@@ -18,7 +18,7 @@ import dev.gtnhplanner.calcoracle.GtnhCalcOracleMod;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.renderer.texture.TextureMap;
 import net.minecraft.client.shader.Framebuffer;
 import net.minecraft.util.IIcon;
@@ -26,6 +26,8 @@ import net.minecraftforge.fluids.Fluid;
 import net.minecraftforge.fluids.FluidStack;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL20;
 
 public final class ClientFluidStackIconRenderer {
 
@@ -246,8 +248,28 @@ public final class ClientFluidStackIconRenderer {
             modelViewPushed = true;
             GL11.glLoadIdentity();
 
+            // Define the state explicitly rather than inheriting whatever the client left.
+            // The active texture unit matters most: if the lightmap unit is still selected,
+            // bindTexture binds the atlas to the wrong unit and unit 0 samples nothing, so
+            // every fluid comes out the same constant colour.
+            GL11.glDisable(GL11.GL_LIGHTING);
+            GL11.glDisable(GL11.GL_FOG);
+            OpenGlHelper.setActiveTexture(OpenGlHelper.lightmapTexUnit);
+            GL11.glDisable(GL11.GL_TEXTURE_2D);
+            OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
+            GL11.glEnable(GL11.GL_TEXTURE_2D);
+            GL11.glTexEnvi(GL11.GL_TEXTURE_ENV, GL11.GL_TEXTURE_ENV_MODE, GL11.GL_MODULATE);
+            GL11.glEnable(GL11.GL_ALPHA_TEST);
+            GL11.glEnable(GL11.GL_BLEND);
+            GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            if (GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM) != 0) {
+                GL20.glUseProgram(0);
+            }
+
             minecraft.getTextureManager().bindTexture(TextureMap.locationBlocksTexture);
+
             int color = stack.getFluid().getColor(stack);
+            logFluidRenderDiagnostics(stack, icon, color);
             float red = ((color >> 16) & 255) / 255.0F;
             float green = ((color >> 8) & 255) / 255.0F;
             float blue = (color & 255) / 255.0F;
@@ -259,13 +281,20 @@ public final class ClientFluidStackIconRenderer {
 
             double min = (GUI_ICON_CANVAS_SIZE - GUI_ITEM_SIZE) / 2.0D;
             double max = min + GUI_ITEM_SIZE;
-            Tessellator tessellator = Tessellator.instance;
-            tessellator.startDrawingQuads();
-            tessellator.addVertexWithUV(min, max, 0.0D, icon.getMinU(), icon.getMaxV());
-            tessellator.addVertexWithUV(max, max, 0.0D, icon.getMaxU(), icon.getMaxV());
-            tessellator.addVertexWithUV(max, min, 0.0D, icon.getMaxU(), icon.getMinV());
-            tessellator.addVertexWithUV(min, min, 0.0D, icon.getMinU(), icon.getMinV());
-            tessellator.draw();
+            // Angelica 2.x replaces the Tessellator with a batching implementation whose
+            // colour output is lost when drawing into this offscreen framebuffer, which
+            // left every fluid icon a flat silhouette. Draw the quad in immediate mode,
+            // matching the item sprite path in ClientItemStackIconRenderer.
+            GL11.glBegin(GL11.GL_QUADS);
+            GL11.glTexCoord2f(icon.getMinU(), icon.getMaxV());
+            GL11.glVertex3d(min, max, 0.0D);
+            GL11.glTexCoord2f(icon.getMaxU(), icon.getMaxV());
+            GL11.glVertex3d(max, max, 0.0D);
+            GL11.glTexCoord2f(icon.getMaxU(), icon.getMinV());
+            GL11.glVertex3d(max, min, 0.0D);
+            GL11.glTexCoord2f(icon.getMinU(), icon.getMinV());
+            GL11.glVertex3d(min, min, 0.0D);
+            GL11.glEnd();
             GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
             GL11.glFlush();
 
@@ -288,6 +317,32 @@ public final class ClientFluidStackIconRenderer {
         }
 
         return ClientItemStackIconRenderer.imageFromRgbaBuffer(buffer);
+    }
+
+    private static int fluidDiagnosticsLogged;
+
+    /** Records what the fluid quad is actually sampling, for the first few fluids. */
+    private static void logFluidRenderDiagnostics(FluidStack stack, IIcon icon, int color) {
+        if (fluidDiagnosticsLogged >= 10) {
+            return;
+        }
+        fluidDiagnosticsLogged++;
+
+        try {
+            GtnhCalcOracleMod.LOG.info(
+                "GTNH fluid render:"
+                    + " fluid=" + stack.getFluid().getName()
+                    + " icon=" + (icon == null ? "null" : icon.getIconName())
+                    + " u=[" + (icon == null ? "-" : icon.getMinU() + "," + icon.getMaxU()) + "]"
+                    + " v=[" + (icon == null ? "-" : icon.getMinV() + "," + icon.getMaxV()) + "]"
+                    + " color=0x" + Integer.toHexString(color)
+                    + " boundTexture=" + GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D)
+                    + " activeUnit=0x" + Integer.toHexString(GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE))
+                    + " glError=" + GL11.glGetError()
+            );
+        } catch (Throwable ignored) {
+            // diagnostics only
+        }
     }
 
     private static IIcon fluidIcon(FluidStack stack) {
