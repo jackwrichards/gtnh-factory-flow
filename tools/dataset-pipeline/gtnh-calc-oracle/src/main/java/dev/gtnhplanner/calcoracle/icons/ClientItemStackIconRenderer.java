@@ -20,9 +20,14 @@ import javax.imageio.ImageIO;
 
 import dev.gtnhplanner.calcoracle.GtnhCalcOracleMod;
 
+import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.renderer.texture.TextureMap;
+import net.minecraft.init.Blocks;
+import net.minecraft.util.IIcon;
+import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.renderer.RenderBlocks;
 import net.minecraft.client.renderer.Tessellator;
@@ -35,6 +40,7 @@ import net.minecraftforge.oredict.OreDictionary;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
+import org.lwjgl.opengl.GL20;
 
 public final class ClientItemStackIconRenderer {
 
@@ -133,6 +139,11 @@ public final class ClientItemStackIconRenderer {
         ByteBuffer buffer;
         boolean projectionPushed = false;
         boolean modelViewPushed = false;
+        boolean fogWasEnabled = false;
+        boolean lightmapWasEnabled = false;
+        int previousShaderProgram = 0;
+        boolean usedForgeItemRenderer = false;
+        int glErrorAfterRender = 0;
 
         try {
             resetTessellator();
@@ -141,6 +152,37 @@ public final class ClientItemStackIconRenderer {
             GL11.glViewport(0, 0, ICON_SIZE, ICON_SIZE);
             GL11.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
             GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+
+            // This renders from whatever GL state the client happens to be in, and the
+            // item quad sits 2000 units deep (see the ortho/translate below). Anything
+            // the world or GUI renderer left enabled is therefore applied on top of the
+            // sprite: fog at that depth saturates to a flat fog colour, an enabled
+            // lightmap texture unit replaces the sampled RGB, and a stale glColor or
+            // non-MODULATE texture env tints everything. All of those keep the sprite's
+            // alpha while destroying its colour. Define the state explicitly rather than
+            // inheriting it.
+            logInheritedGlState();
+
+            fogWasEnabled = GL11.glIsEnabled(GL11.GL_FOG);
+            GL11.glDisable(GL11.GL_FOG);
+
+            OpenGlHelper.setActiveTexture(OpenGlHelper.lightmapTexUnit);
+            lightmapWasEnabled = GL11.glIsEnabled(GL11.GL_TEXTURE_2D);
+            GL11.glDisable(GL11.GL_TEXTURE_2D);
+            OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
+
+            GL11.glEnable(GL11.GL_TEXTURE_2D);
+            GL11.glTexEnvi(GL11.GL_TEXTURE_ENV, GL11.GL_TEXTURE_ENV_MODE, GL11.GL_MODULATE);
+            GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+
+            // Angelica 2.x renders through shader programs. Any program still bound here
+            // overrides the fixed-function state above, so the sprite's colour comes from
+            // the shader while the alpha test carves its silhouette from the sampled
+            // alpha. Drop back to the fixed-function pipeline for the offscreen render.
+            previousShaderProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
+            if (previousShaderProgram != 0) {
+                GL20.glUseProgram(0);
+            }
 
             GL11.glMatrixMode(GL11.GL_PROJECTION);
             GL11.glPushMatrix();
@@ -162,18 +204,28 @@ public final class ClientItemStackIconRenderer {
             }
             int itemX = (GUI_ICON_CANVAS_SIZE - GUI_ITEM_SIZE) / 2;
             int itemY = (GUI_ICON_CANVAS_SIZE - GUI_ITEM_SIZE) / 2;
-            if (
-                !ForgeHooksClient
-                    .renderInventoryItem(RENDER_BLOCKS, minecraft.getTextureManager(), stack, true, 0.0F, itemX, itemY)
-            ) {
-                RENDER_ITEM.renderItemIntoGUI(
-                    fontRenderer,
-                    minecraft.getTextureManager(),
-                    stack,
-                    itemX,
-                    itemY
-                );
+            usedForgeItemRenderer = ForgeHooksClient
+                .renderInventoryItem(RENDER_BLOCKS, minecraft.getTextureManager(), stack, true, 0.0F, itemX, itemY);
+            if (!usedForgeItemRenderer) {
+                if (isBlockItem(stack)) {
+                    // Blocks go through RenderBlocks, which renders correctly here.
+                    RENDER_ITEM.renderItemIntoGUI(
+                        fontRenderer,
+                        minecraft.getTextureManager(),
+                        stack,
+                        itemX,
+                        itemY
+                    );
+                } else {
+                    // Flat item sprites would go through RenderItem.renderIcon, which
+                    // draws via the Tessellator. Angelica 2.x replaces the Tessellator
+                    // with a batching implementation whose colour output is lost when
+                    // drawing into this offscreen framebuffer, leaving every sprite a
+                    // flat silhouette. Blit the sprite directly instead.
+                    renderItemSpriteDirectly(minecraft, stack, itemX, itemY);
+                }
             }
+            glErrorAfterRender = GL11.glGetError();
             RenderHelper.disableStandardItemLighting();
             GL11.glDisable(GL12.GL_RESCALE_NORMAL);
             resetTessellator();
@@ -185,6 +237,17 @@ public final class ClientItemStackIconRenderer {
             RenderHelper.disableStandardItemLighting();
             GL11.glDisable(GL12.GL_RESCALE_NORMAL);
             resetTessellator();
+            if (lightmapWasEnabled) {
+                OpenGlHelper.setActiveTexture(OpenGlHelper.lightmapTexUnit);
+                GL11.glEnable(GL11.GL_TEXTURE_2D);
+                OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
+            }
+            if (fogWasEnabled) {
+                GL11.glEnable(GL11.GL_FOG);
+            }
+            if (previousShaderProgram != 0) {
+                GL20.glUseProgram(previousShaderProgram);
+            }
             if (modelViewPushed) {
                 GL11.glMatrixMode(GL11.GL_MODELVIEW);
                 GL11.glPopMatrix();
@@ -198,7 +261,138 @@ public final class ClientItemStackIconRenderer {
             framebuffer.deleteFramebuffer();
         }
 
-        return imageFromRgbaBuffer(buffer);
+        BufferedImage image = imageFromRgbaBuffer(buffer);
+        logRenderPathDiagnostics(stack, usedForgeItemRenderer, glErrorAfterRender, image);
+        return image;
+    }
+
+    private static boolean isBlockItem(ItemStack stack) {
+        try {
+            return Block.getBlockFromItem(stack.getItem()) != Blocks.air;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    /**
+     * Draws a flat item sprite with immediate-mode GL instead of the Tessellator, honouring
+     * each render pass's icon and {@code getColorFromItemStack} tint the same way
+     * {@code RenderItem.renderItemIntoGUI} does for 2D items.
+     */
+    private static void renderItemSpriteDirectly(Minecraft minecraft, ItemStack stack, int x, int y) {
+        minecraft.getTextureManager().bindTexture(TextureMap.locationItemsTexture);
+
+        int passes = 1;
+        try {
+            passes = Math.max(1, stack.getItem().getRenderPasses(stack.getItemDamage()));
+        } catch (Throwable ignored) {
+            passes = 1;
+        }
+
+        GL11.glEnable(GL11.GL_ALPHA_TEST);
+        GL11.glEnable(GL11.GL_BLEND);
+        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+
+        for (int pass = 0; pass < passes; pass++) {
+            IIcon icon = null;
+            try {
+                icon = stack.getItem().getIcon(stack, pass);
+            } catch (Throwable ignored) {
+                icon = null;
+            }
+            if (icon == null) {
+                try {
+                    icon = stack.getIconIndex();
+                } catch (Throwable ignored) {
+                    icon = null;
+                }
+            }
+            if (icon == null) {
+                continue;
+            }
+
+            int color = 0xFFFFFF;
+            try {
+                color = stack.getItem().getColorFromItemStack(stack, pass);
+            } catch (Throwable ignored) {
+                color = 0xFFFFFF;
+            }
+
+            GL11.glColor4f(
+                ((color >> 16) & 255) / 255.0F,
+                ((color >> 8) & 255) / 255.0F,
+                (color & 255) / 255.0F,
+                1.0F
+            );
+
+            GL11.glBegin(GL11.GL_QUADS);
+            GL11.glTexCoord2f(icon.getMinU(), icon.getMaxV());
+            GL11.glVertex3f(x, y + GUI_ITEM_SIZE, 0.0F);
+            GL11.glTexCoord2f(icon.getMaxU(), icon.getMaxV());
+            GL11.glVertex3f(x + GUI_ITEM_SIZE, y + GUI_ITEM_SIZE, 0.0F);
+            GL11.glTexCoord2f(icon.getMaxU(), icon.getMinV());
+            GL11.glVertex3f(x + GUI_ITEM_SIZE, y, 0.0F);
+            GL11.glTexCoord2f(icon.getMinU(), icon.getMinV());
+            GL11.glVertex3f(x, y, 0.0F);
+            GL11.glEnd();
+        }
+
+        GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    private static int renderPathDiagnosticsLogged;
+
+    /**
+     * Correlates the render path taken with whether the resulting icon kept its colour,
+     * for the first handful of stacks. A flat icon keeps the sprite's alpha but collapses
+     * to a single RGB value, so counting distinct opaque colours identifies it.
+     */
+    private static void logRenderPathDiagnostics(
+        ItemStack stack,
+        boolean usedForgeItemRenderer,
+        int glError,
+        BufferedImage image
+    ) {
+        if (renderPathDiagnosticsLogged >= 60) {
+            return;
+        }
+
+        try {
+            java.util.HashSet<Integer> colors = new java.util.HashSet<Integer>();
+            int opaque = 0;
+            for (int y = 0; y < image.getHeight(); y++) {
+                for (int x = 0; x < image.getWidth(); x++) {
+                    int argb = image.getRGB(x, y);
+                    if (((argb >>> 24) & 255) < 200) {
+                        continue;
+                    }
+                    opaque++;
+                    colors.add(Integer.valueOf(argb & 0xFFFFFF));
+                }
+            }
+
+            boolean flat = opaque > 0 && colors.size() <= 3;
+            boolean blockItem = isBlockItem(stack);
+            // Log every flat result, plus a few healthy sprites for comparison.
+            if (!flat && (blockItem || renderPathDiagnosticsLogged >= 12)) {
+                return;
+            }
+            renderPathDiagnosticsLogged++;
+
+            GtnhCalcOracleMod.LOG.info(
+                "GTNH icon render path:"
+                    + " item=" + Item.itemRegistry.getNameForObject(stack.getItem()) + "@" + stack.getItemDamage()
+                    + " itemClass=" + stack.getItem().getClass().getName()
+                    + " blockItem=" + blockItem
+                    + " forgeItemRenderer=" + usedForgeItemRenderer
+                    + " glError=" + glError
+                    + " distinctColors=" + colors.size()
+                    + " opaquePx=" + opaque
+                    + (flat ? "  <-- FLAT" : "")
+            );
+        } catch (Throwable ignored) {
+            // diagnostics only
+        }
     }
 
     private static BufferedImage renderWithContainerBaseIfNeeded(ItemStack stack, BufferedImage overlay) {
@@ -446,6 +640,48 @@ public final class ClientItemStackIconRenderer {
             return image != null && imageHasVisiblePixels(image) && missingTextureRatio(image) < 0.5D;
         } catch (Throwable ignored) {
             return false;
+        }
+    }
+
+    private static boolean loggedInheritedGlState;
+
+    /** Records the GL state the client handed us, once, so a bad export can be explained. */
+    private static void logInheritedGlState() {
+        if (loggedInheritedGlState) {
+            return;
+        }
+        loggedInheritedGlState = true;
+
+        try {
+            java.nio.FloatBuffer fogColor = BufferUtils.createFloatBuffer(16);
+            GL11.glGetFloat(GL11.GL_FOG_COLOR, fogColor);
+            java.nio.FloatBuffer currentColor = BufferUtils.createFloatBuffer(16);
+            GL11.glGetFloat(GL11.GL_CURRENT_COLOR, currentColor);
+
+            boolean fog = GL11.glIsEnabled(GL11.GL_FOG);
+            int texEnvMode = GL11.glGetTexEnvi(GL11.GL_TEXTURE_ENV, GL11.GL_TEXTURE_ENV_MODE);
+
+            OpenGlHelper.setActiveTexture(OpenGlHelper.lightmapTexUnit);
+            boolean lightmap = GL11.glIsEnabled(GL11.GL_TEXTURE_2D);
+            OpenGlHelper.setActiveTexture(OpenGlHelper.defaultTexUnit);
+
+            GtnhCalcOracleMod.LOG.info(
+                "GTNH icon exporter inherited GL state:"
+                    + " fog=" + fog
+                    + " fogColor=(" + fogColor.get(0) + ", " + fogColor.get(1) + ", " + fogColor.get(2) + ")"
+                    + " lightmapTexUnitEnabled=" + lightmap
+                    + " glColor=(" + currentColor.get(0) + ", " + currentColor.get(1) + ", "
+                    + currentColor.get(2) + ", " + currentColor.get(3) + ")"
+                    + " texEnvMode=0x" + Integer.toHexString(texEnvMode)
+                    + " (GL_MODULATE=0x" + Integer.toHexString(GL11.GL_MODULATE) + ")"
+                    + " shaderProgram=" + GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM)
+                    + " alphaTest=" + GL11.glIsEnabled(GL11.GL_ALPHA_TEST)
+                    + " blend=" + GL11.glIsEnabled(GL11.GL_BLEND)
+                    + " lighting=" + GL11.glIsEnabled(GL11.GL_LIGHTING)
+                    + " boundTexture=" + GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D)
+            );
+        } catch (Throwable t) {
+            GtnhCalcOracleMod.LOG.warn("Could not read inherited GL state.", t);
         }
     }
 
