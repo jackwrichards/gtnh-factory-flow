@@ -57,6 +57,11 @@ volume is ignored by git; generated recipes and PNGs should not be committed.
 real selected GTNH build/exporter and produce a normalized `RecipeDataset`, not raw
 exporter output and not a public dump.
 
+`GTNH_PACK_LOCAL_ZIP` points the runner at an already-downloaded GTNH pack zip instead of
+resolving and downloading one from upstream. This is intended for local runs against a
+specific build (for example a beta the detector would not select), and it skips all
+upstream version resolution.
+
 The command receives:
 
 - `GTNH_DATASET_OUT_DIR` - write normalized `recipes.json` here.
