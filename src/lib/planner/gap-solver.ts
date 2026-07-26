@@ -85,6 +85,42 @@ interface SolveContext {
   /** Which of the caps actually cut a branch short, for honest reporting. */
   limitHits: { depth: boolean; steps: boolean; budget: boolean };
   getProducers: (resource: PlannerResource) => Promise<SolverRecipe[]>;
+  /**
+   * Per-solve memoization. "Can the stockpile cover X" and "who best produces
+   * X" are stable for the whole solve; without these caches the search scans
+   * the supply list for every ingredient of every candidate at every
+   * expansion, and backtracking re-runs entire candidate auditions — the
+   * difference between milliseconds and minutes on deep chains.
+   */
+  supplyMatchCache: Map<string, PlannerResource | undefined>;
+  existingMatchCache: Map<string, ExistingProduction | undefined>;
+  noProducerKeys: Set<string>;
+  chosenProducers: Map<string, SolverRecipe>;
+}
+
+function findSupplyMatch(input: RecipeInput, context: SolveContext): PlannerResource | undefined {
+  const key = getResourceKey(input);
+  if (context.supplyMatchCache.has(key)) {
+    return context.supplyMatchCache.get(key);
+  }
+
+  const match = context.supply.find((entry) => plannerResourceSatisfiesInput(entry, input));
+  context.supplyMatchCache.set(key, match);
+  return match;
+}
+
+function findExistingMatch(
+  input: RecipeInput,
+  context: SolveContext,
+): ExistingProduction | undefined {
+  const key = getResourceKey(input);
+  if (context.existingMatchCache.has(key)) {
+    return context.existingMatchCache.get(key);
+  }
+
+  const match = pickExistingProducer(context.existing, input);
+  context.existingMatchCache.set(key, match);
+  return match;
 }
 
 export async function solveGapFill(
@@ -106,6 +142,10 @@ export async function solveGapFill(
       : undefined,
     budget: { remaining: options.expansionBudget ?? DEFAULT_EXPANSION_BUDGET },
     limitHits: { depth: false, steps: false, budget: false },
+    supplyMatchCache: new Map(),
+    existingMatchCache: new Map(),
+    noProducerKeys: new Set(),
+    chosenProducers: new Map(),
     getProducers: (resource) => {
       const key = getResourceKey(resource);
       const cached = producerCache.get(key);
@@ -307,12 +347,12 @@ async function resolveInputSource(
   state: DraftState,
   context: SolveContext,
 ): Promise<StepInputSource> {
-  const supplyMatch = context.supply.find((entry) => plannerResourceSatisfiesInput(entry, input));
+  const supplyMatch = findSupplyMatch(input, context);
   if (supplyMatch) {
     return { type: "supply", resource: supplyMatch };
   }
 
-  const existingMatch = pickExistingProducer(context.existing, input);
+  const existingMatch = findExistingMatch(input, context);
   if (existingMatch) {
     return {
       type: "existing",
@@ -351,6 +391,19 @@ async function resolveViaProduction(
   state: DraftState,
   context: SolveContext,
 ): Promise<StepInputSource> {
+  const resourceKey = getResourceKey(input);
+  if (context.noProducerKeys.has(resourceKey)) {
+    return markMissing(input, state);
+  }
+
+  // A producer that already won the audition for this resource gets committed
+  // directly. Backtracking revisits the same resources constantly; re-running
+  // the full candidate comparison each time is what made deep solves crawl.
+  const chosen = context.chosenProducers.get(resourceKey);
+  if (chosen) {
+    return commitCandidate(chosen, input, path, ancestors, depth, state, context);
+  }
+
   if (context.budget.remaining <= 0) {
     context.limitHits.budget = true;
     return markMissing(input, state);
@@ -367,6 +420,7 @@ async function resolveViaProduction(
   ).slice(0, context.beamWidth);
 
   if (candidates.length === 0) {
+    context.noProducerKeys.add(resourceKey);
     return markMissing(input, state);
   }
 
@@ -383,6 +437,7 @@ async function resolveViaProduction(
     const suppliedDelta = state.suppliedLinks - suppliedBefore;
 
     if (source.type === "step" && missingDelta === 0) {
+      context.chosenProducers.set(resourceKey, candidate);
       return source;
     }
 
@@ -405,6 +460,7 @@ async function resolveViaProduction(
     return markMissing(input, state);
   }
 
+  context.chosenProducers.set(resourceKey, bestCandidate);
   return commitCandidate(bestCandidate, input, path, ancestors, depth, state, context);
 }
 
@@ -566,8 +622,8 @@ function rankProducers(
       }
 
       const quicklyResolvable =
-        context.supply.some((entry) => plannerResourceSatisfiesInput(entry, candidateInput)) ||
-        Boolean(pickExistingProducer(context.existing, candidateInput)) ||
+        Boolean(findSupplyMatch(candidateInput, context)) ||
+        Boolean(findExistingMatch(candidateInput, context)) ||
         Boolean(findInPlanProducer(state, candidateInput, ancestors));
 
       if (quicklyResolvable) {

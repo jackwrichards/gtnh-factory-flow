@@ -124,6 +124,15 @@ function GapFillPlansContent() {
             />
           ))
         )}
+        {gapSolve.result.timings ? (
+          <div className="text-right text-xs tabular-nums text-fg-muted">
+            solved in {(gapSolve.result.timings.totalMs / 1000).toFixed(2)}s — index{" "}
+            {(gapSolve.result.timings.indexMs / 1000).toFixed(2)}s · search{" "}
+            {(gapSolve.result.timings.searchMs / 1000).toFixed(2)}s · hydrate{" "}
+            {(gapSolve.result.timings.hydrateMs / 1000).toFixed(2)}s ·{" "}
+            {gapSolve.result.timings.lookups} lookups
+          </div>
+        ) : null}
       </div>
     </PlannerDialog>
   );

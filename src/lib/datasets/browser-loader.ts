@@ -183,6 +183,13 @@ export interface RecipeDatasetSolveRequest {
 export interface RecipeDatasetSolveResult {
   plans: Array<GapFillPlan<Recipe>>;
   notes: string[];
+  timings?: {
+    totalMs: number;
+    indexMs: number;
+    searchMs: number;
+    hydrateMs: number;
+    lookups: number;
+  };
 }
 
 /**
@@ -216,10 +223,15 @@ export async function solveRecipeDatasetGap(
   if (!response.ok || !contentType.includes("ndjson") || !response.body) {
     const body = await response.text();
     const payload = safeParseJson(body) as
-      | { error?: string; plans?: RecipeDatasetSolveResult["plans"]; notes?: string[] }
+      | {
+          error?: string;
+          plans?: RecipeDatasetSolveResult["plans"];
+          notes?: string[];
+          timings?: RecipeDatasetSolveResult["timings"];
+        }
       | undefined;
     if (response.ok && payload?.plans) {
-      return { plans: payload.plans, notes: payload.notes ?? [] };
+      return { plans: payload.plans, notes: payload.notes ?? [], timings: payload.timings };
     }
 
     throw new Error(
@@ -251,7 +263,7 @@ export async function solveRecipeDatasetGap(
     }
 
     if (event.type === "result") {
-      result = { plans: event.plans, notes: event.notes ?? [] };
+      result = { plans: event.plans, notes: event.notes ?? [], timings: event.timings };
       return;
     }
 

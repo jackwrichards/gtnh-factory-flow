@@ -34,9 +34,19 @@ export interface DatasetGapSolveRequest {
   options?: GapSolveOptions;
 }
 
+export interface GapSolveTimings {
+  totalMs: number;
+  /** Building the "uses what I have" preference set (includes index warmup). */
+  indexMs: number;
+  searchMs: number;
+  hydrateMs: number;
+  lookups: number;
+}
+
 export interface DatasetGapSolveResult {
   plans: Array<GapFillPlan<Recipe>>;
   notes: string[];
+  timings: GapSolveTimings;
 }
 
 export async function solveDatasetGap(
@@ -52,6 +62,7 @@ export async function solveDatasetGap(
   // joining mid-stream still knows what is being explored.
   let lookups = 0;
   let currentPlan: Pick<GapSolveProgress, "planLabel" | "planIndex"> = {};
+  const startedAt = Date.now();
 
   onProgress?.({ stage: "indexing" });
   // "Uses something I have" — computed once, then used to sample candidates
@@ -62,6 +73,7 @@ export async function solveDatasetGap(
     [...request.supply, ...(request.existingOutputs ?? [])],
     maxTier,
   );
+  const indexedAt = Date.now();
   const result = await solveGapFill(
     {
       target: request.target,
@@ -99,6 +111,7 @@ export async function solveDatasetGap(
     },
   );
 
+  const searchedAt = Date.now();
   onProgress?.({ stage: "hydrating", lookups });
 
   // When nothing closed, diagnose instead of shrugging: how many recipes make
@@ -194,7 +207,18 @@ export async function solveDatasetGap(
     })),
   );
 
-  return { plans, notes: result.notes };
+  const finishedAt = Date.now();
+  return {
+    plans,
+    notes: result.notes,
+    timings: {
+      totalMs: finishedAt - startedAt,
+      indexMs: indexedAt - startedAt,
+      searchMs: searchedAt - indexedAt,
+      hydrateMs: finishedAt - searchedAt,
+      lookups,
+    },
+  };
 }
 
 function toRecipe(recipe: SolverRecipe): Recipe {
