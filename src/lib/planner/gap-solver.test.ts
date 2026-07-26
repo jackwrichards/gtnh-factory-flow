@@ -124,6 +124,27 @@ const fixtureRecipes: SolverRecipe[] = [
     inputs: [{ kind: "fluid", id: "loop-a", amount: 100 }],
     outputs: [{ kind: "fluid", id: "loop-b", amount: 100 }],
   }),
+  // The aluminium trap: a lazy one-gap plan that ignores the stockpile versus
+  // a grounded chain with just as many gaps.
+  recipe({
+    id: "furnace-melt-gear",
+    name: "Furnace: Ingot from Gear",
+    machineType: "Furnace",
+    minimumTier: "ULV",
+    inputs: [{ kind: "item", id: "aluminium-gear", amount: 1, displayName: "Aluminium Gear" }],
+    outputs: [{ kind: "item", id: "aluminium-ingot", amount: 4, displayName: "Aluminium Ingot" }],
+  }),
+  recipe({
+    id: "ebf-aluminium",
+    name: "EBF: Aluminium Ingot",
+    machineType: "Electric Blast Furnace",
+    minimumTier: "MV",
+    inputs: [
+      { kind: "item", id: "aluminium-dust", amount: 2, displayName: "Aluminium Dust" },
+      { kind: "item", id: "rare-flux", amount: 1, displayName: "Rare Flux" },
+    ],
+    outputs: [{ kind: "item", id: "aluminium-ingot", amount: 1, displayName: "Aluminium Ingot" }],
+  }),
   recipe({
     id: "coke-oven-any-log",
     name: "Coke Oven: Charcoal",
@@ -346,6 +367,31 @@ describe("solveGapFill", () => {
     expect(tapPlan?.stats.existingDraws[0]).toEqual(
       expect.objectContaining({ nodeId: "node-existing-pe", ratePerSecond: 100 }),
     );
+  });
+
+  it("prefers plans grounded in the stockpile over lazy one-gap shortcuts", async () => {
+    // Both plans are missing exactly one thing. Melting a gear you do not
+    // have uses nothing from the stockpile; the EBF chain draws its dust from
+    // it. Grounding decides, not gap count or step count.
+    const result = await solveGapFill(
+      {
+        target: {
+          kind: "item",
+          id: "aluminium-ingot",
+          displayName: "Aluminium Ingot",
+          amountPerSecond: 1,
+        },
+        supply: supply(["item", "aluminium-dust"]),
+      },
+      fixtureLookup(),
+    );
+
+    expect(result.plans.map((plan) => plan.steps[0]?.recipe.id)).toEqual([
+      "ebf-aluminium",
+      "furnace-melt-gear",
+    ]);
+    expect(result.plans[0]?.stats.supplyDraws.map((draw) => draw.id)).toEqual(["aluminium-dust"]);
+    expect(result.plans[0]?.missing.map((entry) => entry.id)).toEqual(["rare-flux"]);
   });
 
   it("satisfies wildcard-meta inputs from concrete stockpile entries", async () => {

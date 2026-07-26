@@ -132,6 +132,8 @@ function PlanCard({ entry, onApply }: { entry: VerifiedPlan; onApply: () => void
       resourceLabel({ id: balance.resourceId, displayName: balance.displayName }),
     ),
   ];
+  const suppliedCount = plan.stats.supplyDraws.length + plan.stats.existingDraws.length;
+  const edgeInputCount = suppliedCount + plan.missing.length;
   const visibleSteps = plan.steps.slice(0, VISIBLE_STEPS);
   const visibleDraws = plan.stats.supplyDraws.slice(0, VISIBLE_DRAWS);
 
@@ -160,6 +162,16 @@ function PlanCard({ entry, onApply }: { entry: VerifiedPlan; onApply: () => void
               {euTDelta >= 0 ? "+" : ""}
               {formatNumberWithThousands(Math.round(euTDelta))} EU/t
             </span>
+            {edgeInputCount > 0 ? (
+              <span
+                className={
+                  suppliedCount === edgeInputCount ? "text-emerald-500" : "text-fg-subtle"
+                }
+                title="How many of this chain's edge inputs come from your stockpile or existing machines"
+              >
+                {suppliedCount}/{edgeInputCount} inputs from what you have
+              </span>
+            ) : null}
           </>
         ) : (
           <span>No new machines — reroutes existing production.</span>

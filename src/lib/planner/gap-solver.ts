@@ -60,12 +60,15 @@ interface DraftState {
   steps: DraftStep[];
   producerByKey: Map<string, { stepIndex: number; outputKey: string }>;
   missing: Map<string, PlannerResource>;
+  /** Inputs settled from the stockpile or existing machines so far. */
+  suppliedLinks: number;
 }
 
 interface DraftSnapshot {
   stepCount: number;
   producerByKey: Map<string, { stepIndex: number; outputKey: string }>;
   missing: Map<string, PlannerResource>;
+  suppliedLinks: number;
 }
 
 interface SolveContext {
@@ -166,12 +169,27 @@ export async function solveGapFill(
   plans.sort(
     (left, right) =>
       Number(right.closed) - Number(left.closed) ||
+      getPlanGroundedness(right) - getPlanGroundedness(left) ||
       left.missing.length - right.missing.length ||
       left.stats.machineCount - right.stats.machineCount ||
       left.stats.maxTierIndex - right.stats.maxTierIndex,
   );
 
   return { plans, notes };
+}
+
+/**
+ * How much of the plan's edge inputs come from what the player actually has —
+ * stockpile draws plus taps on existing machines — versus what it declares
+ * missing. "Melt a gear you don't have" scores 0; a deep chain fed by declared
+ * ores scores near 1. This is the primary ranking between unclosed plans:
+ * the request was "make this from what I have", so grounding in the stockpile
+ * is the point, not a tiebreaker.
+ */
+export function getPlanGroundedness(plan: GapFillPlan): number {
+  const supplied = plan.stats.supplyDraws.length + plan.stats.existingDraws.length;
+  const total = supplied + plan.missing.length;
+  return total === 0 ? 1 : supplied / total;
 }
 
 async function buildPlanForRoot(
@@ -241,7 +259,7 @@ function buildExistingTapPlan(
 }
 
 function emptyDraft(): DraftState {
-  return { steps: [], producerByKey: new Map(), missing: new Map() };
+  return { steps: [], producerByKey: new Map(), missing: new Map(), suppliedLinks: 0 };
 }
 
 function snapshot(state: DraftState): DraftSnapshot {
@@ -249,6 +267,7 @@ function snapshot(state: DraftState): DraftSnapshot {
     stepCount: state.steps.length,
     producerByKey: new Map(state.producerByKey),
     missing: new Map(state.missing),
+    suppliedLinks: state.suppliedLinks,
   };
 }
 
@@ -256,6 +275,7 @@ function restore(state: DraftState, saved: DraftSnapshot): void {
   state.steps.length = saved.stepCount;
   state.producerByKey = new Map(saved.producerByKey);
   state.missing = new Map(saved.missing);
+  state.suppliedLinks = saved.suppliedLinks;
 }
 
 async function resolveInputSource(
@@ -324,20 +344,26 @@ async function resolveViaProduction(
 
   const base = snapshot(state);
   let bestCandidate: SolverRecipe | undefined;
-  let bestMissingDelta = Number.POSITIVE_INFINITY;
+  let bestScore = Number.POSITIVE_INFINITY;
 
   for (const candidate of candidates) {
     restore(state, base);
     const missingBefore = state.missing.size;
+    const suppliedBefore = state.suppliedLinks;
     const source = await commitCandidate(candidate, input, path, ancestors, depth, state, context);
     const missingDelta = state.missing.size - missingBefore;
+    const suppliedDelta = state.suppliedLinks - suppliedBefore;
 
     if (source.type === "step" && missingDelta === 0) {
       return source;
     }
 
-    if (source.type === "step" && missingDelta < bestMissingDelta) {
-      bestMissingDelta = missingDelta;
+    // Missing dominates, but between equally-gappy branches the one drawing
+    // more from the stockpile wins — the plan should be grounded in what the
+    // player declared, not in whichever dead end came up first.
+    const score = missingDelta * 1000 - suppliedDelta;
+    if (source.type === "step" && score < bestScore) {
+      bestScore = score;
       bestCandidate = candidate;
     }
 
@@ -392,6 +418,9 @@ async function commitCandidate(
       state,
       context,
     );
+    if (source.type === "supply" || source.type === "existing") {
+      state.suppliedLinks += 1;
+    }
     step.links.push({ inputIndex, input: recipeInput, source });
   }
 
@@ -492,6 +521,7 @@ function rankProducers(
     const matchedKey = getResourceKey(matched);
     const inputKey = getResourceKey(input);
     let unsatisfied = 0;
+    let satisfied = 0;
     let blocked = false;
 
     for (const candidateInput of recipe.inputs) {
@@ -512,7 +542,9 @@ function rankProducers(
         Boolean(pickExistingProducer(context.existing, candidateInput)) ||
         Boolean(findInPlanProducer(state, candidateInput, ancestors));
 
-      if (!quicklyResolvable) {
+      if (quicklyResolvable) {
+        satisfied += 1;
+      } else {
         unsatisfied += 1;
         const cyclePotential =
           path.has(candidateKey) ||
@@ -535,8 +567,11 @@ function rankProducers(
     const chancePenalty = matched.chance !== undefined && matched.chance < 1 ? 25 : 0;
     const consumedInputs = recipe.inputs.filter(isRecipeInputConsumed).length;
     const unpackingPenalty = isUnpackingShapedRecipe(recipe, matched) ? 80 : 0;
+    // Using the stockpile is a virtue, not just a lack of gaps: a recipe fed
+    // by declared abundance outranks one that merely has few ingredients.
     const score =
-      unsatisfied * 20 +
+      unsatisfied * 20 -
+      satisfied * 8 +
       tierIndex * 3 +
       (primaryMatch ? 0 : 12) +
       chancePenalty +
