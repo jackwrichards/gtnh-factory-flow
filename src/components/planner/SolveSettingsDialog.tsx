@@ -172,7 +172,7 @@ export function SolveSettingsDialog({ onClose }: { onClose: () => void }) {
           {visibleMaps.length === 0 ? (
             <div className="text-base text-fg-muted">No machines match.</div>
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-1.5">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">
               {visibleMaps.map((recipeMap) => {
                 const isBlocked = blocked.has(recipeMap);
                 const icon = iconsByMap.get(recipeMap);
@@ -183,30 +183,30 @@ export function SolveSettingsDialog({ onClose }: { onClose: () => void }) {
                     onClick={() => toggleMap(recipeMap)}
                     title={isBlocked ? `Allow ${recipeMap}` : `Exclude ${recipeMap}`}
                     className={[
-                      "flex h-11 items-center gap-2 rounded border px-2 text-left",
+                      "flex h-16 items-center gap-2.5 rounded border px-2.5 text-left",
                       isBlocked
                         ? "border-line bg-surface opacity-45 hover:opacity-80"
                         : "border-emerald-500/50 bg-emerald-500/10 hover:border-emerald-400",
                     ].join(" ")}
                   >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center">
+                    <span className="grid h-12 w-12 shrink-0 place-items-center">
                       {icon ? (
                         <ResourceIcon
                           resource={{ ...icon, amount: 1 }}
                           size="sm"
                           showAmount={false}
                           bare
-                          className="!h-8 !w-8"
+                          className="!h-12 !w-12"
                         />
                       ) : (
-                        <span className="grid h-7 w-7 place-items-center rounded bg-surface-sunken text-xs font-semibold text-fg-muted">
+                        <span className="grid h-11 w-11 place-items-center rounded bg-surface-sunken text-lg font-semibold text-fg-muted">
                           {recipeMap.slice(0, 1)}
                         </span>
                       )}
                     </span>
                     <span
                       className={[
-                        "min-w-0 flex-1 truncate text-sm",
+                        "min-w-0 flex-1 truncate text-sm leading-5",
                         isBlocked ? "line-through" : "",
                       ].join(" ")}
                     >
