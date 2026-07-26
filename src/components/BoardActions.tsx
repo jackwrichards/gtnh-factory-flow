@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   Moon,
   Redo2,
+  Share2,
   Sun,
   Trash2,
   Undo2,
@@ -44,6 +45,7 @@ import {
 } from "@/lib/import-export/plan-image";
 import { useFactoryStore } from "@/store/factory-store";
 import { useThemeStore } from "@/store/theme-store";
+import { SharePlanDialog } from "./community/SharePlanDialog";
 
 /**
  * Board actions — undo/redo, optimise, clean, import/export, theme.
@@ -58,6 +60,7 @@ export function BoardActions() {
   const [pendingExport, setPendingExport] = useState<
     { format: "json" | "svg" | "png"; requestId: string } | undefined
   >();
+  const [isShareOpen, setShareOpen] = useState(false);
   const project = useFactoryStore((state) => state.project);
   const manifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
@@ -285,11 +288,18 @@ export function BoardActions() {
           ) : null}
         </div>
         <ToolbarButton
+          icon={Share2}
+          label="Share to community"
+          disabled={project.nodes.length === 0}
+          onClick={() => setShareOpen(true)}
+        />
+        <ToolbarButton
           icon={theme === "dark" ? Sun : Moon}
           label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
           onClick={toggleTheme}
         />
       </div>
+      {isShareOpen ? <SharePlanDialog onClose={() => setShareOpen(false)} /> : null}
 
       <input
         ref={projectInputRef}

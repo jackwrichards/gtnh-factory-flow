@@ -929,7 +929,13 @@ export function FactoryFlow() {
   );
 
   const exportFlowImage = useCallback(
-    async (format: "svg" | "png", requestId: string, fileName: string, projectJson: string) => {
+    async (
+      format: "svg" | "png",
+      requestId: string,
+      fileName: string,
+      projectJson: string,
+      capture = false,
+    ) => {
       if (exportInProgressRef.current) {
         dispatchImageExportComplete(requestId);
         return;
@@ -968,6 +974,7 @@ export function FactoryFlow() {
         },
       };
 
+      let capturedDataUrl: string | undefined;
       try {
         if (format === "svg") {
           const svgText = embedProjectJsonInSvg(
@@ -987,10 +994,17 @@ export function FactoryFlow() {
         const imageBlob = await toBlob(viewportElement, {
           ...options,
           filter: exportNodeFilter,
-          pixelRatio: getExportPngPixelRatio(imageWidth, imageHeight),
+          pixelRatio: capture ? 1 : getExportPngPixelRatio(imageWidth, imageHeight),
           skipFonts: true,
         });
         if (!imageBlob) {
+          return;
+        }
+
+        if (capture) {
+          // Capture mode hands a thumbnail back to the caller (community
+          // share dialog) instead of saving a file.
+          capturedDataUrl = await makeThumbnailDataUrl(imageBlob);
           return;
         }
 
@@ -1000,7 +1014,7 @@ export function FactoryFlow() {
         console.error(error instanceof Error ? error.message : "Plan image export failed.");
       } finally {
         exportInProgressRef.current = false;
-        dispatchImageExportComplete(requestId);
+        dispatchImageExportComplete(requestId, capturedDataUrl);
       }
     },
     [flowNodes],
@@ -1009,7 +1023,13 @@ export function FactoryFlow() {
   useEffect(() => {
     const handleExportImage = (event: Event) => {
       const detail = (event as CustomEvent).detail as
-        | { format?: unknown; requestId?: unknown; fileName?: unknown; projectJson?: unknown }
+        | {
+            format?: unknown;
+            requestId?: unknown;
+            fileName?: unknown;
+            projectJson?: unknown;
+            capture?: unknown;
+          }
         | undefined;
 
       if (
@@ -1021,7 +1041,13 @@ export function FactoryFlow() {
         return;
       }
 
-      void exportFlowImage(detail.format, detail.requestId, detail.fileName, detail.projectJson);
+      void exportFlowImage(
+        detail.format,
+        detail.requestId,
+        detail.fileName,
+        detail.projectJson,
+        detail.capture === true,
+      );
     };
 
     window.addEventListener(FLOW_IMAGE_EXPORT_EVENT, handleExportImage);
@@ -4819,12 +4845,29 @@ function downloadBlob(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-function dispatchImageExportComplete(requestId: string) {
+function dispatchImageExportComplete(requestId: string, dataUrl?: string) {
   window.dispatchEvent(
     new CustomEvent(FLOW_IMAGE_EXPORT_COMPLETE_EVENT, {
-      detail: { requestId },
+      detail: { requestId, dataUrl },
     }),
   );
+}
+
+/** Downscales a full board capture into a share-card thumbnail. */
+async function makeThumbnailDataUrl(blob: Blob, maxSide = 720): Promise<string> {
+  const bitmap = await createImageBitmap(blob);
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Canvas 2D context unavailable");
+  }
+
+  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return canvas.toDataURL("image/jpeg", 0.82);
 }
 
 function getEdgeResource(

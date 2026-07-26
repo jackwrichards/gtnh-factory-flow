@@ -37,6 +37,8 @@ interface DesignStore {
   hydrate: () => Promise<void>;
   switchToDesign: (id: string) => Promise<void>;
   addDesign: () => Promise<void>;
+  /** Adds `project` as a new design tab and switches to it (community imports). */
+  importProjectAsDesign: (project: FactoryProject, name: string) => Promise<void>;
   copyDesign: (id: string) => Promise<void>;
   renameDesign: (id: string, name: string) => Promise<void>;
   removeDesign: (id: string) => Promise<void>;
@@ -140,6 +142,18 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     await flushCanvasInto(designs.find((design) => design.id === activeDesignId));
 
     const record = createDesignRecord(createEmptyProject(), UNTITLED_DESIGN_NAME);
+    await writeDesign(record);
+    writeActiveDesignId(record.id);
+    set({ activeDesignId: record.id });
+    showProject(record.project);
+    set({ designs: sortDesigns(await listDesignSummaries()) });
+  },
+
+  importProjectAsDesign: async (project, name) => {
+    const { activeDesignId, designs } = get();
+    await flushCanvasInto(designs.find((design) => design.id === activeDesignId));
+
+    const record = createDesignRecord(project, name || UNTITLED_DESIGN_NAME);
     await writeDesign(record);
     writeActiveDesignId(record.id);
     set({ activeDesignId: record.id });

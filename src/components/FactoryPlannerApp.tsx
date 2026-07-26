@@ -12,6 +12,8 @@ import {
 } from "@/lib/datasets/browser-loader";
 import { loadResourceHistory, useFactoryStore } from "@/store/factory-store";
 import { useDesignStore } from "@/store/design-store";
+import { takePendingEditorImport } from "@/lib/community/client";
+import { parseFactoryProjectJson } from "@/lib/import-export";
 import { useThemeStore } from "@/store/theme-store";
 import { DesignTabs } from "./DesignTabs";
 import { FactoryFlow } from "./flow/FactoryFlow";
@@ -81,12 +83,32 @@ export function FactoryPlannerApp() {
     const cancelHydration = scheduleIdleWork(() => {
       hydrateResourceHistory(loadResourceHistory());
 
-      void hydrateDesigns().finally(() => {
-        // Autosave stays parked until the stored design is on the canvas.
-        // Releasing it earlier would let the empty starting plan be written
-        // over the design that is still loading.
-        hydratedRef.current = true;
-      });
+      void hydrateDesigns()
+        .then(async () => {
+          // A plan handed off from the community hub becomes its own design
+          // tab, so it never overwrites whatever the user was working on.
+          const pending = takePendingEditorImport();
+          if (!pending) {
+            return;
+          }
+
+          try {
+            const project = parseFactoryProjectJson(JSON.stringify(pending));
+            await useDesignStore
+              .getState()
+              .importProjectAsDesign(project, project.name || "Community plan");
+          } catch (error) {
+            console.error(
+              error instanceof Error ? error.message : "Importing the community plan failed.",
+            );
+          }
+        })
+        .finally(() => {
+          // Autosave stays parked until the stored design is on the canvas.
+          // Releasing it earlier would let the empty starting plan be written
+          // over the design that is still loading.
+          hydratedRef.current = true;
+        });
     }, 800);
 
     return cancelHydration;
