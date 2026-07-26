@@ -14,7 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   downloadCommunityPlan,
@@ -32,7 +32,7 @@ import { GT_VOLTAGE_TIERS, getVoltageTierIndex } from "@/lib/model/tiers";
 import { formatRate } from "@/lib/model";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { deleteCommunityPlan } from "@/lib/community/client";
-import { AuthForm, useCommunityUser } from "./auth";
+import { useCommunityUser } from "./auth";
 
 const SORT_OPTIONS: Array<{ value: CommunityPlanSort; label: string }> = [
   { value: "new", label: "Newest" },
@@ -54,13 +54,14 @@ interface LoadedPlans {
 
 export function CommunityBrowser() {
   const router = useRouter();
-  const { user, setUser, signOut } = useCommunityUser();
+  const searchParams = useSearchParams();
+  const { user } = useCommunityUser();
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<CommunityPlanSort>("new");
   const [search, setSearch] = useState("");
   const [maxTier, setMaxTier] = useState("");
-  const [mineOnly, setMineOnly] = useState(false);
-  const [isAuthOpen, setAuthOpen] = useState(false);
+  // "My posts" can be deep-linked from the account menu (?mine=1).
+  const [mineOnly, setMineOnly] = useState(() => searchParams.get("mine") === "1");
   const [error, setError] = useState<string>();
   const [preview, setPreview] = useState<CommunityPlanSummary>();
   const searchTimerRef = useRef<number>(undefined);
@@ -176,7 +177,7 @@ export function CommunityBrowser() {
   };
 
   const removeMyPost = async (plan: CommunityPlanSummary) => {
-    if (!plan.isMine) {
+    if (!plan.isMine && user?.isAdmin !== true) {
       return;
     }
 
@@ -272,54 +273,7 @@ export function CommunityBrowser() {
             My posts
           </label>
         ) : null}
-        <span className="ml-auto flex items-center gap-2 text-sm">
-          {user ? (
-            <>
-              <span className="text-fg-subtle">
-                Signed in as <span className="font-semibold text-fg">{user.username}</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setMineOnly(false);
-                  void signOut();
-                }}
-                className="rounded border border-line-strong px-2 py-1 hover:bg-surface-raised"
-              >
-                Sign out
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setAuthOpen(true)}
-              className="rounded border border-cyan-700 bg-cyan-600 px-3 py-1.5 font-medium text-white hover:bg-cyan-500"
-            >
-              Sign in
-            </button>
-          )}
-        </span>
       </div>
-
-      {isAuthOpen && !user ? (
-        <div
-          className="fixed inset-0 z-[100] grid place-items-center bg-neutral-950/50 p-4"
-          onClick={() => setAuthOpen(false)}
-        >
-          <div
-            className="w-full max-w-sm rounded border border-line-strong bg-surface p-4 shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h2 className="mb-3 text-base font-semibold">Community account</h2>
-            <AuthForm
-              onSignedIn={(signedInUser) => {
-                setUser(signedInUser);
-                setAuthOpen(false);
-              }}
-            />
-          </div>
-        </div>
-      ) : null}
 
       {error ? (
         <p className="mb-3 rounded border border-red-400 bg-red-500/10 px-3 py-2 text-sm text-red-500">
@@ -345,6 +299,7 @@ export function CommunityBrowser() {
             <PlanCard
               key={plan.id}
               plan={plan}
+              canManage={plan.isMine === true || user?.isAdmin === true}
               onVote={vote}
               onPreview={openPreview}
               onDownload={downloadJson}
@@ -382,6 +337,7 @@ export function CommunityBrowser() {
       {preview ? (
         <PlanPreviewModal
           plan={preview}
+          canManage={preview.isMine === true || user?.isAdmin === true}
           onClose={() => setPreview(undefined)}
           onVote={vote}
           onDownload={downloadJson}
@@ -395,6 +351,7 @@ export function CommunityBrowser() {
 
 function PlanCard({
   plan,
+  canManage,
   onVote,
   onPreview,
   onDownload,
@@ -402,6 +359,7 @@ function PlanCard({
   onDelete,
 }: {
   plan: CommunityPlanSummary;
+  canManage: boolean;
   onVote: (plan: CommunityPlanSummary, value: 1 | -1) => void;
   onPreview: (plan: CommunityPlanSummary) => void;
   onDownload: (plan: CommunityPlanSummary) => void;
@@ -517,7 +475,7 @@ function PlanCard({
             >
               <Download className="h-3 w-3" />
             </button>
-            {isMine ? (
+            {canManage ? (
               <button
                 type="button"
                 onClick={() => onDelete(plan)}
@@ -618,6 +576,7 @@ function ResourceIconRow({
 
 function PlanPreviewModal({
   plan,
+  canManage,
   onClose,
   onVote,
   onDownload,
@@ -625,13 +584,13 @@ function PlanPreviewModal({
   onDelete,
 }: {
   plan: CommunityPlanSummary;
+  canManage: boolean;
   onClose: () => void;
   onVote: (plan: CommunityPlanSummary, value: 1 | -1) => void;
   onDownload: (plan: CommunityPlanSummary) => void;
   onOpen: (plan: CommunityPlanSummary) => void;
   onDelete: (plan: CommunityPlanSummary) => void;
 }) {
-  const isMine = plan.isMine === true;
   return (
     <div
       className="fixed inset-0 z-[100] grid place-items-center bg-neutral-950/60 p-4"
@@ -688,7 +647,7 @@ function PlanPreviewModal({
         <PreviewResourceList label="Makes" stats={plan.outputs} />
 
         <div className="mt-4 flex justify-end gap-2">
-          {isMine ? (
+          {canManage ? (
             <button
               type="button"
               onClick={() => onDelete(plan)}

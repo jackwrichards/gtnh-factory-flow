@@ -1,38 +1,24 @@
 "use client";
 
 import { LoaderCircle } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import {
-  fetchCurrentUser,
-  loginCommunityUser,
-  logoutCommunityUser,
-  registerCommunityUser,
-} from "@/lib/community/client";
+import { useEffect, useState } from "react";
+import { loginCommunityUser, registerCommunityUser } from "@/lib/community/client";
 import type { CommunityUser } from "@/lib/community/types";
+import { useCommunityAuthStore } from "@/store/community-auth-store";
 
-/** Session state shared by the share dialog and the community page. */
+/** Session state shared across headers, the share dialog, and the hub. */
 export function useCommunityUser() {
-  const [user, setUser] = useState<CommunityUser>();
-  const [isLoading, setLoading] = useState(true);
-
-  const refresh = useCallback(async () => {
-    try {
-      setUser(await fetchCurrentUser());
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const user = useCommunityAuthStore((state) => state.user);
+  const hasHydrated = useCommunityAuthStore((state) => state.hasHydrated);
+  const hydrate = useCommunityAuthStore((state) => state.hydrate);
+  const setUser = useCommunityAuthStore((state) => state.setUser);
+  const signOut = useCommunityAuthStore((state) => state.signOut);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    void hydrate();
+  }, [hydrate]);
 
-  const signOut = useCallback(async () => {
-    await logoutCommunityUser();
-    setUser(undefined);
-  }, []);
-
-  return { user, isLoading, refresh, setUser, signOut };
+  return { user, isLoading: !hasHydrated, setUser, signOut };
 }
 
 /**

@@ -32,16 +32,16 @@ export async function POST(request: Request) {
 
     const { data } = await getCommunityDb()
       .from("community_users")
-      .select("id,username,password_hash")
+      .select("id,username,password_hash,is_admin")
       .eq("username", username)
-      .single<{ id: string; username: string; password_hash: string }>();
+      .single<{ id: string; username: string; password_hash: string; is_admin: boolean }>();
 
     if (!data || !verifyPassword(password, data.password_hash)) {
       return NextResponse.json({ error: "Wrong username or password." }, { status: 401 });
     }
 
     return NextResponse.json(
-      { username: data.username },
+      { username: data.username, isAdmin: data.is_admin },
       { headers: { "Set-Cookie": sessionCookieHeader(makeSessionToken(data.id)) } },
     );
   } catch (error) {

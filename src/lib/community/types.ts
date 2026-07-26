@@ -91,6 +91,7 @@ export interface CommunityUploadResponse {
 
 export interface CommunityUser {
   username: string;
+  isAdmin?: boolean;
 }
 
 export interface CommunityVoteRequest {

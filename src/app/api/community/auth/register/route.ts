@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(
-      { username: data.username },
+      { username: data.username, isAdmin: false },
       { status: 201, headers: { "Set-Cookie": sessionCookieHeader(makeSessionToken(data.id)) } },
     );
   } catch (error) {

@@ -11,7 +11,7 @@ export async function GET(request: Request) {
 
   const user = await getSessionUser(request);
   return NextResponse.json(
-    { user: user ? { username: user.username } : null },
+    { user: user ? { username: user.username, isAdmin: user.is_admin } : null },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

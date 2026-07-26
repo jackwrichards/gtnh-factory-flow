@@ -90,6 +90,7 @@ export function sessionCookieHeader(token: string, clear = false): string {
 export interface SessionUser {
   id: string;
   username: string;
+  is_admin: boolean;
 }
 
 /** Verifies the session cookie and loads the user, or returns undefined. */
@@ -113,7 +114,7 @@ export async function getSessionUser(request: Request): Promise<SessionUser | un
 
   const { data } = await getCommunityDb()
     .from("community_users")
-    .select("id,username")
+    .select("id,username,is_admin")
     .eq("id", userId)
     .single<SessionUser>();
   return data ?? undefined;

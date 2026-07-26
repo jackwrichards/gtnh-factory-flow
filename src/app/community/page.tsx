@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { CommunityBrowser } from "@/components/community/CommunityBrowser";
 import { SiteHeader } from "@/components/community/SiteHeader";
 
@@ -22,7 +23,10 @@ export default function CommunityPage() {
             straight in the editor — and share your own from the planner&apos;s Share button.
           </p>
         </div>
-        <CommunityBrowser />
+        {/* Suspense boundary is required by useSearchParams inside the browser. */}
+        <Suspense>
+          <CommunityBrowser />
+        </Suspense>
       </main>
     </div>
   );

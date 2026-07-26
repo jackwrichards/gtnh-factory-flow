@@ -197,7 +197,7 @@ export async function DELETE(
         return NextResponse.json({ error: "Plan not found." }, { status: 404 });
       }
 
-      if (existing.user_id !== sessionUser.id) {
+      if (existing.user_id !== sessionUser.id && !sessionUser.is_admin) {
         return NextResponse.json({ error: "You don't own this post." }, { status: 403 });
       }
     }

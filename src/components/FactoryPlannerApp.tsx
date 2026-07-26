@@ -18,6 +18,7 @@ import { takePendingEditorImport } from "@/lib/community/client";
 import { parseFactoryProjectJson } from "@/lib/import-export";
 import { useThemeStore } from "@/store/theme-store";
 import { BoardActions } from "./BoardActions";
+import { AccountMenu } from "./community/AccountMenu";
 import { DesignTabs } from "./DesignTabs";
 import { FactoryFlow } from "./flow/FactoryFlow";
 import { InspectorPanel } from "./InspectorPanel";
@@ -197,6 +198,8 @@ export function FactoryPlannerApp() {
           >
             <Users className="h-3.5 w-3.5" /> Community
           </Link>
+          <span className="mx-0.5 h-5 w-px bg-line" aria-hidden />
+          <AccountMenu />
         </div>
       </header>
       <main className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)_440px]">

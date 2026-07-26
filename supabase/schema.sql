@@ -9,6 +9,7 @@ create table if not exists community_users (
   id uuid primary key default gen_random_uuid(),
   username text not null unique check (char_length(username) between 3 and 24),
   password_hash text not null,
+  is_admin boolean not null default false,
   created_at timestamptz not null default now()
 );
 
