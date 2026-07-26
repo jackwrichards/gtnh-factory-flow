@@ -11,7 +11,7 @@ import {
 import {
   attachMyVotes,
   getCommunityDb,
-  hashManageToken,
+  getSessionUser,
   isAdminRequest,
   isCommunityConfigured,
   makeActorKey,
@@ -50,7 +50,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ plan
       .update({ views: data.views + 1 })
       .eq("id", planId);
 
-    const plan = rowToPlanSummary({ ...data, views: data.views + 1 });
+    const sessionUser = await getSessionUser(request);
+    const plan = rowToPlanSummary({ ...data, views: data.views + 1 }, sessionUser?.id);
     if (deviceId) {
       await attachMyVotes([plan], makeActorKey(request, deviceId));
     }
@@ -64,7 +65,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ plan
   }
 }
 
-/** Updates a post in place. Requires the manage token handed out at upload. */
+/** Updates a post in place. Only the signed-in owner may do this. */
 export async function PUT(request: Request, { params }: { params: Promise<{ planId: string }> }) {
   if (!isCommunityConfigured()) {
     return NextResponse.json({ error: "Community hub is not configured." }, { status: 503 });
@@ -78,7 +79,6 @@ export async function PUT(request: Request, { params }: { params: Promise<{ plan
     }
 
     const body = JSON.parse(raw) as {
-      manageToken?: unknown;
       name?: unknown;
       description?: unknown;
       gameVersion?: unknown;
@@ -87,23 +87,23 @@ export async function PUT(request: Request, { params }: { params: Promise<{ plan
       thumbnailDataUrl?: unknown;
     };
 
-    const manageToken = typeof body.manageToken === "string" ? body.manageToken : "";
-    if (!manageToken) {
-      return NextResponse.json({ error: "Missing manage token." }, { status: 401 });
+    const sessionUser = await getSessionUser(request);
+    if (!sessionUser) {
+      return NextResponse.json({ error: "Sign in to update your post." }, { status: 401 });
     }
 
     const db = getCommunityDb();
     const { data: existing } = await db
       .from("community_plans")
-      .select("id,manage_token_hash")
+      .select("id,user_id")
       .eq("id", planId)
-      .single<{ id: string; manage_token_hash: string }>();
+      .single<{ id: string; user_id: string | null }>();
 
     if (!existing) {
       return NextResponse.json({ error: "Plan not found." }, { status: 404 });
     }
 
-    if (existing.manage_token_hash !== hashManageToken(manageToken)) {
+    if (existing.user_id !== sessionUser.id) {
       return NextResponse.json({ error: "You don't own this post." }, { status: 403 });
     }
 
@@ -169,7 +169,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ plan
   }
 }
 
-/** Deletes a post: the owner (manage token) or the site admin (env token). */
+/** Deletes a post: the signed-in owner or the site admin (env token). */
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ planId: string }> },
@@ -180,22 +180,24 @@ export async function DELETE(
 
   try {
     const { planId } = await params;
-    const body = (await request.json().catch(() => ({}))) as { manageToken?: unknown };
-    const manageToken = typeof body.manageToken === "string" ? body.manageToken : "";
-
     const db = getCommunityDb();
     if (!isAdminRequest(request)) {
+      const sessionUser = await getSessionUser(request);
+      if (!sessionUser) {
+        return NextResponse.json({ error: "Sign in to take down your post." }, { status: 401 });
+      }
+
       const { data: existing } = await db
         .from("community_plans")
-        .select("manage_token_hash")
+        .select("user_id")
         .eq("id", planId)
-        .single<{ manage_token_hash: string }>();
+        .single<{ user_id: string | null }>();
 
       if (!existing) {
         return NextResponse.json({ error: "Plan not found." }, { status: 404 });
       }
 
-      if (!manageToken || existing.manage_token_hash !== hashManageToken(manageToken)) {
+      if (existing.user_id !== sessionUser.id) {
         return NextResponse.json({ error: "You don't own this post." }, { status: 403 });
       }
     }

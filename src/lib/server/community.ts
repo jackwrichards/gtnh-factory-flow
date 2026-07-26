@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { CommunityPlanSummary, PlanResourceStat } from "@/lib/community/types";
 
@@ -46,9 +46,77 @@ export function makeActorKey(request: Request, deviceId?: string): string {
     .slice(0, 32);
 }
 
-/** Ownership proof: the DB stores only the hash of the browser-held token. */
-export function hashManageToken(token: string): string {
-  return createHash("sha256").update(`manage:${token}`).digest("hex");
+// ---------------------------------------------------------------------------
+// Dead-simple accounts: username + password, scrypt-hashed, with an HMAC-signed
+// session cookie. No email, no reset flow — this is a hobby community site.
+// ---------------------------------------------------------------------------
+
+export const SESSION_COOKIE = "gtnh_session";
+const SESSION_DAYS = 180;
+
+function authSecret(): string {
+  return process.env.COMMUNITY_HASH_SALT ?? "gtnh-factory-hub";
+}
+
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+export function verifyPassword(password: string, stored: string): boolean {
+  const [salt, hash] = stored.split(":");
+  if (!salt || !hash) {
+    return false;
+  }
+
+  const candidate = scryptSync(password, salt, 64);
+  const expected = Buffer.from(hash, "hex");
+  return candidate.length === expected.length && timingSafeEqual(candidate, expected);
+}
+
+export function makeSessionToken(userId: string): string {
+  const expires = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
+  const payload = `${userId}.${expires}`;
+  const signature = createHmac("sha256", authSecret()).update(payload).digest("hex");
+  return `${payload}.${signature}`;
+}
+
+export function sessionCookieHeader(token: string, clear = false): string {
+  const maxAge = clear ? 0 : SESSION_DAYS * 24 * 60 * 60;
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+}
+
+export interface SessionUser {
+  id: string;
+  username: string;
+}
+
+/** Verifies the session cookie and loads the user, or returns undefined. */
+export async function getSessionUser(request: Request): Promise<SessionUser | undefined> {
+  const cookies = request.headers.get("cookie") ?? "";
+  const match = cookies.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]+)`));
+  if (!match) {
+    return undefined;
+  }
+
+  const [userId, expires, signature] = match[1].split(".");
+  if (!userId || !expires || !signature) {
+    return undefined;
+  }
+
+  const payload = `${userId}.${expires}`;
+  const expected = createHmac("sha256", authSecret()).update(payload).digest("hex");
+  if (signature !== expected || Number(expires) < Date.now()) {
+    return undefined;
+  }
+
+  const { data } = await getCommunityDb()
+    .from("community_users")
+    .select("id,username")
+    .eq("id", userId)
+    .single<SessionUser>();
+  return data ?? undefined;
 }
 
 export function isAdminRequest(request: Request): boolean {
@@ -94,7 +162,7 @@ export async function checkRateLimit(
 export const PLAN_SUMMARY_COLUMNS =
   "id,name,description,game_version,dataset_version,thumbnail_data_url,needs,outputs," +
   "total_eu_t,machine_count,node_count,storage_count,edge_count,highest_tier," +
-  "highest_tier_index,upvotes,downvotes,score,downloads,views,created_at";
+  "highest_tier_index,upvotes,downvotes,score,downloads,views,created_at,user_id,author_name";
 
 export interface PlanRow {
   id: string;
@@ -118,10 +186,14 @@ export interface PlanRow {
   downloads: number;
   views: number;
   created_at: string;
+  user_id: string | null;
+  author_name: string;
 }
 
-export function rowToPlanSummary(row: PlanRow): CommunityPlanSummary {
+export function rowToPlanSummary(row: PlanRow, sessionUserId?: string): CommunityPlanSummary {
   return {
+    authorName: row.author_name || undefined,
+    isMine: Boolean(sessionUserId && row.user_id === sessionUserId),
     id: row.id,
     name: row.name,
     description: row.description,

@@ -1,9 +1,8 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Share2 } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { getMyPostForDesign } from "@/lib/community/client";
 import { useDesignStore } from "@/store/design-store";
 
 const MENU_WIDTH = 160;
@@ -117,7 +116,6 @@ export function DesignTabs() {
           <nav ref={trackRef} aria-label="Designs" className="flex w-max items-center gap-1">
             {designs.map((design) => {
               const isActive = design.id === activeDesignId;
-              const publishedPost = getMyPostForDesign(design.id);
 
               return (
                 <div
@@ -144,17 +142,10 @@ export function DesignTabs() {
                       type="button"
                       onClick={() => void switchToDesign(design.id)}
                       onDoubleClick={() => setRenamingId(design.id)}
-                      title={
-                        publishedPost
-                          ? `${design.name} — shared to the community as "${publishedPost.name}". Double-click to rename.`
-                          : `${design.name} — double-click to rename`
-                      }
-                      className="flex max-w-[170px] items-center gap-1 truncate text-xs font-medium"
+                      title={`${design.name} — double-click to rename`}
+                      className="max-w-[150px] truncate text-xs font-medium"
                     >
-                      {publishedPost ? (
-                        <Share2 className="h-3 w-3 shrink-0 text-cyan-500" />
-                      ) : null}
-                      <span className="truncate">{design.name}</span>
+                      {design.name}
                     </button>
                   )}
 

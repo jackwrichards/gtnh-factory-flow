@@ -5,6 +5,13 @@
 -- Only the Next.js API routes talk to these tables, using the service-role
 -- key, so all validation/rate limiting happens server-side in the app.
 
+create table if not exists community_users (
+  id uuid primary key default gen_random_uuid(),
+  username text not null unique check (char_length(username) between 3 and 24),
+  password_hash text not null,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists community_plans (
   id uuid primary key default gen_random_uuid(),
   name text not null check (char_length(name) between 1 and 80),
@@ -28,12 +35,13 @@ create table if not exists community_plans (
   downloads integer not null default 0,
   views integer not null default 0,
   uploader_key text not null,
-  -- sha256 of the secret manage token handed to the uploader's browser;
-  -- knowing the token authorizes updating or deleting the post.
-  manage_token_hash text not null default '',
+  user_id uuid references community_users (id) on delete cascade,
+  author_name text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create index if not exists community_plans_user_idx on community_plans (user_id);
 
 create index if not exists community_plans_created_at_idx on community_plans (created_at desc);
 create index if not exists community_plans_score_idx on community_plans (score desc);
@@ -62,6 +70,7 @@ create table if not exists community_events (
 create index if not exists community_events_window_idx
   on community_events (actor_key, action, created_at desc);
 
+alter table community_users enable row level security;
 alter table community_plans enable row level security;
 alter table community_votes enable row level security;
 alter table community_events enable row level security;

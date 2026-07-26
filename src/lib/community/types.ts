@@ -40,6 +40,9 @@ export interface CommunityPlanSummary extends CommunityPlanStats {
   downloads: number;
   views: number;
   createdAt: string;
+  authorName?: string;
+  /** True when the signed-in user owns this post. */
+  isMine?: boolean;
   /** This device's current vote, when known. */
   myVote?: 1 | -1;
 }
@@ -57,6 +60,8 @@ export interface CommunityPlanListRequest {
   sort?: CommunityPlanSort;
   search?: string;
   maxTier?: string;
+  /** Only the signed-in user's own posts. */
+  mine?: boolean;
   page?: number;
   pageSize?: number;
   deviceId?: string;
@@ -82,11 +87,10 @@ export interface CommunityUploadRequest {
 
 export interface CommunityUploadResponse {
   id: string;
-  /**
-   * Secret proving ownership of the post. Stored only in the uploader's
-   * browser; required to update or delete the post later.
-   */
-  manageToken: string;
+}
+
+export interface CommunityUser {
+  username: string;
 }
 
 export interface CommunityVoteRequest {

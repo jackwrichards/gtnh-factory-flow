@@ -14,7 +14,7 @@ import {
   attachMyVotes,
   checkRateLimit,
   getCommunityDb,
-  hashManageToken,
+  getSessionUser,
   isCommunityConfigured,
   makeActorKey,
   PLAN_SUMMARY_COLUMNS,
@@ -52,6 +52,8 @@ export async function GET(request: Request) {
       Math.max(1, Number.parseInt(url.searchParams.get("pageSize") ?? "24", 10) || 24),
     );
     const deviceId = url.searchParams.get("deviceId") ?? undefined;
+    const mineOnly = url.searchParams.get("mine") === "1";
+    const sessionUser = await getSessionUser(request);
 
     const db = getCommunityDb();
     let query = db.from("community_plans").select(PLAN_SUMMARY_COLUMNS, { count: "exact" });
@@ -60,6 +62,12 @@ export async function GET(request: Request) {
     }
     if (Number.isFinite(maxTierIndex) && maxTierIndex >= 0) {
       query = query.lte("highest_tier_index", maxTierIndex);
+    }
+    if (mineOnly) {
+      if (!sessionUser) {
+        return NextResponse.json({ plans: [], total: 0, page: 1, pageSize });
+      }
+      query = query.eq("user_id", sessionUser.id);
     }
 
     const { column, ascending } = SORT_COLUMNS[sort];
@@ -74,7 +82,7 @@ export async function GET(request: Request) {
       throw new Error(error.message);
     }
 
-    const plans = (data ?? []).map(rowToPlanSummary);
+    const plans = (data ?? []).map((row) => rowToPlanSummary(row, sessionUser?.id));
     if (deviceId) {
       await attachMyVotes(plans, makeActorKey(request, deviceId));
     }
@@ -132,6 +140,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing device id." }, { status: 400 });
     }
 
+    const sessionUser = await getSessionUser(request);
+    if (!sessionUser) {
+      return NextResponse.json(
+        { error: "Sign in to share plans to the community." },
+        { status: 401 },
+      );
+    }
+
     const thumbnailDataUrl =
       typeof body.thumbnailDataUrl === "string" &&
       body.thumbnailDataUrl.startsWith("data:image/") &&
@@ -159,13 +175,13 @@ export async function POST(request: Request) {
 
     // Stats are always derived server-side from the validated plan.
     const stats = computeCommunityPlanStats(project, calculateThroughput(project));
-    const manageToken = crypto.randomUUID();
 
     const db = getCommunityDb();
     const { data, error } = await db
       .from("community_plans")
       .insert({
-        manage_token_hash: hashManageToken(manageToken),
+        user_id: sessionUser.id,
+        author_name: sessionUser.username,
         name,
         description,
         game_version: gameVersion,
@@ -190,7 +206,7 @@ export async function POST(request: Request) {
       throw new Error(error?.message ?? "Insert failed");
     }
 
-    return NextResponse.json({ id: data.id, manageToken }, { status: 201 });
+    return NextResponse.json({ id: data.id }, { status: 201 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Sharing the plan failed." },

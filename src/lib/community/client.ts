@@ -6,6 +6,7 @@ import type {
   CommunityPlanSummary,
   CommunityUploadRequest,
   CommunityUploadResponse,
+  CommunityUser,
   CommunityVoteResponse,
 } from "./types";
 
@@ -44,6 +45,7 @@ export async function listCommunityPlans(
   if (params.sort) search.set("sort", params.sort);
   if (params.search) search.set("search", params.search);
   if (params.maxTier) search.set("maxTierIndex", params.maxTier);
+  if (params.mine) search.set("mine", "1");
   if (params.page) search.set("page", String(params.page));
   if (params.pageSize) search.set("pageSize", String(params.pageSize));
   search.set("deviceId", getDeviceId());
@@ -94,77 +96,61 @@ export async function uploadCommunityPlan(
 
 export async function updateCommunityPlan(
   planId: string,
-  manageToken: string,
   upload: Omit<CommunityUploadRequest, "deviceId">,
 ): Promise<{ id: string }> {
   const response = await fetch(`/api/community/plans/${encodeURIComponent(planId)}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...upload, manageToken }),
+    body: JSON.stringify(upload),
   });
   return parseJsonOrThrow<{ id: string }>(response);
 }
 
-export async function deleteCommunityPlan(planId: string, manageToken: string): Promise<void> {
+export async function deleteCommunityPlan(planId: string): Promise<void> {
   const response = await fetch(`/api/community/plans/${encodeURIComponent(planId)}`, {
     method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ manageToken }),
   });
   await parseJsonOrThrow<{ ok: boolean }>(response);
 }
 
-/**
- * Local registry of posts made from this browser: plan id → manage token and
- * (when shared from a design tab) the design it came from. This is the whole
- * "account": lose the browser storage and the posts become orphans.
- */
-const MY_POSTS_STORAGE_KEY = "gtnh-factory-flow.community-posts.v1";
+// ---------------------------------------------------------------------------
+// Accounts: username + password, session lives in an httpOnly cookie.
+// ---------------------------------------------------------------------------
 
-export interface MyCommunityPost {
-  planId: string;
-  manageToken: string;
-  designId?: string;
-  name: string;
-  sharedAt: string;
+export async function fetchCurrentUser(): Promise<CommunityUser | undefined> {
+  const response = await fetch("/api/community/auth/me");
+  const body = (await response.json().catch(() => undefined)) as
+    | { user: CommunityUser | null }
+    | undefined;
+  return body?.user ?? undefined;
 }
 
-export function listMyPosts(): MyCommunityPost[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
-
-  try {
-    const raw = window.localStorage.getItem(MY_POSTS_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as MyCommunityPost[]) : [];
-  } catch {
-    return [];
-  }
+export async function registerCommunityUser(
+  username: string,
+  password: string,
+): Promise<CommunityUser> {
+  const response = await fetch("/api/community/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  return parseJsonOrThrow<CommunityUser>(response);
 }
 
-export function rememberMyPost(post: MyCommunityPost): void {
-  const posts = listMyPosts().filter((entry) => entry.planId !== post.planId);
-  posts.push(post);
-  window.localStorage.setItem(MY_POSTS_STORAGE_KEY, JSON.stringify(posts));
+export async function loginCommunityUser(
+  username: string,
+  password: string,
+): Promise<CommunityUser> {
+  const response = await fetch("/api/community/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  return parseJsonOrThrow<CommunityUser>(response);
 }
 
-export function forgetMyPost(planId: string): void {
-  window.localStorage.setItem(
-    MY_POSTS_STORAGE_KEY,
-    JSON.stringify(listMyPosts().filter((entry) => entry.planId !== planId)),
-  );
-}
-
-export function getMyPost(planId: string): MyCommunityPost | undefined {
-  return listMyPosts().find((entry) => entry.planId === planId);
-}
-
-export function getMyPostForDesign(designId: string | undefined): MyCommunityPost | undefined {
-  if (!designId) {
-    return undefined;
-  }
-
-  return listMyPosts().find((entry) => entry.designId === designId);
+export async function logoutCommunityUser(): Promise<void> {
+  await fetch("/api/community/auth/logout", { method: "POST" });
 }
 
 /**

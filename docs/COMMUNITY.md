@@ -44,11 +44,12 @@ endpoints return 503 and the hub page shows an error banner.
 - Thumbnails: JPEG data URLs (≤ 400 KB) captured client-side from the canvas
   at share time and stored inline in the row; the capture shrinks itself until
   it fits. Cards without a photo fall back to the plan's top output sprite.
-- Ownership without accounts: uploads return a secret manage token stored in
-  the uploader's browser (`gtnh-factory-flow.community-posts.v1`), linked to
-  the design tab it came from. That token authorizes updating the post
-  (re-share offers "update vs post as new") and taking it down. Clearing
-  browser storage orphans the posts — that is the accepted trade for no logins.
+- Accounts: dead-simple username + password (`community_users`). Passwords are
+  scrypt-hashed; sessions are HMAC-signed httpOnly cookies (180 days), signed
+  with `COMMUNITY_HASH_SALT`. No email, no password reset. Sharing requires an
+  account; posts carry `user_id`/`author_name`, and only the signed-in owner
+  can update ("Post as → Update …" in the share dialog) or take down a post.
+  Votes remain anonymous (IP+device hash).
 - Moderation: set `COMMUNITY_ADMIN_TOKEN` and send it as the `x-admin-token`
   header on `DELETE /api/community/plans/<id>` to take down any post, or
   delete rows directly in the Supabase dashboard.

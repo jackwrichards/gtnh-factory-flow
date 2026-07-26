@@ -31,7 +31,8 @@ import type {
 import { GT_VOLTAGE_TIERS, getVoltageTierIndex } from "@/lib/model/tiers";
 import { formatRate } from "@/lib/model";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
-import { deleteCommunityPlan, forgetMyPost, getMyPost } from "@/lib/community/client";
+import { deleteCommunityPlan } from "@/lib/community/client";
+import { AuthForm, useCommunityUser } from "./auth";
 
 const SORT_OPTIONS: Array<{ value: CommunityPlanSort; label: string }> = [
   { value: "new", label: "Newest" },
@@ -53,10 +54,13 @@ interface LoadedPlans {
 
 export function CommunityBrowser() {
   const router = useRouter();
+  const { user, setUser, signOut } = useCommunityUser();
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<CommunityPlanSort>("new");
   const [search, setSearch] = useState("");
   const [maxTier, setMaxTier] = useState("");
+  const [mineOnly, setMineOnly] = useState(false);
+  const [isAuthOpen, setAuthOpen] = useState(false);
   const [error, setError] = useState<string>();
   const [preview, setPreview] = useState<CommunityPlanSummary>();
   const searchTimerRef = useRef<number>(undefined);
@@ -64,7 +68,7 @@ export function CommunityBrowser() {
   // Loading state is derived: whenever the query params move past what was
   // last fetched, we are loading. No sync setState inside effects needed.
   const [loaded, setLoaded] = useState<LoadedPlans>();
-  const queryKey = `${sort}|${debouncedSearch}|${maxTier}|${page}`;
+  const queryKey = `${sort}|${debouncedSearch}|${maxTier}|${page}|${mineOnly}|${user?.username ?? ""}`;
 
   useEffect(() => {
     window.clearTimeout(searchTimerRef.current);
@@ -80,6 +84,7 @@ export function CommunityBrowser() {
           sort,
           search: debouncedSearch || undefined,
           maxTier: maxTier || undefined,
+          mine: mineOnly || undefined,
           page,
           pageSize: PAGE_SIZE,
         });
@@ -102,7 +107,7 @@ export function CommunityBrowser() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, maxTier, page, queryKey, sort]);
+  }, [debouncedSearch, maxTier, mineOnly, page, queryKey, sort]);
 
   const plans = loaded?.plans ?? [];
   const total = loaded?.total ?? 0;
@@ -171,8 +176,7 @@ export function CommunityBrowser() {
   };
 
   const removeMyPost = async (plan: CommunityPlanSummary) => {
-    const mine = getMyPost(plan.id);
-    if (!mine) {
+    if (!plan.isMine) {
       return;
     }
 
@@ -181,8 +185,7 @@ export function CommunityBrowser() {
     }
 
     try {
-      await deleteCommunityPlan(plan.id, mine.manageToken);
-      forgetMyPost(plan.id);
+      await deleteCommunityPlan(plan.id);
       setLoaded((current) =>
         current
           ? {
@@ -256,7 +259,67 @@ export function CommunityBrowser() {
             </option>
           ))}
         </select>
+        {user ? (
+          <label className="flex items-center gap-1.5 rounded border border-line-strong bg-surface px-2 py-1.5 text-sm">
+            <input
+              type="checkbox"
+              checked={mineOnly}
+              onChange={(event) => {
+                setMineOnly(event.target.checked);
+                setPage(1);
+              }}
+            />
+            My posts
+          </label>
+        ) : null}
+        <span className="ml-auto flex items-center gap-2 text-sm">
+          {user ? (
+            <>
+              <span className="text-fg-subtle">
+                Signed in as <span className="font-semibold text-fg">{user.username}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setMineOnly(false);
+                  void signOut();
+                }}
+                className="rounded border border-line-strong px-2 py-1 hover:bg-surface-raised"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAuthOpen(true)}
+              className="rounded border border-cyan-700 bg-cyan-600 px-3 py-1.5 font-medium text-white hover:bg-cyan-500"
+            >
+              Sign in
+            </button>
+          )}
+        </span>
       </div>
+
+      {isAuthOpen && !user ? (
+        <div
+          className="fixed inset-0 z-[100] grid place-items-center bg-neutral-950/50 p-4"
+          onClick={() => setAuthOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded border border-line-strong bg-surface p-4 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="mb-3 text-base font-semibold">Community account</h2>
+            <AuthForm
+              onSignedIn={(signedInUser) => {
+                setUser(signedInUser);
+                setAuthOpen(false);
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <p className="mb-3 rounded border border-red-400 bg-red-500/10 px-3 py-2 text-sm text-red-500">
@@ -345,7 +408,7 @@ function PlanCard({
   onOpen: (plan: CommunityPlanSummary) => void;
   onDelete: (plan: CommunityPlanSummary) => void;
 }) {
-  const isMine = Boolean(getMyPost(plan.id));
+  const isMine = plan.isMine === true;
   return (
     <div className="flex flex-col overflow-hidden rounded border border-line bg-surface shadow-sm">
       <button
@@ -409,6 +472,7 @@ function PlanCard({
             </button>
             <p className="text-xs text-fg-muted">
               {plan.gameVersion ? `GTNH ${plan.gameVersion}` : plan.datasetVersionId || "unknown"}
+              {plan.authorName ? ` · by ${plan.authorName}` : ""}
             </p>
           </div>
           <VoteControls plan={plan} onVote={onVote} />
@@ -509,7 +573,7 @@ function describeStat(stat: PlanResourceStat): string {
 function ResourceIconRow({
   label,
   stats,
-  max = 8,
+  max = 6,
 }: {
   label: string;
   stats: PlanResourceStat[];
@@ -522,11 +586,11 @@ function ResourceIconRow({
   const shown = stats.slice(0, max);
   const more = stats.length - shown.length;
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1.5">
       <span className="w-11 shrink-0 text-[11px] font-medium uppercase tracking-wide text-fg-muted">
         {label}
       </span>
-      <div className="flex flex-wrap items-center gap-0.5">
+      <div className="minecraft-pixel-art flex flex-wrap items-center gap-1">
         {shown.map((stat) => (
           <span key={`${stat.kind}:${stat.resourceId}`} title={describeStat(stat)}>
             <ResourceIcon
@@ -543,11 +607,10 @@ function ResourceIconRow({
               bare
               showAmount={false}
               tooltip={false}
-              className="!h-6 !w-6"
             />
           </span>
         ))}
-        {more > 0 ? <span className="ml-0.5 text-[11px] text-fg-muted">+{more}</span> : null}
+        {more > 0 ? <span className="ml-0.5 text-xs text-fg-muted">+{more}</span> : null}
       </div>
     </div>
   );
@@ -568,7 +631,7 @@ function PlanPreviewModal({
   onOpen: (plan: CommunityPlanSummary) => void;
   onDelete: (plan: CommunityPlanSummary) => void;
 }) {
-  const isMine = Boolean(getMyPost(plan.id));
+  const isMine = plan.isMine === true;
   return (
     <div
       className="fixed inset-0 z-[100] grid place-items-center bg-neutral-950/60 p-4"
@@ -583,6 +646,7 @@ function PlanPreviewModal({
             <h2 className="truncate text-lg font-semibold">{plan.name}</h2>
             <p className="text-xs text-fg-muted">
               {plan.gameVersion ? `GTNH ${plan.gameVersion}` : plan.datasetVersionId}
+              {plan.authorName ? ` · by ${plan.authorName}` : ""}
               {" · "}
               shared {new Date(plan.createdAt).toLocaleDateString()}
             </p>
@@ -697,7 +761,7 @@ function PreviewResourceList({
                 bare
                 showAmount={false}
                 tooltip={false}
-                className="!h-5 !w-5 shrink-0"
+                className="shrink-0"
               />
               <span className="truncate">{stat.displayName ?? stat.resourceId}</span>
             </span>
