@@ -4,7 +4,6 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useDesignStore } from "@/store/design-store";
-import { BoardActions } from "./BoardActions";
 
 const MENU_WIDTH = 160;
 
@@ -201,8 +200,6 @@ export function DesignTabs() {
         <span className="ml-auto shrink-0 pl-1 text-[11px] text-fg-muted">
           {saveState === "saving" ? "Saving…" : saveState === "error" ? "Save failed" : "Saved"}
         </span>
-
-        <BoardActions />
       </div>
 
       {openMenu ? (

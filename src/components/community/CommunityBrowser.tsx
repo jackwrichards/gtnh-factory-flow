@@ -36,19 +36,28 @@ const SORT_OPTIONS: Array<{ value: CommunityPlanSort; label: string }> = [
   { value: "power", label: "Highest power" },
 ];
 
+const PAGE_SIZE = 24;
+
+interface LoadedPlans {
+  key: string;
+  plans: CommunityPlanSummary[];
+  total: number;
+}
+
 export function CommunityBrowser() {
   const router = useRouter();
-  const [plans, setPlans] = useState<CommunityPlanSummary[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<CommunityPlanSort>("new");
   const [search, setSearch] = useState("");
   const [maxTier, setMaxTier] = useState("");
-  const [isLoading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
   const [preview, setPreview] = useState<CommunityPlanSummary>();
   const searchTimerRef = useRef<number>(undefined);
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  // Loading state is derived: whenever the query params move past what was
+  // last fetched, we are loading. No sync setState inside effects needed.
+  const [loaded, setLoaded] = useState<LoadedPlans>();
+  const queryKey = `${sort}|${debouncedSearch}|${maxTier}|${page}`;
 
   useEffect(() => {
     window.clearTimeout(searchTimerRef.current);
@@ -56,40 +65,56 @@ export function CommunityBrowser() {
     return () => window.clearTimeout(searchTimerRef.current);
   }, [search]);
 
-  const pageSize = 24;
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(undefined);
-    try {
-      const response = await listCommunityPlans({
-        sort,
-        search: debouncedSearch || undefined,
-        maxTier: maxTier || undefined,
-        page,
-        pageSize,
-      });
-      setPlans(response.plans);
-      setTotal(response.total);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Loading plans failed.");
-    } finally {
-      setLoading(false);
-    }
-  }, [debouncedSearch, maxTier, page, sort]);
-
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await listCommunityPlans({
+          sort,
+          search: debouncedSearch || undefined,
+          maxTier: maxTier || undefined,
+          page,
+          pageSize: PAGE_SIZE,
+        });
+        if (cancelled) {
+          return;
+        }
 
-  useEffect(() => {
-    setPage(1);
-  }, [sort, debouncedSearch, maxTier]);
+        setError(undefined);
+        setLoaded({ key: queryKey, plans: response.plans, total: response.total });
+      } catch (loadError) {
+        if (cancelled) {
+          return;
+        }
+
+        setError(loadError instanceof Error ? loadError.message : "Loading plans failed.");
+        setLoaded({ key: queryKey, plans: [], total: 0 });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, maxTier, page, queryKey, sort]);
+
+  const plans = loaded?.plans ?? [];
+  const total = loaded?.total ?? 0;
+  const isLoading = loaded?.key !== queryKey;
+
+  const patchPlans = useCallback(
+    (patch: (entry: CommunityPlanSummary) => CommunityPlanSummary) => {
+      setLoaded((current) =>
+        current ? { ...current, plans: current.plans.map(patch) } : current,
+      );
+      setPreview((current) => (current ? patch(current) : current));
+    },
+    [],
+  );
 
   const vote = async (plan: CommunityPlanSummary, value: 1 | -1) => {
     try {
       const response = await voteCommunityPlan(plan.id, value);
-      const patch = (entry: CommunityPlanSummary) =>
+      patchPlans((entry) =>
         entry.id === plan.id
           ? {
               ...entry,
@@ -98,9 +123,8 @@ export function CommunityBrowser() {
               score: response.score,
               myVote: response.myVote,
             }
-          : entry;
-      setPlans((current) => current.map(patch));
-      setPreview((current) => (current ? patch(current) : current));
+          : entry,
+      );
     } catch (voteError) {
       setError(voteError instanceof Error ? voteError.message : "Voting failed.");
     }
@@ -134,10 +158,9 @@ export function CommunityBrowser() {
   };
 
   const bumpDownloads = (planId: string) => {
-    const patch = (entry: CommunityPlanSummary) =>
-      entry.id === planId ? { ...entry, downloads: entry.downloads + 1 } : entry;
-    setPlans((current) => current.map(patch));
-    setPreview((current) => (current ? patch(current) : current));
+    patchPlans((entry) =>
+      entry.id === planId ? { ...entry, downloads: entry.downloads + 1 } : entry,
+    );
   };
 
   const openPreview = async (plan: CommunityPlanSummary) => {
@@ -150,7 +173,7 @@ export function CommunityBrowser() {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-6">
@@ -159,14 +182,20 @@ export function CommunityBrowser() {
           <Search className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" />
           <input
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(1);
+            }}
             placeholder="Search plans by name…"
             className="w-full rounded border border-line-strong bg-surface py-1.5 pl-8 pr-2 text-sm"
           />
         </label>
         <select
           value={sort}
-          onChange={(event) => setSort(event.target.value as CommunityPlanSort)}
+          onChange={(event) => {
+            setSort(event.target.value as CommunityPlanSort);
+            setPage(1);
+          }}
           className="rounded border border-line-strong bg-surface px-2 py-1.5 text-sm"
           aria-label="Sort plans"
         >
@@ -178,7 +207,10 @@ export function CommunityBrowser() {
         </select>
         <select
           value={maxTier}
-          onChange={(event) => setMaxTier(event.target.value)}
+          onChange={(event) => {
+            setMaxTier(event.target.value);
+            setPage(1);
+          }}
           className="rounded border border-line-strong bg-surface px-2 py-1.5 text-sm"
           aria-label="Filter by maximum machine tier"
         >

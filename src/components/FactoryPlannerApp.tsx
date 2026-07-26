@@ -1,5 +1,7 @@
 "use client";
 
+import { Users } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useRef } from "react";
 import {
   DEFAULT_DATASET_MANIFEST_URL,
@@ -15,6 +17,7 @@ import { useDesignStore } from "@/store/design-store";
 import { takePendingEditorImport } from "@/lib/community/client";
 import { parseFactoryProjectJson } from "@/lib/import-export";
 import { useThemeStore } from "@/store/theme-store";
+import { BoardActions } from "./BoardActions";
 import { DesignTabs } from "./DesignTabs";
 import { FactoryFlow } from "./flow/FactoryFlow";
 import { InspectorPanel } from "./InspectorPanel";
@@ -182,6 +185,20 @@ export function FactoryPlannerApp() {
 
   return (
     <div className="flex h-screen min-h-[720px] flex-col bg-canvas text-fg">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-3 py-1.5">
+        <span className="text-sm font-bold tracking-tight">
+          GTNH <span className="text-cyan-500">Planner</span>
+        </span>
+        <div className="flex items-center gap-2">
+          <BoardActions />
+          <Link
+            href="/community"
+            className="inline-flex h-7 items-center gap-1.5 rounded border border-cyan-700 bg-cyan-600 px-3 text-sm font-semibold text-white hover:bg-cyan-500"
+          >
+            <Users className="h-3.5 w-3.5" /> Community
+          </Link>
+        </div>
+      </header>
       <main className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)_440px]">
         {/* Each column carries its own header row, all the same height, so the
             three line up where the full-width bar used to be. */}

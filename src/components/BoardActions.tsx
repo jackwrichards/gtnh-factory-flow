@@ -9,14 +9,12 @@ import {
   Moon,
   Redo2,
   Share2,
-  Users,
   Sun,
   Trash2,
   Undo2,
   Upload,
   WandSparkles,
 } from "lucide-react";
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import {
   cloneImportedProject,
@@ -295,14 +293,6 @@ export function BoardActions() {
           disabled={project.nodes.length === 0}
           onClick={() => setShareOpen(true)}
         />
-        <Link
-          href="/community"
-          title="Browse community plans"
-          aria-label="Browse community plans"
-          className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised"
-        >
-          <Users className="h-3.5 w-3.5" />
-        </Link>
         <ToolbarButton
           icon={theme === "dark" ? Sun : Moon}
           label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
