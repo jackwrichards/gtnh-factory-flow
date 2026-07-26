@@ -109,3 +109,22 @@ export interface GapSolveResult<TRecipe extends SolverRecipe = SolverRecipe> {
   plans: Array<GapFillPlan<TRecipe>>;
   notes: string[];
 }
+
+export interface GapSolveHooks {
+  /** Fires as the solver starts exploring each candidate root. */
+  onPlanStart?: (rootName: string, planIndex: number) => void;
+}
+
+/**
+ * A heartbeat from a running solve, streamed to whoever is waiting so the
+ * spinner can say what is actually happening instead of just spinning.
+ */
+export interface GapSolveProgress {
+  stage: "indexing" | "exploring" | "hydrating";
+  /** Producer lookups performed so far. */
+  lookups?: number;
+  /** The resource currently being expanded. */
+  resource?: string;
+  planLabel?: string;
+  planIndex?: number;
+}

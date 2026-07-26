@@ -57,16 +57,53 @@ export async function POST(
       );
     }
 
-    const result = await solveDatasetGap(versionId, {
-      target: parsed.data.target,
-      supply: parsed.data.supply,
-      existingOutputs: parsed.data.existingOutputs,
-      maxTier: parseTierFilter(parsed.data.maxTier),
-      options: parsed.data.options,
+    // A solve can take a while on a cold index, so the response is a stream of
+    // newline-delimited JSON: progress heartbeats while it runs, then one
+    // final `result` (or `error`) line. The client narrates the heartbeats.
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (event: unknown) => {
+          try {
+            controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+          } catch {
+            // The client hung up; the solve just finishes into the void.
+          }
+        };
+
+        try {
+          const result = await solveDatasetGap(
+            versionId,
+            {
+              target: parsed.data.target,
+              supply: parsed.data.supply,
+              existingOutputs: parsed.data.existingOutputs,
+              maxTier: parseTierFilter(parsed.data.maxTier),
+              options: parsed.data.options,
+            },
+            (progress) => send({ type: "progress", progress }),
+          );
+          send({ type: "result", ...result });
+        } catch (error) {
+          send({
+            type: "error",
+            error: error instanceof Error ? error.message : "Gap solve failed.",
+          });
+        } finally {
+          try {
+            controller.close();
+          } catch {
+            // Already closed by a client disconnect.
+          }
+        }
+      },
     });
 
-    return NextResponse.json(result, {
-      headers: { "Cache-Control": "no-store" },
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
     });
   } catch (error) {
     return NextResponse.json(

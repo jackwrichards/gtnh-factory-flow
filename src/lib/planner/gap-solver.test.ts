@@ -365,6 +365,25 @@ describe("solveGapFill", () => {
     );
   });
 
+  it("announces each plan exploration through the hooks", async () => {
+    const planStarts: Array<[string, number]> = [];
+    await solveGapFill(
+      {
+        target: { kind: "fluid", id: "polyethylene", displayName: "Polyethylene", amountPerSecond: 216 },
+        supply: supply(["fluid", "biomass"], ["fluid", "water"]),
+      },
+      fixtureLookup(),
+      { onPlanStart: (rootName, planIndex) => planStarts.push([rootName, planIndex]) },
+    );
+
+    // Exploration order is the ranker's, not the final display order.
+    expect(planStarts.map(([rootName]) => rootName).sort()).toEqual([
+      "LCR: Polyethylene (air)",
+      "LCR: Polyethylene (oxygen)",
+    ]);
+    expect(planStarts.map(([, planIndex]) => planIndex)).toEqual([0, 1]);
+  });
+
   it("respects the tier cap", async () => {
     const result = await solveGapFill(
       {

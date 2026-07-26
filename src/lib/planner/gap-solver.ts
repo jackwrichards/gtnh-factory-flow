@@ -13,6 +13,7 @@ import type {
   GapFillPlan,
   GapFillStep,
   GapFillStepInput,
+  GapSolveHooks,
   GapSolveRequest,
   GapSolveResult,
   PlannerResource,
@@ -81,6 +82,7 @@ interface SolveContext {
 export async function solveGapFill(
   request: GapSolveRequest,
   lookup: RecipeProducerLookup,
+  hooks: GapSolveHooks = {},
 ): Promise<GapSolveResult> {
   const options = request.options ?? {};
   const producerCache = new Map<string, Promise<SolverRecipe[]>>();
@@ -146,6 +148,7 @@ export async function solveGapFill(
     seenRootIds.add(root.id);
     seenRootNames.add(root.name);
 
+    hooks.onPlanStart?.(root.name, plans.length);
     const plan = await buildPlanForRoot(request, root, plans.length, context);
     if (plan) {
       plans.push(plan);

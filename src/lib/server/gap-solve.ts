@@ -1,8 +1,10 @@
 import { getTierIndexForFilter, solveGapFill } from "@/lib/planner/gap-solver";
+import { resourceLabel } from "@/lib/model/resources";
 import type {
   ExistingProduction,
   GapFillPlan,
   GapSolveOptions,
+  GapSolveProgress,
   GapSolveTarget,
   PlannerResource,
   SolverRecipe,
@@ -39,8 +41,15 @@ export interface DatasetGapSolveResult {
 export async function solveDatasetGap(
   versionId: string,
   request: DatasetGapSolveRequest,
+  onProgress?: (progress: GapSolveProgress) => void,
 ): Promise<DatasetGapSolveResult> {
   const maxTier = request.maxTier ?? "all";
+  // Progress carries the current plan context on every heartbeat so a viewer
+  // joining mid-stream still knows what is being explored.
+  let lookups = 0;
+  let currentPlan: Pick<GapSolveProgress, "planLabel" | "planIndex"> = {};
+
+  onProgress?.({ stage: "indexing" });
   // "Uses something I have" — computed once, then used to sample candidates
   // from variant-heavy families (one Coke Oven recipe per log type) by
   // compatibility with the stockpile instead of by luck.
@@ -60,16 +69,32 @@ export async function solveDatasetGap(
       },
     },
     {
-      getProducers: (resource) =>
-        getDatasetProducingRecipes(
+      getProducers: (resource) => {
+        lookups += 1;
+        onProgress?.({
+          stage: "exploring",
+          lookups,
+          resource: resourceLabel(resource),
+          ...currentPlan,
+        });
+        return getDatasetProducingRecipes(
           versionId,
           resource,
           maxTier,
           PRODUCER_LOOKUP_LIMIT,
           preferredRecipeIndexes,
-        ),
+        );
+      },
+    },
+    {
+      onPlanStart: (rootName, planIndex) => {
+        currentPlan = { planLabel: rootName, planIndex };
+        onProgress?.({ stage: "exploring", lookups, ...currentPlan });
+      },
     },
   );
+
+  onProgress?.({ stage: "hydrating", lookups });
 
   // The canvas renders full recipes (NEI layout, machine handlers, icons), so
   // the chosen steps go back hydrated rather than as compact summaries.

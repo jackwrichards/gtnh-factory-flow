@@ -5,6 +5,7 @@ import type {
   ExistingProduction,
   GapFillPlan,
   GapSolveOptions,
+  GapSolveProgress,
   GapSolveTarget,
   PlannerResource,
 } from "@/lib/planner/types";
@@ -181,22 +182,108 @@ export interface RecipeDatasetSolveResult {
   notes: string[];
 }
 
+/**
+ * Runs a solve and narrates it: the endpoint streams newline-delimited JSON —
+ * progress heartbeats while the search runs, then a final result line.
+ */
 export async function solveRecipeDatasetGap(
   _manifestUrl: string,
   version: DatasetVersion,
   request: RecipeDatasetSolveRequest,
-  options: { signal?: AbortSignal } = {},
+  options: { signal?: AbortSignal; onProgress?: (progress: GapSolveProgress) => void } = {},
 ): Promise<RecipeDatasetSolveResult> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/solve`,
     window.location.origin,
   );
   addDatasetCacheKey(url, version);
-  return fetchJson<RecipeDatasetSolveResult>(url.toString(), {
+
+  const response = await fetch(url.toString(), {
     method: "POST",
+    cache: "no-store",
+    headers: {
+      Accept: "application/x-ndjson, application/json",
+      "Content-Type": "application/json",
+    },
     body: JSON.stringify(request),
     signal: options.signal,
   });
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok || !contentType.includes("ndjson") || !response.body) {
+    const body = await response.text();
+    const payload = safeParseJson(body) as
+      | { error?: string; plans?: RecipeDatasetSolveResult["plans"]; notes?: string[] }
+      | undefined;
+    if (response.ok && payload?.plans) {
+      return { plans: payload.plans, notes: payload.notes ?? [] };
+    }
+
+    throw new Error(
+      payload?.error ?? `Request failed (${response.status} ${response.statusText || "HTTP error"}).`,
+    );
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  let result: RecipeDatasetSolveResult | undefined;
+
+  const handleLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const event = safeParseJson(trimmed) as
+      | ({ type: "progress"; progress: GapSolveProgress } | ({ type: "result" } & RecipeDatasetSolveResult) | { type: "error"; error?: string })
+      | undefined;
+    if (!event) {
+      return;
+    }
+
+    if (event.type === "progress") {
+      options.onProgress?.(event.progress);
+      return;
+    }
+
+    if (event.type === "result") {
+      result = { plans: event.plans, notes: event.notes ?? [] };
+      return;
+    }
+
+    throw new Error(event.error ?? "Gap solve failed.");
+  };
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffered += decoder.decode(value, { stream: true });
+    let newlineIndex = buffered.indexOf("\n");
+    while (newlineIndex !== -1) {
+      handleLine(buffered.slice(0, newlineIndex));
+      buffered = buffered.slice(newlineIndex + 1);
+      newlineIndex = buffered.indexOf("\n");
+    }
+  }
+  handleLine(buffered);
+
+  if (!result) {
+    throw new Error("The solve stream ended without a result.");
+  }
+
+  return result;
+}
+
+function safeParseJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
 }
 
 export const loadRecipeDatasetVersion = initRecipeDatasetVersion;

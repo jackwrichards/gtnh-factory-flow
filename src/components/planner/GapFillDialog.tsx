@@ -16,7 +16,12 @@ import {
 import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
 import type { Recipe, ResourceBalance } from "@/lib/model/types";
 import { materializeGapFillPlan } from "@/lib/planner/materialize";
-import type { ExistingProduction, GapFillPlan, PlannerResource } from "@/lib/planner/types";
+import type {
+  ExistingProduction,
+  GapFillPlan,
+  GapSolveProgress,
+  PlannerResource,
+} from "@/lib/planner/types";
 import { calculateThroughput } from "@/lib/solver";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { useFactoryStore } from "@/store/factory-store";
@@ -61,6 +66,7 @@ export function GapFillDialog({
     result?: RecipeDatasetSolveResult;
     message?: string;
   }>();
+  const [progress, setProgress] = useState<{ key: string } & GapSolveProgress>();
 
   const version = useMemo(
     () => datasetManifest?.versions.find((entry) => entry.id === selectedDatasetVersionId),
@@ -138,7 +144,10 @@ export function GapFillDialog({
         existingOutputs,
         maxTier: store.maxTierFilter,
       },
-      { signal: controller.signal },
+      {
+        signal: controller.signal,
+        onProgress: (event) => setProgress({ key: solveKey, ...event }),
+      },
     )
       .then((result) => setSolved({ key: solveKey, result }))
       .catch((error) => {
@@ -197,10 +206,7 @@ export function GapFillDialog({
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
         {solveState.status === "loading" ? (
-          <div className="flex items-center gap-3 py-8 text-fg-muted">
-            <LoaderCircle className="h-5 w-5 animate-spin" />
-            <span>Searching the recipe graph…</span>
-          </div>
+          <SolveProgressPanel progress={progress?.key === solveKey ? progress : undefined} />
         ) : null}
 
         {solveState.status === "error" ? (
@@ -240,6 +246,43 @@ export function GapFillDialog({
         ) : null}
       </div>
     </PlannerDialog>
+  );
+}
+
+/**
+ * Narrates the running solve from its streamed heartbeats: which phase, which
+ * candidate plan, which resource it is currently finding producers for.
+ */
+function SolveProgressPanel({ progress }: { progress?: GapSolveProgress }) {
+  const headline = !progress
+    ? "Contacting the solver…"
+    : progress.stage === "indexing"
+      ? "Warming up the recipe indexes…"
+      : progress.stage === "hydrating"
+        ? "Fetching full recipes for the chosen steps…"
+        : progress.planLabel
+          ? `Plan ${(progress.planIndex ?? 0) + 1}: exploring via ${progress.planLabel}`
+          : "Picking candidate chains for the target…";
+  const detail =
+    progress?.stage === "indexing"
+      ? "Loading the dataset index and matching your stockpile against it — the first solve after a server restart is the slow one."
+      : progress?.stage === "exploring" && progress.resource
+        ? `Looking for ways to make ${progress.resource}`
+        : undefined;
+
+  return (
+    <div className="flex flex-col gap-1.5 py-6">
+      <div className="flex items-center gap-3">
+        <LoaderCircle className="h-5 w-5 shrink-0 animate-spin text-fg-muted" />
+        <span className="min-w-0 flex-1 truncate text-base font-medium">{headline}</span>
+      </div>
+      {detail ? <div className="truncate pl-8 text-sm text-fg-muted">{detail}</div> : null}
+      {progress?.lookups ? (
+        <div className="pl-8 text-xs tabular-nums text-fg-muted">
+          {progress.lookups} recipe lookups so far
+        </div>
+      ) : null}
+    </div>
   );
 }
 
