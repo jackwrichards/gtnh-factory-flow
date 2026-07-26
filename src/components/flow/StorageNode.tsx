@@ -8,6 +8,7 @@ import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { useFactoryStore } from "@/store/factory-store";
 import { makeResourceHandleId } from "./resource-handles";
 import { GT_NODE_COLORS } from "./node-colors";
+import { getPaintBrushCursor } from "./paint-cursor";
 
 export interface StorageNodeData extends Record<string, unknown> {
   storage: FactoryStorage;
@@ -31,6 +32,13 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
     (hoveredFlowResourceKey ?? selectedFlowResourceKey) === resourceKey;
   const isSearchHighlighted = storageMatchesSearch(storage, recipeSearch);
   const storageColor = storage.colorTag ? GT_NODE_COLORS[storage.colorTag] : undefined;
+  const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
+  const paintCursor =
+    nodeColorPaintMode !== undefined
+      ? getPaintBrushCursor(
+          nodeColorPaintMode ? GT_NODE_COLORS[nodeColorPaintMode].swatch : undefined,
+        )
+      : undefined;
   const produced = result?.producedPerSecond ?? 0;
   const consumed = result?.consumedPerSecond ?? 0;
   const net = result?.netPerSecond ?? 0;
@@ -60,15 +68,16 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
           ? "outline outline-4 outline-offset-4 outline-yellow-300 ring-8 ring-cyan-300 [filter:drop-shadow(0_0_16px_rgba(34,211,238,0.95))]"
           : "",
       ].join(" ")}
-      style={
-        storageColor
+      style={{
+        ...(storageColor
           ? ({
               "--storage-node-tint": storageColor.panel,
               "--storage-node-tint-header": storageColor.header,
               "--storage-node-tint-border": storageColor.border,
             } as CSSProperties)
-          : undefined
-      }
+          : undefined),
+        ...(paintCursor ? { cursor: paintCursor } : undefined),
+      }}
       title={`${title}\nIn ${formatRate(produced, 3)}${unit}\nOut ${formatRate(consumed, 3)}${unit}\nNet ${net >= 0 ? "+" : ""}${formatRate(net, 3)}${unit}`}
     >
       {storage.kind === "fluid" ? (

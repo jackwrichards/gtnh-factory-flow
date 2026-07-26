@@ -27,17 +27,11 @@ describe("getEdgeDetailLevel", () => {
     expect(hasEdgeDetail(detail, EDGE_DETAIL_GLOBAL)).toBe(false);
   });
 
-  it("drops to global view when zoomed far out", () => {
+  it("drops to global view when zoomed far out but keeps arrows and labels", () => {
     const detail = getEdgeDetailLevel(0.2);
     expect(hasEdgeDetail(detail, EDGE_DETAIL_GLOBAL)).toBe(true);
-    expect(hasEdgeDetail(detail, EDGE_DETAIL_ARROWS)).toBe(false);
-    expect(hasEdgeDetail(detail, EDGE_DETAIL_LABELS)).toBe(false);
-  });
-
-  it("shows arrows before labels on the way in", () => {
-    const detail = getEdgeDetailLevel(0.75);
     expect(hasEdgeDetail(detail, EDGE_DETAIL_ARROWS)).toBe(true);
-    expect(hasEdgeDetail(detail, EDGE_DETAIL_LABELS)).toBe(false);
+    expect(hasEdgeDetail(detail, EDGE_DETAIL_LABELS)).toBe(true);
   });
 
   it("treats each threshold as inclusive at its exact value", () => {

@@ -279,6 +279,27 @@ export interface FactoryStorage {
   };
 }
 
+export type FactoryAnnotationKind = "box" | "arrow" | "text";
+
+export type FactoryAnnotationArrowDirection = "down-right" | "down-left" | "up-right" | "up-left";
+
+export interface FactoryAnnotation {
+  id: string;
+  kind: FactoryAnnotationKind;
+  colorTag?: FactoryNodeColorTag;
+  text?: string;
+  position: {
+    x: number;
+    y: number;
+  };
+  size: {
+    width: number;
+    height: number;
+  };
+  /** Arrow only: which corners of the bounding box the arrow connects (tail → head). */
+  arrowDirection?: FactoryAnnotationArrowDirection;
+}
+
 export interface FactoryEdge {
   id: string;
   source: string;
@@ -313,6 +334,7 @@ export interface FactoryProject {
   recipes: Recipe[];
   nodes: FactoryNode[];
   storages?: FactoryStorage[];
+  annotations?: FactoryAnnotation[];
   edges: FactoryEdge[];
   fuelProfiles: FuelProfile[];
   selectedFuelProfileId?: string;

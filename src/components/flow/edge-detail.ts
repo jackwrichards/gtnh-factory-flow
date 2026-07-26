@@ -8,8 +8,10 @@
  * is actually crossed.
  */
 
-export const EDGE_LABEL_ZOOM = 0.78;
-export const EDGE_ARROW_ZOOM = 0.72;
+// Labels and arrows used to fade out below ~0.7 zoom, but the rate legends are
+// the primary way to read a plan, so they now stay visible at every zoom level.
+export const EDGE_LABEL_ZOOM = 0;
+export const EDGE_ARROW_ZOOM = 0;
 export const EDGE_GLOBAL_ZOOM = 0.45;
 
 export const EDGE_DETAIL_GLOBAL = 1;

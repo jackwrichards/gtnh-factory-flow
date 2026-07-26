@@ -29,7 +29,7 @@
   --surface-raised: #fafafa;
   --surface-sunken: #f5f5f5;
   --canvas: #f5f5f5;
-  --canvas-dot: #d4d4d4;
+  --canvas-dot: #b8b8b8;
   --fg: #0a0a0a;
   --fg-subtle: #262626;
   --fg-muted: #737373;
@@ -97,7 +97,7 @@
   --surface-raised: #303238;
   --surface-sunken: #1b1d21;
   --canvas: #1b1d21;
-  --canvas-dot: #34363c;
+  --canvas-dot: #4a4d55;
   --fg: #f5f5f5;
   --fg-subtle: #e5e5e5;
   --fg-muted: #a3a3a3;
@@ -227,9 +227,33 @@ textarea {
   pointer-events: none;
 }
 
-.factory-flow-board--moving .react-flow__edgelabel-renderer {
-  opacity: 0;
-  visibility: hidden;
+/* While paint mode is active the whole board keeps the brush cursor, so the
+   grab/grabbing pan cursors don't take over between nodes. */
+.factory-flow-board--painting .react-flow__pane,
+.factory-flow-board--painting .react-flow__pane.draggable,
+.factory-flow-board--painting .react-flow__pane.dragging {
+  cursor: var(--paint-cursor, crosshair) !important;
+}
+
+/* While the delete tool is armed, everything on the board shows the red X. */
+.factory-flow-board--deleting .react-flow__pane,
+.factory-flow-board--deleting .react-flow__node,
+.factory-flow-board--deleting .react-flow__edge,
+.factory-flow-board--deleting .react-flow__edgelabel-renderer * {
+  cursor: var(--delete-cursor, not-allowed) !important;
+}
+
+/* Resource edges normally opt out of pointer events (labels do selection);
+   the delete tool needs the lines themselves to take the click. */
+.factory-flow-board--deleting .react-flow__edge path {
+  pointer-events: stroke !important;
+}
+
+/* While an annotation tool is armed, everything on the board draws. */
+.factory-flow-board--annotating,
+.factory-flow-board--annotating .react-flow__pane,
+.factory-flow-board--annotating .react-flow__node {
+  cursor: crosshair !important;
 }
 
 .factory-flow-board .react-flow__node.selected {

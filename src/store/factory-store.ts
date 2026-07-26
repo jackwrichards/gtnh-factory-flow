@@ -16,6 +16,7 @@ import {
   resourceLabel,
 } from "@/lib/model/resources";
 import type {
+  FactoryAnnotation,
   FactoryEdge,
   FactoryNode,
   FactoryNodeColorTag,
@@ -136,6 +137,10 @@ interface FactoryStore {
   autoRouteStorage: (storageId: string) => void;
   updateStorage: (storageId: string, patch: Partial<FactoryStorage>) => void;
   setStoragePosition: (storageId: string, position: FactoryStorage["position"]) => void;
+  addAnnotation: (annotation: Omit<FactoryAnnotation, "id">) => void;
+  updateAnnotation: (annotationId: string, patch: Partial<FactoryAnnotation>) => void;
+  deleteAnnotation: (annotationId: string) => void;
+  setAnnotationPosition: (annotationId: string, position: FactoryAnnotation["position"]) => void;
   setNodePosition: (nodeId: string, position: FactoryNode["position"]) => void;
   connectNodes: (
     sourceNodeId: string,
@@ -827,6 +832,55 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       return withProjectHistory(state, {
         project,
       });
+    });
+  },
+  addAnnotation: (annotation) => {
+    set((state) => {
+      const project = touchProject({
+        ...state.project,
+        annotations: [
+          ...(state.project.annotations ?? []),
+          { ...annotation, id: createId("annotation") },
+        ],
+      });
+
+      return withProjectHistory(state, { project });
+    });
+  },
+  updateAnnotation: (annotationId, patch) => {
+    set((state) => {
+      const project = touchProject({
+        ...state.project,
+        annotations: (state.project.annotations ?? []).map((annotation) =>
+          annotation.id === annotationId ? { ...annotation, ...patch } : annotation,
+        ),
+      });
+
+      return withProjectHistory(state, { project });
+    });
+  },
+  deleteAnnotation: (annotationId) => {
+    set((state) => {
+      const project = touchProject({
+        ...state.project,
+        annotations: (state.project.annotations ?? []).filter(
+          (annotation) => annotation.id !== annotationId,
+        ),
+      });
+
+      return withProjectHistory(state, { project });
+    });
+  },
+  setAnnotationPosition: (annotationId, position) => {
+    set((state) => {
+      const project = touchProject({
+        ...state.project,
+        annotations: (state.project.annotations ?? []).map((annotation) =>
+          annotation.id === annotationId ? { ...annotation, position } : annotation,
+        ),
+      });
+
+      return withProjectHistory(state, { project });
     });
   },
   setNodePosition: (nodeId, position) => {

@@ -24,9 +24,10 @@ import {
   type ReactFlowInstance,
   useStore,
   useStoreApi,
+  ViewportPortal,
 } from "@xyflow/react";
 import { toBlob, toSvg } from "html-to-image";
-import { LoaderCircle, Paintbrush, X } from "lucide-react";
+import { LoaderCircle, MoveUpRight, Paintbrush, Square, Trash2, Type, X } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -35,6 +36,8 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
@@ -60,6 +63,7 @@ import { applyMachineOutputMultipliers } from "@/lib/solver/machine-effects";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
 import type {
   EdgeThroughput,
+  FactoryAnnotationKind,
   FactoryEdge,
   FactoryNodeColorTag,
   FactoryProject,
@@ -71,6 +75,7 @@ import { useFactoryStore } from "@/store/factory-store";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { RecipeNode, type RecipeFlowNode } from "./RecipeNode";
 import { GT_NODE_COLORS, GT_NODE_COLOR_PALETTE } from "./node-colors";
+import { getDeleteCursor, getPaintBrushCursor } from "./paint-cursor";
 import { makeResourceHandleId, parseResourceHandleId } from "./resource-handles";
 import { formatEdgeRateLabel, formatEdgeValue, isEdgeStarved } from "./edge-labels";
 import {
@@ -82,11 +87,24 @@ import {
   reuseObjectIdentity,
 } from "./edge-detail";
 import { StorageNode, type StorageFlowNode } from "./StorageNode";
+import {
+  ANNOTATION_DRAG_HANDLE_CLASS,
+  AnnotationNode,
+  type AnnotationFlowNode,
+} from "./AnnotationNode";
 
 const nodeTypes = {
   recipeNode: RecipeNode,
   storageNode: StorageNode,
+  annotationNode: AnnotationNode,
 } satisfies NodeTypes;
+
+type BoardFlowNode = RecipeFlowNode | StorageFlowNode | AnnotationFlowNode;
+
+interface AnnotationDraft {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+}
 
 const ResourceEdge = memo(ResourceEdgeComponent);
 
@@ -115,8 +133,8 @@ const CANVAS_COLOR: Record<Theme, string> = {
   dark: "#1b1d21",
 };
 const CANVAS_DOT_COLOR: Record<Theme, string> = {
-  light: "#d4d4d4",
-  dark: "#34363c",
+  light: "#b8b8b8",
+  dark: "#4a4d55",
 };
 
 const RECIPE_SLOT_EDGE_OFFSET = 20;
@@ -239,8 +257,19 @@ function getMissingRecipePlaceholder(recipeId: string) {
 // scope rather than in a ref because reading a ref during render is not allowed.
 const recipeNodeDataCache = new Map<string, RecipeFlowNode["data"]>();
 const storageNodeDataCache = new Map<string, StorageFlowNode["data"]>();
+const annotationNodeDataCache = new Map<string, AnnotationFlowNode["data"]>();
 
-function pruneNodeDataCaches(recipeNodeIds: Set<string>, storageIds: Set<string>) {
+function pruneNodeDataCaches(
+  recipeNodeIds: Set<string>,
+  storageIds: Set<string>,
+  annotationIds: Set<string>,
+) {
+  for (const id of annotationNodeDataCache.keys()) {
+    if (!annotationIds.has(id)) {
+      annotationNodeDataCache.delete(id);
+    }
+  }
+
   for (const id of recipeNodeDataCache.keys()) {
     if (!recipeNodeIds.has(id)) {
       recipeNodeDataCache.delete(id);
@@ -326,6 +355,10 @@ export function FactoryFlow() {
   const deleteNode = useFactoryStore((state) => state.deleteNode);
   const deleteStorage = useFactoryStore((state) => state.deleteStorage);
   const deleteEdge = useFactoryStore((state) => state.deleteEdge);
+  const addAnnotation = useFactoryStore((state) => state.addAnnotation);
+  const updateAnnotation = useFactoryStore((state) => state.updateAnnotation);
+  const deleteAnnotation = useFactoryStore((state) => state.deleteAnnotation);
+  const setAnnotationPosition = useFactoryStore((state) => state.setAnnotationPosition);
   const cancelResourceConnection = useFactoryStore((state) => state.cancelResourceConnection);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const setNodeColorPaintMode = useFactoryStore((state) => state.setNodeColorPaintMode);
@@ -348,7 +381,7 @@ export function FactoryFlow() {
     [project.storages],
   );
 
-  const nodesFromProject = useMemo<Array<RecipeFlowNode | StorageFlowNode>>(
+  const nodesFromProject = useMemo<BoardFlowNode[]>(
     () => [
       ...project.nodes.map((node) => {
         const recipe = recipesById.get(node.recipeId) ?? getMissingRecipePlaceholder(node.recipeId);
@@ -389,10 +422,29 @@ export function FactoryFlow() {
             }),
           }) satisfies StorageFlowNode,
       ),
+      ...(project.annotations ?? []).map(
+        (annotation) =>
+          ({
+            id: annotation.id,
+            type: "annotationNode",
+            position: annotation.position,
+            width: annotation.size.width,
+            height: annotation.size.height,
+            // Boxes sit under everything so they read as grouping frames;
+            // arrows and text notes float above the nodes they point at.
+            zIndex: annotation.kind === "box" ? -5 : 1000,
+            // Box/arrow interiors must stay click-through; only their
+            // drag-handle elements take pointer events (see AnnotationNode).
+            dragHandle: annotation.kind === "text" ? undefined : `.${ANNOTATION_DRAG_HANDLE_CLASS}`,
+            style: annotation.kind === "text" ? undefined : { pointerEvents: "none" as const },
+            data: reuseObjectIdentity(annotationNodeDataCache, annotation.id, { annotation }),
+          }) satisfies AnnotationFlowNode,
+      ),
     ],
     [
       activeFlowResourceKey,
       activeNodeBottlenecks,
+      project.annotations,
       project.nodes,
       project.storages,
       recipesById,
@@ -400,12 +452,19 @@ export function FactoryFlow() {
       result.storages,
     ],
   );
-  const [flowNodes, setFlowNodes] = useState<Array<RecipeFlowNode | StorageFlowNode>>(
-    () => nodesFromProject,
-  );
+  const [flowNodes, setFlowNodes] = useState<BoardFlowNode[]>(() => nodesFromProject);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [isNodeDragging, setNodeDragging] = useState(false);
+  const [annotationTool, setAnnotationTool] = useState<FactoryAnnotationKind | undefined>(
+    undefined,
+  );
+  // Shared by the brush and the annotation tools: the last colour picked in
+  // the palette is what a new box/arrow/note is created with.
+  const [activeColorTag, setActiveColorTag] = useState<FactoryNodeColorTag>("yellow");
+  const [isDeleteMode, setDeleteMode] = useState(false);
+  const [annotationDraft, setAnnotationDraft] = useState<AnnotationDraft | undefined>(undefined);
+  const annotationDraftRef = useRef<AnnotationDraft | undefined>(undefined);
   const [layoutVersion, setLayoutVersion] = useState(0);
   const draggingNodeRef = useRef(false);
   const draggedResourceRef = useRef<DraggedResourceConnection | undefined>(undefined);
@@ -413,10 +472,7 @@ export function FactoryFlow() {
   const connectCompletedRef = useRef(false);
   const exportInProgressRef = useRef(false);
   const boardRef = useRef<HTMLDivElement>(null);
-  const flowInstanceRef = useRef<ReactFlowInstance<
-    RecipeFlowNode | StorageFlowNode,
-    ResourceFlowEdge
-  > | null>(null);
+  const flowInstanceRef = useRef<ReactFlowInstance<BoardFlowNode, ResourceFlowEdge> | null>(null);
 
   useEffect(() => {
     if (draggingNodeRef.current) {
@@ -430,8 +486,9 @@ export function FactoryFlow() {
     pruneNodeDataCaches(
       new Set(project.nodes.map((node) => node.id)),
       new Set((project.storages ?? []).map((storage) => storage.id)),
+      new Set((project.annotations ?? []).map((annotation) => annotation.id)),
     );
-  }, [project.nodes, project.storages]);
+  }, [project.nodes, project.storages, project.annotations]);
 
   // Flow-space measurements are cached across frames, so anything that can move a
   // node or change its size has to drop them explicitly. Positions are covered by
@@ -469,11 +526,8 @@ export function FactoryFlow() {
   }, [flowNodes]);
 
   const handleNodesChange = useCallback(
-    (changes: NodeChange<Array<RecipeFlowNode | StorageFlowNode>[number]>[]) => {
-      setFlowNodes(
-        (currentNodes) =>
-          applyNodeChanges(changes, currentNodes) as Array<RecipeFlowNode | StorageFlowNode>,
-      );
+    (changes: NodeChange<BoardFlowNode>[]) => {
+      setFlowNodes((currentNodes) => applyNodeChanges(changes, currentNodes) as BoardFlowNode[]);
     },
     [],
   );
@@ -556,16 +610,16 @@ export function FactoryFlow() {
                 ? 0.86
                 : 0.92,
           strokeWidth: isFlowHighlighted
-            ? 5
+            ? 5.5
             : isStorageEdge
               ? isStorageEdgeEmphasized
-                ? 3.5
-                : 2.6
+                ? 4
+                : 3.1
               : isStarvedEdge
-                ? 2.2
+                ? 2.7
                 : edge.resourceKind === "fluid"
-                  ? 2.8
-                  : 2.35,
+                  ? 3.4
+                  : 2.9,
         },
       };
     });
@@ -866,7 +920,7 @@ export function FactoryFlow() {
   }, [updateFlowViewportCenter]);
 
   const handleInit = useCallback(
-    (instance: ReactFlowInstance<RecipeFlowNode | StorageFlowNode, ResourceFlowEdge>) => {
+    (instance: ReactFlowInstance<BoardFlowNode, ResourceFlowEdge>) => {
       flowInstanceRef.current = instance;
       window.requestAnimationFrame(updateFlowViewportCenter);
       window.setTimeout(updateFlowViewportCenter, 120);
@@ -1010,6 +1064,11 @@ export function FactoryFlow() {
 
             if ((project.storages ?? []).some((storage) => storage.id === nodeId)) {
               deleteStorage(nodeId);
+              return;
+            }
+
+            if ((project.annotations ?? []).some((annotation) => annotation.id === nodeId)) {
+              deleteAnnotation(nodeId);
             }
           });
           setSelectedEdgeIds([]);
@@ -1029,10 +1088,18 @@ export function FactoryFlow() {
             selectNode(undefined);
             return;
           }
+
+          if ((project.annotations ?? []).some((annotation) => annotation.id === selectedNodeId)) {
+            deleteAnnotation(selectedNodeId);
+            selectNode(undefined);
+            return;
+          }
         }
 
         cancelResourceConnection();
         setNodeColorPaintMode(undefined);
+        setAnnotationTool(undefined);
+        setDeleteMode(false);
         return;
       }
 
@@ -1043,6 +1110,8 @@ export function FactoryFlow() {
 
         cancelResourceConnection();
         setNodeColorPaintMode(undefined);
+        setAnnotationTool(undefined);
+        setDeleteMode(false);
       }
     };
 
@@ -1050,9 +1119,11 @@ export function FactoryFlow() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     cancelResourceConnection,
+    deleteAnnotation,
     deleteEdge,
     deleteNode,
     deleteStorage,
+    project.annotations,
     project.nodes,
     project.storages,
     selectNode,
@@ -1077,6 +1148,17 @@ export function FactoryFlow() {
 
   const handleNodeClick = useCallback(
     (_: unknown, node: Node) => {
+      if (isDeleteMode) {
+        if (node.type === "recipeNode") {
+          deleteNode(node.id);
+        } else if (node.type === "storageNode") {
+          deleteStorage(node.id);
+        } else if (node.type === "annotationNode") {
+          deleteAnnotation(node.id);
+        }
+        return;
+      }
+
       if (nodeColorPaintMode !== undefined) {
         if (node.type === "recipeNode") {
           updateNode(node.id, { colorTag: nodeColorPaintMode ?? undefined });
@@ -1088,12 +1170,39 @@ export function FactoryFlow() {
           return;
         }
 
+        if (node.type === "annotationNode") {
+          updateAnnotation(node.id, { colorTag: nodeColorPaintMode ?? undefined });
+          return;
+        }
+
         return;
       }
 
       selectNode(node.id);
     },
-    [nodeColorPaintMode, selectNode, updateNode, updateStorage],
+    [
+      deleteAnnotation,
+      deleteNode,
+      deleteStorage,
+      isDeleteMode,
+      nodeColorPaintMode,
+      selectNode,
+      updateAnnotation,
+      updateNode,
+      updateStorage,
+    ],
+  );
+
+  const handleEdgeClick = useCallback(
+    (event: ReactMouseEvent, edge: Edge) => {
+      if (!isDeleteMode) {
+        return;
+      }
+
+      event.stopPropagation();
+      deleteEdge(edge.id);
+    },
+    [deleteEdge, isDeleteMode],
   );
 
   const handlePaneClick = useCallback(() => {
@@ -1110,6 +1219,8 @@ export function FactoryFlow() {
     (_: unknown, node: Node) => {
       if (node.type === "storageNode") {
         setStoragePosition(node.id, node.position);
+      } else if (node.type === "annotationNode") {
+        setAnnotationPosition(node.id, node.position);
       } else {
         setNodePosition(node.id, node.position);
       }
@@ -1122,7 +1233,7 @@ export function FactoryFlow() {
         ),
       );
     },
-    [setNodePosition, setStoragePosition],
+    [setAnnotationPosition, setNodePosition, setStoragePosition],
   );
 
   const handleEdgesDelete = useCallback(
@@ -1132,7 +1243,122 @@ export function FactoryFlow() {
     [deleteEdge],
   );
 
+  const commitAnnotationDraft = useCallback(
+    (tool: FactoryAnnotationKind, draft: AnnotationDraft) => {
+      const width = Math.abs(draft.end.x - draft.start.x);
+      const height = Math.abs(draft.end.y - draft.start.y);
+      const corner = {
+        x: Math.min(draft.start.x, draft.end.x),
+        y: Math.min(draft.start.y, draft.end.y),
+      };
+
+      if (tool === "box") {
+        // A bare click (no meaningful drag) drops a default-sized shape.
+        const isClick = width < 12 && height < 12;
+        addAnnotation({
+          kind: "box",
+          colorTag: activeColorTag,
+          position: isClick ? draft.start : corner,
+          size: isClick
+            ? { width: 280, height: 180 }
+            : { width: Math.max(width, 48), height: Math.max(height, 48) },
+        });
+        return;
+      }
+
+      if (tool === "arrow") {
+        const isClick = width < 16 && height < 16;
+        addAnnotation({
+          kind: "arrow",
+          colorTag: activeColorTag,
+          position: isClick ? draft.start : corner,
+          size: isClick
+            ? { width: 200, height: 8 }
+            : { width: Math.max(width, 8), height: Math.max(height, 8) },
+          arrowDirection: `${draft.end.y >= draft.start.y ? "down" : "up"}-${
+            draft.end.x >= draft.start.x ? "right" : "left"
+          }` as const,
+        });
+        return;
+      }
+
+      const isClick = width < 12 && height < 12;
+      addAnnotation({
+        kind: "text",
+        colorTag: activeColorTag,
+        text: "",
+        position: isClick ? draft.start : corner,
+        size: isClick
+          ? { width: 240, height: 80 }
+          : { width: Math.max(width, 96), height: Math.max(height, 40) },
+      });
+    },
+    [activeColorTag, addAnnotation],
+  );
+
+  const handleAnnotationPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const tool = annotationTool;
+      if (!tool || event.button !== 0) {
+        return;
+      }
+
+      // The tool buttons live inside the board wrapper; they must keep working.
+      if ((event.target as HTMLElement).closest("[data-board-toolbar]")) {
+        return;
+      }
+
+      const instance = flowInstanceRef.current;
+      if (!instance) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      const start = instance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const draft = { start, end: start };
+      annotationDraftRef.current = draft;
+      setAnnotationDraft(draft);
+
+      const handleMove = (moveEvent: PointerEvent) => {
+        const current = annotationDraftRef.current;
+        if (!current) {
+          return;
+        }
+
+        const end = instance.screenToFlowPosition({
+          x: moveEvent.clientX,
+          y: moveEvent.clientY,
+        });
+        const next = { start: current.start, end };
+        annotationDraftRef.current = next;
+        setAnnotationDraft(next);
+      };
+      const handleUp = () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", handleUp);
+        const current = annotationDraftRef.current;
+        annotationDraftRef.current = undefined;
+        setAnnotationDraft(undefined);
+        setAnnotationTool(undefined);
+        if (current) {
+          commitAnnotationDraft(tool, current);
+        }
+      };
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", handleUp);
+    },
+    [annotationTool, commitAnnotationDraft],
+  );
+
   const fitViewOptions = useMemo(() => ({ padding: 0.18 }), []);
+
+  const paintCursor =
+    nodeColorPaintMode !== undefined
+      ? getPaintBrushCursor(
+          nodeColorPaintMode ? GT_NODE_COLORS[nodeColorPaintMode].swatch : undefined,
+        )
+      : undefined;
 
   return (
     <div
@@ -1140,7 +1366,17 @@ export function FactoryFlow() {
       className={[
         "factory-flow-board relative h-full min-h-[520px] overflow-hidden border-x border-line bg-canvas",
         isNodeDragging ? "factory-flow-board--dragging" : "",
+        paintCursor ? "factory-flow-board--painting" : "",
+        annotationTool ? "factory-flow-board--annotating" : "",
+        isDeleteMode ? "factory-flow-board--deleting" : "",
       ].join(" ")}
+      style={
+        {
+          ...(paintCursor ? { "--paint-cursor": paintCursor } : undefined),
+          ...(isDeleteMode ? { "--delete-cursor": getDeleteCursor() } : undefined),
+        } as CSSProperties
+      }
+      onPointerDownCapture={handleAnnotationPointerDown}
     >
       <ReactFlow
         nodes={flowNodes}
@@ -1161,6 +1397,7 @@ export function FactoryFlow() {
         elevateNodesOnSelect={false}
         edgesReconnectable={false}
         onNodeClick={handleNodeClick}
+        onEdgeClick={handleEdgeClick}
         onNodesChange={handleNodesChange}
         onSelectionChange={handleSelectionChange}
         onPaneClick={handlePaneClick}
@@ -1174,10 +1411,44 @@ export function FactoryFlow() {
         maxZoom={1.8}
         colorMode={theme}
       >
-        <Background gap={24} color={CANVAS_DOT_COLOR[theme]} />
+        <Background gap={24} size={2} color={CANVAS_DOT_COLOR[theme]} />
         <Controls position="bottom-left" />
+        {annotationDraft && annotationTool ? (
+          <AnnotationDraftPreview
+            tool={annotationTool}
+            draft={annotationDraft}
+            swatch={GT_NODE_COLORS[activeColorTag].swatch}
+          />
+        ) : null}
       </ReactFlow>
-      <PaintToolbar paintMode={nodeColorPaintMode} onPaintModeChange={setNodeColorPaintMode} />
+      <PaintToolbar
+        paintMode={nodeColorPaintMode}
+        onPaintModeChange={(tag) => {
+          setAnnotationTool(undefined);
+          setDeleteMode(false);
+          setNodeColorPaintMode(tag);
+        }}
+        activeColorTag={activeColorTag}
+        onColorSelect={(tag) => {
+          setActiveColorTag(tag);
+          // Changing colour mid-paint keeps painting with the new colour.
+          if (nodeColorPaintMode !== undefined) {
+            setNodeColorPaintMode(tag);
+          }
+        }}
+        annotationTool={annotationTool}
+        onAnnotationToolChange={(tool) => {
+          setNodeColorPaintMode(undefined);
+          setDeleteMode(false);
+          setAnnotationTool(tool);
+        }}
+        isDeleteMode={isDeleteMode}
+        onDeleteModeChange={(enabled) => {
+          setNodeColorPaintMode(undefined);
+          setAnnotationTool(undefined);
+          setDeleteMode(enabled);
+        }}
+      />
       {isProjectImporting ? <FlowLoadingOverlay /> : null}
     </div>
   );
@@ -1198,22 +1469,112 @@ function FlowLoadingOverlay() {
   );
 }
 
+function AnnotationDraftPreview({
+  tool,
+  draft,
+  swatch,
+}: {
+  tool: FactoryAnnotationKind;
+  draft: AnnotationDraft;
+  swatch: string;
+}) {
+  const x = Math.min(draft.start.x, draft.end.x);
+  const y = Math.min(draft.start.y, draft.end.y);
+  const width = Math.max(Math.abs(draft.end.x - draft.start.x), 2);
+  const height = Math.max(Math.abs(draft.end.y - draft.start.y), 2);
+
+  return (
+    <ViewportPortal>
+      <div
+        className="pointer-events-none absolute"
+        style={{ transform: `translate(${x}px, ${y}px)`, width, height }}
+      >
+        {tool === "arrow" ? (
+          <svg
+            className="h-full w-full overflow-visible"
+            viewBox={`0 0 ${width} ${height}`}
+            preserveAspectRatio="none"
+          >
+            <line
+              x1={draft.start.x - x}
+              y1={draft.start.y - y}
+              x2={draft.end.x - x}
+              y2={draft.end.y - y}
+              stroke={swatch}
+              strokeWidth={5}
+              strokeDasharray="8 6"
+              strokeLinecap="round"
+            />
+          </svg>
+        ) : tool === "box" ? (
+          <div
+            className="h-full w-full border-4 border-dashed"
+            style={{ borderColor: swatch, backgroundColor: `${swatch}14` }}
+          />
+        ) : (
+          <div
+            className="h-full w-full border-2 border-dashed"
+            style={{ borderColor: swatch, backgroundColor: "var(--mc-78)", opacity: 0.85 }}
+          />
+        )}
+      </div>
+    </ViewportPortal>
+  );
+}
+
+const ANNOTATION_TOOLS: Array<{
+  kind: FactoryAnnotationKind;
+  label: string;
+  Icon: typeof Square;
+}> = [
+  { kind: "box", label: "Draw box", Icon: Square },
+  { kind: "arrow", label: "Draw arrow", Icon: MoveUpRight },
+  { kind: "text", label: "Add text note", Icon: Type },
+];
+
 function PaintToolbar({
   paintMode,
   onPaintModeChange,
+  activeColorTag,
+  onColorSelect,
+  annotationTool,
+  onAnnotationToolChange,
+  isDeleteMode,
+  onDeleteModeChange,
 }: {
   paintMode?: FactoryNodeColorTag | null;
   onPaintModeChange: (tag: FactoryNodeColorTag | null | undefined) => void;
+  activeColorTag: FactoryNodeColorTag;
+  onColorSelect: (tag: FactoryNodeColorTag) => void;
+  annotationTool?: FactoryAnnotationKind;
+  onAnnotationToolChange: (tool: FactoryAnnotationKind | undefined) => void;
+  isDeleteMode: boolean;
+  onDeleteModeChange: (enabled: boolean) => void;
 }) {
-  const activeColor = paintMode ? GT_NODE_COLORS[paintMode] : undefined;
+  const activeColor = GT_NODE_COLORS[activeColorTag];
   const [isPaletteOpen, setPaletteOpen] = useState(false);
+  // A short grace period on close lets the pointer cross the tiny dead gaps
+  // between the palette and the brush without the palette snapping shut.
+  const paletteCloseTimerRef = useRef<number | undefined>(undefined);
+  const openPalette = () => {
+    window.clearTimeout(paletteCloseTimerRef.current);
+    setPaletteOpen(true);
+  };
+  const scheduleClosePalette = () => {
+    window.clearTimeout(paletteCloseTimerRef.current);
+    paletteCloseTimerRef.current = window.setTimeout(() => setPaletteOpen(false), 250);
+  };
 
   return (
     <div
-      className="nodrag pointer-events-none absolute bottom-12 right-3 z-20 flex items-end"
-      onMouseEnter={() => setPaletteOpen(true)}
-      onMouseLeave={() => setPaletteOpen(false)}
+      data-board-toolbar
+      className="nodrag pointer-events-none absolute right-3 top-3 z-20 flex items-start"
     >
+      <div
+        className="flex items-start"
+        onMouseEnter={openPalette}
+        onMouseLeave={scheduleClosePalette}
+      >
       <div
         className={[
           "mr-0 grid w-[156px] grid-cols-5 gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)] transition-[opacity,transform] duration-100",
@@ -1238,41 +1599,76 @@ function PaintToolbar({
           <button
             key={entry.tag}
             type="button"
-            onClick={() => onPaintModeChange(paintMode === entry.tag ? undefined : entry.tag)}
+            onClick={() => onColorSelect(entry.tag)}
             className={[
               "h-7 w-7 border-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]",
-              paintMode === entry.tag ? "border-white ring-2 ring-cyan-300" : "border-[var(--mc-15)]",
+              activeColorTag === entry.tag
+                ? "border-white ring-2 ring-cyan-300"
+                : "border-[var(--mc-15)]",
             ].join(" ")}
             style={{ backgroundColor: entry.color.swatch }}
             title={entry.tag}
-            aria-label={`Paint ${entry.tag}`}
+            aria-label={`Use ${entry.tag}`}
           />
         ))}
       </div>
       <button
         type="button"
-        onClick={() => {
-          if (paintMode !== undefined) {
-            onPaintModeChange(undefined);
-          }
-        }}
+        onClick={() => setPaletteOpen((open) => !open)}
+        className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]"
+        title={`Color: ${activeColorTag}`}
+        aria-label="Pick color"
+      >
+        <span
+          className="h-5 w-5 border-2 border-[var(--mc-15)] shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]"
+          style={{ backgroundColor: activeColor.swatch }}
+        />
+      </button>
+      </div>
+      <button
+        type="button"
+        onClick={() =>
+          onPaintModeChange(paintMode !== undefined ? undefined : activeColorTag)
+        }
         className={[
-          "pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
+          "pointer-events-auto relative z-10 ml-1 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
           paintMode !== undefined ? "ring-2 ring-cyan-300" : "",
         ].join(" ")}
-        title={paintMode !== undefined ? "Stop painting" : "Paint nodes"}
+        title={
+          paintMode !== undefined
+            ? "Stop painting"
+            : `Paint nodes ${activeColorTag}`
+        }
         aria-label={paintMode !== undefined ? "Stop painting" : "Paint nodes"}
       >
-        {paintMode === undefined ? (
-          <Paintbrush className="h-4 w-4" />
-        ) : paintMode === null ? (
-          <X className="h-4 w-4" />
-        ) : (
-          <span
-            className="h-5 w-5 border-2 border-[var(--mc-15)] shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]"
-            style={{ backgroundColor: activeColor?.swatch }}
-          />
-        )}
+        {paintMode === null ? <X className="h-4 w-4" /> : <Paintbrush className="h-4 w-4" />}
+      </button>
+      {ANNOTATION_TOOLS.map(({ kind, label, Icon }) => (
+        <button
+          key={kind}
+          type="button"
+          onClick={() => onAnnotationToolChange(annotationTool === kind ? undefined : kind)}
+          className={[
+            "pointer-events-auto relative z-10 ml-1 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
+            annotationTool === kind ? "ring-2 ring-cyan-300" : "",
+          ].join(" ")}
+          title={annotationTool === kind ? "Cancel" : label}
+          aria-label={annotationTool === kind ? "Cancel" : label}
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={() => onDeleteModeChange(!isDeleteMode)}
+        className={[
+          "pointer-events-auto relative z-10 ml-1 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
+          isDeleteMode ? "ring-2 ring-red-400" : "",
+        ].join(" ")}
+        title={isDeleteMode ? "Stop deleting" : "Delete tool: click anything to remove it"}
+        aria-label={isDeleteMode ? "Stop deleting" : "Delete tool"}
+      >
+        <Trash2 className={isDeleteMode ? "h-4 w-4 text-red-300" : "h-4 w-4"} />
       </button>
     </div>
   );
@@ -1317,7 +1713,11 @@ function ResourceEdgeComponent({
   const resourceColor = data?.resource
     ? getInitialResourceColor(data.resource)
     : (data?.color ?? DEFAULT_ITEM_EDGE_COLOR);
-  const edgeColor = resourceColor;
+  const theme = useThemeStore((state) => state.theme);
+  // Dominant resource colours are averaged from item sprites, which makes them
+  // muddy; boost saturation everywhere and lift toward white on the dark canvas.
+  const vividColor = saturateHexColor(resourceColor, 0.45);
+  const edgeColor = theme === "dark" ? brightenHexColor(vividColor, 0.15) : vividColor;
   const isGlobalView = hasEdgeDetail(detailLevel, EDGE_DETAIL_GLOBAL);
   const isHighlighted = selected || data?.isFlowHighlighted === true;
   // AGENTS.md requires routing to be deterministic and independent of zoom
@@ -1451,10 +1851,10 @@ function ResourceEdgeComponent({
               strokeOpacity: isHighlighted ? 0.95 : isGlobalView ? 0.36 : 0.72,
               strokeWidth:
                 (isHighlighted
-                  ? 6
+                  ? 6.5
                   : data?.bundle?.role === "primary"
-                    ? Math.max(Number(style?.strokeWidth ?? 2.6) + 0.6, 3.2)
-                    : Number(style?.strokeWidth ?? 2.6)) + 2,
+                    ? Math.max(Number(style?.strokeWidth ?? 3.1) + 0.6, 3.7)
+                    : Number(style?.strokeWidth ?? 3.1)) + 2,
               pointerEvents: "none",
             }}
           />
@@ -1475,9 +1875,9 @@ function ResourceEdgeComponent({
                     : 0.52
                   : style?.strokeOpacity,
               strokeWidth: isHighlighted
-                ? 6
+                ? 6.5
                 : data?.bundle?.role === "primary"
-                  ? Math.max(Number(style?.strokeWidth ?? 2.6) + 0.6, 3.2)
+                  ? Math.max(Number(style?.strokeWidth ?? 3.1) + 0.6, 3.7)
                   : style?.strokeWidth,
               filter: isHighlighted ? "drop-shadow(0 0 4px rgba(34,211,238,0.9))" : undefined,
             }}
@@ -1527,7 +1927,7 @@ function ResourceEdgeComponent({
       {showLabel && data ? (
         <EdgeLabelRenderer>
           <div
-            className="nodrag nopan absolute flex cursor-grab items-center gap-1 border border-[var(--mc-15)] bg-[#2b2d32] px-1 py-0.5 text-[10px] font-medium text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.55)] active:cursor-grabbing"
+            className="nodrag nopan absolute flex cursor-grab items-center gap-1.5 border border-[var(--mc-15)] bg-[#2b2d32] px-2 py-1 text-[13px] font-medium text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.55)] active:cursor-grabbing"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: "all",
@@ -1596,7 +1996,7 @@ function ResourceEdgeComponent({
               size="sm"
               showAmount={false}
               bare
-              className="!h-4 !w-4"
+              className="!h-[22px] !w-[22px]"
             />
             <span className="leading-none">{rate}</span>
           </div>
@@ -1614,7 +2014,7 @@ function ResourceConnectionLine({
   fromPosition,
   toPosition,
   connectionStatus,
-}: ConnectionLineComponentProps<RecipeFlowNode | StorageFlowNode>) {
+}: ConnectionLineComponentProps<BoardFlowNode>) {
   const [edgePath] = getSmoothStepPath({
     sourceX: fromX,
     sourceY: fromY,
@@ -4149,6 +4549,36 @@ function getStorageHandleAtPosition(
   }
 
   return undefined;
+}
+
+function brightenHexColor(color: string, amount: number) {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) {
+    return color;
+  }
+  const value = Number.parseInt(match[1], 16);
+  const lift = (channel: number) => Math.min(255, Math.round(channel + (255 - channel) * amount));
+  const r = lift((value >> 16) & 0xff);
+  const g = lift((value >> 8) & 0xff);
+  const b = lift(value & 0xff);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
+
+// Pushes every channel away from the pixel's grey point, which raises
+// saturation without shifting hue or overall lightness.
+function saturateHexColor(color: string, amount: number) {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) {
+    return color;
+  }
+  const value = Number.parseInt(match[1], 16);
+  const r = (value >> 16) & 0xff;
+  const g = (value >> 8) & 0xff;
+  const b = value & 0xff;
+  const grey = 0.299 * r + 0.587 * g + 0.114 * b;
+  const push = (channel: number) =>
+    Math.min(255, Math.max(0, Math.round(grey + (channel - grey) * (1 + amount))));
+  return `#${((push(r) << 16) | (push(g) << 8) | push(b)).toString(16).padStart(6, "0")}`;
 }
 
 function getInitialResourceColor(resource: ResourceEdgeData["resource"]) {

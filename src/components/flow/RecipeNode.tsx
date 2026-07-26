@@ -51,6 +51,7 @@ import type { NeiPositionedSlot } from "@/lib/nei/layout";
 import { makeResourceHandleId } from "./resource-handles";
 import { useFactoryStore } from "@/store/factory-store";
 import { GT_NODE_COLORS } from "./node-colors";
+import { getPaintBrushCursor } from "./paint-cursor";
 import { GT_TIER_COLORS } from "./tier-colors";
 
 const CROP_CONFIG_PANEL_WIDTH_CLASS = "w-[398px]";
@@ -91,6 +92,12 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     (hoveredNodeBottlenecks || selectedNodeBottlenecks) && result?.status === "bottleneck";
   const isInspectorHighlighted = isFlowResourceHighlighted || isNodeBottleneckHighlighted;
   const nodeColor = projectNode.colorTag ? GT_NODE_COLORS[projectNode.colorTag] : undefined;
+  const paintCursor =
+    nodeColorPaintMode !== undefined
+      ? getPaintBrushCursor(
+          nodeColorPaintMode ? GT_NODE_COLORS[nodeColorPaintMode].swatch : undefined,
+        )
+      : undefined;
   // Recipe derivation is pure in (recipe, projectNode, dataset) but ran on every
   // render, including renders caused by unrelated store writes such as hover or
   // search. It also rebuilt `overclockedRecipe` each time, whose fresh identity
@@ -269,7 +276,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     <div
       className={[
         "group relative min-w-[368px] w-max border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
-        nodeColorPaintMode !== undefined ? "cursor-crosshair" : "",
         selected ? "ring-2 ring-cyan-300" : "",
         isSearchHighlighted ? "ring-4 ring-sky-300" : "",
         isInspectorHighlighted
@@ -277,15 +283,16 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           : "",
         exceedsMaxTier ? "ring-4 ring-red-500" : "",
       ].join(" ")}
-      style={
-        nodeColor
+      style={{
+        ...(nodeColor
           ? {
               backgroundColor: nodeColor.panel,
               borderColor: nodeColor.border,
               boxShadow: `inset 2px 2px 0 var(--mc-100), inset -2px -2px 0 var(--mc-33), 0 0 0 2px ${nodeColor.shadow}`,
             }
-          : undefined
-      }
+          : undefined),
+        ...(paintCursor ? { cursor: paintCursor } : undefined),
+      }}
     >
       {exceedsMaxTier ? (
         <div className="pointer-events-none absolute -right-3 -top-3 z-40 flex max-w-[210px] items-center gap-2 border-4 border-red-700 bg-[#facc15] px-2 py-1 font-mono text-[13px] font-black uppercase leading-tight text-red-950 shadow-[4px_4px_0_rgba(0,0,0,0.45)] [text-shadow:1px_1px_0_rgba(255,255,255,0.45)]">

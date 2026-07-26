@@ -295,6 +295,22 @@ export const factoryStorageSchema = z.object({
   }),
 });
 
+export const factoryAnnotationSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(["box", "arrow", "text"]),
+  colorTag: factoryNodeColorTagSchema.optional(),
+  text: z.string().optional(),
+  position: z.object({
+    x: z.number(),
+    y: z.number(),
+  }),
+  size: z.object({
+    width: z.number(),
+    height: z.number(),
+  }),
+  arrowDirection: z.enum(["down-right", "down-left", "up-right", "up-left"]).optional(),
+});
+
 export const factoryEdgeSchema = z.object({
   id: z.string().min(1),
   source: z.string().min(1),
@@ -331,6 +347,7 @@ export const factoryProjectSchema = z.object({
   recipes: z.array(recipeSchema),
   nodes: z.array(factoryNodeSchema),
   storages: z.array(factoryStorageSchema).optional().default([]),
+  annotations: z.array(factoryAnnotationSchema).optional().default([]),
   edges: z.array(factoryEdgeSchema),
   fuelProfiles: z.array(fuelProfileSchema),
   selectedFuelProfileId: z.string().optional(),
