@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { memo, useState, type CSSProperties } from "react";
+import { memo, useMemo, useState, type CSSProperties } from "react";
 import { AlertTriangle, ChevronDown, WandSparkles } from "lucide-react";
 import type {
   FactoryNode,
@@ -68,7 +68,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const [isMachineMenuOpen, setIsMachineMenuOpen] = useState(false);
   const [openMachineConfigMenuId, setOpenMachineConfigMenuId] = useState<string>();
   const browseResource = useFactoryStore((state) => state.browseResource);
-  const recipeSearch = useFactoryStore((state) => state.recipeSearch);
+  const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
   const hoveredNodeBottlenecks = useFactoryStore((state) => state.hoveredNodeBottlenecks);
@@ -91,66 +91,106 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     (hoveredNodeBottlenecks || selectedNodeBottlenecks) && result?.status === "bottleneck";
   const isInspectorHighlighted = isFlowResourceHighlighted || isNodeBottleneckHighlighted;
   const nodeColor = projectNode.colorTag ? GT_NODE_COLORS[projectNode.colorTag] : undefined;
-  const machineHandlers = getRecipeMachineHandlers(recipe);
-  const selectedMachineHandler = getSelectedMachineHandler(recipe, projectNode);
-  const nodeRecipe = applyRecipeInputOverrides(recipe, projectNode);
-  const effectiveRecipe = applyMachineHandlerToRecipe(nodeRecipe, projectNode);
-  const recipePowerTier = getRecipePowerTier(effectiveRecipe);
-  const tierControl = getNodeTierControl(effectiveRecipe, projectNode);
-  const coilControl = getRecipeCoilTierControl(effectiveRecipe, projectNode);
-  const coilResource = coilControl
-    ? resolveDatasetMachineConfigResource(coilControl.resource, dataset)
-    : undefined;
-  const machineConfigControls = getRecipeMachineConfigTierControls(
+  // Recipe derivation is pure in (recipe, projectNode, dataset) but ran on every
+  // render, including renders caused by unrelated store writes such as hover or
+  // search. It also rebuilt `overclockedRecipe` each time, whose fresh identity
+  // defeated NeiRecipeWindow's memo and re-ran the whole NEI pipeline downstream.
+  const derived = useMemo(() => {
+    const machineHandlers = getRecipeMachineHandlers(recipe);
+    const selectedMachineHandler = getSelectedMachineHandler(recipe, projectNode);
+    const nodeRecipe = applyRecipeInputOverrides(recipe, projectNode);
+    const effectiveRecipe = applyMachineHandlerToRecipe(nodeRecipe, projectNode);
+    const recipePowerTier = getRecipePowerTier(effectiveRecipe);
+    const tierControl = getNodeTierControl(effectiveRecipe, projectNode);
+    const coilControl = getRecipeCoilTierControl(effectiveRecipe, projectNode);
+    const coilResource = coilControl
+      ? resolveDatasetMachineConfigResource(coilControl.resource, dataset)
+      : undefined;
+    const machineConfigControls = getRecipeMachineConfigTierControls(
+      effectiveRecipe,
+      projectNode,
+    ).map((control) => ({
+      ...control,
+      resource: resolveDatasetMachineConfigResource(control.resource, dataset),
+    }));
+    const cropProductionControls = isCropProductionRecipe(effectiveRecipe)
+      ? machineConfigControls.filter((control) => isCropProductionConfigControl(control.id))
+      : [];
+    const beeProductionControls = isBeeProductionRecipe(effectiveRecipe)
+      ? machineConfigControls.filter((control) => isBeeProductionConfigControl(control.id))
+      : [];
+    const isBeeProductionNode = beeProductionControls.length > 0;
+    const beeFrameControls = beeProductionControls.filter((control) =>
+      isBeeFrameSlotControlId(control.id),
+    );
+    const tgsToolControls = machineConfigControls.filter(isTreeGrowthSimulatorToolControl);
+    const overclockedStats = getOverclockedRecipeStats(nodeRecipe, projectNode);
+    const toolAdjustedRecipe = applyTreeGrowthSimulatorToolInputs(effectiveRecipe, tgsToolControls);
+    const visualToolAdjustedRecipe = restoreCrossKindInputOverrideVisuals(
+      toolAdjustedRecipe,
+      recipe,
+      projectNode,
+    );
+    const displayRecipe = isBeeProductionNode
+      ? stripBeeFrameSlotInputs(visualToolAdjustedRecipe)
+      : visualToolAdjustedRecipe;
+    const adjustedRecipe = applyMachineOutputMultipliers(
+      displayRecipe,
+      projectNode,
+      overclockedStats.tier,
+    );
+    const overclockedRecipe = {
+      ...displayRecipe,
+      ...adjustedRecipe,
+      ...overclockedStats,
+    };
+
+    return {
+      machineHandlers,
+      selectedMachineHandler,
+      effectiveRecipe,
+      recipePowerTier,
+      tierControl,
+      coilControl,
+      coilResource,
+      cropProductionControls,
+      isCropProductionNode: cropProductionControls.length > 0,
+      beeFrameControls,
+      beePanelControls: getBeePanelControls(beeProductionControls),
+      tgsToolControls,
+      statsMachineConfigControls: machineConfigControls.filter(
+        (control) =>
+          !isTreeGrowthSimulatorToolControl(control) &&
+          !isDisplayOnlyParallelControl(control) &&
+          !isCropProductionConfigControl(control.id) &&
+          !isBeeProductionConfigControl(control.id),
+      ),
+      machineParallelMultiplier: getMachineParallelMultiplier(effectiveRecipe, projectNode),
+      overclockedRecipe,
+      tierColor: tierControl ? GT_TIER_COLORS[tierControl.current] : undefined,
+      usesNativeNeiRecipe: usesNativeNeiChrome(overclockedRecipe),
+    };
+  }, [dataset, projectNode, recipe]);
+
+  const {
+    machineHandlers,
+    selectedMachineHandler,
     effectiveRecipe,
-    projectNode,
-  ).map((control) => ({
-    ...control,
-    resource: resolveDatasetMachineConfigResource(control.resource, dataset),
-  }));
-  const cropProductionControls = isCropProductionRecipe(effectiveRecipe)
-    ? machineConfigControls.filter((control) => isCropProductionConfigControl(control.id))
-    : [];
-  const isCropProductionNode = cropProductionControls.length > 0;
-  const beeProductionControls = isBeeProductionRecipe(effectiveRecipe)
-    ? machineConfigControls.filter((control) => isBeeProductionConfigControl(control.id))
-    : [];
-  const isBeeProductionNode = beeProductionControls.length > 0;
-  const beeFrameControls = beeProductionControls.filter((control) =>
-    isBeeFrameSlotControlId(control.id),
-  );
-  const beePanelControls = getBeePanelControls(beeProductionControls);
-  const tgsToolControls = machineConfigControls.filter(isTreeGrowthSimulatorToolControl);
-  const statsMachineConfigControls = machineConfigControls.filter(
-    (control) =>
-      !isTreeGrowthSimulatorToolControl(control) &&
-      !isDisplayOnlyParallelControl(control) &&
-      !isCropProductionConfigControl(control.id) &&
-      !isBeeProductionConfigControl(control.id),
-  );
-  const machineParallelMultiplier = getMachineParallelMultiplier(effectiveRecipe, projectNode);
-  const overclockedStats = getOverclockedRecipeStats(nodeRecipe, projectNode);
-  const toolAdjustedRecipe = applyTreeGrowthSimulatorToolInputs(effectiveRecipe, tgsToolControls);
-  const visualToolAdjustedRecipe = restoreCrossKindInputOverrideVisuals(
-    toolAdjustedRecipe,
-    recipe,
-    projectNode,
-  );
-  const displayRecipe = isBeeProductionNode
-    ? stripBeeFrameSlotInputs(visualToolAdjustedRecipe)
-    : visualToolAdjustedRecipe;
-  const adjustedRecipe = applyMachineOutputMultipliers(
-    displayRecipe,
-    projectNode,
-    overclockedStats.tier,
-  );
-  const overclockedRecipe = {
-    ...displayRecipe,
-    ...adjustedRecipe,
-    ...overclockedStats,
-  };
-  const tierColor = tierControl ? GT_TIER_COLORS[tierControl.current] : undefined;
-  const usesNativeNeiRecipe = usesNativeNeiChrome(overclockedRecipe);
+    recipePowerTier,
+    tierControl,
+    coilControl,
+    coilResource,
+    cropProductionControls,
+    isCropProductionNode,
+    beeFrameControls,
+    beePanelControls,
+    tgsToolControls,
+    statsMachineConfigControls,
+    machineParallelMultiplier,
+    overclockedRecipe,
+    tierColor,
+    usesNativeNeiRecipe,
+  } = derived;
   const exceedsMaxTier =
     tierControl !== undefined &&
     maxTierFilter !== "all" &&

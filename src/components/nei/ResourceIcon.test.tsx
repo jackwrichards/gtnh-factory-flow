@@ -18,6 +18,82 @@ describe("ResourceIcon", () => {
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
   });
 
+  describe("fluids", () => {
+    // The dataset carries no art for fluids — not one fluid reference has an
+    // iconPath or an atlas entry — so without a fallback they render as an empty
+    // slot everywhere in the app.
+    function renderFluid(id: string, displayName: string, dominantColor?: string) {
+      return render(
+        <ResourceIcon
+          resource={{ kind: "fluid", id, amount: 1, displayName, dominantColor }}
+          tooltip={false}
+        />,
+      );
+    }
+
+    it("draws something for a fluid with no icon at all", () => {
+      renderFluid("ic2distilledwater", "Distilled Water");
+      expect(screen.getByRole("img", { name: "Distilled Water" })).toBeDefined();
+    });
+
+    it("prefers the dataset colour when one exists", () => {
+      const { container } = renderFluid("some_fluid", "Some Fluid", "#123456");
+      const fill = container.querySelector<HTMLElement>('[role="img"] > span');
+      expect(fill?.style.backgroundColor).toBe("rgb(18, 52, 86)");
+    });
+
+    it("gives the same fluid the same colour every time", () => {
+      // A fluid that changed colour between renders — or between the canvas and
+      // this panel — would read as a different resource.
+      const first = renderFluid("gt_unknown_fluid", "Unknown");
+      const firstColor = first.container.querySelector<HTMLElement>('[role="img"] > span')?.style
+        .backgroundColor;
+      cleanup();
+
+      const second = renderFluid("gt_unknown_fluid", "Unknown");
+      const secondColor = second.container.querySelector<HTMLElement>('[role="img"] > span')?.style
+        .backgroundColor;
+
+      expect(firstColor).toBeTruthy();
+      expect(secondColor).toBe(firstColor);
+    });
+
+    it("gives different fluids different colours", () => {
+      const first = renderFluid("fluid_alpha", "Alpha");
+      const firstColor = first.container.querySelector<HTMLElement>('[role="img"] > span')?.style
+        .backgroundColor;
+      cleanup();
+
+      const second = renderFluid("fluid_beta", "Beta");
+      const secondColor = second.container.querySelector<HTMLElement>('[role="img"] > span')?.style
+        .backgroundColor;
+
+      expect(secondColor).not.toBe(firstColor);
+    });
+
+    it("uses the recognisable colour for well-known fluids", () => {
+      const { container } = renderFluid("water", "Water");
+      const fill = container.querySelector<HTMLElement>('[role="img"] > span');
+      expect(fill?.style.backgroundColor).toBe("rgb(63, 118, 228)");
+    });
+
+    it("still renders real art when a fluid does have an icon", () => {
+      render(
+        <ResourceIcon
+          resource={{
+            kind: "fluid",
+            id: "with_art",
+            amount: 1,
+            displayName: "With Art",
+            iconPath: "/textures/rendered/with_art.png",
+          }}
+          tooltip={false}
+        />,
+      );
+      expect(screen.getByAltText("With Art")).toBeDefined();
+    });
+  });
+
   it("hides generated bee species internals from tooltips", async () => {
     render(
       <ResourceIcon

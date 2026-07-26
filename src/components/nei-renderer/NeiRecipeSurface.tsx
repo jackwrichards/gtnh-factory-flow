@@ -44,7 +44,7 @@ export function NeiRecipeSurface({
     return renderNeiRecipe(model, handler, options);
   }, [options, recipe]);
   const scale = result.options.scale;
-  const layers = groupCommandsByLayer(result.commands);
+  const layers = useMemo(() => groupCommandsByLayer(result.commands), [result.commands]);
 
   return (
     <div

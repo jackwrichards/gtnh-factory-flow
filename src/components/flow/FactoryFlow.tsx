@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   Background,
@@ -23,12 +23,15 @@ import {
   type OnSelectionChangeParams,
   type ReactFlowInstance,
   useStore,
+  useStoreApi,
 } from "@xyflow/react";
 import { toBlob, toSvg } from "html-to-image";
 import { LoaderCircle, Paintbrush, X } from "lucide-react";
 import {
+  memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -70,6 +73,14 @@ import { RecipeNode, type RecipeFlowNode } from "./RecipeNode";
 import { GT_NODE_COLORS, GT_NODE_COLOR_PALETTE } from "./node-colors";
 import { makeResourceHandleId, parseResourceHandleId } from "./resource-handles";
 import { formatEdgeRateLabel, formatEdgeValue, isEdgeStarved } from "./edge-labels";
+import {
+  EDGE_DETAIL_ARROWS,
+  EDGE_DETAIL_GLOBAL,
+  EDGE_DETAIL_LABELS,
+  getEdgeDetailLevel,
+  hasEdgeDetail,
+  reuseObjectIdentity,
+} from "./edge-detail";
 import { StorageNode, type StorageFlowNode } from "./StorageNode";
 
 const nodeTypes = {
@@ -77,9 +88,15 @@ const nodeTypes = {
   storageNode: StorageNode,
 } satisfies NodeTypes;
 
+const ResourceEdge = memo(ResourceEdgeComponent);
+
 const edgeTypes = {
   resourceEdge: ResourceEdge,
 } satisfies EdgeTypes;
+
+function selectEdgeDetailLevel(store: { transform: [number, number, number] }) {
+  return getEdgeDetailLevel(store.transform[2]);
+}
 
 const connectionLineStyle = {
   stroke: "#00d9ff",
@@ -110,8 +127,6 @@ const EDGE_LANE_SPACING = 8;
 const EDGE_LANE_BUCKETS = 4;
 const EDGE_LINK_CLEARANCE = 8;
 const EDGE_ENDPOINT_SPACING = 5;
-const EDGE_LABEL_ZOOM = 0.78;
-const EDGE_ARROW_ZOOM = 0.72;
 const EDGE_ROUTE_RELAXATION_PASSES = 2;
 const EDGE_ROUTE_SNAP_GRID = 4;
 const EXPORT_IMAGE_PADDING = 80;
@@ -179,9 +194,98 @@ const directRouteCache = new Map<
     segments: ReturnType<typeof getPolylineSegments>;
   }
 >();
+// Measured geometry is stored in FLOW coordinates, which are invariant under pan
+// and zoom: translating the viewport cannot move a node relative to the graph
+// origin. Keying these caches on the viewport transform (as they once were) threw
+// every entry away on every pan frame and forced a full re-measure of the whole
+// board, which is what made panning and zooming crawl.
+//
+// Instead they are keyed on a layout epoch that the board bumps when node
+// positions or sizes actually change. Only `viewportTransformCache` is
+// frame-scoped, because the screen->flow conversion genuinely does depend on the
+// live transform.
+type MeasuredBounds = { left: number; right: number; top: number; bottom: number };
+
+const missingRecipePlaceholders = new Map<string, RecipeFlowNode["data"]["recipe"]>();
+
+/**
+ * Stable stand-in for a recipe the dataset no longer contains. Built once per id
+ * so the node's `data` keeps a constant identity across rebuilds.
+ */
+function getMissingRecipePlaceholder(recipeId: string) {
+  const existing = missingRecipePlaceholders.get(recipeId);
+  if (existing) {
+    return existing;
+  }
+
+  const placeholder = {
+    id: recipeId,
+    name: "Missing recipe",
+    machineType: "Unknown",
+    minimumTier: "DEMO",
+    durationTicks: 20,
+    eut: 0,
+    inputs: [],
+    outputs: [],
+  } satisfies RecipeFlowNode["data"]["recipe"];
+  missingRecipePlaceholders.set(recipeId, placeholder);
+  return placeholder;
+}
+
+// Identity caches for node `data`. These are memoisation caches in the same
+// spirit as useMemo â€” the value returned is always derived purely from the
+// inputs, so a render that is discarded or replayed cannot produce a wrong
+// result, only a different (equivalent) object identity. They live at module
+// scope rather than in a ref because reading a ref during render is not allowed.
+const recipeNodeDataCache = new Map<string, RecipeFlowNode["data"]>();
+const storageNodeDataCache = new Map<string, StorageFlowNode["data"]>();
+
+function pruneNodeDataCaches(recipeNodeIds: Set<string>, storageIds: Set<string>) {
+  for (const id of recipeNodeDataCache.keys()) {
+    if (!recipeNodeIds.has(id)) {
+      recipeNodeDataCache.delete(id);
+    }
+  }
+
+  for (const id of storageNodeDataCache.keys()) {
+    if (!storageIds.has(id)) {
+      storageNodeDataCache.delete(id);
+    }
+  }
+}
+
 const measuredSlotEndpointCache = new Map<string, { x: number; y: number } | undefined>();
 const measuredSlotCenterCache = new Map<string, { x: number; y: number } | undefined>();
-let measuredSlotCacheClearScheduled = false;
+const measuredNodeBoundsCache = new Map<string, MeasuredBounds | undefined>();
+let measuredAvoidanceSweep:
+  | { epoch: number; bounds: Array<{ id: string; bounds: MeasuredBounds }>; hash: string }
+  | undefined;
+let measuredLayoutEpoch = 0;
+
+let viewportTransformCache:
+  | {
+      rendererLeft: number;
+      rendererTop: number;
+      translateX: number;
+      translateY: number;
+      scaleX: number;
+      scaleY: number;
+    }
+  | undefined;
+let viewportTransformClearScheduled = false;
+
+/**
+ * Drops every flow-space measurement. Call this when node positions or node
+ * inner layout change â€” never on pan or zoom, which cannot affect flow-space
+ * geometry.
+ */
+function invalidateMeasuredLayout() {
+  measuredLayoutEpoch += 1;
+  measuredSlotEndpointCache.clear();
+  measuredSlotCenterCache.clear();
+  measuredNodeBoundsCache.clear();
+  measuredAvoidanceSweep = undefined;
+}
 
 type DraggedResourceConnection = Pick<
   ResourceAmount,
@@ -231,7 +335,7 @@ export function FactoryFlow() {
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
   const hoveredNodeBottlenecks = useFactoryStore((state) => state.hoveredNodeBottlenecks);
   const selectedNodeBottlenecks = useFactoryStore((state) => state.selectedNodeBottlenecks);
-  const recipeSearch = useFactoryStore((state) => state.recipeSearch);
+  const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
   const activeFlowResourceKey = hoveredFlowResourceKey ?? selectedFlowResourceKey;
   const activeNodeBottlenecks = hoveredNodeBottlenecks || selectedNodeBottlenecks;
@@ -247,7 +351,7 @@ export function FactoryFlow() {
   const nodesFromProject = useMemo<Array<RecipeFlowNode | StorageFlowNode>>(
     () => [
       ...project.nodes.map((node) => {
-        const recipe = recipesById.get(node.recipeId);
+        const recipe = recipesById.get(node.recipeId) ?? getMissingRecipePlaceholder(node.recipeId);
         return {
           id: node.id,
           type: "recipeNode",
@@ -258,22 +362,15 @@ export function FactoryFlow() {
               : activeFlowResourceKey && recipeContainsResourceKey(recipe, activeFlowResourceKey)
                 ? 1500
                 : undefined,
-          data: {
+          // Reusing the previous `data` object when nothing in it moved is what
+          // lets RecipeNode's memo actually hold. Rebuilding it â€” which this memo
+          // does whenever a resource is hovered or the solver re-runs â€” otherwise
+          // re-renders every node on the board for a change affecting one.
+          data: reuseObjectIdentity(recipeNodeDataCache, node.id, {
             projectNode: node,
-            recipe:
-              recipe ??
-              ({
-                id: node.recipeId,
-                name: "Missing recipe",
-                machineType: "Unknown",
-                minimumTier: "DEMO",
-                durationTicks: 20,
-                eut: 0,
-                inputs: [],
-                outputs: [],
-              } satisfies RecipeFlowNode["data"]["recipe"]),
+            recipe,
             result: result.nodes[node.id],
-          },
+          }),
         } satisfies RecipeFlowNode;
       }),
       ...(project.storages ?? []).map(
@@ -286,10 +383,10 @@ export function FactoryFlow() {
               activeFlowResourceKey === makeResourceKey(storage.kind, storage.resourceId)
                 ? 1500
                 : undefined,
-            data: {
+            data: reuseObjectIdentity(storageNodeDataCache, storage.id, {
               storage,
               result: result.storages[storage.id],
-            },
+            }),
           }) satisfies StorageFlowNode,
       ),
     ],
@@ -309,6 +406,7 @@ export function FactoryFlow() {
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [isNodeDragging, setNodeDragging] = useState(false);
+  const [layoutVersion, setLayoutVersion] = useState(0);
   const draggingNodeRef = useRef(false);
   const draggedResourceRef = useRef<DraggedResourceConnection | undefined>(undefined);
   const lastConnectionPointerRef = useRef<{ x: number; y: number } | undefined>(undefined);
@@ -327,6 +425,48 @@ export function FactoryFlow() {
 
     setFlowNodes(nodesFromProject);
   }, [nodesFromProject]);
+
+  useEffect(() => {
+    pruneNodeDataCaches(
+      new Set(project.nodes.map((node) => node.id)),
+      new Set((project.storages ?? []).map((storage) => storage.id)),
+    );
+  }, [project.nodes, project.storages]);
+
+  // Flow-space measurements are cached across frames, so anything that can move a
+  // node or change its size has to drop them explicitly. Positions are covered by
+  // `flowNodes` (drags included, since React Flow rewrites it per frame); sizes
+  // are not, because a node can grow on its own when icons or NEI layout resolve.
+  useLayoutEffect(() => {
+    invalidateMeasuredLayout();
+
+    const board = boardRef.current;
+    if (!board || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    let pending = false;
+    const observer = new ResizeObserver(() => {
+      if (pending) {
+        return;
+      }
+
+      pending = true;
+      // Coalesce the burst ResizeObserver emits when it first observes each node,
+      // and re-route only once the browser has settled on the new sizes.
+      window.requestAnimationFrame(() => {
+        pending = false;
+        invalidateMeasuredLayout();
+        setLayoutVersion((version) => version + 1);
+      });
+    });
+
+    for (const nodeElement of board.querySelectorAll<HTMLElement>(".react-flow__node")) {
+      observer.observe(nodeElement);
+    }
+
+    return () => observer.disconnect();
+  }, [flowNodes]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<Array<RecipeFlowNode | StorageFlowNode>[number]>[]) => {
@@ -429,10 +569,15 @@ export function FactoryFlow() {
         },
       };
     });
+    // `layoutVersion` is a deliberate cache-bust token rather than a value this
+    // memo reads: when a node changes size the routes it produces are stale, and
+    // re-issuing the edge objects is what forces them to re-measure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeFlowResourceKey,
     hoveredStorageResourceKey,
     isNodeDragging,
+    layoutVersion,
     project,
     recipeSearch,
     result.edges,
@@ -1133,7 +1278,7 @@ function PaintToolbar({
   );
 }
 
-function ResourceEdge({
+function ResourceEdgeComponent({
   id,
   sourceX,
   sourceY,
@@ -1150,7 +1295,11 @@ function ResourceEdge({
   data,
 }: EdgeProps<ResourceFlowEdge>) {
   const updateEdge = useFactoryStore((state) => state.updateEdge);
-  const zoom = useStore((store) => store.transform[2]);
+  const detailLevel = useStore(selectEdgeDetailLevel);
+  // Label dragging needs the exact zoom to convert a pointer delta into flow
+  // units, but reading it through a subscription would re-render every edge on
+  // every zoom frame. The store API gives the live value on demand instead.
+  const flowStore = useStoreApi();
   const storedLabelOffsetX = data?.labelOffset?.x ?? 0;
   const storedLabelOffsetY = data?.labelOffset?.y ?? 0;
   const storedLabelOffset = { x: storedLabelOffsetX, y: storedLabelOffsetY };
@@ -1169,9 +1318,13 @@ function ResourceEdge({
     ? getInitialResourceColor(data.resource)
     : (data?.color ?? DEFAULT_ITEM_EDGE_COLOR);
   const edgeColor = resourceColor;
-  const isGlobalView = zoom < 0.45;
+  const isGlobalView = hasEdgeDetail(detailLevel, EDGE_DETAIL_GLOBAL);
   const isHighlighted = selected || data?.isFlowHighlighted === true;
-  const shouldUsePreciseRouting = !isGlobalView;
+  // AGENTS.md requires routing to be deterministic and independent of zoom
+  // level. Precise routing used to be switched off below 0.45 because measuring
+  // was expensive; now that measurements are cached across frames it always runs,
+  // so a route no longer changes shape when the user zooms out.
+  const shouldUsePreciseRouting = true;
   const visualSourceCandidates = getSlotEdgeEndpointCandidates({
     nodeId: source,
     handleId: data?.sourceHandleId ?? sourceHandleId,
@@ -1206,9 +1359,9 @@ function ResourceEdge({
   const showLabel = Boolean(
     data?.showLabel &&
     !isHiddenBundleMember &&
-    (selected || data.isFlowHighlighted || zoom >= EDGE_LABEL_ZOOM),
+      (selected || data.isFlowHighlighted || hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS)),
   );
-  const showArrowHead = isHighlighted || zoom >= EDGE_ARROW_ZOOM;
+  const showArrowHead = isHighlighted || hasEdgeDetail(detailLevel, EDGE_DETAIL_ARROWS);
   const labelOffset = isLabelDragging ? draftLabelOffset : storedLabelOffset;
   const routedEdge =
     data?.bundle?.role === "primary"
@@ -1422,7 +1575,8 @@ function ResourceEdge({
                   y: cablePoint.y - routedEdge.labelY,
                 });
               } else {
-                const scale = zoom > 0 ? zoom : 1;
+                const liveZoom = flowStore.getState().transform[2];
+                const scale = liveZoom > 0 ? liveZoom : 1;
                 setDraftLabelOffset({
                   x: drag.offset.x + (event.clientX - drag.clientX) / scale,
                   y: drag.offset.y + (event.clientY - drag.clientY) / scale,
@@ -1879,7 +2033,6 @@ function getBestDirectEdgePoints({
   targetY: number;
   targetPosition: Position;
 }) {
-  const nodeBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]);
   const sourceEndpoints =
     sourceCandidates && sourceCandidates.length > 0
       ? normalizeRouteEndpoints(sourceCandidates)
@@ -1888,19 +2041,22 @@ function getBestDirectEdgePoints({
     targetCandidates && targetCandidates.length > 0
       ? normalizeRouteEndpoints(targetCandidates)
       : normalizeRouteEndpoints([{ x: targetX, y: targetY, side: targetPosition }]);
-  const normalizedNodeBounds = normalizeRouteBounds(nodeBounds);
 
+  // The signature reuses the shared board hash instead of serialising every
+  // node's bounds per edge, so an unchanged board is an O(1) string compare and
+  // a cache hit never touches the obstacle list at all.
   const routeSignature = getDirectRouteSignature({
     laneOffset,
     sourceEndpoints,
     targetEndpoints,
-    nodeBounds: normalizedNodeBounds,
+    boundsHash: getMeasuredAvoidanceSweep().hash,
   });
   const cachedRoute = edgeId ? directRouteCache.get(edgeId) : undefined;
   if (cachedRoute?.signature === routeSignature) {
     return cachedRoute.route.points;
   }
 
+  const normalizedNodeBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]);
   const obstacleSegments = getIndexedRouteObstacleSegments(edgeId, routeIndex, routeSignature);
   const candidates = sourceEndpoints.flatMap((sourceEndpoint) =>
     targetEndpoints.flatMap((targetEndpoint) =>
@@ -2060,19 +2216,16 @@ function getDirectRouteSignature({
   laneOffset,
   sourceEndpoints,
   targetEndpoints,
-  nodeBounds,
+  boundsHash,
 }: {
   laneOffset: number;
   sourceEndpoints: SlotEdgeEndpoint[];
   targetEndpoints: SlotEdgeEndpoint[];
-  nodeBounds: Array<{ left: number; right: number; top: number; bottom: number }>;
+  boundsHash: string;
 }) {
-  return JSON.stringify({
-    laneOffset,
-    source: sourceEndpoints.map(serializeSlotEdgeEndpoint),
-    target: targetEndpoints.map(serializeSlotEdgeEndpoint),
-    bounds: nodeBounds,
-  });
+  return `${laneOffset}|${sourceEndpoints.map(serializeSlotEdgeEndpoint).join(",")}|${targetEndpoints
+    .map(serializeSlotEdgeEndpoint)
+    .join(",")}|${boundsHash}`;
 }
 
 function normalizeRouteEndpoints(endpoints: SlotEdgeEndpoint[]) {
@@ -2090,27 +2243,8 @@ function normalizeRouteEndpoints(endpoints: SlotEdgeEndpoint[]) {
     );
 }
 
-function normalizeRouteBounds(
-  bounds: Array<{ left: number; right: number; top: number; bottom: number }>,
-) {
-  return bounds
-    .map((entry) => ({
-      left: snapRouteCoord(entry.left),
-      right: snapRouteCoord(entry.right),
-      top: snapRouteCoord(entry.top),
-      bottom: snapRouteCoord(entry.bottom),
-    }))
-    .sort(
-      (left, right) => left.left - right.left || left.top - right.top || left.right - right.right,
-    );
-}
-
 function serializeSlotEdgeEndpoint(endpoint: SlotEdgeEndpoint) {
-  return {
-    x: endpoint.x,
-    y: endpoint.y,
-    side: String(endpoint.side),
-  };
+  return `${endpoint.x}:${endpoint.y}:${String(endpoint.side)}`;
 }
 
 function snapRouteCoord(value: number) {
@@ -3026,21 +3160,83 @@ function countPolylineTurns(points: Array<{ x: number; y: number }>) {
   return turns;
 }
 
-function getMeasuredAvoidanceNodeBounds(excludedNodeIds: Array<string | undefined>) {
-  if (typeof document === "undefined") {
-    return [];
+/**
+ * Measures every node on the board once per layout epoch.
+ *
+ * Each edge needs the same obstacle set minus its own two endpoints, so this
+ * used to walk and measure the entire board once per edge â€” O(edges x nodes)
+ * forced layouts every frame. The sweep is now shared and each edge only filters
+ * it.
+ *
+ * Nodes are ordered by id rather than by DOM order so the obstacle list (and
+ * therefore route scoring) does not depend on React's mount order.
+ */
+function getMeasuredAvoidanceSweep() {
+  if (measuredAvoidanceSweep?.epoch === measuredLayoutEpoch) {
+    return measuredAvoidanceSweep;
   }
 
-  const excluded = new Set(excludedNodeIds.filter((id): id is string => Boolean(id)));
-  return [...document.querySelectorAll<HTMLElement>(".react-flow__node")]
-    .filter((element) => {
+  const bounds: Array<{ id: string; bounds: MeasuredBounds }> = [];
+  if (typeof document !== "undefined") {
+    for (const element of document.querySelectorAll<HTMLElement>(".react-flow__node")) {
       const id = element.dataset.id;
-      return id && !excluded.has(id);
-    })
-    .map((element) => getMeasuredNodeBounds(element.dataset.id ?? ""))
-    .filter((bounds): bounds is { left: number; right: number; top: number; bottom: number } =>
-      Boolean(bounds),
+      if (!id) {
+        continue;
+      }
+
+      const cacheKey = `${measuredLayoutEpoch}|${id}`;
+      let measured = measuredNodeBoundsCache.get(cacheKey);
+      if (!measuredNodeBoundsCache.has(cacheKey)) {
+        measured = measureNodeElementBounds(element);
+        measuredNodeBoundsCache.set(cacheKey, measured);
+      }
+
+      if (measured) {
+        bounds.push({ id, bounds: measured });
+      }
+    }
+  }
+
+  bounds.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+
+  // Snap and geometry-sort once, in the order `normalizeRouteBounds` would have
+  // produced. Filtering an already-sorted list preserves that order, so each edge
+  // no longer has to re-sort the whole board.
+  const normalized = bounds
+    .map((entry) => ({
+      id: entry.id,
+      bounds: {
+        left: snapRouteCoord(entry.bounds.left),
+        right: snapRouteCoord(entry.bounds.right),
+        top: snapRouteCoord(entry.bounds.top),
+        bottom: snapRouteCoord(entry.bounds.bottom),
+      },
+    }))
+    .sort(
+      (left, right) =>
+        left.bounds.left - right.bounds.left ||
+        left.bounds.top - right.bounds.top ||
+        left.bounds.right - right.bounds.right,
     );
+
+  measuredAvoidanceSweep = {
+    epoch: measuredLayoutEpoch,
+    bounds: normalized,
+    hash: bounds
+      .map(
+        (entry) =>
+          `${entry.id}:${snapRouteCoord(entry.bounds.left)},${snapRouteCoord(entry.bounds.top)},${snapRouteCoord(entry.bounds.right)},${snapRouteCoord(entry.bounds.bottom)}`,
+      )
+      .join(";"),
+  };
+  return measuredAvoidanceSweep;
+}
+
+function getMeasuredAvoidanceNodeBounds(excludedNodeIds: Array<string | undefined>) {
+  const excluded = new Set(excludedNodeIds.filter((id): id is string => Boolean(id)));
+  return getMeasuredAvoidanceSweep()
+    .bounds.filter((entry) => !excluded.has(entry.id))
+    .map((entry) => entry.bounds);
 }
 
 function expandBounds(
@@ -3508,16 +3704,9 @@ function getMeasuredSlotEndpoint({
   if (!handleId || typeof document === "undefined") {
     return undefined;
   }
-  scheduleMeasuredSlotCacheClear();
-
-  const cacheKey = [
-    getViewportMeasurementSignature(),
-    "endpoint",
-    nodeId,
-    handleId,
-    edgeSide,
-    endpointOffset,
-  ].join("|");
+  const cacheKey = [measuredLayoutEpoch, "endpoint", nodeId, handleId, edgeSide, endpointOffset].join(
+    "|",
+  );
   if (measuredSlotEndpointCache.has(cacheKey)) {
     return measuredSlotEndpointCache.get(cacheKey);
   }
@@ -3552,9 +3741,7 @@ function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?
   if (!handleId || typeof document === "undefined") {
     return undefined;
   }
-  scheduleMeasuredSlotCacheClear();
-
-  const cacheKey = [getViewportMeasurementSignature(), "center", nodeId, handleId].join("|");
+  const cacheKey = [measuredLayoutEpoch, "center", nodeId, handleId].join("|");
   if (measuredSlotCenterCache.has(cacheKey)) {
     return measuredSlotCenterCache.get(cacheKey);
   }
@@ -3615,13 +3802,25 @@ function getMeasuredNodeBounds(nodeId: string) {
     return undefined;
   }
 
+  const cacheKey = `${measuredLayoutEpoch}|${nodeId}`;
+  if (measuredNodeBoundsCache.has(cacheKey)) {
+    return measuredNodeBoundsCache.get(cacheKey);
+  }
+
   const nodeElement = document.querySelector<HTMLElement>(
     `.react-flow__node[data-id="${cssEscape(nodeId)}"]`,
   );
   if (!nodeElement) {
+    measuredNodeBoundsCache.set(cacheKey, undefined);
     return undefined;
   }
 
+  const bounds = measureNodeElementBounds(nodeElement);
+  measuredNodeBoundsCache.set(cacheKey, bounds);
+  return bounds;
+}
+
+function measureNodeElementBounds(nodeElement: HTMLElement) {
   const rect = nodeElement.getBoundingClientRect();
   const topLeft = screenToFlowPoint({ x: rect.left, y: rect.top }, nodeElement);
   const bottomRight = screenToFlowPoint({ x: rect.right, y: rect.bottom }, nodeElement);
@@ -3638,6 +3837,29 @@ function getMeasuredNodeBounds(nodeId: string) {
 }
 
 function screenToFlowPoint(point: { x: number; y: number }, element: HTMLElement) {
+  const transform = getViewportTransform(element);
+  if (!transform) {
+    return undefined;
+  }
+
+  return {
+    x: (point.x - transform.rendererLeft - transform.translateX) / transform.scaleX,
+    y: (point.y - transform.rendererTop - transform.translateY) / transform.scaleY,
+  };
+}
+
+/**
+ * Reads the live viewport transform at most once per frame.
+ *
+ * `getComputedStyle(...).transform` forces a style recalculation, and this used
+ * to run twice per node per edge â€” so a board with 40 nodes and 80 edges paid
+ * over six thousand forced recalcs in a single frame.
+ */
+function getViewportTransform(element: HTMLElement) {
+  if (viewportTransformCache) {
+    return viewportTransformCache;
+  }
+
   const root = element.closest<HTMLElement>(".react-flow");
   const viewport =
     element.closest<HTMLElement>(".react-flow__viewport") ??
@@ -3650,11 +3872,17 @@ function screenToFlowPoint(point: { x: number; y: number }, element: HTMLElement
   }
 
   const rendererRect = renderer.getBoundingClientRect();
-  const transform = parseCssMatrix(getComputedStyle(viewport).transform);
-  return {
-    x: (point.x - rendererRect.left - transform.translateX) / transform.scaleX,
-    y: (point.y - rendererRect.top - transform.translateY) / transform.scaleY,
+  const matrix = parseCssMatrix(getComputedStyle(viewport).transform);
+  viewportTransformCache = {
+    rendererLeft: rendererRect.left,
+    rendererTop: rendererRect.top,
+    translateX: matrix.translateX,
+    translateY: matrix.translateY,
+    scaleX: matrix.scaleX,
+    scaleY: matrix.scaleY,
   };
+  scheduleViewportTransformClear();
+  return viewportTransformCache;
 }
 
 function parseCssMatrix(transform: string) {
@@ -3696,26 +3924,17 @@ function findResourceEndpointElement(selector: string, nodeId: string, handleId:
   );
 }
 
-function scheduleMeasuredSlotCacheClear() {
-  if (measuredSlotCacheClearScheduled || typeof window === "undefined") {
+function scheduleViewportTransformClear() {
+  if (viewportTransformClearScheduled || typeof window === "undefined") {
+    viewportTransformCache = undefined;
     return;
   }
 
-  measuredSlotCacheClearScheduled = true;
+  viewportTransformClearScheduled = true;
   window.requestAnimationFrame(() => {
-    measuredSlotEndpointCache.clear();
-    measuredSlotCenterCache.clear();
-    measuredSlotCacheClearScheduled = false;
+    viewportTransformCache = undefined;
+    viewportTransformClearScheduled = false;
   });
-}
-
-function getViewportMeasurementSignature() {
-  if (typeof document === "undefined") {
-    return "server";
-  }
-
-  const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
-  return viewport?.style.transform || viewport?.getAttribute("style") || "none";
 }
 
 function cssEscape(value: string) {

@@ -18,7 +18,7 @@ export type StorageFlowNode = Node<StorageNodeData, "storageNode">;
 
 function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   const { storage, result } = data;
-  const recipeSearch = useFactoryStore((state) => state.recipeSearch);
+  const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
