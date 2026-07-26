@@ -1,4 +1,5 @@
-import { getTierIndexForFilter, solveGapFill } from "@/lib/planner/gap-solver";
+import { getRecipeTierIndex, getTierIndexForFilter, solveGapFill } from "@/lib/planner/gap-solver";
+import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
 import { resourceLabel } from "@/lib/model/resources";
 import type {
   ExistingProduction,
@@ -99,6 +100,73 @@ export async function solveDatasetGap(
   );
 
   onProgress?.({ stage: "hydrating", lookups });
+
+  // When nothing closed, diagnose instead of shrugging: how many recipes make
+  // the target at all, and which setting is filtering them away. This is what
+  // turns "no path found" into something the user can actually act on.
+  if (!result.plans.some((plan) => plan.closed)) {
+    const targetLabel = resourceLabel({
+      id: request.target.id,
+      displayName: request.target.displayName,
+    });
+    const unfiltered = await getDatasetProducingRecipes(
+      versionId,
+      request.target,
+      "all",
+      PRODUCER_LOOKUP_LIMIT,
+      preferredRecipeIndexes,
+    );
+
+    if (unfiltered.length === 0) {
+      result.notes.push(
+        `Nothing in the dataset makes ${targetLabel} (${request.target.id}) at all. Several mods reuse the same item name — if this looks wrong, pick the GregTech variant in the request.`,
+      );
+    } else {
+      const tierOnly =
+        maxTier === "all"
+          ? unfiltered
+          : await getDatasetProducingRecipes(
+              versionId,
+              request.target,
+              maxTier,
+              PRODUCER_LOOKUP_LIMIT,
+              preferredRecipeIndexes,
+            );
+      const withMachines = allowedRecipeMaps
+        ? tierOnly.filter((recipe) => {
+            const recipeMap = (recipe.recipeMap ?? recipe.source?.recipeMap ?? "").toLowerCase();
+            return (
+              (recipeMap.length > 0 && allowedRecipeMaps.has(recipeMap)) ||
+              allowedRecipeMaps.has(recipe.machineType.toLowerCase())
+            );
+          })
+        : tierOnly;
+
+      if (withMachines.length === 0) {
+        result.notes.push(
+          `${unfiltered.length} recipes make ${targetLabel}, but none survive your solver settings: the ${maxTier} tier cap removes ${
+            unfiltered.length - tierOnly.length
+          }, disabled machines remove ${tierOnly.length - withMachines.length}.`,
+        );
+      } else {
+        const capIndex = getTierIndexForFilter(maxTier);
+        const aboveCap =
+          capIndex === undefined
+            ? []
+            : unfiltered.filter((recipe) => getRecipeTierIndex(recipe) > capIndex);
+        if (aboveCap.length > 0) {
+          const highestTier =
+            GT_VOLTAGE_TIERS[Math.max(...aboveCap.map((recipe) => getRecipeTierIndex(recipe)))]
+              ?.tier;
+          result.notes.push(
+            `${aboveCap.length} recipes that make ${targetLabel} sit above your ${maxTier} tier cap (up to ${
+              highestTier ?? "?"
+            }). The real chain may need a higher tier.`,
+          );
+        }
+      }
+    }
+  }
 
   // The canvas renders full recipes (NEI layout, machine handlers, icons), so
   // the chosen steps go back hydrated rather than as compact summaries.

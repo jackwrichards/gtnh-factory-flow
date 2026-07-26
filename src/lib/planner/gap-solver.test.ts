@@ -456,6 +456,22 @@ describe("solveGapFill", () => {
     expect(bestPlan?.missing.map((entry) => entry.id)).toContain("naphtha");
   });
 
+  it("says so when the depth limit cut chains short", async () => {
+    const result = await solveGapFill(
+      {
+        target: { kind: "fluid", id: "polyethylene", displayName: "Polyethylene", amountPerSecond: 216 },
+        supply: supply(["fluid", "biomass"], ["fluid", "water"]),
+        // Depth 1: the root's own ingredients may not recurse, so ethylene and
+        // oxygen go missing purely because of the cap.
+        options: { maxDepth: 1 },
+      },
+      fixtureLookup(),
+    );
+
+    expect(result.plans[0]?.closed).toBe(false);
+    expect(result.notes.some((note) => note.includes("depth limit"))).toBe(true);
+  });
+
   it("respects the tier cap", async () => {
     const result = await solveGapFill(
       {
@@ -468,6 +484,6 @@ describe("solveGapFill", () => {
     );
 
     expect(result.plans).toHaveLength(0);
-    expect(result.notes.some((note) => note.includes("No recipe"))).toBe(true);
+    expect(result.notes.some((note) => note.includes("No usable recipe"))).toBe(true);
   });
 });

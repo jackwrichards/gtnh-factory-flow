@@ -80,8 +80,8 @@ function SolvingBody({
       : progress.stage === "hydrating"
         ? "Fetching full recipes…"
         : progress.planLabel
-          ? `Plan ${(progress.planIndex ?? 0) + 1}: via ${progress.planLabel}`
-          : "Picking candidate chains…";
+          ? `Trying route ${(progress.planIndex ?? 0) + 1}: ${progress.planLabel}`
+          : "Picking candidate routes…";
   const detail =
     progress?.stage === "exploring" && progress.resource
       ? `Looking for ways to make ${progress.resource}`

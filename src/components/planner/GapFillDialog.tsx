@@ -11,6 +11,7 @@ import {
 import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
 import type { Recipe, ResourceBalance } from "@/lib/model/types";
 import { materializeGapFillPlan } from "@/lib/planner/materialize";
+import { getPlanGroundedness } from "@/lib/planner/gap-solver";
 import type { GapFillPlan } from "@/lib/planner/types";
 import { calculateThroughput } from "@/lib/solver";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
@@ -89,6 +90,16 @@ function GapFillPlansContent() {
       widthClassName="w-[640px]"
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        {gapSolve.result.plans.length > 0 &&
+        gapSolve.result.plans.every(
+          (plan) => !plan.closed && getPlanGroundedness(plan) === 0,
+        ) ? (
+          <div className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
+            None of these plans use anything from your stockpile — they are melt-downs and
+            shortcuts, not real production. The actual chain is probably blocked by your solver
+            settings: check the tier cap, max depth, and disabled machines.
+          </div>
+        ) : null}
         {gapSolve.result.notes.map((note) => (
           <div
             key={note}
@@ -126,11 +137,15 @@ function PlanCard({ entry, onApply }: { entry: VerifiedPlan; onApply: () => void
   const { plan, newNeeds, euTDelta, verifiedClosed } = entry;
   const isClosed = plan.closed && verifiedClosed;
   const tierName = GT_VOLTAGE_TIERS[plan.stats.maxTierIndex]?.tier ?? "?";
+  // Distinct ids can share one display name (oredict vs concrete forms), so
+  // dedupe by label — "EV Machine Hull, EV Machine Hull" helps nobody.
   const missingLabels = [
-    ...plan.missing.map((resource) => resourceLabel(resource)),
-    ...newNeeds.map((balance) =>
-      resourceLabel({ id: balance.resourceId, displayName: balance.displayName }),
-    ),
+    ...new Set([
+      ...plan.missing.map((resource) => resourceLabel(resource)),
+      ...newNeeds.map((balance) =>
+        resourceLabel({ id: balance.resourceId, displayName: balance.displayName }),
+      ),
+    ]),
   ];
   const suppliedCount = plan.stats.supplyDraws.length + plan.stats.existingDraws.length;
   const edgeInputCount = suppliedCount + plan.missing.length;

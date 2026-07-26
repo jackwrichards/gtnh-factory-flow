@@ -26,7 +26,9 @@ const DEFAULT_BEAM_WIDTH = 5;
 const DEFAULT_MAX_DEPTH = 12;
 const DEFAULT_MAX_STEPS = 40;
 const DEFAULT_PLAN_COUNT = 3;
-const DEFAULT_EXPANSION_BUDGET = 400;
+// Lookups cost ~1ms against the warmed indexes, so the budget is generous;
+// deep GT chains (titanium, platline) legitimately need thousands.
+const DEFAULT_EXPANSION_BUDGET = 4000;
 const RATE_EPSILON = 0.000001;
 
 /**
@@ -80,6 +82,8 @@ interface SolveContext {
   maxTierIndex?: number;
   allowedRecipeMaps?: Set<string>;
   budget: { remaining: number };
+  /** Which of the caps actually cut a branch short, for honest reporting. */
+  limitHits: { depth: boolean; steps: boolean; budget: boolean };
   getProducers: (resource: PlannerResource) => Promise<SolverRecipe[]>;
 }
 
@@ -101,6 +105,7 @@ export async function solveGapFill(
       ? new Set(options.allowedRecipeMaps.map((name) => name.trim().toLowerCase()))
       : undefined,
     budget: { remaining: options.expansionBudget ?? DEFAULT_EXPANSION_BUDGET },
+    limitHits: { depth: false, steps: false, budget: false },
     getProducers: (resource) => {
       const key = getResourceKey(resource);
       const cached = producerCache.get(key);
@@ -163,7 +168,23 @@ export async function solveGapFill(
   }
 
   if (rootCandidates.length === 0 && !existingTarget) {
-    notes.push(`No recipe in this dataset produces ${targetLabel} within the tier limit.`);
+    notes.push(`No usable recipe for ${targetLabel} survived the current solver settings.`);
+  }
+
+  if (context.limitHits.depth) {
+    notes.push(
+      `Some chains were cut short by the depth limit (${context.maxDepth}). Deep lines like titanium or platinum often need more — raise max depth in solver settings.`,
+    );
+  }
+  if (context.limitHits.steps) {
+    notes.push(
+      `Some chains were cut short by the step cap (${context.maxSteps} machines per plan).`,
+    );
+  }
+  if (context.limitHits.budget) {
+    notes.push(
+      "The search ran out of its exploration budget before finishing; plans may be incomplete.",
+    );
   }
 
   plans.sort(
@@ -305,11 +326,17 @@ async function resolveInputSource(
     return inPlan;
   }
 
-  if (
-    depth >= context.maxDepth ||
-    state.steps.length >= context.maxSteps ||
-    path.has(getResourceKey(input))
-  ) {
+  if (depth >= context.maxDepth) {
+    context.limitHits.depth = true;
+    return markMissing(input, state);
+  }
+
+  if (state.steps.length >= context.maxSteps) {
+    context.limitHits.steps = true;
+    return markMissing(input, state);
+  }
+
+  if (path.has(getResourceKey(input))) {
     return markMissing(input, state);
   }
 
@@ -325,6 +352,7 @@ async function resolveViaProduction(
   context: SolveContext,
 ): Promise<StepInputSource> {
   if (context.budget.remaining <= 0) {
+    context.limitHits.budget = true;
     return markMissing(input, state);
   }
 
