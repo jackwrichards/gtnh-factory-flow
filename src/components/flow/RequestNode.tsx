@@ -60,7 +60,9 @@ function RequestNodeComponent({ data, selected }: NodeProps<RequestFlowNode>) {
       ].join(" ")}
       title={`Request — ${title} at ${formatRate(request.amountPerSecond)}${unit}`}
     >
-      <div className="flex h-6 items-center gap-1 border-b-2 border-[#31205a] bg-[#3b2566] px-1 shadow-[inset_1px_1px_0_rgba(255,255,255,0.22)]">
+      {/* Above the connection handle's z-30, so its buttons always win the
+          pointer even if the handle bleeds outside the body box. */}
+      <div className="relative z-40 flex h-6 items-center gap-1 border-b-2 border-[#31205a] bg-[#3b2566] px-1 shadow-[inset_1px_1px_0_rgba(255,255,255,0.22)]">
         <button
           type="button"
           onPointerDown={(event) => event.stopPropagation()}
@@ -104,7 +106,7 @@ function RequestNodeComponent({ data, selected }: NodeProps<RequestFlowNode>) {
           id={REQUEST_DEMAND_HANDLE}
           type="target"
           position={Position.Left}
-          className="nodrag !absolute !bottom-0 !left-0 !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
+          className="nodrag !absolute !bottom-0 !left-0 !right-auto !top-0 !z-30 !h-full !w-1/2 !min-w-0 !min-h-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
         />
         <span
           data-resource-edge-anchor="true"

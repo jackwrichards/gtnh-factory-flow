@@ -35,7 +35,9 @@ function StockpileNodeComponent({ data, selected }: NodeProps<StockpileFlowNode>
       ].join(" ")}
       title={`Stockpile — ${stockpile.resources.length} resources in abundance`}
     >
-      <div className="flex h-6 items-center gap-1 border-b-2 border-[#1c3a24] bg-[#254c30] px-1 shadow-[inset_1px_1px_0_rgba(255,255,255,0.25)]">
+      {/* Above the connection handle's z-30, so its buttons always win the
+          pointer even if the handle bleeds outside the body box. */}
+      <div className="relative z-40 flex h-6 items-center gap-1 border-b-2 border-[#1c3a24] bg-[#254c30] px-1 shadow-[inset_1px_1px_0_rgba(255,255,255,0.25)]">
         <button
           type="button"
           onPointerDown={(event) => event.stopPropagation()}
@@ -72,7 +74,7 @@ function StockpileNodeComponent({ data, selected }: NodeProps<StockpileFlowNode>
           id={STOCKPILE_SUPPLY_HANDLE}
           type="source"
           position={Position.Right}
-          className="nodrag !absolute !bottom-0 !left-auto !right-0 !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
+          className="nodrag !absolute !bottom-0 !left-auto !right-0 !top-0 !z-30 !h-full !w-1/2 !min-w-0 !min-h-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
         />
         <span
           data-resource-edge-anchor="true"
