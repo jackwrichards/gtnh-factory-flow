@@ -46,6 +46,15 @@ interface FactoryStore {
   isProjectImporting: boolean;
   datasetError?: string;
   recipeSearch: string;
+  /**
+   * Debounced mirror of `recipeSearch`, published by the recipe browser and read
+   * by the canvas.
+   *
+   * The raw query changes on every keystroke, and everything that highlights
+   * against it — every node, every storage, the whole edge array — is expensive
+   * to re-render. Splitting the two keeps typing local to the browser panel.
+   */
+  highlightSearch: string;
   maxTierFilter: TierFilter;
   recipeBrowserResource?: RecipeBrowserResource;
   recipeBrowserMode: RecipeBrowserMode;
@@ -73,6 +82,7 @@ interface FactoryStore {
   setProjectImporting: (isImporting: boolean) => void;
   setDatasetError: (error?: string) => void;
   setRecipeSearch: (query: string) => void;
+  setHighlightSearch: (query: string) => void;
   setMaxTierFilter: (tier: TierFilter) => void;
   hydrateResourceHistory: (history: RecipeBrowserResource[]) => void;
   browseResource: (resource: RecipeBrowserResource, mode?: RecipeBrowserMode) => void;
@@ -154,6 +164,7 @@ interface FactoryStore {
   deleteEdge: (edgeId: string) => void;
   setTargetRate: (targetRate?: TargetRate) => void;
   selectFuelProfile: (fuelProfileId: string) => void;
+  renameProject: (name: string) => void;
 }
 
 const initialProject = createEmptyProject();
@@ -205,6 +216,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   isProjectImporting: false,
   datasetError: undefined,
   recipeSearch: "",
+  highlightSearch: "",
   maxTierFilter: "all",
   recipeBrowserResource: undefined,
   recipeBrowserMode: "recipes",
@@ -351,6 +363,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     set({
       dataset: undefined,
       recipeSearch: "",
+      highlightSearch: "",
       selectedRecipeId: undefined,
       selectedDatasetVersionId: undefined,
     });
@@ -366,6 +379,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
   setRecipeSearch: (query) => {
     set({ recipeSearch: query });
+  },
+  setHighlightSearch: (query) => {
+    set({ highlightSearch: query });
   },
   setMaxTierFilter: (tier) => {
     set({ maxTierFilter: tier });
@@ -396,6 +412,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     set({
       recipeBrowserResource: undefined,
       recipeSearch: "",
+      highlightSearch: "",
     });
   },
   cleanBoard: () => {
@@ -1085,6 +1102,19 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       return withProjectHistory(state, {
         project,
         lastResult: calculateThroughput(project),
+      });
+    });
+  },
+  renameProject: (name) => {
+    set((state) => {
+      if (name === state.project.name) {
+        return state;
+      }
+
+      // No throughput recalculation: a name cannot change a rate, and the solve
+      // is the expensive part of every other mutation here.
+      return withProjectHistory(state, {
+        project: touchProject({ ...state.project, name }),
       });
     });
   },

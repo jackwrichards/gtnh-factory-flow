@@ -45,10 +45,13 @@ import {
 import { useFactoryStore } from "@/store/factory-store";
 import { useThemeStore } from "@/store/theme-store";
 
-interface TopBarProps {
-  onLoadDatasetVersion: (versionId: string) => void;
-}
-export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
+/**
+ * Board actions — undo/redo, optimise, clean, import/export, theme.
+ *
+ * Lives on the right of the design tab strip: everything here acts on the plan
+ * that strip is switching between, so the two belong on the same bar.
+ */
+export function BoardActions() {
   const projectInputRef = useRef<HTMLInputElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [isExportMenuOpen, setExportMenuOpen] = useState(false);
@@ -58,7 +61,6 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   const project = useFactoryStore((state) => state.project);
   const manifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
-  const isDatasetLoading = useFactoryStore((state) => state.isDatasetLoading);
   const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
   const canUndo = useFactoryStore((state) => state.undoHistory.length > 0);
   const canRedo = useFactoryStore((state) => state.redoHistory.length > 0);
@@ -203,33 +205,8 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   }, [redo, undo]);
 
   return (
-    <header className="flex min-h-16 flex-wrap items-center gap-3 border-b border-line bg-surface px-4 py-3">
-      <div className="flex min-w-[260px] flex-1 items-start gap-2">
-        <div className="grid min-w-0 gap-1">
-          <h1 className="truncate text-lg font-semibold text-fg">GTNH Planner</h1>
-          <label className="grid max-w-52 gap-0.5">
-            <span className="sr-only">GTNH version</span>
-            <select
-              value={selectedDatasetVersionId ?? ""}
-              disabled={isDatasetLoading || !manifest?.versions.length}
-              onChange={(event) => onLoadDatasetVersion(event.target.value)}
-              className="h-8 rounded border border-line-strong bg-surface px-2 text-sm normal-case tracking-normal text-fg disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-muted"
-            >
-              {manifest?.versions.length ? (
-                manifest.versions.map((version) => (
-                  <option key={version.id} value={version.id}>
-                    {version.gtnhVersion} ({version.channel})
-                  </option>
-                ))
-              ) : (
-                <option value="">No versions</option>
-              )}
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
+    <div className="flex shrink-0 items-center gap-1">
+      <div className="flex items-center gap-1">
         <ToolbarButton icon={Undo2} label="Undo" disabled={!canUndo} onClick={undo} />
         <ToolbarButton icon={Redo2} label="Redo" disabled={!canRedo} onClick={redo} />
         <button
@@ -238,9 +215,9 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
           disabled={project.nodes.length === 0}
           title="Set every machine count to its suggested best ratio"
           aria-label="Set every machine count to its suggested best ratio"
-          className="inline-flex h-9 w-9 items-center justify-center rounded border border-cyan-700 bg-cyan-600 text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:border-line-strong disabled:bg-surface-sunken disabled:text-fg-muted"
+          className="inline-flex h-7 w-7 items-center justify-center rounded border border-cyan-700 bg-cyan-600 text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:border-line-strong disabled:bg-surface-sunken disabled:text-fg-muted"
         >
-          <WandSparkles className="h-4 w-4" />
+          <WandSparkles className="h-3.5 w-3.5" />
         </button>
         <ToolbarButton
           icon={Trash2}
@@ -272,17 +249,17 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
             aria-expanded={isExportMenuOpen}
             aria-busy={pendingExport ? true : undefined}
             disabled={Boolean(pendingExport)}
-            className="inline-flex h-9 items-center justify-center gap-1 rounded border border-line-strong bg-surface px-2 text-fg-subtle hover:bg-surface-raised disabled:cursor-wait disabled:bg-surface-sunken disabled:text-fg-muted"
+            className="inline-flex h-7 items-center justify-center gap-0.5 rounded border border-line-strong bg-surface px-1.5 text-fg-subtle hover:bg-surface-raised disabled:cursor-wait disabled:bg-surface-sunken disabled:text-fg-muted"
           >
             {pendingExport ? (
-              <LoaderCircle className="h-4 w-4 animate-spin" />
+              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <Download className="h-4 w-4" />
+              <Download className="h-3.5 w-3.5" />
             )}
-            <ChevronDown className="h-3.5 w-3.5" />
+            <ChevronDown className="h-3 w-3" />
           </button>
           {isExportMenuOpen ? (
-            <div className="absolute right-0 top-10 z-50 min-w-44 border border-line-strong bg-surface py-1 text-sm shadow-lg">
+            <div className="absolute right-0 top-8 z-50 min-w-44 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
               <ExportMenuItem
                 icon={Download}
                 label="Export plan JSON"
@@ -326,7 +303,7 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
           }
         }}
       />
-    </header>
+    </div>
   );
 }
 
@@ -724,9 +701,9 @@ function ToolbarButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="inline-flex h-9 w-9 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-muted"
+      className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-muted"
     >
-      <Icon className="h-4 w-4" />
+      <Icon className="h-3.5 w-3.5" />
     </button>
   );
 }

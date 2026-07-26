@@ -133,7 +133,7 @@ describe("RecipeBrowser", () => {
   });
 
   it("keeps the concrete Spruce Log context when adding a recipe from the recipe book", async () => {
-    render(<RecipeBrowser />);
+    render(<RecipeBrowser onLoadDatasetVersion={() => {}} />);
 
     await screen.findByText("Coke Oven");
     await waitFor(() => {

@@ -22,6 +22,8 @@ import { useFactoryStore } from "@/store/factory-store";
 import type { TierFilter } from "@/store/factory-store";
 import type { Recipe, ResourceAmount } from "@/lib/model/types";
 import { usesNativeNeiChrome } from "@/lib/nei/layout";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { AppIdentity } from "./AppIdentity";
 import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
 import { ResourceIcon } from "./nei/ResourceIcon";
@@ -37,7 +39,11 @@ const RESOURCE_QUERY_CACHE_TTL_MS = 90_000;
 const RESOURCE_SEARCH_DEBOUNCE_MS = 125;
 const RECIPE_SEARCH_DEBOUNCE_MS = 200;
 
-export function RecipeBrowser() {
+interface RecipeBrowserProps {
+  onLoadDatasetVersion: (versionId: string) => void;
+}
+
+export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
   const dataset = useFactoryStore((state) => state.dataset);
   const datasetManifest = useFactoryStore((state) => state.datasetManifest);
   const datasetManifestUrl = useFactoryStore((state) => state.datasetManifestUrl);
@@ -51,6 +57,7 @@ export function RecipeBrowser() {
   const resourceHistory = useFactoryStore((state) => state.recipeResourceHistory);
   const selectedRecipeId = useFactoryStore((state) => state.selectedRecipeId);
   const setRecipeSearch = useFactoryStore((state) => state.setRecipeSearch);
+  const setHighlightSearch = useFactoryStore((state) => state.setHighlightSearch);
   const setMaxTier = useFactoryStore((state) => state.setMaxTierFilter);
   const browseResource = useFactoryStore((state) => state.browseResource);
   const clearResourceBrowser = useFactoryStore((state) => state.clearResourceBrowser);
@@ -79,6 +86,13 @@ export function RecipeBrowser() {
   const pendingRecipePrefetchesRef = useRef<Set<string>>(new Set());
   const debouncedRecipeSearch = useDebouncedValue(recipeSearch, RESOURCE_SEARCH_DEBOUNCE_MS);
   const debouncedRecipeBookSearch = useDebouncedValue(recipeBookSearch, RECIPE_SEARCH_DEBOUNCE_MS);
+
+  // Publish the settled query to the canvas. Highlighting every node, storage and
+  // edge against a half-typed word is wasted work the user never sees, so the
+  // board only reacts once typing pauses.
+  useEffect(() => {
+    setHighlightSearch(debouncedRecipeSearch);
+  }, [debouncedRecipeSearch, setHighlightSearch]);
 
   const activeResource = useMemo(() => {
     if (!browserResource) {
@@ -476,6 +490,7 @@ export function RecipeBrowser() {
   return (
     <>
       <aside className="relative z-40 flex h-full min-h-[360px] flex-col border-r border-neutral-800 bg-[#25272c] text-neutral-100">
+        <AppIdentity onLoadDatasetVersion={onLoadDatasetVersion} />
         <div className="border-b border-neutral-800 px-3 py-3">
           <label className="flex h-9 items-center gap-2 rounded-[4px] border border-neutral-700 bg-[#17191d] px-2 text-sm text-neutral-200 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]">
             <Search className="h-4 w-4 text-neutral-500" />
@@ -1205,7 +1220,10 @@ function VirtualRecipeResultList({
 }) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 360 });
-  const rowHeight = recipes.some(usesNativeNeiChrome) ? 322 : 246;
+  // `usesNativeNeiChrome` resolves a layout per call, and infinite scroll keeps
+  // growing this array (120, 240, 360...), so it must not run on every scroll
+  // frame.
+  const rowHeight = useMemo(() => (recipes.some(usesNativeNeiChrome) ? 322 : 246), [recipes]);
   const columnCount = 2;
   const overscan = 1;
   const rowCount = Math.ceil(recipes.length / columnCount);
@@ -1644,20 +1662,6 @@ function getResourceQueryCacheKey({
   return [versionId, query.trim().toLowerCase(), offset, limit].join("|");
 }
 
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-
-  useEffect(() => {
-    const timeoutMs = typeof value === "string" && value.length === 0 ? 0 : delayMs;
-    const timer = window.setTimeout(() => {
-      setDebouncedValue(value);
-    }, timeoutMs);
-
-    return () => window.clearTimeout(timer);
-  }, [delayMs, value]);
-
-  return debouncedValue;
-}
 
 function getCachedRecipeQuery(cache: Map<string, RecipeQueryCacheEntry>, key: string) {
   const entry = cache.get(key);

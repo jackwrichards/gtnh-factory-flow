@@ -36,6 +36,24 @@
   --line: #e5e5e5;
   --line-strong: #d4d4d4;
 
+  /*
+   * Chart tokens.
+   *
+   * Voltage tier is an ordinal scale — ULV below LV below MV — so it takes one
+   * hue stepped by lightness rather than a set of unrelated colours: the reader
+   * sees the order in the ramp itself. Steps are validated against this panel's
+   * own surface (light #fafafa, dark #303238) for monotone lightness, a visible
+   * gap between neighbours, and a light end that still clears the surface. The
+   * dark column is the same hue re-stepped for the dark surface, not a flip.
+   */
+  --viz-ordinal-1: #86b6ef;
+  --viz-ordinal-2: #5598e7;
+  --viz-ordinal-3: #2a78d6;
+  --viz-ordinal-4: #1c5cab;
+  --viz-ordinal-5: #0d366b;
+  /* Nominal series: machine names carry no order, so every bar shares one hue. */
+  --viz-series-1: #2a78d6;
+
   --mc-100: #ffffff;
   --mc-98: #f7f7f7;
   --mc-96: #f4f4f4;
@@ -85,6 +103,13 @@
   --fg-muted: #a3a3a3;
   --line: #3a3b40;
   --line-strong: #4a4b52;
+
+  --viz-ordinal-1: #256abf;
+  --viz-ordinal-2: #3987e5;
+  --viz-ordinal-3: #6da7ec;
+  --viz-ordinal-4: #9ec5f4;
+  --viz-ordinal-5: #cde2fb;
+  --viz-series-1: #3987e5;
 
   --mc-100: #5a5c65;
   --mc-98: #565861;
@@ -177,6 +202,23 @@ textarea {
 .minecraft-pixel-art * {
   image-rendering: crisp-edges;
   image-rendering: pixelated;
+}
+
+/*
+ * Scrolls, but without a scrollbar taking a bite out of the row.
+ *
+ * For a short horizontal strip inside a fixed-height bar, a classic Windows
+ * scrollbar is a sizeable fraction of the bar's height. Scrolling stays
+ * available by wheel, trackpad, drag and keyboard; the arrows beside the strip
+ * are the visible affordance.
+ */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 .factory-flow-board--moving .react-flow__edges,
