@@ -40,6 +40,7 @@ export function computeCommunityPlanStats(
     }
   }
 
+  const icons = buildResourceIconIndex(project);
   return {
     nodeCount: project.nodes.length,
     storageCount: (project.storages ?? []).length,
@@ -48,25 +49,80 @@ export function computeCommunityPlanStats(
     totalEuT: Number.isFinite(result.totalEuT) ? result.totalEuT : 0,
     highestTier,
     highestTierIndex,
-    needs: toResourceStats(result.externalInputs, "consumed"),
-    outputs: toResourceStats(result.unconsumedOutputs, "produced"),
+    needs: toResourceStats(result.externalInputs, "consumed", icons),
+    outputs: toResourceStats(result.unconsumedOutputs, "produced", icons),
   };
+}
+
+type ResourceIconInfo = Pick<
+  PlanResourceStat,
+  "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
+>;
+
+/**
+ * Icon refs live on the recipe/storage resources inside the plan JSON, not on
+ * the solver's balances, so index them once by kind:id for the stat lines.
+ */
+function buildResourceIconIndex(project: FactoryProject): Map<string, ResourceIconInfo> {
+  const index = new Map<string, ResourceIconInfo>();
+  const add = (resource: {
+    kind: string;
+    id: string;
+    displayName?: string;
+    iconPath?: string;
+    iconAtlas?: PlanResourceStat["iconAtlas"];
+    dominantColor?: string;
+  }) => {
+    const key = `${resource.kind}:${resource.id}`;
+    if (!index.has(key) && (resource.iconPath || resource.iconAtlas)) {
+      index.set(key, {
+        displayName: resource.displayName,
+        iconPath: resource.iconPath,
+        iconAtlas: resource.iconAtlas,
+        dominantColor: resource.dominantColor,
+      });
+    }
+  };
+
+  for (const recipe of project.recipes) {
+    recipe.inputs.forEach(add);
+    recipe.outputs.forEach(add);
+  }
+  for (const storage of project.storages ?? []) {
+    add({
+      kind: storage.kind,
+      id: storage.resourceId,
+      displayName: storage.displayName,
+      iconPath: storage.iconPath,
+      iconAtlas: storage.iconAtlas,
+      dominantColor: storage.dominantColor,
+    });
+  }
+
+  return index;
 }
 
 function toResourceStats(
   balances: ThroughputResult["externalInputs"],
   direction: "consumed" | "produced",
+  icons: Map<string, ResourceIconInfo>,
 ): PlanResourceStat[] {
   return balances
-    .map((balance) => ({
-      kind: balance.kind,
-      resourceId: balance.resourceId,
-      displayName: balance.displayName,
-      ratePerSecond:
-        direction === "consumed"
-          ? Math.abs(balance.consumedPerSecond)
-          : Math.abs(balance.surplusPerSecond || balance.producedPerSecond),
-    }))
+    .map((balance) => {
+      const icon = icons.get(`${balance.kind}:${balance.resourceId}`);
+      return {
+        kind: balance.kind,
+        resourceId: balance.resourceId,
+        displayName: balance.displayName ?? icon?.displayName,
+        iconPath: icon?.iconPath,
+        iconAtlas: icon?.iconAtlas,
+        dominantColor: icon?.dominantColor,
+        ratePerSecond:
+          direction === "consumed"
+            ? Math.abs(balance.consumedPerSecond)
+            : Math.abs(balance.surplusPerSecond || balance.producedPerSecond),
+      };
+    })
     .filter((stat) => stat.ratePerSecond > 0)
     .sort((a, b) => b.ratePerSecond - a.ratePerSecond)
     .slice(0, COMMUNITY_RESOURCE_STAT_LIMIT);

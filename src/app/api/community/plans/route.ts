@@ -14,6 +14,7 @@ import {
   attachMyVotes,
   checkRateLimit,
   getCommunityDb,
+  hashManageToken,
   isCommunityConfigured,
   makeActorKey,
   PLAN_SUMMARY_COLUMNS,
@@ -158,11 +159,13 @@ export async function POST(request: Request) {
 
     // Stats are always derived server-side from the validated plan.
     const stats = computeCommunityPlanStats(project, calculateThroughput(project));
+    const manageToken = crypto.randomUUID();
 
     const db = getCommunityDb();
     const { data, error } = await db
       .from("community_plans")
       .insert({
+        manage_token_hash: hashManageToken(manageToken),
         name,
         description,
         game_version: gameVersion,
@@ -187,7 +190,7 @@ export async function POST(request: Request) {
       throw new Error(error?.message ?? "Insert failed");
     }
 
-    return NextResponse.json({ id: data.id }, { status: 201 });
+    return NextResponse.json({ id: data.id, manageToken }, { status: 201 });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Sharing the plan failed." },

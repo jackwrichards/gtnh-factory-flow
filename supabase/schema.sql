@@ -28,7 +28,11 @@ create table if not exists community_plans (
   downloads integer not null default 0,
   views integer not null default 0,
   uploader_key text not null,
-  created_at timestamptz not null default now()
+  -- sha256 of the secret manage token handed to the uploader's browser;
+  -- knowing the token authorizes updating or deleting the post.
+  manage_token_hash text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create index if not exists community_plans_created_at_idx on community_plans (created_at desc);

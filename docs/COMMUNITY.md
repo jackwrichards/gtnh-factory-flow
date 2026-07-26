@@ -42,4 +42,13 @@ endpoints return 503 and the hub page shows an error banner.
 - Downloads: counted via the download endpoint (JSON download and
   "Open in editor" both use it).
 - Thumbnails: JPEG data URLs (≤ 400 KB) captured client-side from the canvas
-  at share time and stored inline in the row.
+  at share time and stored inline in the row; the capture shrinks itself until
+  it fits. Cards without a photo fall back to the plan's top output sprite.
+- Ownership without accounts: uploads return a secret manage token stored in
+  the uploader's browser (`gtnh-factory-flow.community-posts.v1`), linked to
+  the design tab it came from. That token authorizes updating the post
+  (re-share offers "update vs post as new") and taking it down. Clearing
+  browser storage orphans the posts — that is the accepted trade for no logins.
+- Moderation: set `COMMUNITY_ADMIN_TOKEN` and send it as the `x-admin-token`
+  header on `DELETE /api/community/plans/<id>` to take down any post, or
+  delete rows directly in the Supabase dashboard.

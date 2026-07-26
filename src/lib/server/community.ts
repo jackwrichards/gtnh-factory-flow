@@ -46,6 +46,16 @@ export function makeActorKey(request: Request, deviceId?: string): string {
     .slice(0, 32);
 }
 
+/** Ownership proof: the DB stores only the hash of the browser-held token. */
+export function hashManageToken(token: string): string {
+  return createHash("sha256").update(`manage:${token}`).digest("hex");
+}
+
+export function isAdminRequest(request: Request): boolean {
+  const adminToken = process.env.COMMUNITY_ADMIN_TOKEN;
+  return Boolean(adminToken) && request.headers.get("x-admin-token") === adminToken;
+}
+
 /** Returns true when the action is allowed; records it when it is. */
 export async function checkRateLimit(
   actorKey: string,

@@ -4853,21 +4853,47 @@ function dispatchImageExportComplete(requestId: string, dataUrl?: string) {
   );
 }
 
-/** Downscales a full board capture into a share-card thumbnail. */
-async function makeThumbnailDataUrl(blob: Blob, maxSide = 720): Promise<string> {
+/**
+ * Downscales a full board capture into a share-card thumbnail, shrinking
+ * until it fits the upload limit so big factories don't silently lose their
+ * preview image.
+ */
+async function makeThumbnailDataUrl(blob: Blob, maxBytes = 380_000): Promise<string> {
   const bitmap = await createImageBitmap(blob);
-  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Canvas 2D context unavailable");
-  }
+  try {
+    const attempts: Array<{ maxSide: number; quality: number }> = [
+      { maxSide: 720, quality: 0.82 },
+      { maxSide: 560, quality: 0.72 },
+      { maxSide: 420, quality: 0.62 },
+      { maxSide: 320, quality: 0.5 },
+    ];
 
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return canvas.toDataURL("image/jpeg", 0.82);
+    let smallest: string | undefined;
+    for (const { maxSide, quality } of attempts) {
+      const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("Canvas 2D context unavailable");
+      }
+
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+      if (dataUrl.length <= maxBytes) {
+        return dataUrl;
+      }
+      smallest = dataUrl;
+    }
+
+    if (!smallest) {
+      throw new Error("Thumbnail encode produced no image");
+    }
+    return smallest;
+  } finally {
+    bitmap.close();
+  }
 }
 
 function getEdgeResource(

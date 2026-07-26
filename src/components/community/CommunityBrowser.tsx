@@ -9,6 +9,7 @@ import {
   LoaderCircle,
   Pencil,
   Search,
+  Trash2,
   X,
   Zap,
 } from "lucide-react";
@@ -22,9 +23,15 @@ import {
   stashPlanForEditor,
   voteCommunityPlan,
 } from "@/lib/community/client";
-import type { CommunityPlanSort, CommunityPlanSummary } from "@/lib/community/types";
+import type {
+  CommunityPlanSort,
+  CommunityPlanSummary,
+  PlanResourceStat,
+} from "@/lib/community/types";
 import { GT_VOLTAGE_TIERS, getVoltageTierIndex } from "@/lib/model/tiers";
 import { formatRate } from "@/lib/model";
+import { ResourceIcon } from "@/components/nei/ResourceIcon";
+import { deleteCommunityPlan, forgetMyPost, getMyPost } from "@/lib/community/client";
 
 const SORT_OPTIONS: Array<{ value: CommunityPlanSort; label: string }> = [
   { value: "new", label: "Newest" },
@@ -163,6 +170,34 @@ export function CommunityBrowser() {
     );
   };
 
+  const removeMyPost = async (plan: CommunityPlanSummary) => {
+    const mine = getMyPost(plan.id);
+    if (!mine) {
+      return;
+    }
+
+    if (!window.confirm(`Take down "${plan.name}" from the community hub?`)) {
+      return;
+    }
+
+    try {
+      await deleteCommunityPlan(plan.id, mine.manageToken);
+      forgetMyPost(plan.id);
+      setLoaded((current) =>
+        current
+          ? {
+              ...current,
+              plans: current.plans.filter((entry) => entry.id !== plan.id),
+              total: Math.max(0, current.total - 1),
+            }
+          : current,
+      );
+      setPreview((current) => (current?.id === plan.id ? undefined : current));
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Taking the post down failed.");
+    }
+  };
+
   const openPreview = async (plan: CommunityPlanSummary) => {
     setPreview(plan);
     try {
@@ -251,6 +286,7 @@ export function CommunityBrowser() {
               onPreview={openPreview}
               onDownload={downloadJson}
               onOpen={openInEditor}
+              onDelete={removeMyPost}
             />
           ))}
         </div>
@@ -287,6 +323,7 @@ export function CommunityBrowser() {
           onVote={vote}
           onDownload={downloadJson}
           onOpen={openInEditor}
+          onDelete={removeMyPost}
         />
       ) : null}
     </div>
@@ -299,13 +336,16 @@ function PlanCard({
   onPreview,
   onDownload,
   onOpen,
+  onDelete,
 }: {
   plan: CommunityPlanSummary;
   onVote: (plan: CommunityPlanSummary, value: 1 | -1) => void;
   onPreview: (plan: CommunityPlanSummary) => void;
   onDownload: (plan: CommunityPlanSummary) => void;
   onOpen: (plan: CommunityPlanSummary) => void;
+  onDelete: (plan: CommunityPlanSummary) => void;
 }) {
+  const isMine = Boolean(getMyPost(plan.id));
   return (
     <div className="flex flex-col overflow-hidden rounded border border-line bg-surface shadow-sm">
       <button
@@ -321,6 +361,25 @@ function PlanCard({
             alt={`${plan.name} preview`}
             className="h-full w-full object-cover"
           />
+        ) : plan.outputs[0]?.iconPath || plan.outputs[0]?.iconAtlas ? (
+          // No photo: fall back to the plan's main product sprite.
+          <div className="grid h-full w-full place-items-center minecraft-pixel-art">
+            <ResourceIcon
+              resource={{
+                kind: plan.outputs[0].kind,
+                id: plan.outputs[0].resourceId,
+                amount: plan.outputs[0].ratePerSecond,
+                displayName: plan.outputs[0].displayName,
+                iconPath: plan.outputs[0].iconPath,
+                iconAtlas: plan.outputs[0].iconAtlas,
+                dominantColor: plan.outputs[0].dominantColor,
+              }}
+              size="xl"
+              bare
+              showAmount={false}
+              tooltip={false}
+            />
+          </div>
         ) : (
           <div className="grid h-full w-full place-items-center text-fg-muted">
             <Factory className="h-8 w-8" />
@@ -329,6 +388,11 @@ function PlanCard({
         {plan.highestTier ? (
           <span className="absolute right-1.5 top-1.5 rounded bg-neutral-900/80 px-1.5 py-0.5 text-[11px] font-semibold text-amber-300">
             {plan.highestTier}
+          </span>
+        ) : null}
+        {isMine ? (
+          <span className="absolute left-1.5 top-1.5 rounded bg-cyan-600/90 px-1.5 py-0.5 text-[11px] font-semibold text-white">
+            Yours
           </span>
         ) : null}
       </button>
@@ -360,8 +424,8 @@ function PlanCard({
           <span>{plan.nodeCount} nodes</span>
         </div>
 
-        <ResourceLine label="Needs" stats={plan.needs} />
-        <ResourceLine label="Makes" stats={plan.outputs} />
+        <ResourceIconRow label="Needs" stats={plan.needs} />
+        <ResourceIconRow label="Makes" stats={plan.outputs} />
 
         <div className="mt-auto flex items-center justify-between pt-1 text-xs text-fg-muted">
           <span className="inline-flex items-center gap-2">
@@ -389,6 +453,16 @@ function PlanCard({
             >
               <Download className="h-3 w-3" />
             </button>
+            {isMine ? (
+              <button
+                type="button"
+                onClick={() => onDelete(plan)}
+                title="Take this post down"
+                className="inline-flex items-center rounded border border-red-700 px-2 py-1 text-red-500 hover:bg-red-500/10"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            ) : null}
           </span>
         </div>
       </div>
@@ -426,31 +500,57 @@ function VoteControls({
   );
 }
 
-function ResourceLine({
+function describeStat(stat: PlanResourceStat): string {
+  const unit = stat.kind === "fluid" ? " L/s" : "/s";
+  return `${stat.displayName ?? stat.resourceId} ${formatRate(stat.ratePerSecond, 2)}${unit}`;
+}
+
+/** A row of item sprites — never truncated text. Hover a sprite for details. */
+function ResourceIconRow({
   label,
   stats,
+  max = 8,
 }: {
   label: string;
-  stats: CommunityPlanSummary["needs"];
+  stats: PlanResourceStat[];
+  max?: number;
 }) {
   if (stats.length === 0) {
     return null;
   }
 
-  const shown = stats.slice(0, 3);
+  const shown = stats.slice(0, max);
   const more = stats.length - shown.length;
   return (
-    <p className="truncate text-xs text-fg-subtle" title={stats.map(describeStat).join(", ")}>
-      <span className="font-medium text-fg">{label}:</span>{" "}
-      {shown.map(describeStat).join(", ")}
-      {more > 0 ? ` +${more} more` : ""}
-    </p>
+    <div className="flex items-center gap-1">
+      <span className="w-11 shrink-0 text-[11px] font-medium uppercase tracking-wide text-fg-muted">
+        {label}
+      </span>
+      <div className="flex flex-wrap items-center gap-0.5">
+        {shown.map((stat) => (
+          <span key={`${stat.kind}:${stat.resourceId}`} title={describeStat(stat)}>
+            <ResourceIcon
+              resource={{
+                kind: stat.kind,
+                id: stat.resourceId,
+                amount: stat.ratePerSecond,
+                displayName: stat.displayName,
+                iconPath: stat.iconPath,
+                iconAtlas: stat.iconAtlas,
+                dominantColor: stat.dominantColor,
+              }}
+              size="sm"
+              bare
+              showAmount={false}
+              tooltip={false}
+              className="!h-6 !w-6"
+            />
+          </span>
+        ))}
+        {more > 0 ? <span className="ml-0.5 text-[11px] text-fg-muted">+{more}</span> : null}
+      </div>
+    </div>
   );
-}
-
-function describeStat(stat: CommunityPlanSummary["needs"][number]): string {
-  const unit = stat.kind === "fluid" ? " L/s" : "/s";
-  return `${stat.displayName ?? stat.resourceId} ${formatRate(stat.ratePerSecond, 2)}${unit}`;
 }
 
 function PlanPreviewModal({
@@ -459,13 +559,16 @@ function PlanPreviewModal({
   onVote,
   onDownload,
   onOpen,
+  onDelete,
 }: {
   plan: CommunityPlanSummary;
   onClose: () => void;
   onVote: (plan: CommunityPlanSummary, value: 1 | -1) => void;
   onDownload: (plan: CommunityPlanSummary) => void;
   onOpen: (plan: CommunityPlanSummary) => void;
+  onDelete: (plan: CommunityPlanSummary) => void;
 }) {
+  const isMine = Boolean(getMyPost(plan.id));
   return (
     <div
       className="fixed inset-0 z-[100] grid place-items-center bg-neutral-950/60 p-4"
@@ -521,6 +624,15 @@ function PlanPreviewModal({
         <PreviewResourceList label="Makes" stats={plan.outputs} />
 
         <div className="mt-4 flex justify-end gap-2">
+          {isMine ? (
+            <button
+              type="button"
+              onClick={() => onDelete(plan)}
+              className="mr-auto inline-flex items-center gap-1.5 rounded border border-red-700 px-3 py-1.5 text-sm text-red-500 hover:bg-red-500/10"
+            >
+              <Trash2 className="h-4 w-4" /> Take down
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => onDownload(plan)}
@@ -568,9 +680,27 @@ function PreviewResourceList({
         {stats.map((stat) => (
           <li
             key={`${stat.kind}:${stat.resourceId}`}
-            className="flex justify-between gap-2 border-b border-line/50 py-0.5"
+            className="flex items-center justify-between gap-2 border-b border-line/50 py-0.5"
           >
-            <span className="truncate">{stat.displayName ?? stat.resourceId}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <ResourceIcon
+                resource={{
+                  kind: stat.kind,
+                  id: stat.resourceId,
+                  amount: stat.ratePerSecond,
+                  displayName: stat.displayName,
+                  iconPath: stat.iconPath,
+                  iconAtlas: stat.iconAtlas,
+                  dominantColor: stat.dominantColor,
+                }}
+                size="sm"
+                bare
+                showAmount={false}
+                tooltip={false}
+                className="!h-5 !w-5 shrink-0"
+              />
+              <span className="truncate">{stat.displayName ?? stat.resourceId}</span>
+            </span>
             <span className="shrink-0 text-fg-subtle">
               {formatRate(stat.ratePerSecond, 2)}
               {stat.kind === "fluid" ? " L/s" : "/s"}

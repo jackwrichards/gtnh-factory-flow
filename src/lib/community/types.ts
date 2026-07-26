@@ -1,4 +1,4 @@
-import type { MachineTier, ResourceKind } from "@/lib/model/types";
+import type { MachineTier, ResourceIconAtlasRef, ResourceKind } from "@/lib/model/types";
 
 /** One line of a plan's stat card: an external need or an unconsumed output. */
 export interface PlanResourceStat {
@@ -7,6 +7,10 @@ export interface PlanResourceStat {
   displayName?: string;
   /** items/s or L/s, positive. */
   ratePerSecond: number;
+  /** Icon refs copied out of the plan JSON so cards can render real sprites. */
+  iconPath?: string;
+  iconAtlas?: ResourceIconAtlasRef;
+  dominantColor?: string;
 }
 
 /** The sortable/filterable identity of a shared plan, computed from its JSON. */
@@ -74,6 +78,15 @@ export interface CommunityUploadRequest {
   /** Full FactoryProject JSON; the server re-validates and re-derives stats. */
   plan: unknown;
   thumbnailDataUrl?: string;
+}
+
+export interface CommunityUploadResponse {
+  id: string;
+  /**
+   * Secret proving ownership of the post. Stored only in the uploader's
+   * browser; required to update or delete the post later.
+   */
+  manageToken: string;
 }
 
 export interface CommunityVoteRequest {
