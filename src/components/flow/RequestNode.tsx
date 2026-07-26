@@ -63,6 +63,7 @@ function RequestNodeComponent({ data, selected }: NodeProps<RequestFlowNode>) {
       <div className="flex h-6 items-center gap-1 border-b-2 border-[#31205a] bg-[#3b2566] px-1 shadow-[inset_1px_1px_0_rgba(255,255,255,0.22)]">
         <button
           type="button"
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
             deleteRequest(request.id);
@@ -78,6 +79,7 @@ function RequestNodeComponent({ data, selected }: NodeProps<RequestFlowNode>) {
         </div>
         <button
           type="button"
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
             window.dispatchEvent(
@@ -139,6 +141,8 @@ function RequestNodeComponent({ data, selected }: NodeProps<RequestFlowNode>) {
           type="text"
           inputMode="decimal"
           value={rateDraft}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
           onChange={(event) => setRateDraft(event.target.value)}
           onBlur={commitRate}
           onKeyDown={(event) => {

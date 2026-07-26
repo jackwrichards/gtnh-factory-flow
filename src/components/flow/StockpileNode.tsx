@@ -38,6 +38,7 @@ function StockpileNodeComponent({ data, selected }: NodeProps<StockpileFlowNode>
       <div className="flex h-6 items-center gap-1 border-b-2 border-[#1c3a24] bg-[#254c30] px-1 shadow-[inset_1px_1px_0_rgba(255,255,255,0.25)]">
         <button
           type="button"
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
             deleteStockpile(stockpile.id);
@@ -53,6 +54,7 @@ function StockpileNodeComponent({ data, selected }: NodeProps<StockpileFlowNode>
         </div>
         <button
           type="button"
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
             setEditingStockpile(stockpile.id);
