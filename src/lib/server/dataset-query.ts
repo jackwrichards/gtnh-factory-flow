@@ -56,6 +56,17 @@ interface LoadedRecipeIndex {
   recipeMapIconEntriesByMap?: Map<string, RecipeMapIconEntry>;
   recipesByRawRecipeId?: Map<string, Recipe[]>;
   hydratedRecipeSummaries?: Map<number, RecipeSummary>;
+  /**
+   * Resource scopes (oredict fan-out, cell equivalents, wildcards) are pure
+   * per dataset but expensive to derive — some walk every resource. The gap
+   * solver asks for the same ones on every solve, so they are memoized here.
+   */
+  resourceScopeCaches?: {
+    recipes: Map<string, RecipeResourceScope>;
+    uses: Map<string, RecipeResourceScope>;
+  };
+  /** Tier-filtered "recipes using this resource" sets, keyed resource|tier. */
+  solverUsesIndexCache?: Map<string, number[]>;
 }
 
 export interface DatasetRecipeRef {
@@ -420,17 +431,22 @@ export async function getDatasetRecipeIndexesUsingResources(
 ): Promise<Set<number>> {
   const catalog = await loadCatalog(versionId);
   const usingRecipeIndexes = new Set<number>();
+  catalog.solverUsesIndexCache ??= new Map();
 
   if (catalog.version.recipeLookupIndexPath) {
     const lookup = await loadRecipeLookupIndex(catalog.version);
     for (const resource of resources) {
-      const scope = getRecipeResourceScope(catalog, resource, "uses");
-      for (const recipeIndexes of getLookupRecipesByMap(lookup, scope, "uses").values()) {
-        for (const recipeIndex of recipeIndexes) {
-          if (recipeMatchesLookupTier(lookup, recipeIndex, maxTier)) {
-            usingRecipeIndexes.add(recipeIndex);
-          }
-        }
+      const cacheKey = `${resource.kind}:${resource.id}|${maxTier}`;
+      let recipeIndexes = catalog.solverUsesIndexCache.get(cacheKey);
+      if (!recipeIndexes) {
+        const scope = getCachedResourceScope(catalog, resource, "uses");
+        recipeIndexes = [...getLookupRecipesByMap(lookup, scope, "uses").values()]
+          .flat()
+          .filter((recipeIndex) => recipeMatchesLookupTier(lookup, recipeIndex, maxTier));
+        catalog.solverUsesIndexCache.set(cacheKey, recipeIndexes);
+      }
+      for (const recipeIndex of recipeIndexes) {
+        usingRecipeIndexes.add(recipeIndex);
       }
     }
     return usingRecipeIndexes;
@@ -439,14 +455,39 @@ export async function getDatasetRecipeIndexesUsingResources(
   const recipeCatalog = await loadRecipeIndex(versionId);
   const indexes = ensureIndexes(recipeCatalog);
   for (const resource of resources) {
-    const scope = getRecipeResourceScope(recipeCatalog, resource, "uses");
-    for (const recipeIndex of getResourceIndexes(indexes.recipeIndexesByResource, scope, "uses")) {
-      if (recipeMatchesTierIndex(indexes, recipeIndex, maxTier)) {
-        usingRecipeIndexes.add(recipeIndex);
-      }
+    const cacheKey = `${resource.kind}:${resource.id}|${maxTier}`;
+    let recipeIndexes = recipeCatalog.solverUsesIndexCache?.get(cacheKey);
+    if (!recipeIndexes) {
+      const scope = getCachedResourceScope(recipeCatalog, resource, "uses");
+      recipeIndexes = getResourceIndexes(indexes.recipeIndexesByResource, scope, "uses").filter(
+        (recipeIndex) => recipeMatchesTierIndex(indexes, recipeIndex, maxTier),
+      );
+      recipeCatalog.solverUsesIndexCache ??= new Map();
+      recipeCatalog.solverUsesIndexCache.set(cacheKey, recipeIndexes);
+    }
+    for (const recipeIndex of recipeIndexes) {
+      usingRecipeIndexes.add(recipeIndex);
     }
   }
   return usingRecipeIndexes;
+}
+
+function getCachedResourceScope(
+  catalog: LoadedRecipeIndex,
+  resource: Pick<ResourceAmount, "kind" | "id">,
+  mode: "recipes" | "uses",
+): RecipeResourceScope {
+  catalog.resourceScopeCaches ??= { recipes: new Map(), uses: new Map() };
+  const cache = catalog.resourceScopeCaches[mode];
+  const key = `${resource.kind}:${resource.id}`;
+  const cached = cache.get(key);
+  if (cached) {
+    return cached;
+  }
+
+  const scope = getRecipeResourceScope(catalog, resource, mode);
+  cache.set(key, scope);
+  return scope;
 }
 
 export async function getDatasetProducingRecipes(
@@ -455,15 +496,20 @@ export async function getDatasetProducingRecipes(
   maxTier: TierFilter,
   limit: number,
   preferredRecipeIndexes?: ReadonlySet<number>,
+  allowedRecipeMaps?: ReadonlySet<string>,
 ): Promise<RecipeSummary[]> {
   const catalog = await loadCatalog(versionId);
-  const resourceScope = getRecipeResourceScope(catalog, resource, "recipes");
+  const resourceScope = getCachedResourceScope(catalog, resource, "recipes");
+  const isMapAllowed = (recipeMap: string | undefined) =>
+    !allowedRecipeMaps || (recipeMap !== undefined && allowedRecipeMaps.has(recipeMap.toLowerCase()));
 
   if (catalog.version.recipeLookupIndexPath) {
     const lookup = await loadRecipeLookupIndex(catalog.version);
     const recipesByMap = getLookupRecipesByMap(lookup, resourceScope, "recipes");
     const recipeIndexes = spreadRecipeIndexesAcrossMaps(
-      [...recipesByMap.values()],
+      [...recipesByMap.entries()]
+        .filter(([recipeMapId]) => isMapAllowed(lookup.recipeMaps[recipeMapId]))
+        .map(([, mapRecipeIndexes]) => mapRecipeIndexes),
       (recipeIndex) => recipeMatchesLookupTier(lookup, recipeIndex, maxTier),
       lookup.tierIndexes,
       limit,
@@ -481,12 +527,16 @@ export async function getDatasetProducingRecipes(
 
   const recipeCatalog = await loadRecipeIndex(versionId);
   const indexes = ensureIndexes(recipeCatalog);
-  const recipeMaps = getResourceRecipeMaps(indexes.recipeMapsByResource, resourceScope, "recipes");
+  const recipeMaps = getResourceRecipeMaps(
+    indexes.recipeMapsByResource,
+    resourceScope,
+    "recipes",
+  ).filter((recipeMap) => isMapAllowed(recipeMap));
   const recipeIndexesByMap = recipeMaps.map((recipeMap) =>
     getResourceIndexes(indexes.recipeIndexesByResourceAndMap, resourceScope, "recipes", recipeMap),
   );
   const recipeIndexes = spreadRecipeIndexesAcrossMaps(
-    recipeIndexesByMap.length > 0
+    recipeIndexesByMap.length > 0 || allowedRecipeMaps
       ? recipeIndexesByMap
       : [getResourceIndexes(indexes.recipeIndexesByResource, resourceScope, "recipes")],
     (recipeIndex) => recipeMatchesTierIndex(indexes, recipeIndex, maxTier),

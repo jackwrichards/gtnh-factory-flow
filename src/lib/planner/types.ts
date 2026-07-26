@@ -34,6 +34,11 @@ export interface GapSolveOptions {
   maxTierIndex?: number;
   /** Global cap on producer lookups, so a hostile chain cannot run away. */
   expansionBudget?: number;
+  /**
+   * Recipe map / machine names the search may use. Unset means everything;
+   * set, any recipe whose map and machine type are both outside it is skipped.
+   */
+  allowedRecipeMaps?: string[];
 }
 
 export interface GapSolveRequest {

@@ -75,6 +75,7 @@ interface SolveContext {
   maxDepth: number;
   maxSteps: number;
   maxTierIndex?: number;
+  allowedRecipeMaps?: Set<string>;
   budget: { remaining: number };
   getProducers: (resource: PlannerResource) => Promise<SolverRecipe[]>;
 }
@@ -93,6 +94,9 @@ export async function solveGapFill(
     maxDepth: options.maxDepth ?? DEFAULT_MAX_DEPTH,
     maxSteps: options.maxSteps ?? DEFAULT_MAX_STEPS,
     maxTierIndex: options.maxTierIndex,
+    allowedRecipeMaps: options.allowedRecipeMaps
+      ? new Set(options.allowedRecipeMaps.map((name) => name.trim().toLowerCase()))
+      : undefined,
     budget: { remaining: options.expansionBudget ?? DEFAULT_EXPANSION_BUDGET },
     getProducers: (resource) => {
       const key = getResourceKey(resource);
@@ -471,7 +475,7 @@ function rankProducers(
   const scored: Array<{ recipe: SolverRecipe; score: number }> = [];
 
   for (const recipe of producers) {
-    if (isDegenerateRecipe(recipe)) {
+    if (isDegenerateRecipe(recipe) || !isRecipeMapAllowed(recipe, context.allowedRecipeMaps)) {
       continue;
     }
 
@@ -717,6 +721,16 @@ function toPlannerResource(
     iconAtlas: resource.iconAtlas,
     dominantColor: resource.dominantColor,
   };
+}
+
+function isRecipeMapAllowed(recipe: SolverRecipe, allowed: Set<string> | undefined): boolean {
+  if (!allowed) {
+    return true;
+  }
+
+  const recipeMap = (recipe.recipeMap ?? recipe.source?.recipeMap ?? "").trim().toLowerCase();
+  const machineType = recipe.machineType.trim().toLowerCase();
+  return (recipeMap.length > 0 && allowed.has(recipeMap)) || allowed.has(machineType);
 }
 
 function isDegenerateRecipe(recipe: SolverRecipe): boolean {

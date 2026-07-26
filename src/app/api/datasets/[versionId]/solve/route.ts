@@ -39,6 +39,7 @@ const solveRequestSchema = z.object({
       beamWidth: z.number().int().min(1).max(8).optional(),
       maxDepth: z.number().int().min(1).max(16).optional(),
       maxSteps: z.number().int().min(1).max(60).optional(),
+      allowedRecipeMaps: z.array(z.string().min(1)).max(800).optional(),
     })
     .optional(),
 });

@@ -384,6 +384,32 @@ describe("solveGapFill", () => {
     expect(planStarts.map(([, planIndex]) => planIndex)).toEqual([0, 1]);
   });
 
+  it("only routes through allowed machines", async () => {
+    const result = await solveGapFill(
+      {
+        target: { kind: "fluid", id: "polyethylene", displayName: "Polyethylene", amountPerSecond: 216 },
+        supply: supply(["fluid", "biomass"], ["fluid", "water"]),
+        options: {
+          // No Distillery: the ethanol route is cut off, leaving the cracker.
+          allowedRecipeMaps: [
+            "Large Chemical Reactor",
+            "Oil Cracking Unit",
+            "Fermenter",
+            "Electrolyzer",
+          ],
+        },
+      },
+      fixtureLookup(),
+    );
+
+    for (const plan of result.plans) {
+      expect(plan.steps.every((step) => step.recipe.id !== "distillery-ethylene")).toBe(true);
+    }
+    const bestPlan = result.plans[0];
+    expect(bestPlan?.steps.some((step) => step.recipe.id === "cracker-ethylene")).toBe(true);
+    expect(bestPlan?.missing.map((entry) => entry.id)).toContain("naphtha");
+  });
+
   it("respects the tier cap", async () => {
     const result = await solveGapFill(
       {

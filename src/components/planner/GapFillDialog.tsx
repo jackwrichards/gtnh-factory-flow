@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle, Wand2 } from "lucide-react";
+import { LoaderCircle, SlidersHorizontal, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
 import {
@@ -13,8 +13,9 @@ import {
   getResourceKey,
   resourceLabel,
 } from "@/lib/model";
-import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
-import type { Recipe, ResourceBalance } from "@/lib/model/types";
+import { GT_OVERCLOCK_TIERS, GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
+import type { MachineTier, Recipe, ResourceBalance } from "@/lib/model/types";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { materializeGapFillPlan } from "@/lib/planner/materialize";
 import type {
   ExistingProduction,
@@ -31,6 +32,56 @@ type SolveState =
   | { status: "loading" }
   | { status: "error"; message: string }
   | { status: "ready"; result: RecipeDatasetSolveResult };
+
+type SolveTierSetting = "global" | Exclude<MachineTier, "DEMO">;
+
+interface GapSolveSettings {
+  maxTier: SolveTierSetting;
+  maxDepth: number;
+  blockedRecipeMaps: string[];
+}
+
+const SETTINGS_STORAGE_KEY = "gtnh-factory-flow.gap-solve-settings.v1";
+const DEFAULT_SETTINGS: GapSolveSettings = { maxTier: "global", maxDepth: 8, blockedRecipeMaps: [] };
+
+function loadSolveSettings(): GapSolveSettings {
+  if (typeof window === "undefined") {
+    return DEFAULT_SETTINGS;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) {
+      return DEFAULT_SETTINGS;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<GapSolveSettings>;
+    return {
+      maxTier:
+        parsed.maxTier === "global" ||
+        GT_VOLTAGE_TIERS.some((entry) => entry.tier === parsed.maxTier)
+          ? (parsed.maxTier as SolveTierSetting)
+          : DEFAULT_SETTINGS.maxTier,
+      maxDepth:
+        typeof parsed.maxDepth === "number" && parsed.maxDepth >= 1 && parsed.maxDepth <= 16
+          ? Math.round(parsed.maxDepth)
+          : DEFAULT_SETTINGS.maxDepth,
+      blockedRecipeMaps: Array.isArray(parsed.blockedRecipeMaps)
+        ? parsed.blockedRecipeMaps.filter((entry): entry is string => typeof entry === "string")
+        : [],
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+function saveSolveSettings(settings: GapSolveSettings): void {
+  try {
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // Best effort; the dialog still works without persistence.
+  }
+}
 
 interface VerifiedPlan {
   plan: GapFillPlan<Recipe>;
@@ -67,6 +118,18 @@ export function GapFillDialog({
     message?: string;
   }>();
   const [progress, setProgress] = useState<{ key: string } & GapSolveProgress>();
+  const [settings, setSettings] = useState<GapSolveSettings>(loadSolveSettings);
+  const [isSettingsOpen, setSettingsOpen] = useState(false);
+  const recipeMaps = useFactoryStore((state) => state.dataset?.recipeMaps);
+  const globalMaxTier = useFactoryStore((state) => state.maxTierFilter);
+
+  const updateSettings = (patch: Partial<GapSolveSettings>) => {
+    setSettings((previous) => {
+      const next = { ...previous, ...patch };
+      saveSolveSettings(next);
+      return next;
+    });
+  };
 
   const version = useMemo(
     () => datasetManifest?.versions.find((entry) => entry.id === selectedDatasetVersionId),
@@ -76,7 +139,9 @@ export function GapFillDialog({
   const requestTitle = request
     ? resourceLabel({ id: request.resourceId, displayName: request.displayName })
     : "…";
-  const solveKey = `${stockpileId}|${requestId}|${version?.id ?? ""}`;
+  // Debounced so toggling a batch of machines re-solves once, not per click.
+  const settingsKey = useDebouncedValue(JSON.stringify(settings), 600);
+  const solveKey = `${stockpileId}|${requestId}|${version?.id ?? ""}|${settingsKey}`;
   const requestExists = Boolean(request);
   // Supply is the union of every stockpile plus what the board already makes;
   // with neither, a solve can only report that everything is missing.
@@ -132,6 +197,14 @@ export function GapFillDialog({
       }
     }
 
+    const activeSettings = JSON.parse(settingsKey) as GapSolveSettings;
+    const blockedMaps = new Set(activeSettings.blockedRecipeMaps);
+    const datasetRecipeMaps = store.dataset?.recipeMaps ?? [];
+    const allowedRecipeMaps =
+      blockedMaps.size > 0
+        ? datasetRecipeMaps.filter((recipeMap) => !blockedMaps.has(recipeMap))
+        : undefined;
+
     solveRecipeDatasetGap(
       store.datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
       version,
@@ -147,7 +220,12 @@ export function GapFillDialog({
         },
         supply,
         existingOutputs,
-        maxTier: store.maxTierFilter,
+        maxTier:
+          activeSettings.maxTier === "global" ? store.maxTierFilter : activeSettings.maxTier,
+        options: {
+          maxDepth: activeSettings.maxDepth,
+          allowedRecipeMaps,
+        },
       },
       {
         signal: controller.signal,
@@ -165,7 +243,7 @@ export function GapFillDialog({
       });
 
     return () => controller.abort();
-  }, [hasAnySupply, requestExists, requestId, solveKey, version]);
+  }, [hasAnySupply, requestExists, requestId, settingsKey, solveKey, version]);
 
   const solveState: SolveState = useMemo(() => {
     if (!version) {
@@ -217,6 +295,33 @@ export function GapFillDialog({
       widthClassName="w-[640px]"
     >
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setSettingsOpen((open) => !open)}
+            className="flex h-8 items-center gap-1.5 rounded border border-line px-2.5 text-sm hover:bg-surface-sunken"
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            Search settings
+          </button>
+          <span className="text-xs text-fg-muted">
+            {settings.maxTier === "global" ? `tier ${globalMaxTier}` : `tier ${settings.maxTier}`} ·
+            depth {settings.maxDepth}
+            {settings.blockedRecipeMaps.length > 0
+              ? ` · ${settings.blockedRecipeMaps.length} machines off`
+              : ""}
+          </span>
+        </div>
+
+        {isSettingsOpen ? (
+          <SolveSettingsPanel
+            settings={settings}
+            onChange={updateSettings}
+            recipeMaps={recipeMaps ?? []}
+            globalMaxTier={globalMaxTier}
+          />
+        ) : null}
+
         {solveState.status === "loading" ? (
           <SolveProgressPanel progress={progress?.key === solveKey ? progress : undefined} />
         ) : null}
@@ -272,6 +377,136 @@ export function GapFillDialog({
         ) : null}
       </div>
     </PlannerDialog>
+  );
+}
+
+/**
+ * The narrowing controls: tier cap, search depth, and which machines the
+ * solver may use at all. Fewer machines and shallower depth mean a much
+ * smaller graph to search. Changes persist and re-solve automatically.
+ */
+function SolveSettingsPanel({
+  settings,
+  onChange,
+  recipeMaps,
+  globalMaxTier,
+}: {
+  settings: GapSolveSettings;
+  onChange: (patch: Partial<GapSolveSettings>) => void;
+  recipeMaps: string[];
+  globalMaxTier: string;
+}) {
+  const [mapFilter, setMapFilter] = useState("");
+  const blocked = useMemo(() => new Set(settings.blockedRecipeMaps), [settings.blockedRecipeMaps]);
+  const visibleMaps = useMemo(() => {
+    const normalized = mapFilter.trim().toLowerCase();
+    const maps = normalized
+      ? recipeMaps.filter((recipeMap) => recipeMap.toLowerCase().includes(normalized))
+      : recipeMaps;
+    return [...maps].sort((left, right) => left.localeCompare(right));
+  }, [mapFilter, recipeMaps]);
+
+  const toggleMap = (recipeMap: string) => {
+    onChange({
+      blockedRecipeMaps: blocked.has(recipeMap)
+        ? settings.blockedRecipeMaps.filter((entry) => entry !== recipeMap)
+        : [...settings.blockedRecipeMaps, recipeMap],
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-3 rounded border border-line bg-surface-raised p-3">
+      <div className="flex flex-wrap items-center gap-4">
+        <label className="flex items-center gap-2 text-sm">
+          Max tier
+          <select
+            value={settings.maxTier}
+            onChange={(event) => onChange({ maxTier: event.target.value as SolveTierSetting })}
+            className="h-8 rounded border border-line bg-surface-sunken px-2 text-sm outline-none focus:border-cyan-500"
+          >
+            <option value="global">Recipe-book filter ({globalMaxTier})</option>
+            {GT_OVERCLOCK_TIERS.map((entry) => (
+              <option key={entry.tier} value={entry.tier}>
+                {entry.tier}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          Max depth
+          <input
+            type="number"
+            min={1}
+            max={16}
+            value={settings.maxDepth}
+            onChange={(event) => {
+              const parsed = Number.parseInt(event.target.value, 10);
+              if (Number.isInteger(parsed)) {
+                onChange({ maxDepth: Math.min(16, Math.max(1, parsed)) });
+              }
+            }}
+            className="h-8 w-16 rounded border border-line bg-surface-sunken px-2 text-sm outline-none focus:border-cyan-500"
+          />
+          <span className="text-xs text-fg-muted">recipes deep</span>
+        </label>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">Machines</span>
+          <input
+            type="text"
+            value={mapFilter}
+            onChange={(event) => setMapFilter(event.target.value)}
+            placeholder="Filter machines…"
+            className="h-8 w-48 rounded border border-line bg-surface-sunken px-2 text-sm outline-none focus:border-cyan-500"
+          />
+          <span className="flex-1" />
+          {settings.blockedRecipeMaps.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => onChange({ blockedRecipeMaps: [] })}
+              className="h-7 rounded border border-line px-2 text-xs hover:bg-surface-sunken"
+            >
+              Enable all
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => onChange({ blockedRecipeMaps: [...recipeMaps] })}
+            className="h-7 rounded border border-line px-2 text-xs hover:bg-surface-sunken"
+            title="Turn everything off, then enable just the machines you want"
+          >
+            Disable all
+          </button>
+        </div>
+        <div className="flex max-h-44 flex-wrap content-start gap-1.5 overflow-y-auto">
+          {visibleMaps.length === 0 ? (
+            <span className="text-sm text-fg-muted">No machines match the filter.</span>
+          ) : (
+            visibleMaps.map((recipeMap) => {
+              const isBlocked = blocked.has(recipeMap);
+              return (
+                <button
+                  key={recipeMap}
+                  type="button"
+                  onClick={() => toggleMap(recipeMap)}
+                  className={[
+                    "h-7 rounded border px-2 text-xs",
+                    isBlocked
+                      ? "border-line text-fg-muted line-through opacity-60 hover:opacity-90"
+                      : "border-emerald-500/50 bg-emerald-500/10 hover:border-emerald-400",
+                  ].join(" ")}
+                  title={isBlocked ? `Allow ${recipeMap}` : `Exclude ${recipeMap}`}
+                >
+                  {recipeMap}
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -44,6 +44,9 @@ export async function solveDatasetGap(
   onProgress?: (progress: GapSolveProgress) => void,
 ): Promise<DatasetGapSolveResult> {
   const maxTier = request.maxTier ?? "all";
+  const allowedRecipeMaps = request.options?.allowedRecipeMaps
+    ? new Set(request.options.allowedRecipeMaps.map((name) => name.trim().toLowerCase()))
+    : undefined;
   // Progress carries the current plan context on every heartbeat so a viewer
   // joining mid-stream still knows what is being explored.
   let lookups = 0;
@@ -83,6 +86,7 @@ export async function solveDatasetGap(
           maxTier,
           PRODUCER_LOOKUP_LIMIT,
           preferredRecipeIndexes,
+          allowedRecipeMaps,
         );
       },
     },

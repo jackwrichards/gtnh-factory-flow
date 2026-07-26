@@ -174,7 +174,10 @@ export interface RecipeDatasetSolveRequest {
   supply: PlannerResource[];
   existingOutputs?: ExistingProduction[];
   maxTier: TierFilter;
-  options?: Pick<GapSolveOptions, "planCount" | "beamWidth" | "maxDepth" | "maxSteps">;
+  options?: Pick<
+    GapSolveOptions,
+    "planCount" | "beamWidth" | "maxDepth" | "maxSteps" | "allowedRecipeMaps"
+  >;
 }
 
 export interface RecipeDatasetSolveResult {
