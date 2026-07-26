@@ -89,7 +89,7 @@ function RequestNodeComponent({ data, selected }: NodeProps<RequestFlowNode>) {
           title={
             hasStockpile
               ? "Auto-build a chain from your stockpile"
-              : "Place a stockpile first to auto-build"
+              : "Nothing to build from yet — put resources in a stockpile first"
           }
           aria-label="Auto-build a chain from your stockpile"
         >

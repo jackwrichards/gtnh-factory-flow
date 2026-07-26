@@ -456,7 +456,9 @@ export function FactoryFlow() {
                   (total, edge) => total + (result.edges[edge.id]?.transferredPerSecond ?? 0),
                   0,
                 ),
-              hasStockpile: (project.stockpiles ?? []).length > 0,
+              hasStockpile:
+                (project.stockpiles ?? []).some((stockpile) => stockpile.resources.length > 0) ||
+                project.nodes.some((node) => node.enabled),
             }),
           }) satisfies RequestFlowNode,
       ),
@@ -730,10 +732,15 @@ export function FactoryFlow() {
         const targetRequest = requests.find((entry) => entry.id === connection.target);
 
         if ((sourceStockpile && targetRequest) || (sourceRequest && targetStockpile)) {
-          setGapFill({
-            stockpileId: (sourceStockpile ?? targetStockpile)!.id,
-            requestId: (targetRequest ?? sourceRequest)!.id,
-          });
+          const hasAnySupply =
+            stockpiles.some((stockpile) => stockpile.resources.length > 0) ||
+            project.nodes.some((node) => node.enabled);
+          if (hasAnySupply) {
+            setGapFill({
+              stockpileId: (sourceStockpile ?? targetStockpile)!.id,
+              requestId: (targetRequest ?? sourceRequest)!.id,
+            });
+          }
           return;
         }
 
@@ -4446,10 +4453,13 @@ function isCompatibleResourceConnection(
   const targetRequest = requests.find((entry) => entry.id === connection.target);
 
   if (sourceStockpile || targetStockpile || sourceRequest || targetRequest) {
-    // The smart arrow: any stockpile can reach any request; the planner decides
-    // what actually flows.
+    // The smart arrow: a stockpile can reach any request, as long as there is
+    // anything to solve from — stocked resources or running machines.
     if ((sourceStockpile && targetRequest) || (sourceRequest && targetStockpile)) {
-      return true;
+      return (
+        stockpiles.some((stockpile) => stockpile.resources.length > 0) ||
+        project.nodes.some((node) => node.enabled)
+      );
     }
 
     if (sourceStockpile || targetStockpile) {

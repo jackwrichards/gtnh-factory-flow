@@ -78,9 +78,14 @@ export function GapFillDialog({
     : "…";
   const solveKey = `${stockpileId}|${requestId}|${version?.id ?? ""}`;
   const requestExists = Boolean(request);
+  // Supply is the union of every stockpile plus what the board already makes;
+  // with neither, a solve can only report that everything is missing.
+  const hasAnySupply =
+    (project.stockpiles ?? []).some((stockpile) => stockpile.resources.length > 0) ||
+    project.nodes.some((node) => node.enabled);
 
   useEffect(() => {
-    if (!version || !requestExists) {
+    if (!version || !requestExists || !hasAnySupply) {
       return;
     }
 
@@ -160,7 +165,7 @@ export function GapFillDialog({
       });
 
     return () => controller.abort();
-  }, [requestExists, requestId, solveKey, version]);
+  }, [hasAnySupply, requestExists, requestId, solveKey, version]);
 
   const solveState: SolveState = useMemo(() => {
     if (!version) {
@@ -169,13 +174,20 @@ export function GapFillDialog({
     if (!requestExists) {
       return { status: "error", message: "The request no longer exists." };
     }
+    if (!hasAnySupply) {
+      return {
+        status: "error",
+        message:
+          "Your stockpile is empty and nothing on the board produces anything yet. Add the resources you have in abundance to the stockpile first.",
+      };
+    }
     if (solved?.key !== solveKey) {
       return { status: "loading" };
     }
     return solved.result
       ? { status: "ready", result: solved.result }
       : { status: "error", message: solved.message ?? "Solve failed." };
-  }, [requestExists, solveKey, solved, version]);
+  }, [hasAnySupply, requestExists, solveKey, solved, version]);
 
   const verifiedPlans = useMemo<VerifiedPlan[]>(() => {
     if (solveState.status !== "ready") {
@@ -210,8 +222,22 @@ export function GapFillDialog({
         ) : null}
 
         {solveState.status === "error" ? (
-          <div className="rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-500">
-            {solveState.message}
+          <div className="flex flex-col gap-2">
+            <div className="rounded border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-500">
+              {solveState.message}
+            </div>
+            {!hasAnySupply ? (
+              <button
+                type="button"
+                onClick={() => {
+                  useFactoryStore.getState().setEditingStockpile(stockpileId);
+                  onClose();
+                }}
+                className="self-start rounded border border-line px-3 py-1.5 text-sm hover:bg-surface-sunken"
+              >
+                Open the stockpile editor
+              </button>
+            ) : null}
           </div>
         ) : null}
 
