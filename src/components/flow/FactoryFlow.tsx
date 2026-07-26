@@ -26,7 +26,7 @@ import {
   useStoreApi,
 } from "@xyflow/react";
 import { toBlob, toSvg } from "html-to-image";
-import { LoaderCircle, Paintbrush, X } from "lucide-react";
+import { Archive, LoaderCircle, Paintbrush, Target, X } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -82,10 +82,17 @@ import {
   reuseObjectIdentity,
 } from "./edge-detail";
 import { StorageNode, type StorageFlowNode } from "./StorageNode";
+import { StockpileNode, type StockpileFlowNode } from "./StockpileNode";
+import { GAP_FILL_REQUEST_EVENT, RequestNode, type RequestFlowNode } from "./RequestNode";
+import { AddRequestDialog } from "@/components/planner/AddRequestDialog";
+import { GapFillDialog } from "@/components/planner/GapFillDialog";
+import { StockpileEditorDialog } from "@/components/planner/StockpileEditorDialog";
 
 const nodeTypes = {
   recipeNode: RecipeNode,
   storageNode: StorageNode,
+  stockpileNode: StockpileNode,
+  requestNode: RequestNode,
 } satisfies NodeTypes;
 
 const ResourceEdge = memo(ResourceEdgeComponent);
@@ -177,6 +184,8 @@ type ResourceEdgeData = {
 
 type ResourceFlowEdge = Edge<ResourceEdgeData, "resourceEdge">;
 
+type BoardFlowNode = RecipeFlowNode | StorageFlowNode | StockpileFlowNode | RequestFlowNode;
+
 type SlotEdgeEndpoint = { x: number; y: number; side: Position };
 type RoutedEdgePath = {
   path: string;
@@ -239,8 +248,15 @@ function getMissingRecipePlaceholder(recipeId: string) {
 // scope rather than in a ref because reading a ref during render is not allowed.
 const recipeNodeDataCache = new Map<string, RecipeFlowNode["data"]>();
 const storageNodeDataCache = new Map<string, StorageFlowNode["data"]>();
+const stockpileNodeDataCache = new Map<string, StockpileFlowNode["data"]>();
+const requestNodeDataCache = new Map<string, RequestFlowNode["data"]>();
 
-function pruneNodeDataCaches(recipeNodeIds: Set<string>, storageIds: Set<string>) {
+function pruneNodeDataCaches(
+  recipeNodeIds: Set<string>,
+  storageIds: Set<string>,
+  stockpileIds: Set<string>,
+  requestIds: Set<string>,
+) {
   for (const id of recipeNodeDataCache.keys()) {
     if (!recipeNodeIds.has(id)) {
       recipeNodeDataCache.delete(id);
@@ -250,6 +266,18 @@ function pruneNodeDataCaches(recipeNodeIds: Set<string>, storageIds: Set<string>
   for (const id of storageNodeDataCache.keys()) {
     if (!storageIds.has(id)) {
       storageNodeDataCache.delete(id);
+    }
+  }
+
+  for (const id of stockpileNodeDataCache.keys()) {
+    if (!stockpileIds.has(id)) {
+      stockpileNodeDataCache.delete(id);
+    }
+  }
+
+  for (const id of requestNodeDataCache.keys()) {
+    if (!requestIds.has(id)) {
+      requestNodeDataCache.delete(id);
     }
   }
 }
@@ -320,11 +348,16 @@ export function FactoryFlow() {
   const updateNode = useFactoryStore((state) => state.updateNode);
   const updateStorage = useFactoryStore((state) => state.updateStorage);
   const setStoragePosition = useFactoryStore((state) => state.setStoragePosition);
+  const setStockpilePosition = useFactoryStore((state) => state.setStockpilePosition);
+  const setRequestPosition = useFactoryStore((state) => state.setRequestPosition);
+  const addStockpile = useFactoryStore((state) => state.addStockpile);
   const connectNodes = useFactoryStore((state) => state.connectNodes);
   const addStorageForConnection = useFactoryStore((state) => state.addStorageForConnection);
   const selectedNodeId = useFactoryStore((state) => state.selectedNodeId);
   const deleteNode = useFactoryStore((state) => state.deleteNode);
   const deleteStorage = useFactoryStore((state) => state.deleteStorage);
+  const deleteStockpile = useFactoryStore((state) => state.deleteStockpile);
+  const deleteRequest = useFactoryStore((state) => state.deleteRequest);
   const deleteEdge = useFactoryStore((state) => state.deleteEdge);
   const cancelResourceConnection = useFactoryStore((state) => state.cancelResourceConnection);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
@@ -348,7 +381,7 @@ export function FactoryFlow() {
     [project.storages],
   );
 
-  const nodesFromProject = useMemo<Array<RecipeFlowNode | StorageFlowNode>>(
+  const nodesFromProject = useMemo<BoardFlowNode[]>(
     () => [
       ...project.nodes.map((node) => {
         const recipe = recipesById.get(node.recipeId) ?? getMissingRecipePlaceholder(node.recipeId);
@@ -389,34 +422,75 @@ export function FactoryFlow() {
             }),
           }) satisfies StorageFlowNode,
       ),
+      ...(project.stockpiles ?? []).map(
+        (stockpile) =>
+          ({
+            id: stockpile.id,
+            type: "stockpileNode",
+            position: stockpile.position,
+            data: reuseObjectIdentity(stockpileNodeDataCache, stockpile.id, {
+              stockpile,
+              tappedCount: new Set(
+                project.edges
+                  .filter((edge) => edge.source === stockpile.id)
+                  .map((edge) => makeResourceKey(edge.resourceKind, edge.resourceId)),
+              ).size,
+            }),
+          }) satisfies StockpileFlowNode,
+      ),
+      ...(project.requests ?? []).map(
+        (request) =>
+          ({
+            id: request.id,
+            type: "requestNode",
+            position: request.position,
+            zIndex:
+              activeFlowResourceKey === makeResourceKey(request.kind, request.resourceId)
+                ? 1500
+                : undefined,
+            data: reuseObjectIdentity(requestNodeDataCache, request.id, {
+              request,
+              fulfilledPerSecond: project.edges
+                .filter((edge) => edge.target === request.id)
+                .reduce(
+                  (total, edge) => total + (result.edges[edge.id]?.transferredPerSecond ?? 0),
+                  0,
+                ),
+              hasStockpile: (project.stockpiles ?? []).length > 0,
+            }),
+          }) satisfies RequestFlowNode,
+      ),
     ],
     [
       activeFlowResourceKey,
       activeNodeBottlenecks,
+      project.edges,
       project.nodes,
+      project.requests,
+      project.stockpiles,
       project.storages,
       recipesById,
+      result.edges,
       result.nodes,
       result.storages,
     ],
   );
-  const [flowNodes, setFlowNodes] = useState<Array<RecipeFlowNode | StorageFlowNode>>(
-    () => nodesFromProject,
-  );
+  const [flowNodes, setFlowNodes] = useState<BoardFlowNode[]>(() => nodesFromProject);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [isNodeDragging, setNodeDragging] = useState(false);
   const [layoutVersion, setLayoutVersion] = useState(0);
+  const [gapFill, setGapFill] = useState<{ stockpileId: string; requestId: string } | undefined>(
+    undefined,
+  );
+  const [isAddRequestOpen, setAddRequestOpen] = useState(false);
   const draggingNodeRef = useRef(false);
   const draggedResourceRef = useRef<DraggedResourceConnection | undefined>(undefined);
   const lastConnectionPointerRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const connectCompletedRef = useRef(false);
   const exportInProgressRef = useRef(false);
   const boardRef = useRef<HTMLDivElement>(null);
-  const flowInstanceRef = useRef<ReactFlowInstance<
-    RecipeFlowNode | StorageFlowNode,
-    ResourceFlowEdge
-  > | null>(null);
+  const flowInstanceRef = useRef<ReactFlowInstance<BoardFlowNode, ResourceFlowEdge> | null>(null);
 
   useEffect(() => {
     if (draggingNodeRef.current) {
@@ -430,8 +504,10 @@ export function FactoryFlow() {
     pruneNodeDataCaches(
       new Set(project.nodes.map((node) => node.id)),
       new Set((project.storages ?? []).map((storage) => storage.id)),
+      new Set((project.stockpiles ?? []).map((stockpile) => stockpile.id)),
+      new Set((project.requests ?? []).map((request) => request.id)),
     );
-  }, [project.nodes, project.storages]);
+  }, [project.nodes, project.requests, project.stockpiles, project.storages]);
 
   // Flow-space measurements are cached across frames, so anything that can move a
   // node or change its size has to drop them explicitly. Positions are covered by
@@ -468,15 +544,9 @@ export function FactoryFlow() {
     return () => observer.disconnect();
   }, [flowNodes]);
 
-  const handleNodesChange = useCallback(
-    (changes: NodeChange<Array<RecipeFlowNode | StorageFlowNode>[number]>[]) => {
-      setFlowNodes(
-        (currentNodes) =>
-          applyNodeChanges(changes, currentNodes) as Array<RecipeFlowNode | StorageFlowNode>,
-      );
-    },
-    [],
-  );
+  const handleNodesChange = useCallback((changes: NodeChange<BoardFlowNode>[]) => {
+    setFlowNodes((currentNodes) => applyNodeChanges(changes, currentNodes) as BoardFlowNode[]);
+  }, []);
 
   const edges = useMemo<ResourceFlowEdge[]>(() => {
     const edgeBundles = getEdgeBundles(project, project.edges, result.edges);
@@ -650,6 +720,64 @@ export function FactoryFlow() {
     (connection: Connection) => {
       connectCompletedRef.current = true;
       if (connection.source && connection.target) {
+        // The smart arrow: stockpile → request never becomes a plain edge. It
+        // opens the gap-fill planner, which builds the whole chain between them.
+        const stockpiles = project.stockpiles ?? [];
+        const requests = project.requests ?? [];
+        const sourceStockpile = stockpiles.find((entry) => entry.id === connection.source);
+        const targetStockpile = stockpiles.find((entry) => entry.id === connection.target);
+        const sourceRequest = requests.find((entry) => entry.id === connection.source);
+        const targetRequest = requests.find((entry) => entry.id === connection.target);
+
+        if ((sourceStockpile && targetRequest) || (sourceRequest && targetStockpile)) {
+          setGapFill({
+            stockpileId: (sourceStockpile ?? targetStockpile)!.id,
+            requestId: (targetRequest ?? sourceRequest)!.id,
+          });
+          return;
+        }
+
+        if (sourceStockpile || targetStockpile) {
+          const stockpile = (sourceStockpile ?? targetStockpile)!;
+          const nodeId = sourceStockpile ? connection.target : connection.source;
+          const nodeHandle = sourceStockpile ? connection.targetHandle : connection.sourceHandle;
+          const inputResource = nodeHandle
+            ? getResourceForHandle(project, nodeId, nodeHandle)
+            : undefined;
+          const stockedEntry = inputResource
+            ? stockpile.resources.find((resource) => resourceMatchesInput(resource, inputResource))
+            : undefined;
+          connectNodes(
+            stockpile.id,
+            nodeId,
+            stockedEntry
+              ? {
+                  kind: stockedEntry.kind,
+                  id: stockedEntry.id,
+                  displayName: stockedEntry.displayName,
+                  iconPath: stockedEntry.iconPath,
+                  iconAtlas: stockedEntry.iconAtlas,
+                  dominantColor: stockedEntry.dominantColor,
+                  targetHandle: nodeHandle ?? undefined,
+                }
+              : undefined,
+          );
+          return;
+        }
+
+        if (sourceRequest || targetRequest) {
+          const request = (sourceRequest ?? targetRequest)!;
+          const nodeId = targetRequest ? connection.source : connection.target;
+          const nodeHandle = targetRequest ? connection.sourceHandle : connection.targetHandle;
+          connectNodes(nodeId, request.id, {
+            kind: request.kind,
+            id: request.resourceId,
+            displayName: request.displayName,
+            sourceHandle: nodeHandle ?? undefined,
+          });
+          return;
+        }
+
         const sourceHandle = parseResourceHandleId(connection.sourceHandle);
         const targetHandle = parseResourceHandleId(connection.targetHandle);
 
@@ -698,7 +826,7 @@ export function FactoryFlow() {
         connectResourceEdges(connection.source, connection.target);
       }
     },
-    [connectResourceEdges, project],
+    [connectNodes, connectResourceEdges, project],
   );
 
   const isValidResourceConnection = useCallback(
@@ -866,7 +994,7 @@ export function FactoryFlow() {
   }, [updateFlowViewportCenter]);
 
   const handleInit = useCallback(
-    (instance: ReactFlowInstance<RecipeFlowNode | StorageFlowNode, ResourceFlowEdge>) => {
+    (instance: ReactFlowInstance<BoardFlowNode, ResourceFlowEdge>) => {
       flowInstanceRef.current = instance;
       window.requestAnimationFrame(updateFlowViewportCenter);
       window.setTimeout(updateFlowViewportCenter, 120);
@@ -994,6 +1122,27 @@ export function FactoryFlow() {
   }, [selectNode]);
 
   useEffect(() => {
+    // The request node's wand: same planner as the smart arrow, using the
+    // first stockpile on the board as the supply anchor.
+    const handleGapFillRequest = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { requestId?: unknown } | undefined;
+      if (typeof detail?.requestId !== "string") {
+        return;
+      }
+
+      const firstStockpile = (useFactoryStore.getState().project.stockpiles ?? [])[0];
+      if (!firstStockpile) {
+        return;
+      }
+
+      setGapFill({ stockpileId: firstStockpile.id, requestId: detail.requestId });
+    };
+
+    window.addEventListener(GAP_FILL_REQUEST_EVENT, handleGapFillRequest);
+    return () => window.removeEventListener(GAP_FILL_REQUEST_EVENT, handleGapFillRequest);
+  }, []);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Delete") {
         if (isEditableKeyboardTarget(event.target)) {
@@ -1010,6 +1159,16 @@ export function FactoryFlow() {
 
             if ((project.storages ?? []).some((storage) => storage.id === nodeId)) {
               deleteStorage(nodeId);
+              return;
+            }
+
+            if ((project.stockpiles ?? []).some((stockpile) => stockpile.id === nodeId)) {
+              deleteStockpile(nodeId);
+              return;
+            }
+
+            if ((project.requests ?? []).some((request) => request.id === nodeId)) {
+              deleteRequest(nodeId);
             }
           });
           setSelectedEdgeIds([]);
@@ -1026,6 +1185,18 @@ export function FactoryFlow() {
 
           if ((project.storages ?? []).some((storage) => storage.id === selectedNodeId)) {
             deleteStorage(selectedNodeId);
+            selectNode(undefined);
+            return;
+          }
+
+          if ((project.stockpiles ?? []).some((stockpile) => stockpile.id === selectedNodeId)) {
+            deleteStockpile(selectedNodeId);
+            selectNode(undefined);
+            return;
+          }
+
+          if ((project.requests ?? []).some((request) => request.id === selectedNodeId)) {
+            deleteRequest(selectedNodeId);
             selectNode(undefined);
             return;
           }
@@ -1052,8 +1223,12 @@ export function FactoryFlow() {
     cancelResourceConnection,
     deleteEdge,
     deleteNode,
+    deleteRequest,
+    deleteStockpile,
     deleteStorage,
     project.nodes,
+    project.requests,
+    project.stockpiles,
     project.storages,
     selectNode,
     selectedEdgeIds,
@@ -1091,6 +1266,10 @@ export function FactoryFlow() {
         return;
       }
 
+      if (node.type === "stockpileNode" || node.type === "requestNode") {
+        return;
+      }
+
       selectNode(node.id);
     },
     [nodeColorPaintMode, selectNode, updateNode, updateStorage],
@@ -1110,6 +1289,10 @@ export function FactoryFlow() {
     (_: unknown, node: Node) => {
       if (node.type === "storageNode") {
         setStoragePosition(node.id, node.position);
+      } else if (node.type === "stockpileNode") {
+        setStockpilePosition(node.id, node.position);
+      } else if (node.type === "requestNode") {
+        setRequestPosition(node.id, node.position);
       } else {
         setNodePosition(node.id, node.position);
       }
@@ -1122,7 +1305,7 @@ export function FactoryFlow() {
         ),
       );
     },
-    [setNodePosition, setStoragePosition],
+    [setNodePosition, setRequestPosition, setStockpilePosition, setStoragePosition],
   );
 
   const handleEdgesDelete = useCallback(
@@ -1178,7 +1361,51 @@ export function FactoryFlow() {
         <Controls position="bottom-left" />
       </ReactFlow>
       <PaintToolbar paintMode={nodeColorPaintMode} onPaintModeChange={setNodeColorPaintMode} />
+      <PlannerToolbar
+        onAddStockpile={addStockpile}
+        onAddRequest={() => setAddRequestOpen(true)}
+      />
+      <StockpileEditorDialog />
+      {isAddRequestOpen ? <AddRequestDialog onClose={() => setAddRequestOpen(false)} /> : null}
+      {gapFill ? (
+        <GapFillDialog
+          stockpileId={gapFill.stockpileId}
+          requestId={gapFill.requestId}
+          onClose={() => setGapFill(undefined)}
+        />
+      ) : null}
       {isProjectImporting ? <FlowLoadingOverlay /> : null}
+    </div>
+  );
+}
+
+function PlannerToolbar({
+  onAddStockpile,
+  onAddRequest,
+}: {
+  onAddStockpile: () => void;
+  onAddRequest: () => void;
+}) {
+  return (
+    <div className="absolute left-3 top-3 z-20 flex gap-1.5">
+      <button
+        type="button"
+        onClick={onAddStockpile}
+        className="flex h-8 items-center gap-1.5 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] px-2 text-xs font-semibold text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-33)] hover:brightness-110"
+        title="Place a stockpile: everything you have in abundance"
+      >
+        <Archive className="h-3.5 w-3.5" />
+        Stockpile
+      </button>
+      <button
+        type="button"
+        onClick={onAddRequest}
+        className="flex h-8 items-center gap-1.5 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] px-2 text-xs font-semibold text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-33)] hover:brightness-110"
+        title="Place a request: something you want made"
+      >
+        <Target className="h-3.5 w-3.5" />
+        Request
+      </button>
     </div>
   );
 }
@@ -1614,7 +1841,7 @@ function ResourceConnectionLine({
   fromPosition,
   toPosition,
   connectionStatus,
-}: ConnectionLineComponentProps<RecipeFlowNode | StorageFlowNode>) {
+}: ConnectionLineComponentProps<BoardFlowNode>) {
   const [edgePath] = getSmoothStepPath({
     sourceX: fromX,
     sourceY: fromY,
@@ -4211,6 +4438,52 @@ function isCompatibleResourceConnection(
   project: FactoryProject,
   connection: Connection | Edge,
 ): boolean {
+  const stockpiles = project.stockpiles ?? [];
+  const requests = project.requests ?? [];
+  const sourceStockpile = stockpiles.find((entry) => entry.id === connection.source);
+  const targetStockpile = stockpiles.find((entry) => entry.id === connection.target);
+  const sourceRequest = requests.find((entry) => entry.id === connection.source);
+  const targetRequest = requests.find((entry) => entry.id === connection.target);
+
+  if (sourceStockpile || targetStockpile || sourceRequest || targetRequest) {
+    // The smart arrow: any stockpile can reach any request; the planner decides
+    // what actually flows.
+    if ((sourceStockpile && targetRequest) || (sourceRequest && targetStockpile)) {
+      return true;
+    }
+
+    if (sourceStockpile || targetStockpile) {
+      const stockpile = (sourceStockpile ?? targetStockpile)!;
+      const nodeId = sourceStockpile ? connection.target : connection.source;
+      const handleId = sourceStockpile ? connection.targetHandle : connection.sourceHandle;
+      const handle = parseResourceHandleId(handleId);
+      if (!nodeId || !handleId || handle?.side !== "input") {
+        return false;
+      }
+
+      const inputResource = getResourceForHandle(project, nodeId, handleId);
+      return Boolean(
+        inputResource &&
+          isRecipeInputConsumed(inputResource) &&
+          stockpile.resources.some((resource) => resourceMatchesInput(resource, inputResource)),
+      );
+    }
+
+    const request = (sourceRequest ?? targetRequest)!;
+    const nodeId = targetRequest ? connection.source : connection.target;
+    const handleId = targetRequest ? connection.sourceHandle : connection.targetHandle;
+    const handle = parseResourceHandleId(handleId);
+    if (!nodeId || !handleId || handle?.side !== "output") {
+      return false;
+    }
+
+    const outputResource = getResourceForHandle(project, nodeId, handleId);
+    return Boolean(
+      outputResource &&
+        resourceMatchesInput(outputResource, { kind: request.kind, id: request.resourceId }),
+    );
+  }
+
   const sourceHandle = parseResourceHandleId(connection.sourceHandle);
   const targetHandle = parseResourceHandleId(connection.targetHandle);
   if (!sourceHandle || !targetHandle) {
@@ -4408,6 +4681,12 @@ function getEdgeResource(
   const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
   const sourceStorage = (project.storages ?? []).find((storage) => storage.id === edge.source);
   const targetStorage = (project.storages ?? []).find((storage) => storage.id === edge.target);
+  const stockpileEntry = (project.stockpiles ?? [])
+    .find((stockpile) => stockpile.id === edge.source)
+    ?.resources.find(
+      (resource) => resource.kind === edge.resourceKind && resource.id === edge.resourceId,
+    );
+  const targetRequest = (project.requests ?? []).find((request) => request.id === edge.target);
   const output = sourceRecipe?.outputs.find(
     (resource) => resource.kind === edge.resourceKind && resource.id === edge.resourceId,
   );
@@ -4417,12 +4696,24 @@ function getEdgeResource(
     kind: edge.resourceKind,
     id: edge.resourceId,
     amount: 1,
-    displayName: output?.displayName ?? storage?.displayName ?? edge.label,
-    iconPath: output?.iconPath ?? storage?.iconPath,
-    iconAtlas: output?.iconAtlas ?? storage?.iconAtlas,
+    displayName:
+      output?.displayName ??
+      storage?.displayName ??
+      stockpileEntry?.displayName ??
+      targetRequest?.displayName ??
+      edge.label,
+    iconPath:
+      output?.iconPath ?? storage?.iconPath ?? stockpileEntry?.iconPath ?? targetRequest?.iconPath,
+    iconAtlas:
+      output?.iconAtlas ??
+      storage?.iconAtlas ??
+      stockpileEntry?.iconAtlas ??
+      targetRequest?.iconAtlas,
     dominantColor:
       output?.dominantColor ??
       storage?.dominantColor ??
+      stockpileEntry?.dominantColor ??
+      targetRequest?.dominantColor ??
       output?.iconAtlas?.dominantColor ??
       storage?.iconAtlas?.dominantColor,
   };

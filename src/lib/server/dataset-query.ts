@@ -399,6 +399,151 @@ export async function queryDatasetRecipes(
   };
 }
 
+/**
+ * Every recipe that produces the resource, across all recipe maps at once.
+ * The NEI-style query above scopes results to a single map because that is how
+ * the recipe book browses; the gap solver needs the full producer fan-out.
+ */
+/** Per recipe map, so one huge crafting family cannot crowd out the machines. */
+const SOLVER_PER_MAP_CANDIDATE_LIMIT = 8;
+
+/**
+ * Every recipe index that consumes any of the given resources, oredict and
+ * cell equivalences included. The gap solver builds this once per solve from
+ * the stockpile: variant-heavy families (a Coke Oven entry per log type) can
+ * then be sampled by "uses what I actually have" instead of blindly.
+ */
+export async function getDatasetRecipeIndexesUsingResources(
+  versionId: string,
+  resources: Array<Pick<ResourceAmount, "kind" | "id">>,
+  maxTier: TierFilter,
+): Promise<Set<number>> {
+  const catalog = await loadCatalog(versionId);
+  const usingRecipeIndexes = new Set<number>();
+
+  if (catalog.version.recipeLookupIndexPath) {
+    const lookup = await loadRecipeLookupIndex(catalog.version);
+    for (const resource of resources) {
+      const scope = getRecipeResourceScope(catalog, resource, "uses");
+      for (const recipeIndexes of getLookupRecipesByMap(lookup, scope, "uses").values()) {
+        for (const recipeIndex of recipeIndexes) {
+          if (recipeMatchesLookupTier(lookup, recipeIndex, maxTier)) {
+            usingRecipeIndexes.add(recipeIndex);
+          }
+        }
+      }
+    }
+    return usingRecipeIndexes;
+  }
+
+  const recipeCatalog = await loadRecipeIndex(versionId);
+  const indexes = ensureIndexes(recipeCatalog);
+  for (const resource of resources) {
+    const scope = getRecipeResourceScope(recipeCatalog, resource, "uses");
+    for (const recipeIndex of getResourceIndexes(indexes.recipeIndexesByResource, scope, "uses")) {
+      if (recipeMatchesTierIndex(indexes, recipeIndex, maxTier)) {
+        usingRecipeIndexes.add(recipeIndex);
+      }
+    }
+  }
+  return usingRecipeIndexes;
+}
+
+export async function getDatasetProducingRecipes(
+  versionId: string,
+  resource: Pick<ResourceAmount, "kind" | "id">,
+  maxTier: TierFilter,
+  limit: number,
+  preferredRecipeIndexes?: ReadonlySet<number>,
+): Promise<RecipeSummary[]> {
+  const catalog = await loadCatalog(versionId);
+  const resourceScope = getRecipeResourceScope(catalog, resource, "recipes");
+
+  if (catalog.version.recipeLookupIndexPath) {
+    const lookup = await loadRecipeLookupIndex(catalog.version);
+    const recipesByMap = getLookupRecipesByMap(lookup, resourceScope, "recipes");
+    const recipeIndexes = spreadRecipeIndexesAcrossMaps(
+      [...recipesByMap.values()],
+      (recipeIndex) => recipeMatchesLookupTier(lookup, recipeIndex, maxTier),
+      lookup.tierIndexes,
+      limit,
+      preferredRecipeIndexes,
+    );
+    // Candidate hydration runs hundreds of times per solve. The compact
+    // in-memory recipe index answers it without touching shards; hitting the
+    // gzip shards through their small LRU instead turns a solve into a
+    // minute of decompression thrash.
+    const summaryCatalog = catalog.version.recipeIndexPath
+      ? await loadRecipeIndex(versionId)
+      : catalog;
+    return getRecipeSummariesByIndex(summaryCatalog, recipeIndexes);
+  }
+
+  const recipeCatalog = await loadRecipeIndex(versionId);
+  const indexes = ensureIndexes(recipeCatalog);
+  const recipeMaps = getResourceRecipeMaps(indexes.recipeMapsByResource, resourceScope, "recipes");
+  const recipeIndexesByMap = recipeMaps.map((recipeMap) =>
+    getResourceIndexes(indexes.recipeIndexesByResourceAndMap, resourceScope, "recipes", recipeMap),
+  );
+  const recipeIndexes = spreadRecipeIndexesAcrossMaps(
+    recipeIndexesByMap.length > 0
+      ? recipeIndexesByMap
+      : [getResourceIndexes(indexes.recipeIndexesByResource, resourceScope, "recipes")],
+    (recipeIndex) => recipeMatchesTierIndex(indexes, recipeIndex, maxTier),
+    indexes.tierIndexes,
+    limit,
+    preferredRecipeIndexes,
+  );
+  return getRecipeSummariesByIndex(recipeCatalog, recipeIndexes);
+}
+
+/**
+ * Popular resources (charcoal has thousands of producers) cannot all be
+ * hydrated, so the cut has to happen before hydration — and any global cut
+ * lets one enormous family (fifty tool variants of a crafting recipe, all
+ * ULV) crowd out the machine that actually matters. So the head is taken per
+ * recipe map: recipes that consume the solver's supply first, then lowest
+ * tiers — the two ranking signals available without touching shards — and the
+ * union is re-sorted the same way for the cap.
+ */
+function spreadRecipeIndexesAcrossMaps(
+  recipeIndexesByMap: number[][],
+  matchesTier: (recipeIndex: number) => boolean,
+  tierIndexes: number[],
+  limit: number,
+  preferredRecipeIndexes?: ReadonlySet<number>,
+): number[] {
+  const rank = (left: number, right: number) => {
+    if (preferredRecipeIndexes) {
+      const preference =
+        Number(preferredRecipeIndexes.has(right)) - Number(preferredRecipeIndexes.has(left));
+      if (preference !== 0) {
+        return preference;
+      }
+    }
+
+    return (
+      (tierIndexes[left] ?? GT_VOLTAGE_TIERS.length - 1) -
+        (tierIndexes[right] ?? GT_VOLTAGE_TIERS.length - 1) || left - right
+    );
+  };
+  const seen = new Set<number>();
+  const spread: number[] = [];
+
+  for (const mapRecipeIndexes of recipeIndexesByMap) {
+    const eligible = mapRecipeIndexes
+      .filter((recipeIndex) => !seen.has(recipeIndex) && matchesTier(recipeIndex))
+      .sort(rank)
+      .slice(0, SOLVER_PER_MAP_CANDIDATE_LIMIT);
+    for (const recipeIndex of eligible) {
+      seen.add(recipeIndex);
+      spread.push(recipeIndex);
+    }
+  }
+
+  return spread.sort(rank).slice(0, limit);
+}
+
 async function queryDatasetRecipesFromLookup(
   catalog: LoadedRecipeIndex,
   request: {
@@ -557,6 +702,11 @@ async function prewarmDatasetVersionOnce(
   if (catalog.version.recipeLookupIndexPath) {
     const lookup = await loadRecipeLookupIndex(catalog.version);
     ensureLookupSearchIndex(lookup);
+    // The gap solver hydrates producer candidates from the compact recipe
+    // index; loading it here moves that ~10 MB parse out of the first solve.
+    if (catalog.version.recipeIndexPath) {
+      await loadRecipeIndex(versionId);
+    }
   } else {
     const recipeCatalog = await loadRecipeIndex(versionId);
     ensureIndexes(recipeCatalog);

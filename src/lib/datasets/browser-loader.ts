@@ -2,6 +2,13 @@
 
 import type { MachineTier, Recipe, RecipeOutput, ResourceAmount } from "@/lib/model/types";
 import type {
+  ExistingProduction,
+  GapFillPlan,
+  GapSolveOptions,
+  GapSolveTarget,
+  PlannerResource,
+} from "@/lib/planner/types";
+import type {
   DatasetResourceIndexEntry,
   DatasetVersion,
   RecipeDataset,
@@ -159,6 +166,37 @@ export async function queryRecipeDatasetResources(
   addDatasetCacheKey(url, version);
 
   return fetchJson<RecipeDatasetResourceQueryResult>(url.toString(), { signal: options.signal });
+}
+
+export interface RecipeDatasetSolveRequest {
+  target: GapSolveTarget;
+  supply: PlannerResource[];
+  existingOutputs?: ExistingProduction[];
+  maxTier: TierFilter;
+  options?: Pick<GapSolveOptions, "planCount" | "beamWidth" | "maxDepth" | "maxSteps">;
+}
+
+export interface RecipeDatasetSolveResult {
+  plans: Array<GapFillPlan<Recipe>>;
+  notes: string[];
+}
+
+export async function solveRecipeDatasetGap(
+  _manifestUrl: string,
+  version: DatasetVersion,
+  request: RecipeDatasetSolveRequest,
+  options: { signal?: AbortSignal } = {},
+): Promise<RecipeDatasetSolveResult> {
+  const url = new URL(
+    `/api/datasets/${encodeURIComponent(version.id)}/solve`,
+    window.location.origin,
+  );
+  addDatasetCacheKey(url, version);
+  return fetchJson<RecipeDatasetSolveResult>(url.toString(), {
+    method: "POST",
+    body: JSON.stringify(request),
+    signal: options.signal,
+  });
 }
 
 export const loadRecipeDatasetVersion = initRecipeDatasetVersion;

@@ -130,6 +130,30 @@ class MachineCountOptimizer {
       this.requireNodeOutput(node.id, key, node.targetOutput.amountPerSecond, undefined);
     }
 
+    // A request node is a target output pinned to the canvas: its rate pulls on
+    // every producer wired into it, split evenly across those feeds.
+    for (const request of this.context.project.requests ?? []) {
+      const feedEdges = this.context.project.edges.filter(
+        (edge) => edge.target === request.id && this.context.nodesById.has(edge.source),
+      );
+      if (feedEdges.length === 0) {
+        continue;
+      }
+
+      hasExplicitDemand = true;
+      for (const edge of feedEdges) {
+        const outputKey =
+          getPlanOutputKeyForEdge(this.context.ratePlans.get(edge.source), edge) ??
+          makeResourceKey(edge.resourceKind, edge.resourceId);
+        this.requireNodeOutput(
+          edge.source,
+          outputKey,
+          request.amountPerSecond / feedEdges.length,
+          undefined,
+        );
+      }
+    }
+
     if (this.context.project.targetRate) {
       hasExplicitDemand = true;
       const key = makeResourceKey(

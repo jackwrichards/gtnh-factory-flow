@@ -279,6 +279,55 @@ export interface FactoryStorage {
   };
 }
 
+export interface StockpileResource {
+  kind: ResourceKind;
+  id: ResourceId;
+  displayName?: string;
+  iconPath?: string;
+  iconAtlas?: ResourceIconAtlasRef;
+  dominantColor?: string;
+  alternatives?: ResourceAlternative[];
+}
+
+/**
+ * "Everything I have in abundance." Unlike a FactoryStorage (a buffer that
+ * holds one resource and closes nothing), edges leaving a stockpile count as
+ * production in the balance sheet: an input fed from here stops being a Need.
+ * Supply is treated as unlimited.
+ */
+export interface FactoryStockpile {
+  id: string;
+  name?: string;
+  colorTag?: FactoryNodeColorTag;
+  resources: StockpileResource[];
+  position: {
+    x: number;
+    y: number;
+  };
+}
+
+/**
+ * A goal pinned to the canvas: "I want this resource at this rate." It never
+ * consumes in the balance sheet — the product still shows as an output — but
+ * its rate drives demand through incoming edges the way `targetOutput` does,
+ * so utilization and the machine-count optimizer scale the chain to meet it.
+ */
+export interface FactoryRequest {
+  id: string;
+  kind: ResourceKind;
+  resourceId: ResourceId;
+  displayName?: string;
+  iconPath?: string;
+  iconAtlas?: ResourceIconAtlasRef;
+  dominantColor?: string;
+  colorTag?: FactoryNodeColorTag;
+  amountPerSecond: number;
+  position: {
+    x: number;
+    y: number;
+  };
+}
+
 export interface FactoryEdge {
   id: string;
   source: string;
@@ -313,6 +362,8 @@ export interface FactoryProject {
   recipes: Recipe[];
   nodes: FactoryNode[];
   storages?: FactoryStorage[];
+  stockpiles?: FactoryStockpile[];
+  requests?: FactoryRequest[];
   edges: FactoryEdge[];
   fuelProfiles: FuelProfile[];
   selectedFuelProfileId?: string;

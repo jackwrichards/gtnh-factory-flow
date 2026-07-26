@@ -11,6 +11,7 @@ import type {
   BottleneckReport,
   EdgeThroughput,
   FactoryProject,
+  FactoryRequest,
   FactoryStorage,
   FuelEstimate,
   NodeThroughputResult,
@@ -53,6 +54,10 @@ export function calculateThroughput(
   let totalEuT = 0;
   const projectStorages = project.storages ?? [];
   const storagesById = new Map(projectStorages.map((storage) => [storage.id, storage]));
+  const stockpilesById = new Map(
+    (project.stockpiles ?? []).map((stockpile) => [stockpile.id, stockpile]),
+  );
+  const requestsById = new Map((project.requests ?? []).map((request) => [request.id, request]));
 
   for (const storage of projectStorages) {
     storages[storage.id] = {
@@ -168,11 +173,48 @@ export function calculateThroughput(
   const storageIncomingCounts = countIncomingEdgesToStorageResource(project, projectStorages);
   const storageIncomingTransferred = new Map<string, number>();
 
+  const requestIncomingCounts = countIncomingEdgesToRequests(project, requestsById);
+
   for (const edge of project.edges) {
     const key = makeResourceKey(edge.resourceKind, edge.resourceId);
     const targetDemandKey = getEdgeTargetDemandKey(project, edge) ?? key;
     const sourceStorage = storagesById.get(edge.source);
     const targetStorage = storagesById.get(edge.target);
+    const sourceStockpile = stockpilesById.get(edge.source);
+    const targetRequest = requestsById.get(edge.target);
+
+    if (sourceStockpile || targetRequest) {
+      if (sourceStockpile && targetRequest) {
+        continue;
+      }
+
+      if (sourceStockpile) {
+        // Unlimited supply: the stockpile hands the consumer exactly what it
+        // asks for, so the edge is never the limiting factor.
+        const targetResult = nodes[edge.target];
+        const targetCount = incomingEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1;
+        const targetDemand = targetResult?.inputs[targetDemandKey]?.amountPerSecond ?? 0;
+        const demandPerSecond = targetDemand / targetCount;
+
+        edgeResults[edge.id] = buildEdgeResult(edge, key, demandPerSecond, demandPerSecond);
+        continue;
+      }
+
+      // Request sink: demand is the request's rate, split across its feeds,
+      // and it pulls on the producer like a per-node target output would.
+      const requestDemand =
+        (targetRequest!.amountPerSecond ?? 0) / (requestIncomingCounts.get(edge.target) || 1);
+      const sourceResult = nodes[edge.source];
+      const sourceCapacity = getCompatibleOutputFlow(sourceResult, edge)?.amountPerSecond ?? 0;
+      const transferredPerSecond = Math.min(sourceCapacity, requestDemand);
+
+      addRequiredRate(requiredByNodeAndResource, edge.source, key, requestDemand);
+      edgeResults[edge.id] = buildEdgeResult(edge, key, requestDemand, transferredPerSecond, {
+        nameplateDemandPerSecond: requestDemand,
+        sourceCapacityPerSecond: sourceCapacity,
+      });
+      continue;
+    }
 
     if (sourceStorage || targetStorage) {
       if (sourceStorage && targetStorage) {
@@ -520,8 +562,69 @@ function calculateEffectiveBalances(
   }
 
   applyConvertedStorageOutputBalances(project, nodes, edgeResults, storagesById, balances);
+  applyStockpileSupplyBalances(project, edgeResults, balances);
 
   return balances;
+}
+
+/**
+ * Every liter and item drawn from a stockpile counts as produced: "I have this
+ * in abundance" means feeding a machine from it settles the balance rather
+ * than leaving a Need behind. Production is booked under the consumer's input
+ * key so it cancels the consumption entry exactly, including oredict inputs
+ * that the edge satisfies with a concrete member.
+ */
+function applyStockpileSupplyBalances(
+  project: FactoryProject,
+  edgeResults: Record<string, EdgeThroughput>,
+  balances: Map<ResourceKey, ResourceBalance>,
+): void {
+  const stockpileIds = new Set((project.stockpiles ?? []).map((stockpile) => stockpile.id));
+  if (stockpileIds.size === 0) {
+    return;
+  }
+
+  for (const edge of project.edges) {
+    if (!stockpileIds.has(edge.source)) {
+      continue;
+    }
+
+    const transferredPerSecond = edgeResults[edge.id]?.transferredPerSecond ?? 0;
+    if (transferredPerSecond <= EPSILON) {
+      continue;
+    }
+
+    const demandKey =
+      getEdgeTargetDemandKey(project, edge) ?? makeResourceKey(edge.resourceKind, edge.resourceId);
+    const demandResource = resourceFromKey(demandKey);
+    addBalanceProduction(
+      balances,
+      {
+        kind: demandResource.kind,
+        id: demandResource.id,
+        displayName: edge.label,
+        amount: 0,
+      },
+      transferredPerSecond,
+    );
+  }
+}
+
+function countIncomingEdgesToRequests(
+  project: FactoryProject,
+  requestsById: Map<string, FactoryRequest>,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+
+  for (const edge of project.edges) {
+    if (!requestsById.has(edge.target)) {
+      continue;
+    }
+
+    counts.set(edge.target, (counts.get(edge.target) ?? 0) + 1);
+  }
+
+  return counts;
 }
 
 function applyConvertedStorageOutputBalances(
@@ -687,11 +790,44 @@ function refreshEdgeResultsFromNodeUtilization(
     incomingEdgeCounts,
     storagesById,
   );
+  const stockpileIds = new Set((project.stockpiles ?? []).map((stockpile) => stockpile.id));
+  const requestsById = new Map((project.requests ?? []).map((request) => [request.id, request]));
+  const requestIncomingCounts = countIncomingEdgesToRequests(project, requestsById);
   for (const edge of project.edges) {
     const key = makeResourceKey(edge.resourceKind, edge.resourceId);
     const targetDemandKey = getEdgeTargetDemandKey(project, edge) ?? key;
     const sourceStorage = storagesById.get(edge.source);
     const targetStorage = storagesById.get(edge.target);
+    const targetRequest = requestsById.get(edge.target);
+
+    if (targetRequest) {
+      if (stockpileIds.has(edge.source)) {
+        continue;
+      }
+
+      const sourceResult = nodes[edge.source];
+      const requestDemand =
+        (targetRequest.amountPerSecond ?? 0) / (requestIncomingCounts.get(edge.target) || 1);
+      const sourceFullCapacity = sourceResult
+        ? (getCompatibleOutputFlow(sourceResult, edge)?.amountPerSecond ?? 0)
+        : Number.POSITIVE_INFINITY;
+      const sourceEffectiveCapacity = sourceResult
+        ? getEffectiveFlowRate(getCompatibleOutputFlow(sourceResult, edge), sourceResult.utilization)
+        : Number.POSITIVE_INFINITY;
+      const transferredPerSecond = Math.min(sourceEffectiveCapacity, requestDemand);
+
+      edgeResults[edge.id] = buildEdgeResult(
+        edge,
+        key,
+        requestDemand,
+        Number.isFinite(transferredPerSecond) ? transferredPerSecond : requestDemand,
+        {
+          nameplateDemandPerSecond: requestDemand,
+          sourceCapacityPerSecond: sourceFullCapacity,
+        },
+      );
+      continue;
+    }
 
     if (sourceStorage && targetStorage) {
       continue;
@@ -928,10 +1064,11 @@ function refreshNodeUtilizationFromEdgeResults(
     projectStorages,
   );
   const storageIncomingCounts = countIncomingEdgesToStorageResource(project, projectStorages);
+  const stockpileIds = new Set((project.stockpiles ?? []).map((stockpile) => stockpile.id));
   let changed = false;
 
   for (const edge of project.edges) {
-    if (storagesById.has(edge.source)) {
+    if (storagesById.has(edge.source) || stockpileIds.has(edge.source)) {
       continue;
     }
 
