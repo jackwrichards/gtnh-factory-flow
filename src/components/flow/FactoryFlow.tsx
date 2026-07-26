@@ -26,7 +26,7 @@ import {
   useStoreApi,
 } from "@xyflow/react";
 import { toBlob, toSvg } from "html-to-image";
-import { Archive, LoaderCircle, Paintbrush, Target, X } from "lucide-react";
+import { Archive, LoaderCircle, Paintbrush, SlidersHorizontal, Target, X } from "lucide-react";
 import {
   memo,
   useCallback,
@@ -85,7 +85,9 @@ import { StorageNode, type StorageFlowNode } from "./StorageNode";
 import { StockpileNode, type StockpileFlowNode } from "./StockpileNode";
 import { GAP_FILL_REQUEST_EVENT, RequestNode, type RequestFlowNode } from "./RequestNode";
 import { AddRequestDialog } from "@/components/planner/AddRequestDialog";
-import { GapFillDialog } from "@/components/planner/GapFillDialog";
+import { GapFillPlansDialog } from "@/components/planner/GapFillDialog";
+import { GapSolveStatusCard } from "@/components/planner/GapSolveStatusCard";
+import { SolveSettingsDialog } from "@/components/planner/SolveSettingsDialog";
 import { StockpileEditorDialog } from "@/components/planner/StockpileEditorDialog";
 
 const nodeTypes = {
@@ -482,10 +484,9 @@ export function FactoryFlow() {
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [isNodeDragging, setNodeDragging] = useState(false);
   const [layoutVersion, setLayoutVersion] = useState(0);
-  const [gapFill, setGapFill] = useState<{ stockpileId: string; requestId: string } | undefined>(
-    undefined,
-  );
   const [isAddRequestOpen, setAddRequestOpen] = useState(false);
+  const [isSolveSettingsOpen, setSolveSettingsOpen] = useState(false);
+  const startGapSolve = useFactoryStore((state) => state.startGapSolve);
   const draggingNodeRef = useRef(false);
   const draggedResourceRef = useRef<DraggedResourceConnection | undefined>(undefined);
   const lastConnectionPointerRef = useRef<{ x: number; y: number } | undefined>(undefined);
@@ -736,10 +737,10 @@ export function FactoryFlow() {
             stockpiles.some((stockpile) => stockpile.resources.length > 0) ||
             project.nodes.some((node) => node.enabled);
           if (hasAnySupply) {
-            setGapFill({
-              stockpileId: (sourceStockpile ?? targetStockpile)!.id,
-              requestId: (targetRequest ?? sourceRequest)!.id,
-            });
+            startGapSolve(
+              (sourceStockpile ?? targetStockpile)!.id,
+              (targetRequest ?? sourceRequest)!.id,
+            );
           }
           return;
         }
@@ -833,7 +834,7 @@ export function FactoryFlow() {
         connectResourceEdges(connection.source, connection.target);
       }
     },
-    [connectNodes, connectResourceEdges, project],
+    [connectNodes, connectResourceEdges, project, startGapSolve],
   );
 
   const isValidResourceConnection = useCallback(
@@ -1142,12 +1143,12 @@ export function FactoryFlow() {
         return;
       }
 
-      setGapFill({ stockpileId: firstStockpile.id, requestId: detail.requestId });
+      startGapSolve(firstStockpile.id, detail.requestId);
     };
 
     window.addEventListener(GAP_FILL_REQUEST_EVENT, handleGapFillRequest);
     return () => window.removeEventListener(GAP_FILL_REQUEST_EVENT, handleGapFillRequest);
-  }, []);
+  }, [startGapSolve]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1371,15 +1372,14 @@ export function FactoryFlow() {
       <PlannerToolbar
         onAddStockpile={addStockpile}
         onAddRequest={() => setAddRequestOpen(true)}
+        onOpenSolveSettings={() => setSolveSettingsOpen(true)}
       />
+      <GapSolveStatusCard />
       <StockpileEditorDialog />
+      <GapFillPlansDialog />
       {isAddRequestOpen ? <AddRequestDialog onClose={() => setAddRequestOpen(false)} /> : null}
-      {gapFill ? (
-        <GapFillDialog
-          stockpileId={gapFill.stockpileId}
-          requestId={gapFill.requestId}
-          onClose={() => setGapFill(undefined)}
-        />
+      {isSolveSettingsOpen ? (
+        <SolveSettingsDialog onClose={() => setSolveSettingsOpen(false)} />
       ) : null}
       {isProjectImporting ? <FlowLoadingOverlay /> : null}
     </div>
@@ -1389,9 +1389,11 @@ export function FactoryFlow() {
 function PlannerToolbar({
   onAddStockpile,
   onAddRequest,
+  onOpenSolveSettings,
 }: {
   onAddStockpile: () => void;
   onAddRequest: () => void;
+  onOpenSolveSettings: () => void;
 }) {
   return (
     <div className="absolute left-3 top-3 z-20 flex gap-1.5">
@@ -1412,6 +1414,15 @@ function PlannerToolbar({
       >
         <Target className="h-3.5 w-3.5" />
         Request
+      </button>
+      <button
+        type="button"
+        onClick={onOpenSolveSettings}
+        className="flex h-8 items-center gap-1.5 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] px-2 text-xs font-semibold text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-33)] hover:brightness-110"
+        title="Auto-build settings: tier cap, depth, allowed machines"
+      >
+        <SlidersHorizontal className="h-3.5 w-3.5" />
+        Solver
       </button>
     </div>
   );

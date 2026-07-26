@@ -12,7 +12,14 @@ import {
   REQUEST_DEMAND_HANDLE,
   STOCKPILE_SUPPLY_HANDLE,
 } from "@/lib/planner/materialize";
-import type { GapFillPlan } from "@/lib/planner/types";
+import { loadSolveSettings } from "@/lib/planner/solve-settings";
+import type { GapFillPlan, GapSolveProgress, PlannerResource } from "@/lib/planner/types";
+import type { ExistingProduction } from "@/lib/planner/types";
+import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
+import {
+  solveRecipeDatasetGap,
+  type RecipeDatasetSolveResult,
+} from "@/lib/datasets/browser-loader";
 import {
   getFilledCellFluidEquivalent,
   getResourceKey,
@@ -156,6 +163,11 @@ interface FactoryStore {
   setRequestPosition: (requestId: string, position: FactoryRequest["position"]) => void;
   deleteRequest: (requestId: string) => void;
   applyGapFillPlan: (stockpileId: string, requestId: string, plan: GapFillPlan<Recipe>) => void;
+  gapSolve?: GapSolveRun;
+  startGapSolve: (stockpileId: string, requestId: string) => void;
+  cancelGapSolve: () => void;
+  dismissGapSolveResults: () => void;
+  openGapSolveResults: () => void;
   setNodePosition: (nodeId: string, position: FactoryNode["position"]) => void;
   connectNodes: (
     sourceNodeId: string,
@@ -189,6 +201,9 @@ interface FactoryStore {
 
 const initialProject = createEmptyProject();
 
+/** The in-flight gap solve's cancellation, one at a time by design. */
+let gapSolveAbort: AbortController | undefined;
+
 export type RecipeBrowserMode = "recipes" | "uses";
 export type TierFilter = "all" | Exclude<MachineTier, "DEMO">;
 
@@ -209,6 +224,22 @@ export interface RecipeBrowserResource {
   iconAtlas?: ResourceAmount["iconAtlas"];
   dominantColor?: string;
   anchorNodeId?: string;
+}
+
+/**
+ * A gap solve running (or finished) in the background. The canvas shows its
+ * heartbeat; the plans dialog opens from it once results land.
+ */
+export interface GapSolveRun {
+  id: string;
+  stockpileId: string;
+  requestId: string;
+  status: "solving" | "ready" | "error";
+  progress?: GapSolveProgress;
+  result?: RecipeDatasetSolveResult;
+  message?: string;
+  /** True when the results dialog was closed but the run is kept around. */
+  dismissed?: boolean;
 }
 
 export interface PendingResourceConnection {
@@ -1006,11 +1037,147 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       const project = touchProject(materialized.project);
       return withProjectHistory(state, {
         project,
+        gapSolve: undefined,
         selectedNodeId: materialized.rootNodeId ?? state.selectedNodeId,
         selectedRecipeId: plan.steps[0]?.recipe.id ?? state.selectedRecipeId,
         lastResult: calculateThroughput(project),
       });
     });
+  },
+  gapSolve: undefined,
+  startGapSolve: (stockpileId, requestId) => {
+    const state = get();
+    const version = state.datasetManifest?.versions.find(
+      (entry) => entry.id === state.selectedDatasetVersionId,
+    );
+    const request = (state.project.requests ?? []).find((entry) => entry.id === requestId);
+    const runId = createId("gap-solve");
+
+    if (!version || !request) {
+      set({
+        gapSolve: {
+          id: runId,
+          stockpileId,
+          requestId,
+          status: "error",
+          message: version ? "The request no longer exists." : "No recipe dataset is loaded yet.",
+        },
+      });
+      return;
+    }
+
+    gapSolveAbort?.abort();
+    const controller = new AbortController();
+    gapSolveAbort = controller;
+
+    // Snapshot the ask now; the board can keep changing while this runs.
+    const settings = loadSolveSettings();
+    const blockedMaps = new Set(settings.blockedRecipeMaps);
+    const datasetRecipeMaps = state.dataset?.recipeMaps ?? [];
+    const supply: PlannerResource[] = (state.project.stockpiles ?? []).flatMap((stockpile) =>
+      stockpile.resources.map((resource) => ({
+        kind: resource.kind,
+        id: resource.id,
+        displayName: resource.displayName,
+        iconPath: resource.iconPath,
+        iconAtlas: resource.iconAtlas,
+        dominantColor: resource.dominantColor,
+        stockpileId: stockpile.id,
+      })),
+    );
+    const existingOutputs: ExistingProduction[] = [];
+    for (const node of state.project.nodes) {
+      if (!node.enabled) {
+        continue;
+      }
+
+      const nodeResult = state.lastResult.nodes[node.id];
+      if (!nodeResult || nodeResult.status === "missing-recipe") {
+        continue;
+      }
+
+      for (const flow of Object.values(nodeResult.outputs)) {
+        existingOutputs.push({
+          kind: flow.kind,
+          id: flow.resourceId,
+          displayName: flow.displayName,
+          nodeId: node.id,
+          availablePerSecond: flow.amountPerSecond,
+        });
+      }
+    }
+
+    set({ gapSolve: { id: runId, stockpileId, requestId, status: "solving" } });
+
+    solveRecipeDatasetGap(
+      state.datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
+      version,
+      {
+        target: {
+          kind: request.kind,
+          id: request.resourceId,
+          displayName: request.displayName,
+          iconPath: request.iconPath,
+          iconAtlas: request.iconAtlas,
+          dominantColor: request.dominantColor,
+          amountPerSecond: request.amountPerSecond,
+        },
+        supply,
+        existingOutputs,
+        maxTier: settings.maxTier === "global" ? state.maxTierFilter : settings.maxTier,
+        options: {
+          maxDepth: settings.maxDepth,
+          allowedRecipeMaps:
+            blockedMaps.size > 0
+              ? datasetRecipeMaps.filter((recipeMap) => !blockedMaps.has(recipeMap))
+              : undefined,
+        },
+      },
+      {
+        signal: controller.signal,
+        onProgress: (progress) => {
+          const current = get().gapSolve;
+          if (current?.id === runId) {
+            set({ gapSolve: { ...current, progress } });
+          }
+        },
+      },
+    )
+      .then((result) => {
+        const current = get().gapSolve;
+        if (current?.id !== runId) {
+          return;
+        }
+
+        set({ gapSolve: { ...current, status: "ready", result } });
+      })
+      .catch((error) => {
+        const current = get().gapSolve;
+        if (controller.signal.aborted || current?.id !== runId) {
+          return;
+        }
+
+        set({
+          gapSolve: {
+            ...current,
+            status: "error",
+            message: error instanceof Error ? error.message : "Solve failed.",
+          },
+        });
+      });
+  },
+  cancelGapSolve: () => {
+    gapSolveAbort?.abort();
+    gapSolveAbort = undefined;
+    set({ gapSolve: undefined });
+  },
+  dismissGapSolveResults: () => {
+    set((state) => (state.gapSolve ? { gapSolve: { ...state.gapSolve, dismissed: true } } : state));
+  },
+  openGapSolveResults: () => {
+    set((state) =>
+      state.gapSolve ? { gapSolve: { ...state.gapSolve, dismissed: false } } : state,
+    );
   },
   setNodePosition: (nodeId, position) => {
     set((state) => {
