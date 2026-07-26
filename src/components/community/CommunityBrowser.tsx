@@ -127,7 +127,7 @@ export function CommunityBrowser() {
       const { plan: planJson } = await downloadCommunityPlan(plan.id);
       stashPlanForEditor(planJson);
       bumpDownloads(plan.id);
-      router.push("/app");
+      router.push("/");
     } catch (openError) {
       setError(openError instanceof Error ? openError.message : "Opening the plan failed.");
     }
@@ -204,8 +204,8 @@ export function CommunityBrowser() {
       ) : plans.length === 0 ? (
         <div className="rounded border border-line bg-surface-raised px-4 py-12 text-center text-sm text-fg-subtle">
           No shared plans yet{debouncedSearch ? " matching your search" : ""}. Build something in{" "}
-          <Link href="/app" className="text-cyan-500 underline">
-            the editor
+          <Link href="/" className="text-cyan-500 underline">
+            the planner
           </Link>{" "}
           and hit Share!
         </div>

@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 export default function CommunityPage() {
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-fg">
-      <SiteHeader active="community" />
+      <SiteHeader />
       <main className="flex-1">
         <div className="mx-auto w-full max-w-6xl px-4 pt-6">
           <h1 className="text-xl font-bold">Community plans</h1>
