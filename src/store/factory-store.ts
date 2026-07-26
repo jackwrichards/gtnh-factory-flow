@@ -8,19 +8,6 @@ import { calculateThroughput } from "@/lib/solver";
 import { applyRecipeInputOverrides } from "@/lib/model/recipe-input-overrides";
 import { optimizeMachineCountsForProject } from "@/lib/solver/machine-count-optimizer";
 import {
-  materializeGapFillPlan,
-  REQUEST_DEMAND_HANDLE,
-  STOCKPILE_SUPPLY_HANDLE,
-} from "@/lib/planner/materialize";
-import { loadSolveSettings } from "@/lib/planner/solve-settings";
-import type { GapFillPlan, GapSolveProgress, PlannerResource } from "@/lib/planner/types";
-import type { ExistingProduction } from "@/lib/planner/types";
-import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
-import {
-  solveRecipeDatasetGap,
-  type RecipeDatasetSolveResult,
-} from "@/lib/datasets/browser-loader";
-import {
   getFilledCellFluidEquivalent,
   getResourceKey,
   isOreDictionaryResource,
@@ -33,14 +20,11 @@ import type {
   FactoryNode,
   FactoryNodeColorTag,
   FactoryProject,
-  FactoryRequest,
-  FactoryStockpile,
   FactoryStorage,
   MachineTier,
   Recipe,
   ResourceAmount,
   ResourceKind,
-  StockpileResource,
   TargetRate,
   ThroughputResult,
 } from "@/lib/model/types";
@@ -152,22 +136,6 @@ interface FactoryStore {
   autoRouteStorage: (storageId: string) => void;
   updateStorage: (storageId: string, patch: Partial<FactoryStorage>) => void;
   setStoragePosition: (storageId: string, position: FactoryStorage["position"]) => void;
-  editingStockpileId?: string;
-  setEditingStockpile: (stockpileId?: string) => void;
-  addStockpile: () => void;
-  updateStockpile: (stockpileId: string, patch: Partial<FactoryStockpile>) => void;
-  setStockpilePosition: (stockpileId: string, position: FactoryStockpile["position"]) => void;
-  deleteStockpile: (stockpileId: string) => void;
-  addRequest: (resource: StockpileResource, amountPerSecond?: number) => void;
-  updateRequest: (requestId: string, patch: Partial<FactoryRequest>) => void;
-  setRequestPosition: (requestId: string, position: FactoryRequest["position"]) => void;
-  deleteRequest: (requestId: string) => void;
-  applyGapFillPlan: (stockpileId: string, requestId: string, plan: GapFillPlan<Recipe>) => void;
-  gapSolve?: GapSolveRun;
-  startGapSolve: (stockpileId: string, requestId: string) => void;
-  cancelGapSolve: () => void;
-  dismissGapSolveResults: () => void;
-  openGapSolveResults: () => void;
   setNodePosition: (nodeId: string, position: FactoryNode["position"]) => void;
   connectNodes: (
     sourceNodeId: string,
@@ -201,9 +169,6 @@ interface FactoryStore {
 
 const initialProject = createEmptyProject();
 
-/** The in-flight gap solve's cancellation, one at a time by design. */
-let gapSolveAbort: AbortController | undefined;
-
 export type RecipeBrowserMode = "recipes" | "uses";
 export type TierFilter = "all" | Exclude<MachineTier, "DEMO">;
 
@@ -224,22 +189,6 @@ export interface RecipeBrowserResource {
   iconAtlas?: ResourceAmount["iconAtlas"];
   dominantColor?: string;
   anchorNodeId?: string;
-}
-
-/**
- * A gap solve running (or finished) in the background. The canvas shows its
- * heartbeat; the plans dialog opens from it once results land.
- */
-export interface GapSolveRun {
-  id: string;
-  stockpileId: string;
-  requestId: string;
-  status: "solving" | "ready" | "error";
-  progress?: GapSolveProgress;
-  result?: RecipeDatasetSolveResult;
-  message?: string;
-  /** True when the results dialog was closed but the run is kept around. */
-  dismissed?: boolean;
 }
 
 export interface PendingResourceConnection {
@@ -473,8 +422,6 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         recipes: [],
         nodes: [],
         storages: [],
-        stockpiles: [],
-        requests: [],
         edges: [],
         targetRate: undefined,
       });
@@ -881,303 +828,6 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         project,
       });
     });
-  },
-  editingStockpileId: undefined,
-  setEditingStockpile: (stockpileId) => {
-    set({ editingStockpileId: stockpileId });
-  },
-  addStockpile: () => {
-    set((state) => {
-      const stockpile: FactoryStockpile = {
-        id: createId("stockpile"),
-        resources: [],
-        position: state.flowViewportCenter
-          ? { x: state.flowViewportCenter.x - 420, y: state.flowViewportCenter.y - 120 }
-          : { x: 80, y: 160 },
-      };
-      const project = touchProject({
-        ...state.project,
-        stockpiles: [...(state.project.stockpiles ?? []), stockpile],
-      });
-
-      return withProjectHistory(state, {
-        project,
-        editingStockpileId: stockpile.id,
-        lastResult: calculateThroughput(project),
-      });
-    });
-  },
-  updateStockpile: (stockpileId, patch) => {
-    set((state) => {
-      const project = touchProject(
-        pruneInvalidEdgesAndOrphanStorages({
-          ...state.project,
-          stockpiles: (state.project.stockpiles ?? []).map((stockpile) =>
-            stockpile.id === stockpileId ? { ...stockpile, ...patch } : stockpile,
-          ),
-        }),
-      );
-
-      return withProjectHistory(state, {
-        project,
-        lastResult: calculateThroughput(project),
-      });
-    });
-  },
-  setStockpilePosition: (stockpileId, position) => {
-    set((state) => {
-      const project = touchProject({
-        ...state.project,
-        stockpiles: (state.project.stockpiles ?? []).map((stockpile) =>
-          stockpile.id === stockpileId ? { ...stockpile, position } : stockpile,
-        ),
-      });
-
-      return withProjectHistory(state, { project });
-    });
-  },
-  deleteStockpile: (stockpileId) => {
-    set((state) => {
-      const project = touchProject({
-        ...state.project,
-        stockpiles: (state.project.stockpiles ?? []).filter(
-          (stockpile) => stockpile.id !== stockpileId,
-        ),
-        edges: state.project.edges.filter(
-          (edge) => edge.source !== stockpileId && edge.target !== stockpileId,
-        ),
-      });
-
-      return withProjectHistory(state, {
-        project,
-        editingStockpileId:
-          state.editingStockpileId === stockpileId ? undefined : state.editingStockpileId,
-        lastResult: calculateThroughput(project),
-      });
-    });
-  },
-  addRequest: (resource, amountPerSecond = 1) => {
-    set((state) => {
-      const request: FactoryRequest = {
-        id: createId("request"),
-        kind: resource.kind,
-        resourceId: resource.id,
-        displayName: resource.displayName,
-        iconPath: resource.iconPath,
-        iconAtlas: resource.iconAtlas,
-        dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
-        amountPerSecond,
-        position: state.flowViewportCenter
-          ? { x: state.flowViewportCenter.x + 260, y: state.flowViewportCenter.y - 80 }
-          : { x: 620, y: 160 },
-      };
-      const project = touchProject({
-        ...state.project,
-        requests: [...(state.project.requests ?? []), request],
-      });
-
-      return withProjectHistory(state, {
-        project,
-        lastResult: calculateThroughput(project),
-      });
-    });
-  },
-  updateRequest: (requestId, patch) => {
-    set((state) => {
-      const project = touchProject(
-        pruneInvalidEdgesAndOrphanStorages({
-          ...state.project,
-          requests: (state.project.requests ?? []).map((request) =>
-            request.id === requestId ? { ...request, ...patch } : request,
-          ),
-        }),
-      );
-
-      return withProjectHistory(state, {
-        project,
-        lastResult: calculateThroughput(project),
-      });
-    });
-  },
-  setRequestPosition: (requestId, position) => {
-    set((state) => {
-      const project = touchProject({
-        ...state.project,
-        requests: (state.project.requests ?? []).map((request) =>
-          request.id === requestId ? { ...request, position } : request,
-        ),
-      });
-
-      return withProjectHistory(state, { project });
-    });
-  },
-  deleteRequest: (requestId) => {
-    set((state) => {
-      const project = touchProject({
-        ...state.project,
-        requests: (state.project.requests ?? []).filter((request) => request.id !== requestId),
-        edges: state.project.edges.filter(
-          (edge) => edge.source !== requestId && edge.target !== requestId,
-        ),
-      });
-
-      return withProjectHistory(state, {
-        project,
-        lastResult: calculateThroughput(project),
-      });
-    });
-  },
-  applyGapFillPlan: (stockpileId, requestId, plan) => {
-    set((state) => {
-      const materialized = materializeGapFillPlan(state.project, stockpileId, requestId, plan);
-      if (materialized.project === state.project) {
-        return state;
-      }
-
-      const project = touchProject(materialized.project);
-      return withProjectHistory(state, {
-        project,
-        gapSolve: undefined,
-        selectedNodeId: materialized.rootNodeId ?? state.selectedNodeId,
-        selectedRecipeId: plan.steps[0]?.recipe.id ?? state.selectedRecipeId,
-        lastResult: calculateThroughput(project),
-      });
-    });
-  },
-  gapSolve: undefined,
-  startGapSolve: (stockpileId, requestId) => {
-    const state = get();
-    const version = state.datasetManifest?.versions.find(
-      (entry) => entry.id === state.selectedDatasetVersionId,
-    );
-    const request = (state.project.requests ?? []).find((entry) => entry.id === requestId);
-    const runId = createId("gap-solve");
-
-    if (!version || !request) {
-      set({
-        gapSolve: {
-          id: runId,
-          stockpileId,
-          requestId,
-          status: "error",
-          message: version ? "The request no longer exists." : "No recipe dataset is loaded yet.",
-        },
-      });
-      return;
-    }
-
-    gapSolveAbort?.abort();
-    const controller = new AbortController();
-    gapSolveAbort = controller;
-
-    // Snapshot the ask now; the board can keep changing while this runs.
-    const settings = loadSolveSettings();
-    const blockedMaps = new Set(settings.blockedRecipeMaps);
-    const datasetRecipeMaps = state.dataset?.recipeMaps ?? [];
-    const supply: PlannerResource[] = (state.project.stockpiles ?? []).flatMap((stockpile) =>
-      stockpile.resources.map((resource) => ({
-        kind: resource.kind,
-        id: resource.id,
-        displayName: resource.displayName,
-        iconPath: resource.iconPath,
-        iconAtlas: resource.iconAtlas,
-        dominantColor: resource.dominantColor,
-        stockpileId: stockpile.id,
-      })),
-    );
-    const existingOutputs: ExistingProduction[] = [];
-    for (const node of state.project.nodes) {
-      if (!node.enabled) {
-        continue;
-      }
-
-      const nodeResult = state.lastResult.nodes[node.id];
-      if (!nodeResult || nodeResult.status === "missing-recipe") {
-        continue;
-      }
-
-      for (const flow of Object.values(nodeResult.outputs)) {
-        existingOutputs.push({
-          kind: flow.kind,
-          id: flow.resourceId,
-          displayName: flow.displayName,
-          nodeId: node.id,
-          availablePerSecond: flow.amountPerSecond,
-        });
-      }
-    }
-
-    set({ gapSolve: { id: runId, stockpileId, requestId, status: "solving" } });
-
-    solveRecipeDatasetGap(
-      state.datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
-      version,
-      {
-        target: {
-          kind: request.kind,
-          id: request.resourceId,
-          displayName: request.displayName,
-          iconPath: request.iconPath,
-          iconAtlas: request.iconAtlas,
-          dominantColor: request.dominantColor,
-          amountPerSecond: request.amountPerSecond,
-        },
-        supply,
-        existingOutputs,
-        maxTier: settings.maxTier === "global" ? state.maxTierFilter : settings.maxTier,
-        options: {
-          maxDepth: settings.maxDepth,
-          allowedRecipeMaps:
-            blockedMaps.size > 0
-              ? datasetRecipeMaps.filter((recipeMap) => !blockedMaps.has(recipeMap))
-              : undefined,
-        },
-      },
-      {
-        signal: controller.signal,
-        onProgress: (progress) => {
-          const current = get().gapSolve;
-          if (current?.id === runId) {
-            set({ gapSolve: { ...current, progress } });
-          }
-        },
-      },
-    )
-      .then((result) => {
-        const current = get().gapSolve;
-        if (current?.id !== runId) {
-          return;
-        }
-
-        set({ gapSolve: { ...current, status: "ready", result } });
-      })
-      .catch((error) => {
-        const current = get().gapSolve;
-        if (controller.signal.aborted || current?.id !== runId) {
-          return;
-        }
-
-        set({
-          gapSolve: {
-            ...current,
-            status: "error",
-            message: error instanceof Error ? error.message : "Solve failed.",
-          },
-        });
-      });
-  },
-  cancelGapSolve: () => {
-    gapSolveAbort?.abort();
-    gapSolveAbort = undefined;
-    set({ gapSolve: undefined });
-  },
-  dismissGapSolveResults: () => {
-    set((state) => (state.gapSolve ? { gapSolve: { ...state.gapSolve, dismissed: true } } : state));
-  },
-  openGapSolveResults: () => {
-    set((state) =>
-      state.gapSolve ? { gapSolve: { ...state.gapSolve, dismissed: false } } : state,
-    );
   },
   setNodePosition: (nodeId, position) => {
     set((state) => {
@@ -1837,55 +1487,8 @@ function isFactoryEdgeStillValid(project: FactoryProject, edge: FactoryEdge): bo
   const targetNode = project.nodes.find((node) => node.id === edge.target);
   const sourceStorage = (project.storages ?? []).find((storage) => storage.id === edge.source);
   const targetStorage = (project.storages ?? []).find((storage) => storage.id === edge.target);
-  const sourceStockpile = (project.stockpiles ?? []).find(
-    (stockpile) => stockpile.id === edge.source,
-  );
-  const targetRequest = (project.requests ?? []).find((request) => request.id === edge.target);
   const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
   const targetRecipe = project.recipes.find((recipe) => recipe.id === targetNode?.recipeId);
-
-  if (sourceStockpile) {
-    if (!targetNode || !targetRecipe) {
-      return false;
-    }
-
-    // The edge dies with its stockpile entry: removing a resource from the
-    // drawer must not leave phantom supply lines feeding machines.
-    if (
-      !sourceStockpile.resources.some(
-        (resource) => resource.kind === edge.resourceKind && resource.id === edge.resourceId,
-      )
-    ) {
-      return false;
-    }
-
-    const effectiveTargetRecipe = applyRecipeInputOverrides(targetRecipe, targetNode);
-    return effectiveTargetRecipe.inputs.some(
-      (input) =>
-        isRecipeInputConsumed(input) &&
-        resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, input),
-    );
-  }
-
-  if (targetRequest) {
-    if (!sourceNode || !sourceRecipe) {
-      return false;
-    }
-
-    if (
-      !resourceMatchesInput(
-        { kind: edge.resourceKind, id: edge.resourceId },
-        { kind: targetRequest.kind, id: targetRequest.resourceId },
-      )
-    ) {
-      return false;
-    }
-
-    const effectiveSourceRecipe = applyRecipeInputOverrides(sourceRecipe, sourceNode);
-    return effectiveSourceRecipe.outputs.some((output) =>
-      resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, output),
-    );
-  }
 
   if ((!sourceNode && !sourceStorage) || (!targetNode && !targetStorage)) {
     return false;
@@ -1955,70 +1558,8 @@ function buildEdgeBetweenNodes(
   const targetNode = project.nodes.find((node) => node.id === targetNodeId);
   const sourceStorage = (project.storages ?? []).find((storage) => storage.id === sourceNodeId);
   const targetStorage = (project.storages ?? []).find((storage) => storage.id === targetNodeId);
-  const sourceStockpile = (project.stockpiles ?? []).find(
-    (stockpile) => stockpile.id === sourceNodeId,
-  );
-  const targetRequest = (project.requests ?? []).find((request) => request.id === targetNodeId);
   const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
   const targetRecipe = project.recipes.find((recipe) => recipe.id === targetNode?.recipeId);
-
-  if (sourceStockpile && targetNode && targetRecipe) {
-    const effectiveTargetRecipe = applyRecipeInputOverrides(targetRecipe, targetNode);
-    const stockpileEntry = selectedResource
-      ? sourceStockpile.resources.find(
-          (resource) =>
-            resource.kind === selectedResource.kind && resource.id === selectedResource.id,
-        )
-      : sourceStockpile.resources.find((resource) =>
-          effectiveTargetRecipe.inputs.some(
-            (input) => isRecipeInputConsumed(input) && resourceMatchesInput(resource, input),
-          ),
-        );
-    const matchedInput = stockpileEntry
-      ? effectiveTargetRecipe.inputs.find(
-          (input) => isRecipeInputConsumed(input) && resourceMatchesInput(stockpileEntry, input),
-        )
-      : undefined;
-    if (!stockpileEntry || !matchedInput) {
-      return undefined;
-    }
-
-    return {
-      id: createId("edge"),
-      source: sourceStockpile.id,
-      target: targetNodeId,
-      sourceHandle: STOCKPILE_SUPPLY_HANDLE,
-      targetHandle: selectedResource?.targetHandle,
-      resourceKind: stockpileEntry.kind,
-      resourceId: stockpileEntry.id,
-      label: resourceLabel(stockpileEntry),
-    };
-  }
-
-  if (sourceNode && sourceRecipe && targetRequest) {
-    const effectiveSourceRecipe = applyRecipeInputOverrides(sourceRecipe, sourceNode);
-    const requestResource = { kind: targetRequest.kind, id: targetRequest.resourceId };
-    const matchedOutput = effectiveSourceRecipe.outputs.find((output) =>
-      resourceMatchesInput(output, requestResource),
-    );
-    if (!matchedOutput) {
-      return undefined;
-    }
-
-    return {
-      id: createId("edge"),
-      source: sourceNodeId,
-      target: targetRequest.id,
-      sourceHandle: selectedResource?.sourceHandle,
-      targetHandle: REQUEST_DEMAND_HANDLE,
-      resourceKind: targetRequest.kind,
-      resourceId: targetRequest.resourceId,
-      label: resourceLabel({
-        id: targetRequest.resourceId,
-        displayName: targetRequest.displayName,
-      }),
-    };
-  }
 
   if ((!sourceNode && !sourceStorage) || (!targetNode && !targetStorage)) {
     return undefined;
@@ -2537,32 +2078,6 @@ function refreshProjectResourceIcons(
       outputs: recipe.outputs.map((output) => refreshResourceIcon(output, iconsByResource)),
     })),
     storages: project.storages?.map((storage) => refreshStorageIcon(storage, iconsByResource)),
-    stockpiles: project.stockpiles?.map((stockpile) => ({
-      ...stockpile,
-      resources: stockpile.resources.map((resource) =>
-        refreshResourceIcon(resource, iconsByResource),
-      ),
-    })),
-    requests: project.requests?.map((request) => refreshRequestIcon(request, iconsByResource)),
-  };
-}
-
-function refreshRequestIcon(
-  request: FactoryRequest,
-  iconsByResource: Map<string, IconResource>,
-): FactoryRequest {
-  const indexed = iconsByResource.get(`${request.kind}:${request.resourceId}`);
-  if (!indexed) {
-    return request;
-  }
-
-  return {
-    ...request,
-    displayName: request.displayName ?? indexed.displayName,
-    iconPath: indexed.iconPath,
-    iconAtlas: indexed.iconAtlas,
-    dominantColor:
-      indexed.dominantColor ?? indexed.iconAtlas?.dominantColor ?? request.dominantColor,
   };
 }
 

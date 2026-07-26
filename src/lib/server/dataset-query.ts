@@ -18,7 +18,6 @@ import {
   GT_VOLTAGE_TIERS,
   isOreDictionaryResource,
   isVirtualChoiceResource,
-  resourceLabel,
   resourceMatchesInput,
 } from "@/lib/model";
 
@@ -57,26 +56,6 @@ interface LoadedRecipeIndex {
   recipeMapIconEntriesByMap?: Map<string, RecipeMapIconEntry>;
   recipesByRawRecipeId?: Map<string, Recipe[]>;
   hydratedRecipeSummaries?: Map<number, RecipeSummary>;
-  /**
-   * Resource scopes (oredict fan-out, cell equivalents, wildcards) are pure
-   * per dataset but expensive to derive — some walk every resource. The gap
-   * solver asks for the same ones on every solve, so they are memoized here.
-   */
-  resourceScopeCaches?: {
-    recipes: Map<string, RecipeResourceScope>;
-    uses: Map<string, RecipeResourceScope>;
-  };
-  /** Tier-filtered "recipes using this resource" sets, keyed resource|tier. */
-  solverUsesIndexCache?: Map<string, number[]>;
-  /**
-   * Reverse indexes over the whole resource table, built once. Without them,
-   * resolving one fluid's cell equivalents or one item's oredict groups walks
-   * every resource in the dataset — around a second per lookup, which turned
-   * deep solves into minutes.
-   */
-  cellItemsByFluidKey?: Map<string, Array<DatasetResource | DatasetResourceIndexEntry>>;
-  oredictNamesByMemberId?: Map<string, Set<string>>;
-  oredictWildcardMembers?: Array<{ baseId: string; name: string }>;
 }
 
 export interface DatasetRecipeRef {
@@ -420,190 +399,6 @@ export async function queryDatasetRecipes(
   };
 }
 
-/**
- * Every recipe that produces the resource, across all recipe maps at once.
- * The NEI-style query above scopes results to a single map because that is how
- * the recipe book browses; the gap solver needs the full producer fan-out.
- */
-/** Per recipe map, so one huge crafting family cannot crowd out the machines. */
-const SOLVER_PER_MAP_CANDIDATE_LIMIT = 8;
-
-/**
- * Every recipe index that consumes any of the given resources, oredict and
- * cell equivalences included. The gap solver builds this once per solve from
- * the stockpile: variant-heavy families (a Coke Oven entry per log type) can
- * then be sampled by "uses what I actually have" instead of blindly.
- */
-export async function getDatasetRecipeIndexesUsingResources(
-  versionId: string,
-  resources: Array<Pick<ResourceAmount, "kind" | "id">>,
-  maxTier: TierFilter,
-): Promise<Set<number>> {
-  const catalog = await loadCatalog(versionId);
-  const usingRecipeIndexes = new Set<number>();
-  catalog.solverUsesIndexCache ??= new Map();
-
-  if (catalog.version.recipeLookupIndexPath) {
-    const lookup = await loadRecipeLookupIndex(catalog.version);
-    for (const resource of resources) {
-      const cacheKey = `${resource.kind}:${resource.id}|${maxTier}`;
-      let recipeIndexes = catalog.solverUsesIndexCache.get(cacheKey);
-      if (!recipeIndexes) {
-        const scope = getCachedResourceScope(catalog, resource, "uses");
-        recipeIndexes = [...getLookupRecipesByMap(lookup, scope, "uses").values()]
-          .flat()
-          .filter((recipeIndex) => recipeMatchesLookupTier(lookup, recipeIndex, maxTier));
-        catalog.solverUsesIndexCache.set(cacheKey, recipeIndexes);
-      }
-      for (const recipeIndex of recipeIndexes) {
-        usingRecipeIndexes.add(recipeIndex);
-      }
-    }
-    return usingRecipeIndexes;
-  }
-
-  const recipeCatalog = await loadRecipeIndex(versionId);
-  const indexes = ensureIndexes(recipeCatalog);
-  for (const resource of resources) {
-    const cacheKey = `${resource.kind}:${resource.id}|${maxTier}`;
-    let recipeIndexes = recipeCatalog.solverUsesIndexCache?.get(cacheKey);
-    if (!recipeIndexes) {
-      const scope = getCachedResourceScope(recipeCatalog, resource, "uses");
-      recipeIndexes = getResourceIndexes(indexes.recipeIndexesByResource, scope, "uses").filter(
-        (recipeIndex) => recipeMatchesTierIndex(indexes, recipeIndex, maxTier),
-      );
-      recipeCatalog.solverUsesIndexCache ??= new Map();
-      recipeCatalog.solverUsesIndexCache.set(cacheKey, recipeIndexes);
-    }
-    for (const recipeIndex of recipeIndexes) {
-      usingRecipeIndexes.add(recipeIndex);
-    }
-  }
-  return usingRecipeIndexes;
-}
-
-function getCachedResourceScope(
-  catalog: LoadedRecipeIndex,
-  resource: Pick<ResourceAmount, "kind" | "id">,
-  mode: "recipes" | "uses",
-): RecipeResourceScope {
-  catalog.resourceScopeCaches ??= { recipes: new Map(), uses: new Map() };
-  const cache = catalog.resourceScopeCaches[mode];
-  const key = `${resource.kind}:${resource.id}`;
-  const cached = cache.get(key);
-  if (cached) {
-    return cached;
-  }
-
-  const scope = getRecipeResourceScope(catalog, resource, mode);
-  cache.set(key, scope);
-  return scope;
-}
-
-export async function getDatasetProducingRecipes(
-  versionId: string,
-  resource: Pick<ResourceAmount, "kind" | "id">,
-  maxTier: TierFilter,
-  limit: number,
-  preferredRecipeIndexes?: ReadonlySet<number>,
-  allowedRecipeMaps?: ReadonlySet<string>,
-): Promise<RecipeSummary[]> {
-  const catalog = await loadCatalog(versionId);
-  const resourceScope = getCachedResourceScope(catalog, resource, "recipes");
-  const isMapAllowed = (recipeMap: string | undefined) =>
-    !allowedRecipeMaps || (recipeMap !== undefined && allowedRecipeMaps.has(recipeMap.toLowerCase()));
-
-  if (catalog.version.recipeLookupIndexPath) {
-    const lookup = await loadRecipeLookupIndex(catalog.version);
-    const recipesByMap = getLookupRecipesByMap(lookup, resourceScope, "recipes");
-    const recipeIndexes = spreadRecipeIndexesAcrossMaps(
-      [...recipesByMap.entries()]
-        .filter(([recipeMapId]) => isMapAllowed(lookup.recipeMaps[recipeMapId]))
-        .map(([, mapRecipeIndexes]) => mapRecipeIndexes),
-      (recipeIndex) => recipeMatchesLookupTier(lookup, recipeIndex, maxTier),
-      lookup.tierIndexes,
-      limit,
-      preferredRecipeIndexes,
-    );
-    // Candidate hydration runs hundreds of times per solve. The compact
-    // in-memory recipe index answers it without touching shards; hitting the
-    // gzip shards through their small LRU instead turns a solve into a
-    // minute of decompression thrash.
-    const summaryCatalog = catalog.version.recipeIndexPath
-      ? await loadRecipeIndex(versionId)
-      : catalog;
-    return getRecipeSummariesByIndex(summaryCatalog, recipeIndexes);
-  }
-
-  const recipeCatalog = await loadRecipeIndex(versionId);
-  const indexes = ensureIndexes(recipeCatalog);
-  const recipeMaps = getResourceRecipeMaps(
-    indexes.recipeMapsByResource,
-    resourceScope,
-    "recipes",
-  ).filter((recipeMap) => isMapAllowed(recipeMap));
-  const recipeIndexesByMap = recipeMaps.map((recipeMap) =>
-    getResourceIndexes(indexes.recipeIndexesByResourceAndMap, resourceScope, "recipes", recipeMap),
-  );
-  const recipeIndexes = spreadRecipeIndexesAcrossMaps(
-    recipeIndexesByMap.length > 0 || allowedRecipeMaps
-      ? recipeIndexesByMap
-      : [getResourceIndexes(indexes.recipeIndexesByResource, resourceScope, "recipes")],
-    (recipeIndex) => recipeMatchesTierIndex(indexes, recipeIndex, maxTier),
-    indexes.tierIndexes,
-    limit,
-    preferredRecipeIndexes,
-  );
-  return getRecipeSummariesByIndex(recipeCatalog, recipeIndexes);
-}
-
-/**
- * Popular resources (charcoal has thousands of producers) cannot all be
- * hydrated, so the cut has to happen before hydration — and any global cut
- * lets one enormous family (fifty tool variants of a crafting recipe, all
- * ULV) crowd out the machine that actually matters. So the head is taken per
- * recipe map: recipes that consume the solver's supply first, then lowest
- * tiers — the two ranking signals available without touching shards — and the
- * union is re-sorted the same way for the cap.
- */
-function spreadRecipeIndexesAcrossMaps(
-  recipeIndexesByMap: number[][],
-  matchesTier: (recipeIndex: number) => boolean,
-  tierIndexes: number[],
-  limit: number,
-  preferredRecipeIndexes?: ReadonlySet<number>,
-): number[] {
-  const rank = (left: number, right: number) => {
-    if (preferredRecipeIndexes) {
-      const preference =
-        Number(preferredRecipeIndexes.has(right)) - Number(preferredRecipeIndexes.has(left));
-      if (preference !== 0) {
-        return preference;
-      }
-    }
-
-    return (
-      (tierIndexes[left] ?? GT_VOLTAGE_TIERS.length - 1) -
-        (tierIndexes[right] ?? GT_VOLTAGE_TIERS.length - 1) || left - right
-    );
-  };
-  const seen = new Set<number>();
-  const spread: number[] = [];
-
-  for (const mapRecipeIndexes of recipeIndexesByMap) {
-    const eligible = mapRecipeIndexes
-      .filter((recipeIndex) => !seen.has(recipeIndex) && matchesTier(recipeIndex))
-      .sort(rank)
-      .slice(0, SOLVER_PER_MAP_CANDIDATE_LIMIT);
-    for (const recipeIndex of eligible) {
-      seen.add(recipeIndex);
-      spread.push(recipeIndex);
-    }
-  }
-
-  return spread.sort(rank).slice(0, limit);
-}
-
 async function queryDatasetRecipesFromLookup(
   catalog: LoadedRecipeIndex,
   request: {
@@ -758,19 +553,10 @@ async function prewarmDatasetVersionOnce(
   const catalog = await loadCatalog(versionId);
   getCatalogResourcesByKey(catalog);
   ensureResourceIndexes(catalog);
-  // The solver's equivalence indexes: one pass each here beats paying for
-  // them inside the first solve.
-  getCellItemsByFluidKey(catalog);
-  getOredictNamesForMember(catalog, "");
 
   if (catalog.version.recipeLookupIndexPath) {
     const lookup = await loadRecipeLookupIndex(catalog.version);
     ensureLookupSearchIndex(lookup);
-    // The gap solver hydrates producer candidates from the compact recipe
-    // index; loading it here moves that ~10 MB parse out of the first solve.
-    if (catalog.version.recipeIndexPath) {
-      await loadRecipeIndex(versionId);
-    }
   } else {
     const recipeCatalog = await loadRecipeIndex(versionId);
     ensureIndexes(recipeCatalog);
@@ -1421,61 +1207,22 @@ function getRecipeResourceScope(
   }
 
   const oreDictionaryNames = new Set(indexed?.oreDictionary ?? []);
-  for (const name of getOredictNamesForMember(catalog, resource.id)) {
-    oreDictionaryNames.add(name);
+  for (const candidate of resourcesByKey.values()) {
+    if (
+      candidate.kind === "item" &&
+      isOreDictionaryResource(candidate) &&
+      candidate.alternatives?.some((alternative) =>
+        resourceIdsAreCompatible(alternative.id, resource.id),
+      )
+    ) {
+      oreDictionaryNames.add(candidate.id.slice("oredict:".length));
+    }
   }
   for (const name of oreDictionaryNames ?? []) {
     addScopedResource(resources, { kind: "item", id: `oredict:${name}` });
   }
 
   return { resource, resources };
-}
-
-/**
- * Which oredict groups list this concrete item, answered from a reverse index
- * built once per dataset instead of scanning every resource per query.
- */
-function getOredictNamesForMember(catalog: LoadedRecipeIndex, memberId: string): Set<string> {
-  if (!catalog.oredictNamesByMemberId || !catalog.oredictWildcardMembers) {
-    const byExactId = new Map<string, Set<string>>();
-    const wildcardMembers: Array<{ baseId: string; name: string }> = [];
-
-    for (const candidate of getCatalogResourcesByKey(catalog).values()) {
-      if (candidate.kind !== "item" || !isOreDictionaryResource(candidate)) {
-        continue;
-      }
-
-      const name = candidate.id.slice("oredict:".length);
-      for (const alternative of candidate.alternatives ?? []) {
-        if (alternative.id.endsWith("@32767")) {
-          wildcardMembers.push({
-            baseId: alternative.id.slice(0, -"@32767".length),
-            name,
-          });
-          continue;
-        }
-
-        const existing = byExactId.get(alternative.id);
-        if (existing) {
-          existing.add(name);
-        } else {
-          byExactId.set(alternative.id, new Set([name]));
-        }
-      }
-    }
-
-    catalog.oredictNamesByMemberId = byExactId;
-    catalog.oredictWildcardMembers = wildcardMembers;
-  }
-
-  const names = new Set(catalog.oredictNamesByMemberId.get(memberId) ?? []);
-  for (const wildcard of catalog.oredictWildcardMembers) {
-    if (memberId === wildcard.baseId || memberId.startsWith(`${wildcard.baseId}@`)) {
-      names.add(wildcard.name);
-    }
-  }
-
-  return names;
 }
 
 function getFilledCellEquivalentResources(
@@ -1502,74 +1249,17 @@ function getFilledCellEquivalentResources(
     return equivalents;
   }
 
-  // Fluid → filled-cell items via the prebuilt reverse index. Candidates are
-  // re-verified with the real matcher, so the index only narrows the search;
-  // it never changes what matches.
-  const cellItemsByFluidKey = getCellItemsByFluidKey(catalog);
-  const probeKeys = new Set(
-    [resource.id, normalizeEquivalenceName(resourceLabel(resource)), normalizeEquivalenceName(resource.id)].filter(
-      Boolean,
-    ),
-  );
-  for (const probeKey of probeKeys) {
-    for (const candidate of cellItemsByFluidKey.get(probeKey) ?? []) {
-      if (resourceMatchesInput(resource, candidate)) {
-        addEquivalent({ kind: "item", id: candidate.id });
-      }
+  for (const candidate of resourcesByKey.values()) {
+    if (
+      candidate.kind === "item" &&
+      !isOreDictionaryResource(candidate) &&
+      resourceMatchesInput(resource, candidate)
+    ) {
+      addEquivalent({ kind: "item", id: candidate.id });
     }
   }
 
   return equivalents;
-}
-
-function getCellItemsByFluidKey(
-  catalog: LoadedRecipeIndex,
-): Map<string, Array<DatasetResource | DatasetResourceIndexEntry>> {
-  if (catalog.cellItemsByFluidKey) {
-    return catalog.cellItemsByFluidKey;
-  }
-
-  const index = new Map<string, Array<DatasetResource | DatasetResourceIndexEntry>>();
-  const register = (key: string, resource: DatasetResource | DatasetResourceIndexEntry) => {
-    if (!key) {
-      return;
-    }
-    const existing = index.get(key);
-    if (existing) {
-      existing.push(resource);
-    } else {
-      index.set(key, [resource]);
-    }
-  };
-
-  for (const resource of getCatalogResourcesByKey(catalog).values()) {
-    if (resource.kind !== "item" || isOreDictionaryResource(resource)) {
-      continue;
-    }
-
-    const fluid = getFilledCellFluidEquivalent(resource);
-    if (!fluid) {
-      continue;
-    }
-
-    register(fluid.id, resource);
-    register(normalizeEquivalenceName(fluid.id), resource);
-    if (fluid.displayName) {
-      register(normalizeEquivalenceName(fluid.displayName), resource);
-    }
-  }
-
-  catalog.cellItemsByFluidKey = index;
-  return index;
-}
-
-/** Mirrors the matcher's name normalization: lowercase, alphanumeric words. */
-function normalizeEquivalenceName(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/^fluid:/, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
 }
 
 function addScopedResource(

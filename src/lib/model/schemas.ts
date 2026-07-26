@@ -295,57 +295,6 @@ export const factoryStorageSchema = z.object({
   }),
 });
 
-export const stockpileResourceSchema = z.object({
-  kind: resourceKindSchema,
-  id: z.string().min(1),
-  displayName: z.string().optional(),
-  iconPath: z.string().optional(),
-  iconAtlas: resourceIconAtlasRefSchema.optional(),
-  dominantColor: dominantColorSchema,
-  alternatives: z
-    .array(
-      z.object({
-        kind: resourceKindSchema,
-        id: z.string().min(1),
-        displayName: z.string().min(1).optional(),
-        iconPath: z.string().min(1).optional(),
-        iconAtlas: resourceIconAtlasRefSchema.optional(),
-        dominantColor: dominantColorSchema,
-        modId: z.string().min(1).optional(),
-        tooltip: z.array(z.string()).optional(),
-        amount: z.number().positive().optional(),
-      }),
-    )
-    .optional(),
-});
-
-export const factoryStockpileSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().optional(),
-  colorTag: factoryNodeColorTagSchema.optional(),
-  resources: z.array(stockpileResourceSchema),
-  position: z.object({
-    x: z.number(),
-    y: z.number(),
-  }),
-});
-
-export const factoryRequestSchema = z.object({
-  id: z.string().min(1),
-  kind: resourceKindSchema,
-  resourceId: z.string().min(1),
-  displayName: z.string().optional(),
-  iconPath: z.string().optional(),
-  iconAtlas: resourceIconAtlasRefSchema.optional(),
-  dominantColor: dominantColorSchema,
-  colorTag: factoryNodeColorTagSchema.optional(),
-  amountPerSecond: z.number().positive("Request rate must be greater than zero"),
-  position: z.object({
-    x: z.number(),
-    y: z.number(),
-  }),
-});
-
 export const factoryEdgeSchema = z.object({
   id: z.string().min(1),
   source: z.string().min(1),
@@ -382,8 +331,6 @@ export const factoryProjectSchema = z.object({
   recipes: z.array(recipeSchema),
   nodes: z.array(factoryNodeSchema),
   storages: z.array(factoryStorageSchema).optional().default([]),
-  stockpiles: z.array(factoryStockpileSchema).optional(),
-  requests: z.array(factoryRequestSchema).optional(),
   edges: z.array(factoryEdgeSchema),
   fuelProfiles: z.array(fuelProfileSchema),
   selectedFuelProfileId: z.string().optional(),
