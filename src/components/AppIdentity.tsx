@@ -7,7 +7,7 @@ interface AppIdentityProps {
 }
 
 /**
- * Title and game-version picker, at the head of the recipe browser panel.
+ * Game-version picker, at the head of the recipe browser panel.
  *
  * Rendered inside the panel's own `<aside>` rather than as a sibling above it.
  * As a sibling it was a separate box that had to be kept the same width and the
@@ -26,15 +26,10 @@ export function AppIdentity({ onLoadDatasetVersion }: AppIdentityProps) {
 
   return (
     <div className="shrink-0 border-b border-neutral-800 px-3 py-2">
-      <h1 className="truncate text-sm font-semibold text-neutral-100">GTNH Planner</h1>
-
-      {/*
-        Its own row under the title. Sharing one meant the title, the label and
-        the select competing for the column's width in a wide pixel font, and
-        the select lost every time; here it just takes what is left.
-      */}
+      {/* The app title lives in the global header row now; this panel head
+          only carries the dataset picker. */}
       <label
-        className="mt-1.5 flex items-center gap-2"
+        className="flex items-center gap-2"
         title="Which GTNH pack version every recipe is loaded from. Changing it reloads the recipe list and re-resolves the recipes already on your board."
       >
         <span className="shrink-0 text-[11px] font-semibold uppercase tracking-wide text-neutral-400">

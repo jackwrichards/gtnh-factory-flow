@@ -186,9 +186,9 @@ export function FactoryPlannerApp() {
   return (
     <div className="flex h-screen min-h-[720px] flex-col bg-canvas text-fg">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-surface px-3 py-1.5">
-        <span className="text-sm font-bold tracking-tight">
+        <h1 className="text-sm font-bold tracking-tight">
           GTNH <span className="text-cyan-500">Planner</span>
-        </span>
+        </h1>
         <div className="flex items-center gap-2">
           <BoardActions />
           <Link
