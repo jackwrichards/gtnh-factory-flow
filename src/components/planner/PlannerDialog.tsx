@@ -13,11 +13,14 @@ export function PlannerDialog({
   onClose,
   children,
   widthClassName = "w-[520px]",
+  heightClassName = "",
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
   widthClassName?: string;
+  /** e.g. "h-[86vh]" for pickers that want all the room they can get. */
+  heightClassName?: string;
 }) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -47,7 +50,7 @@ export function PlannerDialog({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`${widthClassName} flex max-h-[85vh] min-h-0 flex-col border border-line-strong bg-surface text-fg shadow-2xl`}
+        className={`${widthClassName} ${heightClassName} flex max-h-[88vh] min-h-0 flex-col border border-line-strong bg-surface text-fg shadow-2xl`}
       >
         <div className="flex h-11 shrink-0 items-center justify-between border-b border-line px-4">
           <span className="text-base font-semibold">{title}</span>
