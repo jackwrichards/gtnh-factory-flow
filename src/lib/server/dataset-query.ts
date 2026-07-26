@@ -18,6 +18,7 @@ import {
   GT_VOLTAGE_TIERS,
   isOreDictionaryResource,
   isVirtualChoiceResource,
+  resourceLabel,
   resourceMatchesInput,
 } from "@/lib/model";
 
@@ -67,6 +68,15 @@ interface LoadedRecipeIndex {
   };
   /** Tier-filtered "recipes using this resource" sets, keyed resource|tier. */
   solverUsesIndexCache?: Map<string, number[]>;
+  /**
+   * Reverse indexes over the whole resource table, built once. Without them,
+   * resolving one fluid's cell equivalents or one item's oredict groups walks
+   * every resource in the dataset — around a second per lookup, which turned
+   * deep solves into minutes.
+   */
+  cellItemsByFluidKey?: Map<string, Array<DatasetResource | DatasetResourceIndexEntry>>;
+  oredictNamesByMemberId?: Map<string, Set<string>>;
+  oredictWildcardMembers?: Array<{ baseId: string; name: string }>;
 }
 
 export interface DatasetRecipeRef {
@@ -748,6 +758,10 @@ async function prewarmDatasetVersionOnce(
   const catalog = await loadCatalog(versionId);
   getCatalogResourcesByKey(catalog);
   ensureResourceIndexes(catalog);
+  // The solver's equivalence indexes: one pass each here beats paying for
+  // them inside the first solve.
+  getCellItemsByFluidKey(catalog);
+  getOredictNamesForMember(catalog, "");
 
   if (catalog.version.recipeLookupIndexPath) {
     const lookup = await loadRecipeLookupIndex(catalog.version);
@@ -1407,22 +1421,61 @@ function getRecipeResourceScope(
   }
 
   const oreDictionaryNames = new Set(indexed?.oreDictionary ?? []);
-  for (const candidate of resourcesByKey.values()) {
-    if (
-      candidate.kind === "item" &&
-      isOreDictionaryResource(candidate) &&
-      candidate.alternatives?.some((alternative) =>
-        resourceIdsAreCompatible(alternative.id, resource.id),
-      )
-    ) {
-      oreDictionaryNames.add(candidate.id.slice("oredict:".length));
-    }
+  for (const name of getOredictNamesForMember(catalog, resource.id)) {
+    oreDictionaryNames.add(name);
   }
   for (const name of oreDictionaryNames ?? []) {
     addScopedResource(resources, { kind: "item", id: `oredict:${name}` });
   }
 
   return { resource, resources };
+}
+
+/**
+ * Which oredict groups list this concrete item, answered from a reverse index
+ * built once per dataset instead of scanning every resource per query.
+ */
+function getOredictNamesForMember(catalog: LoadedRecipeIndex, memberId: string): Set<string> {
+  if (!catalog.oredictNamesByMemberId || !catalog.oredictWildcardMembers) {
+    const byExactId = new Map<string, Set<string>>();
+    const wildcardMembers: Array<{ baseId: string; name: string }> = [];
+
+    for (const candidate of getCatalogResourcesByKey(catalog).values()) {
+      if (candidate.kind !== "item" || !isOreDictionaryResource(candidate)) {
+        continue;
+      }
+
+      const name = candidate.id.slice("oredict:".length);
+      for (const alternative of candidate.alternatives ?? []) {
+        if (alternative.id.endsWith("@32767")) {
+          wildcardMembers.push({
+            baseId: alternative.id.slice(0, -"@32767".length),
+            name,
+          });
+          continue;
+        }
+
+        const existing = byExactId.get(alternative.id);
+        if (existing) {
+          existing.add(name);
+        } else {
+          byExactId.set(alternative.id, new Set([name]));
+        }
+      }
+    }
+
+    catalog.oredictNamesByMemberId = byExactId;
+    catalog.oredictWildcardMembers = wildcardMembers;
+  }
+
+  const names = new Set(catalog.oredictNamesByMemberId.get(memberId) ?? []);
+  for (const wildcard of catalog.oredictWildcardMembers) {
+    if (memberId === wildcard.baseId || memberId.startsWith(`${wildcard.baseId}@`)) {
+      names.add(wildcard.name);
+    }
+  }
+
+  return names;
 }
 
 function getFilledCellEquivalentResources(
@@ -1449,17 +1502,74 @@ function getFilledCellEquivalentResources(
     return equivalents;
   }
 
-  for (const candidate of resourcesByKey.values()) {
-    if (
-      candidate.kind === "item" &&
-      !isOreDictionaryResource(candidate) &&
-      resourceMatchesInput(resource, candidate)
-    ) {
-      addEquivalent({ kind: "item", id: candidate.id });
+  // Fluid → filled-cell items via the prebuilt reverse index. Candidates are
+  // re-verified with the real matcher, so the index only narrows the search;
+  // it never changes what matches.
+  const cellItemsByFluidKey = getCellItemsByFluidKey(catalog);
+  const probeKeys = new Set(
+    [resource.id, normalizeEquivalenceName(resourceLabel(resource)), normalizeEquivalenceName(resource.id)].filter(
+      Boolean,
+    ),
+  );
+  for (const probeKey of probeKeys) {
+    for (const candidate of cellItemsByFluidKey.get(probeKey) ?? []) {
+      if (resourceMatchesInput(resource, candidate)) {
+        addEquivalent({ kind: "item", id: candidate.id });
+      }
     }
   }
 
   return equivalents;
+}
+
+function getCellItemsByFluidKey(
+  catalog: LoadedRecipeIndex,
+): Map<string, Array<DatasetResource | DatasetResourceIndexEntry>> {
+  if (catalog.cellItemsByFluidKey) {
+    return catalog.cellItemsByFluidKey;
+  }
+
+  const index = new Map<string, Array<DatasetResource | DatasetResourceIndexEntry>>();
+  const register = (key: string, resource: DatasetResource | DatasetResourceIndexEntry) => {
+    if (!key) {
+      return;
+    }
+    const existing = index.get(key);
+    if (existing) {
+      existing.push(resource);
+    } else {
+      index.set(key, [resource]);
+    }
+  };
+
+  for (const resource of getCatalogResourcesByKey(catalog).values()) {
+    if (resource.kind !== "item" || isOreDictionaryResource(resource)) {
+      continue;
+    }
+
+    const fluid = getFilledCellFluidEquivalent(resource);
+    if (!fluid) {
+      continue;
+    }
+
+    register(fluid.id, resource);
+    register(normalizeEquivalenceName(fluid.id), resource);
+    if (fluid.displayName) {
+      register(normalizeEquivalenceName(fluid.displayName), resource);
+    }
+  }
+
+  catalog.cellItemsByFluidKey = index;
+  return index;
+}
+
+/** Mirrors the matcher's name normalization: lowercase, alphanumeric words. */
+function normalizeEquivalenceName(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/^fluid:/, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function addScopedResource(
