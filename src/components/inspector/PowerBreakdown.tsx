@@ -96,14 +96,6 @@ export function PowerBreakdown() {
         <h2 className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">Power</h2>
         <span className="text-base font-bold tabular-nums text-fg">{formatRate(totalEuT, 0)}</span>
         <span className="text-[11px] font-semibold text-fg-muted">EU/t</span>
-        {mode === "actual" && totals.peakEuT > totals.actualEuT ? (
-          <span
-            className="truncate text-[11px] tabular-nums text-fg-subtle"
-            title={`Peak draw with every machine running flat out: ${formatEuT(totals.peakEuT)}`}
-          >
-            of {formatEuT(totals.peakEuT)} peak
-          </span>
-        ) : null}
 
         <div className="ml-auto flex overflow-hidden rounded border border-line">
           {(["peak", "actual"] as const).map((option) => (
@@ -129,6 +121,12 @@ export function PowerBreakdown() {
           ))}
         </div>
       </div>
+
+      {mode === "actual" && totals.peakEuT > totals.actualEuT ? (
+        <p className="mt-1 text-[10px] leading-tight text-fg-subtle">
+          Peak draw {formatEuT(totals.peakEuT)} — with every machine at 100%
+        </p>
+      ) : null}
 
       <div className="mt-1.5 flex overflow-hidden rounded border border-line">
         {(["tier", "machine", "usage"] as const).map((option) => (
@@ -255,7 +253,7 @@ function MachineBars({ slices }: { slices: PowerSlice[] }) {
  */
 function UsageBars({ slices }: { slices: MachineUsageSlice[] }) {
   return (
-    <ul className="mt-2 space-y-1">
+    <ul className="mt-2 space-y-1.5">
       {slices.map((slice) => (
         <li
           key={slice.key}
@@ -265,23 +263,25 @@ function UsageBars({ slices }: { slices: MachineUsageSlice[] }) {
             slice.nodeCount > 1 ? ` across ${slice.nodeCount} nodes` : ""
           }`}
         >
-          <div className="flex items-baseline gap-2 text-[11px] leading-tight">
+          <div className="flex items-baseline justify-between gap-2 text-[11px] leading-tight">
             <span className="truncate text-fg">{slice.label}</span>
-            <span className="ml-auto shrink-0 tabular-nums text-fg-subtle">
-              {formatRate(slice.actualEuT, 0)} / {formatEuT(slice.peakEuT)}
-            </span>
-            <span className="w-9 shrink-0 text-right font-semibold tabular-nums text-fg-muted">
+            <span className="shrink-0 font-semibold tabular-nums text-fg">
               {formatShare(slice.utilization)}
             </span>
           </div>
-          <div className="mt-0.5 h-2 w-full rounded-[4px] bg-surface-sunken">
-            <div
-              style={{
-                width: `${Math.min(Math.max(slice.utilization * 100, 1), 100)}%`,
-                backgroundColor: "var(--viz-series-1)",
-              }}
-              className="h-full rounded-[4px]"
-            />
+          <div className="mt-0.5 flex items-center gap-2">
+            <div className="h-2 flex-1 rounded-[4px] bg-surface-sunken">
+              <div
+                style={{
+                  width: `${Math.min(Math.max(slice.utilization * 100, 1), 100)}%`,
+                  backgroundColor: "var(--viz-series-1)",
+                }}
+                className="h-full rounded-[4px]"
+              />
+            </div>
+            <span className="shrink-0 text-[10px] tabular-nums text-fg-subtle">
+              {formatRate(slice.actualEuT, 0)} / {formatEuT(slice.peakEuT)}
+            </span>
           </div>
         </li>
       ))}
