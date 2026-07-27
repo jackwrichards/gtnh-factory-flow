@@ -100,12 +100,12 @@ export function describeEdgeRate(data: EdgeLabelInput | undefined): string {
   const unit = data.unit;
 
   if (starved && nameplate !== undefined && nameplate > flowing + 1e-6) {
-    return `The machine this feeds needs ${withUnit(nameplate, unit)} but only gets ${withUnit(flowing, unit)}, so it runs at ${formatSatisfactionPercent(flowing / nameplate)}. It takes ${formatEdgeValue(nameplate / Math.max(flowing, 1e-6))}× the current supply to fill it.`;
+    return `The machine this feeds needs ${withUnit(nameplate, unit)} but only gets ${withUnit(flowing, unit)}, so that machine runs at ${formatSatisfactionPercent(flowing / nameplate)}. It takes ${formatEdgeValue(nameplate / Math.max(flowing, 1e-6))}× the current supply to fill it.`;
   }
 
   const capacity = getEdgeSurplusCapacity(data);
   if (capacity !== undefined && capacity > flowing + 1e-6) {
-    return `The maker can produce ${withUnit(capacity, unit)} but only ${withUnit(flowing, unit)} is taken, so it runs at ${formatSatisfactionPercent(flowing / capacity)}. ${withUnit(capacity - flowing, unit)} is free for new machines.`;
+    return `The maker can produce ${withUnit(capacity, unit)} but only ${withUnit(flowing, unit)} is taken, so the maker runs at ${formatSatisfactionPercent(flowing / capacity)}. ${withUnit(capacity - flowing, unit)} is free for new machines.`;
   }
 
   if (capacity !== undefined) {
