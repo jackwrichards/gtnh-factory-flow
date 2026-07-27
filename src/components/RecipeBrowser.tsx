@@ -642,20 +642,6 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
               <option value="mod">By mod</option>
               <option value="recipes">Most recipes</option>
             </select>
-            <select
-              value={maxTier}
-              onChange={(event) => setMaxTier(event.target.value as TierFilter)}
-              title="Maximum machine tier"
-              aria-label="Maximum machine tier"
-              className="col-span-2 h-7 min-w-0 rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-xs text-neutral-100 outline-none"
-            >
-              <option value="all">All tiers</option>
-              {GT_VOLTAGE_TIERS.map((entry) => (
-                <option key={entry.tier} value={entry.tier}>
-                  Up to {entry.tier}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 
@@ -698,6 +684,8 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
           recipeMapTabs={recipeMapTabs}
           hasMore={recipeHasMore}
           selectedRecipeId={selectedRecipeId}
+          maxTier={maxTier}
+          onMaxTierChange={setMaxTier}
           onAdd={handleAddRecipe}
           onAddConnected={undefined}
           onBrowseResource={(resource, mode) =>
@@ -1268,6 +1256,8 @@ function RecipeBookOverlay({
   queryTotal,
   recipeMapTabs,
   selectedRecipeId,
+  maxTier,
+  onMaxTierChange,
   onAdd,
   onAddConnected,
   onBrowseResource,
@@ -1288,6 +1278,8 @@ function RecipeBookOverlay({
   queryTotal: number;
   recipeMapTabs: RecipeMapTab[];
   selectedRecipeId?: string;
+  maxTier: TierFilter;
+  onMaxTierChange: (tier: TierFilter) => void;
   onAdd: (recipe: RecipeSummary) => void | Promise<void>;
   onAddConnected?: (recipeId: string) => void | Promise<void>;
   onBrowseResource: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
@@ -1387,8 +1379,8 @@ function RecipeBookOverlay({
             <div />
           </div>
 
-          <div className="px-3 pt-2">
-            <label className="flex h-9 items-center gap-2 border-2 border-[var(--mc-33)] bg-[#17191d] px-2 text-sm text-neutral-100 shadow-[inset_2px_2px_0_#30343b,inset_-2px_-2px_0_#050607]">
+          <div className="flex gap-2 px-3 pt-2">
+            <label className="flex h-9 min-w-0 flex-1 items-center gap-2 border-2 border-[var(--mc-33)] bg-[#17191d] px-2 text-sm text-neutral-100 shadow-[inset_2px_2px_0_#30343b,inset_-2px_-2px_0_#050607]">
               <Search className="h-4 w-4 text-neutral-500" />
               <input
                 value={query}
@@ -1408,6 +1400,20 @@ function RecipeBookOverlay({
                 </button>
               ) : null}
             </label>
+            <select
+              value={maxTier}
+              onChange={(event) => onMaxTierChange(event.target.value as TierFilter)}
+              title="Hide recipes above this voltage tier (also flags too-high nodes on the board)"
+              aria-label="Maximum machine tier"
+              className="h-9 w-28 shrink-0 border-2 border-[var(--mc-33)] bg-[#17191d] px-1.5 text-sm text-neutral-100 outline-none shadow-[inset_2px_2px_0_#30343b,inset_-2px_-2px_0_#050607]"
+            >
+              <option value="all">All tiers</option>
+              {GT_VOLTAGE_TIERS.map((entry) => (
+                <option key={entry.tier} value={entry.tier}>
+                  ≤ {entry.tier}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-3" id="recipe-book-scroll">
