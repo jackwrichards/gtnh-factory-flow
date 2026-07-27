@@ -109,9 +109,12 @@ function UsageCellButton({
           <span className="h-full w-full rounded bg-surface-sunken" aria-hidden />
         )}
       </span>
+      {/* No plate behind the text — a shadow keeps it readable over any icon
+          without reading as a box. */}
       <span
         className={[
-          "absolute bottom-0.5 right-0.5 rounded bg-surface/85 px-1 py-0.5 text-[11px] font-bold leading-none tabular-nums backdrop-blur-[2px]",
+          "pointer-events-none absolute inset-x-0 bottom-0.5 text-center text-[11px] font-bold leading-none tabular-nums",
+          "[text-shadow:0_0_3px_rgba(255,255,255,0.95),0_1px_2px_rgba(255,255,255,0.9)] dark:[text-shadow:0_0_3px_rgba(0,0,0,0.9),0_1px_2px_rgba(0,0,0,0.95)]",
           STATUS_TEXT[cell.status] ?? "text-fg",
         ].join(" ")}
       >
