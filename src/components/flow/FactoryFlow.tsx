@@ -1726,8 +1726,8 @@ function PaintToolbar({
   );
 }
 
-/** Matches rate tokens like "10/s", "1,200.5/s" or "12 L/s" in a sentence. */
-const RATE_TOKEN_PATTERN = /(\d[\d,]*(?:\.\d+)?(?:\s?L)?\/[a-z]+)/g;
+/** Matches the figures in a sentence: rates ("10/s", "12 L/s"), percents ("20%") and multipliers ("5×"). */
+const RATE_TOKEN_PATTERN = /(\d[\d,]*(?:\.\d+)?(?:(?:\s?L)?\/[a-z]+|%|×))/g;
 
 /**
  * Lifts the rates out of a plain-English sentence so they read as figures:
