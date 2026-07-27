@@ -45,11 +45,11 @@ export function UsageLimitContent({
   entries: UsageLimitEntry[];
 }) {
   return (
-    <div className="w-56">
+    <div className="w-64">
       <div className="flex items-baseline gap-2">
-        <span className="truncate text-[12px] font-semibold text-white">{title}</span>
+        <span className="truncate text-[14px] font-semibold text-white">{title}</span>
         <span
-          className="ml-auto shrink-0 text-[12px] font-bold tabular-nums"
+          className="ml-auto shrink-0 text-[14px] font-bold tabular-nums"
           style={{ color: usagePercentColor(utilization, status) }}
         >
           {formatSatisfactionPercent(utilization)}
@@ -57,10 +57,10 @@ export function UsageLimitContent({
       </div>
 
       {entries.length > 0 ? (
-        <ul className="mt-1.5 space-y-1.5">
+        <ul className="mt-2 space-y-2">
           {entries.map((entry, index) => (
             <li key={entry.key}>
-              <div className="flex items-baseline gap-2 text-[10px] leading-none">
+              <div className="flex items-baseline gap-2 text-[12px] leading-none">
                 <span
                   className={
                     index === 0
@@ -75,7 +75,7 @@ export function UsageLimitContent({
                   {entryPercent(entry)}
                 </span>
               </div>
-              <p className="mt-0.5 text-[10px] leading-snug text-slate-400">{entry.detail}</p>
+              <p className="mt-0.5 text-[12px] leading-snug text-slate-400">{entry.detail}</p>
             </li>
           ))}
         </ul>

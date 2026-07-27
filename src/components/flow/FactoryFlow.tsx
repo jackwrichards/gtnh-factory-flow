@@ -2106,7 +2106,7 @@ function ResourceEdgeComponent({
           </div>
           {isLabelHovered && !isLabelDragging ? (
             <div
-              className="nodrag nopan pointer-events-none absolute w-60 border-2 bg-[#2b2d32] px-3 py-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14),inset_-1px_-1px_0_rgba(0,0,0,0.55),0_6px_16px_rgba(0,0,0,0.55)]"
+              className="nodrag nopan pointer-events-none absolute w-64 border-2 bg-[#2b2d32] px-3 py-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14),inset_-1px_-1px_0_rgba(0,0,0,0.55),0_6px_16px_rgba(0,0,0,0.55)]"
               style={{
                 transform: `translate(-50%, -100%) translate(${labelX}px, ${labelY - 22}px)`,
                 borderColor: labelAccentColor,
@@ -2121,19 +2121,19 @@ function ResourceEdgeComponent({
                   bare
                   className="!h-[20px] !w-[20px]"
                 />
-                <span className="truncate text-[11px] font-semibold text-white">
+                <span className="truncate text-[13px] font-semibold text-white">
                   {data.resource.displayName ?? data.resource.id}
                 </span>
                 {labelToneWord ? (
                   <span
-                    className="ml-auto shrink-0 text-[9px] font-bold uppercase tracking-wide"
+                    className="ml-auto shrink-0 text-[11px] font-bold uppercase tracking-wide"
                     style={{ color: labelAccentColor }}
                   >
                     {labelToneWord}
                   </span>
                 ) : null}
               </div>
-              <p className="mt-1 text-[10px] leading-snug text-slate-300">
+              <p className="mt-1 text-[12px] leading-snug text-slate-300">
                 {renderRateSentence(describeEdgeRate(data), labelAccentColor)}
               </p>
             </div>
