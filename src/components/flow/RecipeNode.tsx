@@ -45,6 +45,8 @@ import {
 } from "@/lib/model";
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
+import { UsageLimitContent } from "@/components/inspector/UsageLimitContent";
+import { buildUsageLimitChain } from "@/components/inspector/usage-limits";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { usesNativeNeiChrome } from "@/lib/nei/layout";
 import type { NeiPositionedSlot } from "@/lib/nei/layout";
@@ -578,7 +580,12 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               onChange={(machineCount) => updateNode(projectNode.id, { machineCount })}
               onOptimize={() => optimizeMachineCount(projectNode.id)}
             />
-            <Stat label="Usage" value={`${formatRate(utilizationPercent, 1)}%`} />
+            <UsageStat
+              nodeId={projectNode.id}
+              title={recipe.machineType || recipe.name}
+              utilizationPercent={utilizationPercent}
+              result={result}
+            />
             <Stat
               label={isCropProductionNode ? "Power" : "EU/t"}
               value={isCropProductionNode ? "Passive" : formatRate(result?.euT ?? 0, 0)}
@@ -591,6 +598,64 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
 }
 
 export const RecipeNode = memo(RecipeNodeComponent);
+
+/**
+ * The Usage stat, coloured by the solver's status bands, with the "what limits
+ * this machine" chain on hover. The chain is only computed while hovered so a
+ * board full of nodes pays nothing for it.
+ */
+function UsageStat({
+  nodeId,
+  title,
+  utilizationPercent,
+  result,
+}: {
+  nodeId: string;
+  title: string;
+  utilizationPercent: number;
+  result?: NodeThroughputResult;
+}) {
+  const [isHovered, setHovered] = useState(false);
+  const project = useFactoryStore((state) => state.project);
+  const lastResult = useFactoryStore((state) => state.lastResult);
+  const chain = useMemo(
+    () => (isHovered ? buildUsageLimitChain(project, lastResult, nodeId) : []),
+    [isHovered, lastResult, nodeId, project],
+  );
+  const valueClassName =
+    result?.status === "bottleneck"
+      ? "text-red-700"
+      : result?.status === "balanced"
+        ? "text-emerald-700"
+        : undefined;
+
+  return (
+    <span
+      className="contents"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <MinecraftTooltip
+        content={
+          chain.length > 0 ? (
+            <UsageLimitContent
+              title={title}
+              utilization={result?.utilization ?? 0}
+              status={result?.status}
+              entries={chain}
+            />
+          ) : undefined
+        }
+      >
+        <Stat
+          label="Usage"
+          value={`${formatRate(utilizationPercent, 1)}%`}
+          valueClassName={valueClassName}
+        />
+      </MinecraftTooltip>
+    </span>
+  );
+}
 
 function recipeContainsSearchResource(recipe: Recipe, query: string) {
   const normalizedQuery = normalizeSearch(query);
@@ -1225,11 +1290,19 @@ function getConnectionSlotState(
   return "idle";
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
   return (
     <div className="min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
       <div className="truncate text-[9px] uppercase text-[var(--mc-ink-muted)]">{label}</div>
-      <div className="truncate font-medium">{value}</div>
+      <div className={["truncate font-medium", valueClassName ?? ""].join(" ")}>{value}</div>
     </div>
   );
 }

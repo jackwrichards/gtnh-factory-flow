@@ -2,8 +2,11 @@
 
 import { useMemo } from "react";
 import { useFactoryStore } from "@/store/factory-store";
+import { MinecraftTooltip } from "../nei/MinecraftTooltip";
 import { ResourceIcon } from "../nei/ResourceIcon";
 import { buildUsageCells, type UsageCell, type UsageIconResource } from "./usage-grid";
+import { UsageLimitContent } from "./UsageLimitContent";
+import { buildUsageLimitChain, type UsageLimitEntry } from "./usage-limits";
 
 /**
  * Percent colour keys to the solver's own status thresholds rather than
@@ -43,6 +46,14 @@ export function UsagePanel() {
     [machineIconsByRecipeMap, project, result],
   );
 
+  // The limit chain is only built for the cell being hovered, which is also
+  // the node lit up on the canvas.
+  const hoveredNodeId = useFactoryStore((state) => state.hoveredUsageNodeId);
+  const hoveredChain = useMemo(
+    () => (hoveredNodeId ? buildUsageLimitChain(project, result, hoveredNodeId) : []),
+    [hoveredNodeId, project, result],
+  );
+
   if (cells.length === 0) {
     return null;
   }
@@ -61,6 +72,7 @@ export function UsagePanel() {
           <UsageCellButton
             key={cell.nodeId}
             cell={cell}
+            limitChain={cell.nodeId === hoveredNodeId ? hoveredChain : undefined}
             onHover={setHoveredUsageNodeId}
             onSelect={selectNode}
           />
@@ -72,14 +84,28 @@ export function UsagePanel() {
 
 function UsageCellButton({
   cell,
+  limitChain,
   onHover,
   onSelect,
 }: {
   cell: UsageCell;
+  limitChain?: UsageLimitEntry[];
   onHover: (nodeId?: string) => void;
   onSelect: (nodeId: string) => void;
 }) {
   return (
+    <MinecraftTooltip
+      content={
+        limitChain && limitChain.length > 0 ? (
+          <UsageLimitContent
+            title={`${cell.label}${cell.machineCount > 1 ? ` ×${cell.machineCount}` : ""}`}
+            utilization={cell.utilization}
+            status={cell.status}
+            entries={limitChain}
+          />
+        ) : undefined
+      }
+    >
     <button
       type="button"
       onMouseEnter={() => onHover(cell.nodeId)}
@@ -87,9 +113,6 @@ function UsageCellButton({
       onFocus={() => onHover(cell.nodeId)}
       onBlur={() => onHover(undefined)}
       onClick={() => onSelect(cell.nodeId)}
-      title={`${cell.label}${cell.machineCount > 1 ? ` ×${cell.machineCount}` : ""} — ${
-        cell.recipeName
-      } — running at ${formatUsagePercent(cell.utilization)}`}
       className="relative aspect-square overflow-hidden rounded border border-transparent hover:border-cyan-300 hover:bg-cyan-50 dark:hover:border-cyan-500/60 dark:hover:bg-cyan-500/10"
     >
       {/* The icon owns the whole cell; the percent floats over it so growing
@@ -122,5 +145,6 @@ function UsageCellButton({
         {formatUsagePercent(cell.utilization)}
       </span>
     </button>
+    </MinecraftTooltip>
   );
 }
