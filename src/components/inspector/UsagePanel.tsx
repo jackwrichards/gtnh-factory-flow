@@ -56,10 +56,7 @@ export function UsagePanel() {
         Usage
       </h2>
 
-      <div
-        className="mt-1 grid max-h-56 gap-0.5 overflow-y-auto overscroll-contain"
-        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(68px, 1fr))" }}
-      >
+      <div className="mt-1 grid max-h-56 grid-cols-6 gap-0.5 overflow-y-auto overscroll-contain">
         {cells.map((cell) => (
           <UsageCellButton
             key={cell.nodeId}
@@ -96,7 +93,9 @@ function UsageCellButton({
       className="relative aspect-square overflow-hidden rounded border border-transparent hover:border-cyan-300 hover:bg-cyan-50 dark:hover:border-cyan-500/60 dark:hover:bg-cyan-500/10"
     >
       {/* The icon owns the whole cell; the percent floats over it so growing
-          the art never grows the cell. */}
+          the art never grows the cell. Sprites ship with a wide transparent
+          margin baked in — the scale crop-zooms past it so the art, not the
+          margin, is what fills the cell. */}
       <span className="absolute inset-0 flex items-center justify-center overflow-hidden">
         {cell.icon ? (
           <ResourceIcon
@@ -105,7 +104,7 @@ function UsageCellButton({
             bare
             showAmount={false}
             tooltip={false}
-            className="!h-full !w-full"
+            className="!h-full !w-full scale-[1.3]"
           />
         ) : (
           <span className="h-full w-full rounded bg-surface-sunken" aria-hidden />
