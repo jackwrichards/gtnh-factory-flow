@@ -34,6 +34,9 @@ export interface RecipeDatasetResourceQuery {
   query: string;
   offset: number;
   limit: number;
+  kind?: "item" | "fluid";
+  mod?: string;
+  sort?: "relevance" | "name" | "mod" | "recipes";
 }
 
 export interface RecipeDatasetResourceQueryResult {
@@ -42,6 +45,8 @@ export interface RecipeDatasetResourceQueryResult {
   offset: number;
   limit: number;
   hasMore: boolean;
+  /** Mods present in the current search scope, with match counts. */
+  mods?: Array<{ id: string; count: number }>;
 }
 
 export interface RecipeDatasetResolveRef {
@@ -156,6 +161,15 @@ export async function queryRecipeDatasetResources(
   url.searchParams.set("query", query.query);
   url.searchParams.set("offset", String(query.offset));
   url.searchParams.set("limit", String(query.limit));
+  if (query.kind) {
+    url.searchParams.set("kind", query.kind);
+  }
+  if (query.mod) {
+    url.searchParams.set("mod", query.mod);
+  }
+  if (query.sort && query.sort !== "relevance") {
+    url.searchParams.set("sort", query.sort);
+  }
   addDatasetCacheKey(url, version);
 
   return fetchJson<RecipeDatasetResourceQueryResult>(url.toString(), { signal: options.signal });

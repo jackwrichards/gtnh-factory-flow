@@ -239,12 +239,26 @@ export async function resolveDatasetRecipeRefs(
     .filter((match): match is { importedId: string; recipeId: string } => Boolean(match));
 }
 
+export type ResourceQuerySort = "relevance" | "name" | "mod" | "recipes";
+
+/** Mod is encoded in the id prefix ("gregtech:gt.metaitem..."); fluids are bare ids. */
+export function getResourceModId(resource: { id: string; kind: string }): string {
+  const colon = resource.id.indexOf(":");
+  if (colon > 0) {
+    return resource.id.slice(0, colon);
+  }
+  return resource.kind === "fluid" ? "fluids" : "other";
+}
+
 export async function queryDatasetResources(
   versionId: string,
   request: {
     query: string;
     offset: number;
     limit: number;
+    kind?: "item" | "fluid";
+    mod?: string;
+    sort?: ResourceQuerySort;
   },
 ) {
   const catalog = await loadCatalog(versionId);
@@ -252,6 +266,7 @@ export async function queryDatasetResources(
   const queryTokens = splitSearchTokens(request.query);
   const candidateIndexes = queryTextSearchIndex(indexes.searchIndex, queryTokens);
   const matches: number[] = [];
+  const modCounts = new Map<string, number>();
 
   for (const resourceIndex of candidateIndexes ?? indexes.sortedResourceIndexes) {
     const resource = catalog.resourceIndex[resourceIndex];
@@ -268,7 +283,42 @@ export async function queryDatasetResources(
     ) {
       continue;
     }
+    if (request.kind && resource.kind !== request.kind) {
+      continue;
+    }
+
+    // Mod counts reflect the search+kind scope, so the mod dropdown always
+    // shows what picking each mod would leave.
+    const modId = getResourceModId(resource);
+    modCounts.set(modId, (modCounts.get(modId) ?? 0) + 1);
+    if (request.mod && modId !== request.mod) {
+      continue;
+    }
     matches.push(resourceIndex);
+  }
+
+  const sort = request.sort ?? "relevance";
+  if (sort !== "relevance") {
+    const nameOf = (index: number) => {
+      const resource = catalog.resourceIndex[index];
+      return (resource?.displayName ?? resource?.id ?? "").toLowerCase();
+    };
+    if (sort === "name") {
+      matches.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+    } else if (sort === "mod") {
+      matches.sort((a, b) => {
+        const modCompare = getResourceModId(catalog.resourceIndex[a]).localeCompare(
+          getResourceModId(catalog.resourceIndex[b]),
+        );
+        return modCompare !== 0 ? modCompare : nameOf(a).localeCompare(nameOf(b));
+      });
+    } else if (sort === "recipes") {
+      matches.sort((a, b) => {
+        const countDelta =
+          (catalog.resourceIndex[b]?.recipeCount ?? 0) - (catalog.resourceIndex[a]?.recipeCount ?? 0);
+        return countDelta !== 0 ? countDelta : nameOf(a).localeCompare(nameOf(b));
+      });
+    }
   }
 
   return {
@@ -280,6 +330,9 @@ export async function queryDatasetResources(
     offset: request.offset,
     limit: request.limit,
     hasMore: request.offset + request.limit < matches.length,
+    mods: [...modCounts.entries()]
+      .map(([id, count]) => ({ id, count }))
+      .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id)),
   };
 }
 

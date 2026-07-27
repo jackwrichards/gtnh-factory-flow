@@ -1,6 +1,6 @@
 "use client";
 
-import { GitBranchPlus, Plus, Search, X } from "lucide-react";
+import { GitBranchPlus, LayoutGrid, List, Plus, Search, X } from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { PointerEvent, RefObject } from "react";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
@@ -30,9 +30,25 @@ import { ResourceIcon } from "./nei/ResourceIcon";
 
 const RECIPE_QUERY_LIMIT = 120;
 const RESOURCE_DEFAULT_PAGE_SIZE = 6;
-const RESOURCE_ROW_HEIGHT = 62;
-const RESOURCE_ROW_GAP = 8;
+const RESOURCE_ROW_HEIGHT = 40;
+const RESOURCE_ROW_GAP = 2;
+const RESOURCE_GRID_CELL = 56;
+const RESOURCE_GRID_GAP = 4;
 const RESOURCE_PAGER_HEIGHT = 40;
+const RESOURCE_VIEW_STORAGE_KEY = "gtnh-factory-flow.resource-view.v1";
+
+type ResourceKindFilter = "all" | "item" | "fluid";
+type ResourceSortMode = "relevance" | "name" | "mod" | "recipes";
+type ResourceViewMode = "list" | "grid";
+
+/** Mod is the id prefix ("gregtech:..."); bare fluid ids group as "fluids". */
+function getResourceModLabel(resource: { id: string; kind: string }): string {
+  const colon = resource.id.indexOf(":");
+  if (colon > 0) {
+    return resource.id.slice(0, colon);
+  }
+  return resource.kind === "fluid" ? "fluids" : "other";
+}
 const RESOURCE_HISTORY_VISIBLE_FALLBACK = 8;
 const RECIPE_QUERY_CACHE_TTL_MS = 90_000;
 const RESOURCE_QUERY_CACHE_TTL_MS = 90_000;
@@ -74,6 +90,11 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
   const [resourcePageSize, setResourcePageSize] = useState(RESOURCE_DEFAULT_PAGE_SIZE);
   const [resourceResults, setResourceResults] = useState<IndexedResource[]>([]);
   const [resourceTotal, setResourceTotal] = useState(0);
+  const [resourceKind, setResourceKind] = useState<ResourceKindFilter>("all");
+  const [resourceMod, setResourceMod] = useState("");
+  const [resourceSort, setResourceSort] = useState<ResourceSortMode>("relevance");
+  const [resourceView, setResourceView] = useState<ResourceViewMode>("list");
+  const [resourceMods, setResourceMods] = useState<Array<{ id: string; count: number }>>([]);
   const [resourceQueryLoading, setResourceQueryLoading] = useState(false);
   const [resourceQueryError, setResourceQueryError] = useState<string | undefined>();
   const [recipeMapIcons, setRecipeMapIcons] = useState<Record<string, DatasetResourceIndexEntry>>(
@@ -153,10 +174,35 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
             query: debouncedRecipeSearch.trim(),
             offset: page * resourcePageSize,
             limit: resourcePageSize,
+            kind: resourceKind,
+            mod: resourceMod,
+            sort: resourceSort,
           })
         : "",
-    [debouncedRecipeSearch, resourcePageSize, selectedDatasetVersion],
+    [
+      debouncedRecipeSearch,
+      resourceKind,
+      resourceMod,
+      resourcePageSize,
+      resourceSort,
+      selectedDatasetVersion,
+    ],
   );
+
+  // The saved view preference is applied after mount (deferred) so the SSR
+  // markup and first client render agree.
+  useEffect(() => {
+    const stored = window.localStorage.getItem(RESOURCE_VIEW_STORAGE_KEY);
+    if (stored === "grid") {
+      return deferStateUpdate(() => setResourceView("grid"));
+    }
+    return undefined;
+  }, []);
+
+  const changeResourceView = useCallback((view: ResourceViewMode) => {
+    setResourceView(view);
+    window.localStorage.setItem(RESOURCE_VIEW_STORAGE_KEY, view);
+  }, []);
 
   const prefetchRecipeMap = useCallback(
     (recipeMap: string) => {
@@ -265,7 +311,15 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
 
   useEffect(() => {
     return deferStateUpdate(() => setResourcePage(0));
-  }, [debouncedRecipeSearch, selectedDatasetVersion?.id]);
+  }, [debouncedRecipeSearch, resourceKind, resourceMod, resourceSort, selectedDatasetVersion?.id]);
+
+  // Kind/search changes can empty the selected mod's scope; drop a stale pick.
+  useEffect(() => {
+    if (resourceMod && resourceMods.length > 0 && !resourceMods.some((m) => m.id === resourceMod)) {
+      return deferStateUpdate(() => setResourceMod(""));
+    }
+    return undefined;
+  }, [resourceMod, resourceMods]);
 
   useEffect(() => {
     const maxPage = Math.max(0, Math.ceil(resourceTotal / resourcePageSize) - 1);
@@ -292,6 +346,7 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
       return deferStateUpdate(() => {
         setResourceResults(cached.resources);
         setResourceTotal(cached.total);
+        setResourceMods(cached.mods ?? []);
         setResourceQueryLoading(false);
         setResourceQueryError(undefined);
       });
@@ -313,6 +368,9 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
         query,
         offset: resourcePage * resourcePageSize,
         limit: resourcePageSize,
+        kind: resourceKind === "all" ? undefined : resourceKind,
+        mod: resourceMod || undefined,
+        sort: resourceSort,
       },
       { signal: controller.signal },
     )
@@ -324,6 +382,7 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
         trimResourceQueryCache(resourceQueryCacheRef.current);
         setResourceResults(result.resources);
         setResourceTotal(result.total);
+        setResourceMods(result.mods ?? []);
         setResourceQueryLoading(false);
       })
       .catch((error) => {
@@ -344,8 +403,11 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
     datasetManifestUrl,
     getResourceQueryKey,
     debouncedRecipeSearch,
+    resourceKind,
+    resourceMod,
     resourcePage,
     resourcePageSize,
+    resourceSort,
     selectedDatasetVersion,
   ]);
 
@@ -516,21 +578,85 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
             ) : null}
           </label>
 
-          <label className="mt-2 grid gap-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
-            Tier
+          <div className="mt-2 flex items-center gap-1">
+            {(
+              [
+                ["all", "All"],
+                ["item", "Items"],
+                ["fluid", "Fluids"],
+              ] as Array<[ResourceKindFilter, string]>
+            ).map(([kind, label]) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => setResourceKind(kind)}
+                className={[
+                  "h-7 flex-1 rounded-[4px] border text-xs font-medium",
+                  resourceKind === kind
+                    ? "border-cyan-500 bg-cyan-500/15 text-cyan-300"
+                    : "border-neutral-700 bg-[#17191d] text-neutral-400 hover:text-neutral-200",
+                ].join(" ")}
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => changeResourceView(resourceView === "list" ? "grid" : "list")}
+              title={resourceView === "list" ? "Switch to grid view" : "Switch to list view"}
+              aria-label={resourceView === "list" ? "Switch to grid view" : "Switch to list view"}
+              className="flex h-7 w-8 shrink-0 items-center justify-center rounded-[4px] border border-neutral-700 bg-[#17191d] text-neutral-400 hover:text-neutral-200"
+            >
+              {resourceView === "list" ? (
+                <LayoutGrid className="h-3.5 w-3.5" />
+              ) : (
+                <List className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <select
+              value={resourceMod}
+              onChange={(event) => setResourceMod(event.target.value)}
+              title="Filter by mod"
+              aria-label="Filter by mod"
+              className="h-7 min-w-0 rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-xs text-neutral-100 outline-none"
+            >
+              <option value="">All mods</option>
+              {resourceMods.map((mod) => (
+                <option key={mod.id} value={mod.id}>
+                  {mod.id} ({mod.count})
+                </option>
+              ))}
+            </select>
+            <select
+              value={resourceSort}
+              onChange={(event) => setResourceSort(event.target.value as ResourceSortMode)}
+              title="Sort results"
+              aria-label="Sort results"
+              className="h-7 min-w-0 rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-xs text-neutral-100 outline-none"
+            >
+              <option value="relevance">Best match</option>
+              <option value="name">Name A–Z</option>
+              <option value="mod">By mod</option>
+              <option value="recipes">Most recipes</option>
+            </select>
             <select
               value={maxTier}
               onChange={(event) => setMaxTier(event.target.value as TierFilter)}
-              className="h-8 rounded-[4px] border border-neutral-700 bg-[#17191d] px-2 text-sm normal-case tracking-normal text-neutral-100 outline-none"
+              title="Maximum machine tier"
+              aria-label="Maximum machine tier"
+              className="col-span-2 h-7 min-w-0 rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-xs text-neutral-100 outline-none"
             >
               <option value="all">All tiers</option>
               {GT_VOLTAGE_TIERS.map((entry) => (
                 <option key={entry.tier} value={entry.tier}>
-                  {entry.tier}
+                  Up to {entry.tier}
                 </option>
               ))}
             </select>
-          </label>
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden p-3">
@@ -550,6 +676,7 @@ export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
               isLoading={resourceQueryLoading}
               error={resourceQueryError}
               activeResource={activeResource}
+              view={resourceView}
               onPageChange={setResourcePage}
               onPageSizeChange={setResourcePageSize}
               onBrowse={browseResource}
@@ -689,9 +816,11 @@ function useVisibleResourceHistorySlots(resourceCount: number) {
 
 function useResourcePageSize(
   containerRef: RefObject<HTMLDivElement | null>,
+  view: ResourceViewMode,
   onPageSizeChange: (pageSize: number) => void,
 ) {
   const [pageSize, setPageSize] = useState(RESOURCE_DEFAULT_PAGE_SIZE);
+  const [gridColumns, setGridColumns] = useState(6);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -702,12 +831,28 @@ function useResourcePageSize(
     const updatePageSize = () => {
       const availableHeight = Math.max(RESOURCE_ROW_HEIGHT, container.clientHeight);
       const listHeight = Math.max(RESOURCE_ROW_HEIGHT, availableHeight - RESOURCE_PAGER_HEIGHT);
-      const nextPageSize = Math.max(
-        1,
-        Math.floor((listHeight + RESOURCE_ROW_GAP) / RESOURCE_ROW_HEIGHT),
-      );
+      let nextPageSize: number;
+      let nextColumns = 6;
+      if (view === "grid") {
+        const width = Math.max(RESOURCE_GRID_CELL, container.clientWidth);
+        nextColumns = Math.max(
+          1,
+          Math.floor((width + RESOURCE_GRID_GAP) / (RESOURCE_GRID_CELL + RESOURCE_GRID_GAP)),
+        );
+        const rows = Math.max(
+          1,
+          Math.floor((listHeight + RESOURCE_GRID_GAP) / (RESOURCE_GRID_CELL + RESOURCE_GRID_GAP)),
+        );
+        nextPageSize = nextColumns * rows;
+      } else {
+        nextPageSize = Math.max(
+          1,
+          Math.floor((listHeight + RESOURCE_ROW_GAP) / (RESOURCE_ROW_HEIGHT + RESOURCE_ROW_GAP)),
+        );
+      }
 
       setPageSize((current) => (current === nextPageSize ? current : nextPageSize));
+      setGridColumns((current) => (current === nextColumns ? current : nextColumns));
       onPageSizeChange(nextPageSize);
     };
 
@@ -715,9 +860,9 @@ function useResourcePageSize(
     const observer = new ResizeObserver(updatePageSize);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [containerRef, onPageSizeChange]);
+  }, [containerRef, onPageSizeChange, view]);
 
-  return pageSize;
+  return { pageSize, gridColumns };
 }
 
 interface IndexedResource extends Pick<
@@ -758,6 +903,7 @@ function VirtualResourceResultList({
   isLoading,
   error,
   activeResource,
+  view,
   onPageChange,
   onPageSizeChange,
   onBrowse,
@@ -768,12 +914,13 @@ function VirtualResourceResultList({
   isLoading: boolean;
   error?: string;
   activeResource?: IndexedResource;
+  view: ResourceViewMode;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onBrowse: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const pageSize = useResourcePageSize(containerRef, onPageSizeChange);
+  const { pageSize, gridColumns } = useResourcePageSize(containerRef, view, onPageSizeChange);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const handlePreviousPage = useCallback(() => {
     onPageChange(Math.max(0, currentPage - 1));
@@ -789,9 +936,7 @@ function VirtualResourceResultList({
           {error}
         </div>
       ) : isLoading && resources.length === 0 ? (
-        <div className="rounded border border-dashed border-neutral-600 p-4 text-sm text-neutral-300">
-          Loading resources...
-        </div>
+        <ResourceResultSkeleton view={view} pageSize={pageSize} gridColumns={gridColumns} />
       ) : resources.length === 0 ? (
         <div className="rounded border border-dashed border-neutral-600 p-4 text-sm text-neutral-300">
           No matching resource.
@@ -800,6 +945,9 @@ function VirtualResourceResultList({
         <ResourceResultPage
           resources={resources}
           activeResource={activeResource}
+          view={view}
+          gridColumns={gridColumns}
+          isRefreshing={isLoading}
           onBrowseResource={onBrowse}
         />
       )}
@@ -809,6 +957,49 @@ function VirtualResourceResultList({
         onPreviousPage={handlePreviousPage}
         onNextPage={handleNextPage}
       />
+    </div>
+  );
+}
+
+/** Pulsing placeholders shaped like the results, instead of a text box. */
+function ResourceResultSkeleton({
+  view,
+  pageSize,
+  gridColumns,
+}: {
+  view: ResourceViewMode;
+  pageSize: number;
+  gridColumns: number;
+}) {
+  const count = Math.max(3, Math.min(pageSize, 60));
+  if (view === "grid") {
+    return (
+      <div
+        className="grid min-h-0 flex-1 content-start gap-1 overflow-hidden"
+        style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}
+        aria-label="Loading resources"
+      >
+        {Array.from({ length: count }, (_, index) => (
+          <div
+            key={index}
+            className="aspect-square animate-pulse rounded-[4px] bg-neutral-800/70"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden" aria-label="Loading resources">
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className="flex h-10 shrink-0 items-center gap-2.5 px-1.5">
+          <div className="h-8 w-8 animate-pulse rounded-[4px] bg-neutral-800/70" />
+          <div
+            className="h-3 animate-pulse rounded bg-neutral-800/70"
+            style={{ width: `${45 + ((index * 17) % 40)}%` }}
+          />
+        </div>
+      ))}
     </div>
   );
 }
@@ -856,10 +1047,16 @@ function ResourcePager({
 function ResourceResultPage({
   resources,
   activeResource,
+  view,
+  gridColumns,
+  isRefreshing,
   onBrowseResource,
 }: {
   resources: IndexedResource[];
   activeResource?: IndexedResource;
+  view: ResourceViewMode;
+  gridColumns: number;
+  isRefreshing: boolean;
   onBrowseResource: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
   const [, startBrowseTransition] = useTransition();
@@ -871,9 +1068,57 @@ function ResourceResultPage({
     [onBrowseResource, startBrowseTransition],
   );
 
+  if (view === "grid") {
+    return (
+      <div
+        className={[
+          "grid min-h-0 flex-1 content-start gap-1 overflow-hidden",
+          isRefreshing ? "opacity-60" : "",
+        ].join(" ")}
+        style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}
+        aria-label="Resource results"
+        role="listbox"
+      >
+        {resources.map((resource) => {
+          const active =
+            activeResource?.kind === resource.kind && activeResource.id === resource.id;
+          return (
+            <button
+              key={`${resource.kind}:${resource.id}`}
+              type="button"
+              onClick={() => browse(resource, "recipes")}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                browse(resource, "uses");
+              }}
+              className={[
+                "minecraft-pixel-art flex aspect-square items-center justify-center rounded-[4px] border",
+                active
+                  ? "border-cyan-400 bg-cyan-500/10"
+                  : "border-transparent hover:border-neutral-500 hover:bg-white/5",
+              ].join(" ")}
+              role="option"
+              aria-selected={active}
+            >
+              <ResourceIcon
+                resource={{ ...resource, amount: 1 }}
+                size="md"
+                bare
+                showAmount={false}
+              />
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col justify-start gap-2 overflow-hidden"
+      className={[
+        "flex min-h-0 flex-1 flex-col justify-start gap-0.5 overflow-hidden",
+        isRefreshing ? "opacity-60" : "",
+      ].join(" ")}
       aria-label="Resource results"
       role="listbox"
     >
@@ -889,21 +1134,34 @@ function ResourceResultPage({
               event.preventDefault();
               browse(resource, "uses");
             }}
+            title={resourceLabel(resource)}
             className={[
-              "flex h-[54px] w-full items-center gap-3 overflow-hidden rounded-[4px] border bg-[#303238] px-2 text-left text-sm text-neutral-50 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]",
-              active ? "border-cyan-400" : "border-neutral-700 hover:border-neutral-500",
+              "flex h-10 w-full shrink-0 items-center gap-2.5 overflow-hidden rounded-[4px] border px-1.5 text-left text-sm text-neutral-50",
+              active
+                ? "border-cyan-400 bg-cyan-500/10"
+                : "border-transparent hover:bg-white/5",
             ].join(" ")}
             role="option"
             aria-selected={active}
           >
-            <ResourceIcon
-              resource={{ ...resource, amount: 1 }}
-              size="sm"
-              showAmount={false}
-              tooltip={false}
-            />
-            <span className="min-w-0 flex-1 truncate [text-shadow:1px_1px_0_#000]">
-              {resourceLabel(resource)}
+            <span className="minecraft-pixel-art flex h-8 w-8 shrink-0 items-center justify-center">
+              <ResourceIcon
+                resource={{ ...resource, amount: 1 }}
+                size="sm"
+                bare
+                showAmount={false}
+                tooltip={false}
+                className="!h-8 !w-8"
+              />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate leading-tight [text-shadow:1px_1px_0_#000]">
+                {resourceLabel(resource)}
+              </span>
+              <span className="block truncate text-[10px] leading-tight text-neutral-500">
+                {getResourceModLabel(resource)}
+                {resource.recipeCount > 0 ? ` · ${resource.recipeCount} recipes` : ""}
+              </span>
             </span>
           </button>
         );
@@ -1653,13 +1911,19 @@ function getResourceQueryCacheKey({
   query,
   offset,
   limit,
+  kind,
+  mod,
+  sort,
 }: {
   versionId: string;
   query: string;
   offset: number;
   limit: number;
+  kind: ResourceKindFilter;
+  mod: string;
+  sort: ResourceSortMode;
 }) {
-  return [versionId, query.trim().toLowerCase(), offset, limit].join("|");
+  return [versionId, query.trim().toLowerCase(), offset, limit, kind, mod, sort].join("|");
 }
 
 
