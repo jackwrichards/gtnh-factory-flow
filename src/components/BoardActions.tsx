@@ -49,9 +49,6 @@ import {
 import { useFactoryStore } from "@/store/factory-store";
 import { useThemeStore } from "@/store/theme-store";
 import { SharePlanDialog } from "./community/SharePlanDialog";
-import { listCommunityPlans } from "@/lib/community/client";
-import type { CommunityPlanSummary } from "@/lib/community/types";
-import { useCommunityUser } from "./community/auth";
 
 /**
  * Board actions — undo/redo, optimise, clean, import/export, theme.
@@ -69,9 +66,7 @@ export function BoardActions() {
   const [isShareOpen, setShareOpen] = useState(false);
   const linkMenuRef = useRef<HTMLDivElement>(null);
   const [isLinkMenuOpen, setLinkMenuOpen] = useState(false);
-  const [myPosts, setMyPosts] = useState<CommunityPlanSummary[]>();
   const [copiedLink, setCopiedLink] = useState<string>();
-  const { user } = useCommunityUser();
   const project = useFactoryStore((state) => state.project);
   const manifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
@@ -181,22 +176,19 @@ export function BoardActions() {
     return () => window.removeEventListener("mousedown", closeMenus);
   }, []);
 
-  const toggleLinkMenu = () => {
-    setLinkMenuOpen((isOpen) => !isOpen);
-    // Refresh the post list on every open so freshly shared plans appear.
-    if (!isLinkMenuOpen && user) {
-      void listCommunityPlans({ mine: true, pageSize: 48 }).then(
-        (response) => setMyPosts(response.plans),
-        () => setMyPosts([]),
-      );
-    }
-  };
+  // The design remembers which community post it belongs to (set by Share and
+  // by opening a post from the hub); the link button targets exactly that.
+  const linkedPlanId = project.metadata?.communityPlanId;
 
-  const copyPostLink = async (post: CommunityPlanSummary, kind: "view" | "edit") => {
+  const copyPostLink = async (kind: "view" | "edit") => {
+    if (!linkedPlanId) {
+      return;
+    }
+
     const url =
       kind === "edit"
-        ? `${window.location.origin}/?plan=${post.id}`
-        : `${window.location.origin}/community?plan=${post.id}`;
+        ? `${window.location.origin}/?plan=${linkedPlanId}`
+        : `${window.location.origin}/community?plan=${linkedPlanId}`;
     try {
       await navigator.clipboard.writeText(url);
     } catch {
@@ -204,10 +196,9 @@ export function BoardActions() {
       return;
     }
 
-    const key = `${post.id}:${kind}`;
-    setCopiedLink(key);
+    setCopiedLink(kind);
     window.setTimeout(
-      () => setCopiedLink((current) => (current === key ? undefined : current)),
+      () => setCopiedLink((current) => (current === kind ? undefined : current)),
       1500,
     );
   };
@@ -341,60 +332,46 @@ export function BoardActions() {
         <div ref={linkMenuRef} className="relative">
           <button
             type="button"
-            onClick={toggleLinkMenu}
-            title="Copy links to your shared posts"
-            aria-label="Copy links to your shared posts"
+            onClick={() => setLinkMenuOpen((isOpen) => !isOpen)}
+            disabled={!linkedPlanId}
+            title={
+              linkedPlanId
+                ? "Copy a link to this plan's community post"
+                : "Share this plan first to get a link"
+            }
+            aria-label="Copy a link to this plan's community post"
             aria-expanded={isLinkMenuOpen}
-            className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised"
+            className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-muted"
           >
             <Link2 className="h-3.5 w-3.5" />
           </button>
-          {isLinkMenuOpen ? (
-            <div className="absolute right-0 top-8 z-50 w-64 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
-              {!user ? (
-                <p className="px-3 py-2 text-fg-muted">
-                  Sign in (top right) to get links to your shared posts.
-                </p>
-              ) : myPosts === undefined ? (
-                <p className="px-3 py-2 text-fg-muted">Loading your posts…</p>
-              ) : myPosts.length === 0 ? (
-                <p className="px-3 py-2 text-fg-muted">
-                  No posts yet — use the Share button first.
-                </p>
-              ) : (
-                myPosts.map((post) => (
-                  <div
-                    key={post.id}
-                    className="flex items-center gap-1 px-2 py-1 hover:bg-surface-raised"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => void copyPostLink(post, "view")}
-                      title="Copy link to this post"
-                      className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
-                    >
-                      {copiedLink === `${post.id}:view` ? (
-                        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-                      ) : (
-                        <Link2 className="h-3.5 w-3.5 shrink-0 text-fg-muted" />
-                      )}
-                      <span className="truncate">{post.name}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void copyPostLink(post, "edit")}
-                      title="Copy edit link (opens in a friend's editor)"
-                      className="shrink-0 rounded p-1 text-fg-muted hover:text-fg"
-                    >
-                      {copiedLink === `${post.id}:edit` ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-500" />
-                      ) : (
-                        <Pencil className="h-3.5 w-3.5" />
-                      )}
-                    </button>
-                  </div>
-                ))
-              )}
+          {isLinkMenuOpen && linkedPlanId ? (
+            <div className="absolute right-0 top-8 z-50 min-w-44 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
+              <button
+                type="button"
+                onClick={() => void copyPostLink("view")}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-raised"
+              >
+                {copiedLink === "view" ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                ) : (
+                  <Link2 className="h-3.5 w-3.5 text-fg-muted" />
+                )}
+                Copy link
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyPostLink("edit")}
+                title="Opens this post directly in a friend's editor"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-raised"
+              >
+                {copiedLink === "edit" ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                ) : (
+                  <Pencil className="h-3.5 w-3.5 text-fg-muted" />
+                )}
+                Copy edit link
+              </button>
             </div>
           ) : null}
         </div>

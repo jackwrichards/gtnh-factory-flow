@@ -14,7 +14,11 @@ import {
 } from "@/lib/datasets/browser-loader";
 import { loadResourceHistory, useFactoryStore } from "@/store/factory-store";
 import { useDesignStore } from "@/store/design-store";
-import { downloadCommunityPlan, takePendingEditorImport } from "@/lib/community/client";
+import {
+  downloadCommunityPlan,
+  tagPlanWithCommunityId,
+  takePendingEditorImport,
+} from "@/lib/community/client";
 import { parseFactoryProjectJson } from "@/lib/import-export";
 import { useThemeStore } from "@/store/theme-store";
 import { BoardActions } from "./BoardActions";
@@ -111,7 +115,7 @@ export function FactoryPlannerApp() {
             if (sharedPlanId) {
               try {
                 const { plan } = await downloadCommunityPlan(sharedPlanId);
-                await importAsDesign(plan);
+                await importAsDesign(tagPlanWithCommunityId(plan, sharedPlanId));
               } finally {
                 params.delete("plan");
                 const query = params.toString();

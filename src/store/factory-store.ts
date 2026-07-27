@@ -137,6 +137,8 @@ interface FactoryStore {
   autoRouteStorage: (storageId: string) => void;
   updateStorage: (storageId: string, patch: Partial<FactoryStorage>) => void;
   setStoragePosition: (storageId: string, position: FactoryStorage["position"]) => void;
+  /** Records which community post the current design belongs to (no undo entry). */
+  setProjectCommunityLink: (communityPlanId: string) => void;
   addAnnotation: (annotation: Omit<FactoryAnnotation, "id">) => void;
   updateAnnotation: (annotationId: string, patch: Partial<FactoryAnnotation>) => void;
   deleteAnnotation: (annotationId: string) => void;
@@ -833,6 +835,14 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         project,
       });
     });
+  },
+  setProjectCommunityLink: (communityPlanId) => {
+    set((state) => ({
+      project: {
+        ...state.project,
+        metadata: { ...state.project.metadata, communityPlanId },
+      },
+    }));
   },
   addAnnotation: (annotation) => {
     set((state) => {

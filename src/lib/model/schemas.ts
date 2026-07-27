@@ -358,6 +358,7 @@ export const factoryProjectSchema = z.object({
       source: z.string().optional(),
       createdAt: z.string().optional(),
       updatedAt: z.string().optional(),
+      communityPlanId: z.string().optional(),
     })
     .optional(),
 });

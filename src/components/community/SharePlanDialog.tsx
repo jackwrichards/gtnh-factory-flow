@@ -29,6 +29,7 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
   const result = useFactoryStore((state) => state.lastResult);
   const manifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
+  const setProjectCommunityLink = useFactoryStore((state) => state.setProjectCommunityLink);
   const { user, isLoading: isUserLoading, setUser } = useCommunityUser();
 
   const [name, setName] = useState(project.name || "My factory");
@@ -37,8 +38,12 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
     username: string;
     posts: CommunityPlanSummary[];
   }>();
-  const [updateTargetId, setUpdateTargetId] = useState("");
+  const [postAsNew, setPostAsNew] = useState(false);
   const myPosts = user && myPostsFor?.username === user.username ? myPostsFor.posts : [];
+  // The design remembers which post it was shared as / imported from; Share
+  // only ever targets that one post (or creates a new one).
+  const linkedPost = myPosts.find((post) => post.id === project.metadata?.communityPlanId);
+  const updateTargetId = linkedPost && !postAsNew ? linkedPost.id : "";
   const [thumbnail, setThumbnail] = useState<ThumbnailState>({ status: "capturing" });
   const [isUploading, setUploading] = useState(false);
   const [error, setError] = useState<string>();
@@ -128,9 +133,11 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
       if (updateTargetId) {
         await updateCommunityPlan(updateTargetId, payload);
         setShared({ kind: "updated", planId: updateTargetId });
+        setProjectCommunityLink(updateTargetId);
       } else {
         const { id } = await uploadCommunityPlan(payload);
         setShared({ kind: "created", planId: id });
+        setProjectCommunityLink(id);
       }
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Sharing failed.");
@@ -237,22 +244,27 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
               Posting as <span className="font-semibold text-fg">{user.username}</span>
             </p>
 
-            {myPosts.length > 0 ? (
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium">Post as</span>
-                <select
-                  value={updateTargetId}
-                  onChange={(event) => setUpdateTargetId(event.target.value)}
-                  className="w-full rounded border border-line-strong bg-surface-sunken px-2 py-1.5"
-                >
-                  <option value="">New post</option>
-                  {myPosts.map((post) => (
-                    <option key={post.id} value={post.id}>
-                      Update “{post.name}”
-                    </option>
-                  ))}
-                </select>
-              </label>
+            {linkedPost ? (
+              <div className="flex gap-3 rounded border border-line bg-surface-raised p-2 text-sm">
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="share-target"
+                    checked={!postAsNew}
+                    onChange={() => setPostAsNew(false)}
+                  />
+                  Update “{linkedPost.name}”
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="radio"
+                    name="share-target"
+                    checked={postAsNew}
+                    onChange={() => setPostAsNew(true)}
+                  />
+                  Post as new
+                </label>
+              </div>
             ) : null}
 
             <div className="flex gap-3">

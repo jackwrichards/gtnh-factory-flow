@@ -344,6 +344,8 @@ export interface FactoryProject {
     source?: string;
     createdAt?: string;
     updatedAt?: string;
+    /** The community post this design was shared as / imported from. */
+    communityPlanId?: string;
   };
 }
 

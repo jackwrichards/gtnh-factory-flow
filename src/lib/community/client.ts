@@ -160,6 +160,19 @@ export async function logoutCommunityUser(): Promise<void> {
  */
 export const PENDING_IMPORT_STORAGE_KEY = "gtnh-factory-flow.pending-community-import.v1";
 
+/**
+ * Stamps a downloaded plan with the community post it came from, so the
+ * editor's Share and link actions can target that exact post later.
+ */
+export function tagPlanWithCommunityId(plan: unknown, planId: string): unknown {
+  if (typeof plan !== "object" || plan === null) {
+    return plan;
+  }
+
+  const record = plan as { metadata?: Record<string, unknown> };
+  return { ...record, metadata: { ...record.metadata, communityPlanId: planId } };
+}
+
 export function stashPlanForEditor(plan: unknown): void {
   window.localStorage.setItem(PENDING_IMPORT_STORAGE_KEY, JSON.stringify(plan));
 }

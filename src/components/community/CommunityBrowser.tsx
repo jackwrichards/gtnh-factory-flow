@@ -23,6 +23,7 @@ import {
   getCommunityPlan,
   listCommunityPlans,
   stashPlanForEditor,
+  tagPlanWithCommunityId,
   voteCommunityPlan,
 } from "@/lib/community/client";
 import type {
@@ -174,7 +175,7 @@ export function CommunityBrowser() {
   const openInEditor = async (plan: CommunityPlanSummary) => {
     try {
       const { plan: planJson } = await downloadCommunityPlan(plan.id);
-      stashPlanForEditor(planJson);
+      stashPlanForEditor(tagPlanWithCommunityId(planJson, plan.id));
       bumpDownloads(plan.id);
       router.push("/");
     } catch (openError) {
