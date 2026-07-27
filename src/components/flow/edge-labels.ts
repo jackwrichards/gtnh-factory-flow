@@ -57,11 +57,11 @@ function getEdgeFlowFigures(data: EdgeLabelInput): {
 }
 
 /**
- * The producer's capacity on this line, when a "flowing / capacity" fraction
- * should be shown: the consumer is fed, something is flowing, and the capacity
- * is a real number — drawers and tanks report an infinite supply, and
- * "1 / Infinity" helps nobody. A 1:1 fraction still shows, so a line running
- * exactly at capacity reads "10 / 10" rather than hiding the comparison.
+ * The producer's capacity on this line, when a satisfaction percent should be
+ * shown: the consumer is fed, something is flowing, and the capacity is a real
+ * number — drawers and tanks report an infinite supply, which is no
+ * comparison at all. A 1:1 line still shows its 100%, rather than hiding the
+ * comparison.
  */
 export function getEdgeSurplusCapacity(data: EdgeLabelInput | undefined): number | undefined {
   if (!data || isEdgeStarved(data)) {
@@ -124,16 +124,17 @@ export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {
   // the plain flow rate in the healthy case.
   const { flowing, nameplate, starved } = getEdgeFlowFigures(data);
 
+  // The left side is always the real flow; the percent is how much of the
+  // line's potential that flow covers. Red: share of what the consumer needs.
+  // Green: share of what the producer could make - a machine giving 1 of a
+  // possible 10 reads 10%, the same number its usage cell shows.
   if (starved && nameplate !== undefined && nameplate > flowing + 1e-6) {
-    return `${formatEdgeValue(flowing)} / ${withUnit(nameplate, data.unit)}`;
+    return `${withUnit(flowing, data.unit)} · ${formatSatisfactionPercent(flowing / nameplate)}`;
   }
 
-  // The mirror image of the starved ratio: flowing over what the producer
-  // could make, so slack capacity reads at a glance instead of hiding behind
-  // a plain rate.
   const surplusCapacity = getEdgeSurplusCapacity(data);
-  if (surplusCapacity !== undefined) {
-    return `${formatEdgeValue(flowing)} / ${withUnit(surplusCapacity, data.unit)}`;
+  if (surplusCapacity !== undefined && flowing > 1e-6) {
+    return `${withUnit(flowing, data.unit)} · ${formatSatisfactionPercent(flowing / surplusCapacity)}`;
   }
 
   return withUnit(flowing, data.unit);
@@ -148,4 +149,13 @@ export function formatEdgeValue(value: number): string {
 /** "10/s" reads as one token; "12 L/s" needs the space to stay a unit. */
 function withUnit(value: number, unit: string): string {
   return unit.startsWith("/") ? `${formatEdgeValue(value)}${unit}` : `${formatEdgeValue(value)} ${unit}`;
+}
+
+/**
+ * How much of the line's potential is flowing, as a percent. On red edges the
+ * potential is what the consumer needs; on green edges it is what the
+ * producer could make. Either way 100% means the line is maxed out.
+ */
+export function formatSatisfactionPercent(ratio: number): string {
+  return `${Math.min(Math.round(ratio * 100), 999)}%`;
 }
