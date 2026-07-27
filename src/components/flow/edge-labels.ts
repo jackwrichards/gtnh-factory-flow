@@ -100,19 +100,19 @@ export function describeEdgeRate(data: EdgeLabelInput | undefined): string {
   const unit = data.unit;
 
   if (starved && nameplate !== undefined && nameplate > flowing + 1e-6) {
-    return `The machine downstream wants ${withUnit(nameplate, unit)} but only ${withUnit(flowing, unit)} is arriving — it needs more supply.`;
+    return `The machine this feeds wants ${withUnit(nameplate, unit)} but only gets ${withUnit(flowing, unit)}. It needs more supply.`;
   }
 
   const capacity = getEdgeSurplusCapacity(data);
   if (capacity !== undefined && capacity > flowing + 1e-6) {
-    return `The producer could make ${withUnit(capacity, unit)} but only ${withUnit(flowing, unit)} is being taken — ${withUnit(capacity - flowing, unit)} to spare.`;
+    return `The maker can produce ${withUnit(capacity, unit)} but only ${withUnit(flowing, unit)} is used. ${withUnit(capacity - flowing, unit)} is spare.`;
   }
 
   if (capacity !== undefined) {
-    return `Flowing at the producer's full ${withUnit(capacity, unit)} — supply and demand match exactly.`;
+    return `All of the maker's ${withUnit(capacity, unit)} is being used. Supply and demand match.`;
   }
 
-  return `Flowing ${withUnit(flowing, unit)}.`;
+  return `Carrying ${withUnit(flowing, unit)}.`;
 }
 
 export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {
