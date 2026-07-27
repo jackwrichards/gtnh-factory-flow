@@ -155,13 +155,13 @@ describe("describeEdgeRate", () => {
         makeEdge({ demand: 2, transferred: 2, nameplateDemand: 10, isSupplyCapped: true }),
       ),
     ).toBe(
-      "The machine this feeds needs 10/s but only gets 2/s, so that machine runs at 20%. It takes 5× the current supply to fill it.",
+      "The machine this feeds needs 10/s but only gets 2/s (20%). It takes 5× the current supply to fill it.",
     );
   });
 
   it("explains a surplus line from the producer's side, with the spare amount", () => {
     expect(describeEdgeRate(makeEdge({ demand: 2, sourceCapacity: 10 }))).toBe(
-      "The maker can produce 10/s but only 2/s is taken, so the maker runs at 20%. 8/s is free for new machines.",
+      "The maker can produce 10/s but only 2/s is taken (20%). 8/s is free for new machines.",
     );
   });
 

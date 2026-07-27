@@ -99,13 +99,17 @@ export function describeEdgeRate(data: EdgeLabelInput | undefined): string {
   const { flowing, nameplate, starved } = getEdgeFlowFigures(data);
   const unit = data.unit;
 
+  // Careful with claims here: this line only knows about one resource. The
+  // maker's real run speed can be set by its other products, and the fed
+  // machine's by its other ingredients - so speak about the line, never about
+  // how fast either machine runs. That is the usage grid's job.
   if (starved && nameplate !== undefined && nameplate > flowing + 1e-6) {
-    return `The machine this feeds needs ${withUnit(nameplate, unit)} but only gets ${withUnit(flowing, unit)}, so that machine runs at ${formatSatisfactionPercent(flowing / nameplate)}. It takes ${formatEdgeValue(nameplate / Math.max(flowing, 1e-6))}× the current supply to fill it.`;
+    return `The machine this feeds needs ${withUnit(nameplate, unit)} but only gets ${withUnit(flowing, unit)} (${formatSatisfactionPercent(flowing / nameplate)}). It takes ${formatEdgeValue(nameplate / Math.max(flowing, 1e-6))}× the current supply to fill it.`;
   }
 
   const capacity = getEdgeSurplusCapacity(data);
   if (capacity !== undefined && capacity > flowing + 1e-6) {
-    return `The maker can produce ${withUnit(capacity, unit)} but only ${withUnit(flowing, unit)} is taken, so the maker runs at ${formatSatisfactionPercent(flowing / capacity)}. ${withUnit(capacity - flowing, unit)} is free for new machines.`;
+    return `The maker can produce ${withUnit(capacity, unit)} but only ${withUnit(flowing, unit)} is taken (${formatSatisfactionPercent(flowing / capacity)}). ${withUnit(capacity - flowing, unit)} is free for new machines.`;
   }
 
   if (capacity !== undefined) {
