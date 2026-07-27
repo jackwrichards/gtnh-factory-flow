@@ -32,7 +32,7 @@ import type {
 
 export const LOCAL_STORAGE_KEY = "gtnh-factory-flow.project.v2";
 export const RESOURCE_HISTORY_STORAGE_KEY = "gtnh-factory-flow.resource-history.v1";
-const RESOURCE_HISTORY_LIMIT = 8;
+const RESOURCE_HISTORY_LIMIT = 30;
 const PROJECT_HISTORY_LIMIT = 100;
 
 interface FactoryStore {

@@ -1,6 +1,15 @@
 "use client";
 
-import { GitBranchPlus, LayoutGrid, List, Plus, Search, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  GitBranchPlus,
+  LayoutGrid,
+  List,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { PointerEvent, RefObject } from "react";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
@@ -49,7 +58,7 @@ function getResourceModLabel(resource: { id: string; kind: string }): string {
   }
   return resource.kind === "fluid" ? "fluids" : "other";
 }
-const RESOURCE_HISTORY_VISIBLE_FALLBACK = 8;
+const RESOURCE_HISTORY_VISIBLE_FALLBACK = 18;
 const RECIPE_QUERY_CACHE_TTL_MS = 90_000;
 const RESOURCE_QUERY_CACHE_TTL_MS = 90_000;
 const RESOURCE_SEARCH_DEBOUNCE_MS = 125;
@@ -747,8 +756,17 @@ function ResourceHistoryPanel({
   }
 
   return (
-    <div className="pointer-events-auto z-20 h-[58px] shrink-0 overflow-hidden border-t border-neutral-700 bg-[#111317] p-2 shadow-[0_-8px_18px_rgba(0,0,0,0.22)]">
-      <div ref={containerRef} className="flex w-full min-w-0 gap-2 overflow-hidden">
+    <div className="pointer-events-auto z-20 shrink-0 border-t border-neutral-800 bg-[#111317] px-2 pb-2 pt-1.5">
+      <p className="mb-1 px-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
+        Recent
+      </p>
+      <div
+        ref={containerRef}
+        className="minecraft-pixel-art grid w-full min-w-0 gap-1 overflow-hidden"
+        style={{
+          gridTemplateColumns: `repeat(auto-fill, minmax(${HISTORY_CELL_SIZE}px, 1fr))`,
+        }}
+      >
         {visibleResources.map((resource) => (
           <button
             key={`${resource.kind}:${resource.id}`}
@@ -759,15 +777,25 @@ function ResourceHistoryPanel({
               onBrowse(resource, "uses");
             }}
             aria-label={resourceLabel(resource)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center border border-transparent bg-transparent p-0 hover:border-cyan-400"
+            title={resourceLabel(resource)}
+            className="flex aspect-square items-center justify-center rounded-[4px] border border-transparent p-0 hover:border-neutral-500 hover:bg-white/5"
           >
-            <ResourceIcon resource={{ ...resource, amount: 1 }} size="sm" showAmount={false} />
+            <ResourceIcon
+              resource={{ ...resource, amount: 1 }}
+              size="md"
+              bare
+              showAmount={false}
+              tooltip={false}
+            />
           </button>
         ))}
       </div>
     </div>
   );
 }
+
+const HISTORY_CELL_SIZE = 52;
+const HISTORY_ROWS = 3;
 
 function useVisibleResourceHistorySlots(resourceCount: number) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -784,10 +812,10 @@ function useVisibleResourceHistorySlots(resourceCount: number) {
     }
 
     const updateVisibleSlotCount = () => {
-      const slotSize = 40;
-      const gap = 8;
+      const gap = 4;
       const width = Math.max(0, container.clientWidth - 1);
-      setVisibleSlotCount(Math.max(0, Math.floor((width + gap) / (slotSize + gap))));
+      const columns = Math.max(1, Math.floor((width + gap) / (HISTORY_CELL_SIZE + gap)));
+      setVisibleSlotCount(columns * HISTORY_ROWS);
     };
 
     const animationFrame = window.requestAnimationFrame(updateVisibleSlotCount);
@@ -1004,29 +1032,29 @@ function ResourcePager({
   onNextPage: () => void;
 }) {
   return (
-    <div className="mt-2 grid h-8 w-full min-w-0 max-w-full shrink-0 grid-cols-[32px_minmax(0,1fr)_32px] items-center overflow-hidden border border-neutral-700 bg-[#111317] text-center font-mono text-sm text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.08),inset_-1px_-1px_0_rgba(0,0,0,0.45)]">
+    <div className="mt-1.5 flex h-8 w-full min-w-0 shrink-0 items-center gap-1">
       <button
         type="button"
         onClick={onPreviousPage}
         disabled={currentPage === 0}
-        className="h-full border-r border-neutral-700 bg-[#1b1d21] text-red-400 disabled:opacity-35"
+        className="flex h-7 w-8 items-center justify-center rounded-[4px] border border-neutral-700 bg-[#17191d] text-neutral-300 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
         aria-label="Previous resource page"
         title="Previous page"
       >
-        {"<"}
+        <ChevronLeft className="h-3.5 w-3.5" />
       </button>
-      <div className="truncate px-2 [text-shadow:1px_1px_0_#000]">
-        {currentPage + 1}/{pageCount}
+      <div className="min-w-0 flex-1 truncate text-center text-xs text-neutral-400">
+        Page {Math.min(currentPage + 1, pageCount)} of {pageCount}
       </div>
       <button
         type="button"
         onClick={onNextPage}
         disabled={currentPage >= pageCount - 1}
-        className="h-full border-l border-neutral-700 bg-[#1b1d21] text-red-400 disabled:opacity-35"
+        className="flex h-7 w-8 items-center justify-center rounded-[4px] border border-neutral-700 bg-[#17191d] text-neutral-300 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
         aria-label="Next resource page"
         title="Next page"
       >
-        {">"}
+        <ChevronRight className="h-3.5 w-3.5" />
       </button>
     </div>
   );
