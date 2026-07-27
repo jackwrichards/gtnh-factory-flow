@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { AppHeader } from "@/components/AppHeader";
 import { CommunityBrowser } from "@/components/community/CommunityBrowser";
-import { SiteHeader } from "@/components/community/SiteHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export default function CommunityPage() {
   return (
     <div className="flex min-h-screen flex-col bg-canvas text-fg">
-      <SiteHeader />
+      <AppHeader page="community" />
       <main className="flex-1">
         <div className="mx-auto w-full max-w-6xl px-4 pt-6">
           <h1 className="text-xl font-bold">Community plans</h1>

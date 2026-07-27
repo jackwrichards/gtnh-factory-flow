@@ -8,11 +8,9 @@ import {
   ImageDown,
   Link2,
   LoaderCircle,
-  Moon,
   Pencil,
   Redo2,
   Share2,
-  Sun,
   Trash2,
   Undo2,
   Upload,
@@ -47,7 +45,6 @@ import {
   extractProjectJsonFromSvg,
 } from "@/lib/import-export/plan-image";
 import { useFactoryStore } from "@/store/factory-store";
-import { useThemeStore } from "@/store/theme-store";
 import { SharePlanDialog } from "./community/SharePlanDialog";
 
 /**
@@ -79,8 +76,6 @@ export function BoardActions() {
   const optimizeMachineCounts = useFactoryStore((state) => state.optimizeMachineCounts);
   const undo = useFactoryStore((state) => state.undo);
   const redo = useFactoryStore((state) => state.redo);
-  const theme = useThemeStore((state) => state.theme);
-  const toggleTheme = useThemeStore((state) => state.toggleTheme);
 
   const exportJson = async () => {
     const requestId = crypto.randomUUID();
@@ -375,11 +370,6 @@ export function BoardActions() {
             </div>
           ) : null}
         </div>
-        <ToolbarButton
-          icon={theme === "dark" ? Sun : Moon}
-          label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-          onClick={toggleTheme}
-        />
       </div>
       {isShareOpen ? <SharePlanDialog onClose={() => setShareOpen(false)} /> : null}
 
