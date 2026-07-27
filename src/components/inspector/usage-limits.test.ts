@@ -179,7 +179,7 @@ describe("buildUsageLimitChain", () => {
     expect(chain[0].kind).toBe("machines");
     expect(chain[0].active).toBe(true);
     // 2 machines at 250% demand: 5 machines cover it.
-    expect(chain[0].detail).toContain("5 machines");
+    expect(chain[0].detail).toBe("5 needed");
   });
 
   it("reports no takers when nothing is connected downstream", () => {

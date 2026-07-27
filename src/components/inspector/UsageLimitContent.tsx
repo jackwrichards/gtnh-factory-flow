@@ -30,8 +30,9 @@ function entryPercent(entry: UsageLimitEntry): string {
 }
 
 /**
- * The shared "why is this machine at X%" panel body: the binding limit first,
- * then who would take over if it were fixed.
+ * The shared "why is this machine at X%" panel: the binding limit first, then
+ * who would take over if it were fixed. Bars carry the message; the only words
+ * are names and the LIMIT / NEXT tags.
  */
 export function UsageLimitContent({
   title,
@@ -46,10 +47,10 @@ export function UsageLimitContent({
 }) {
   return (
     <div className="w-64">
-      <div className="flex items-baseline gap-2">
+      <div className="flex items-baseline gap-2 border-b border-white/15 pb-1.5">
         <span className="truncate text-[14px] font-semibold text-white">{title}</span>
         <span
-          className="ml-auto shrink-0 text-[14px] font-bold tabular-nums"
+          className="ml-auto shrink-0 text-[15px] font-bold tabular-nums"
           style={{ color: usagePercentColor(utilization, status) }}
         >
           {formatSatisfactionPercent(utilization)}
@@ -58,26 +59,42 @@ export function UsageLimitContent({
 
       {entries.length > 0 ? (
         <ul className="mt-2 space-y-2">
-          {entries.map((entry, index) => (
-            <li key={entry.key}>
-              <div className="flex items-baseline gap-2 text-[12px] leading-none">
-                <span
-                  className={
-                    index === 0
-                      ? "font-bold uppercase tracking-wide text-amber-300"
-                      : "font-semibold uppercase tracking-wide text-slate-400"
-                  }
-                >
-                  {index === 0 ? "Limit" : index === 1 ? "Next" : "Then"}
-                </span>
-                <span className="truncate font-semibold text-slate-200">{entry.label}</span>
-                <span className="ml-auto shrink-0 font-bold tabular-nums text-slate-300">
-                  {entryPercent(entry)}
-                </span>
-              </div>
-              <p className="mt-0.5 text-[12px] leading-snug text-slate-400">{entry.detail}</p>
-            </li>
-          ))}
+          {entries.map((entry, index) => {
+            const isActive = index === 0;
+            const barColor = isActive ? "#fbbf24" : "#64748b";
+            const fill = Number.isFinite(entry.fraction)
+              ? Math.min(Math.max(entry.fraction, 0), 1) * 100
+              : 100;
+
+            return (
+              <li key={entry.key}>
+                <div className="flex items-baseline gap-1.5 text-[12px] leading-none">
+                  <span
+                    className="w-10 shrink-0 text-[10px] font-bold uppercase tracking-wide"
+                    style={{ color: isActive ? "#fbbf24" : "#64748b" }}
+                  >
+                    {isActive ? "Limit" : "Next"}
+                  </span>
+                  <span className="truncate font-semibold text-white">{entry.label}</span>
+                  <span className="ml-auto shrink-0 text-[11px] tabular-nums text-slate-400">
+                    {entry.detail}
+                  </span>
+                  <span
+                    className="w-11 shrink-0 text-right text-[12px] font-bold tabular-nums"
+                    style={{ color: isActive ? "#fbbf24" : "#cbd5e1" }}
+                  >
+                    {entryPercent(entry)}
+                  </span>
+                </div>
+                <div className="ml-[46px] mt-1 h-[5px] overflow-hidden rounded-sm bg-white/10">
+                  <div
+                    className="h-full rounded-sm"
+                    style={{ width: `${fill}%`, backgroundColor: barColor }}
+                  />
+                </div>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </div>

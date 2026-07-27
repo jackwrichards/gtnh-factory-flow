@@ -15,6 +15,7 @@ export interface UsageLimitEntry {
    * machine at 50%, Infinity never limits (storage-fed lines).
    */
   fraction: number;
+  /** Compact figures for the row, e.g. "5/s of 10/s" or "5 needed". No prose. */
   detail: string;
   /** True on the factor that is setting the usage right now. */
   active: boolean;
@@ -101,7 +102,7 @@ export function buildUsageLimitChain(
         kind: "machines",
         label: "Machine count",
         fraction,
-        detail: `Takers want ${formatSatisfactionPercent(fraction)} of what it can make. ${machinesNeeded} machines would keep up.`,
+        detail: `${machinesNeeded} needed`,
         active: false,
       };
     } else {
@@ -110,7 +111,7 @@ export function buildUsageLimitChain(
         kind: "demand",
         label: `${name} demand`,
         fraction,
-        detail: `Takers use ${rateWithUnit(wanted, outputFlow.kind)} of the ${rateWithUnit(capacity, outputFlow.kind)} it makes.`,
+        detail: `${rateWithUnit(wanted, outputFlow.kind)} of ${rateWithUnit(capacity, outputFlow.kind)}`,
         active: false,
       };
     }
@@ -122,7 +123,7 @@ export function buildUsageLimitChain(
       kind: "no-demand",
       label: "No takers",
       fraction: 1,
-      detail: "Nothing takes the output, so it runs full speed.",
+      detail: "runs free",
       active: false,
     };
   }
@@ -165,7 +166,7 @@ export function buildUsageLimitChain(
         kind: "supply",
         label: `${name} supply`,
         fraction: Number.POSITIVE_INFINITY,
-        detail: "Fed from storage. Never a limit.",
+        detail: "from storage",
         active: false,
       });
       continue;
@@ -177,7 +178,7 @@ export function buildUsageLimitChain(
       kind: "supply",
       label: `${name} supply`,
       fraction,
-      detail: `Gets up to ${rateWithUnit(incoming.capacity, inputFlow.kind)} of the ${rateWithUnit(need, inputFlow.kind)} it needs.`,
+      detail: `${rateWithUnit(incoming.capacity, inputFlow.kind)} of ${rateWithUnit(need, inputFlow.kind)}`,
       active: incoming.binding,
     });
   }
