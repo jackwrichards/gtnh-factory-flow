@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { FactoryNode, NodeThroughputResult, Recipe } from "@/lib/model/types";
-import { buildPowerByMachine, buildPowerByTier } from "./power-breakdown";
+import {
+  buildMachineUsage,
+  buildPowerByMachine,
+  buildPowerByTier,
+  computePowerTotals,
+} from "./power-breakdown";
 
 function makeNode(id: string, recipeId: string, machineCount: number): FactoryNode {
   return {
@@ -14,7 +19,7 @@ function makeNode(id: string, recipeId: string, machineCount: number): FactoryNo
   };
 }
 
-function makeNodeResult(id: string, euT: number): NodeThroughputResult {
+function makeNodeResult(id: string, euT: number, utilization = 1): NodeThroughputResult {
   return {
     nodeId: id,
     recipeId: `recipe_${id}`,
@@ -26,7 +31,7 @@ function makeNodeResult(id: string, euT: number): NodeThroughputResult {
     euT,
     requiredRatePerSecond: 0,
     maxRatePerSecond: 0,
-    utilization: 1,
+    utilization,
     theoreticalMachinesRequired: 1,
     status: "balanced",
     warnings: [],
@@ -158,6 +163,7 @@ describe("buildPowerByMachine", () => {
         recipes: nodes.map((node, index) => makeRecipe(node.recipeId, `Machine ${index}`)),
       },
       { nodes: nodeResults },
+      "peak",
       5,
     );
 
@@ -183,5 +189,101 @@ describe("buildPowerByMachine", () => {
     );
 
     expect(machines.reduce((sum, slice) => sum + slice.share, 0)).toBeCloseTo(1);
+  });
+
+  it("scales draws by utilization in actual mode", () => {
+    const machines = buildPowerByMachine(
+      { nodes: [makeNode("a", "chem", 1), makeNode("b", "ebf", 1)], recipes },
+      {
+        nodes: {
+          a: makeNodeResult("a", 300, 0.5),
+          b: makeNodeResult("b", 100, 1),
+        },
+      },
+      "actual",
+    );
+
+    expect(machines.map((slice) => slice.euT)).toEqual([150, 100]);
+  });
+});
+
+describe("actual mode", () => {
+  it("keeps the tier from nameplate draw while scaling the summed EU/t", () => {
+    // An HV machine idling at 10% is still an HV load — it does not become an
+    // LV row just because its average draw dipped under the LV ceiling.
+    const tiers = buildPowerByTier(
+      { nodes: [makeNode("a", "r", 1)] },
+      { nodes: { a: makeNodeResult("a", 400, 0.1) } },
+      "actual",
+    );
+
+    expect(tiers).toHaveLength(1);
+    expect(tiers[0].label).toBe("HV");
+    expect(tiers[0].euT).toBeCloseTo(40);
+  });
+
+  it("drops machines that never run, but never scales above nameplate", () => {
+    const tiers = buildPowerByTier(
+      { nodes: [makeNode("idle", "r", 1), makeNode("over", "r", 1)] },
+      {
+        nodes: {
+          idle: makeNodeResult("idle", 30, 0),
+          // Overdemanded nodes can report utilization > 1; the draw caps at nameplate.
+          over: makeNodeResult("over", 100, 2.5),
+        },
+      },
+      "actual",
+    );
+
+    expect(tiers).toHaveLength(1);
+    expect(tiers[0].euT).toBe(100);
+  });
+});
+
+describe("computePowerTotals", () => {
+  it("reports nameplate and utilization-scaled totals side by side", () => {
+    const totals = computePowerTotals(
+      { nodes: [makeNode("a", "r", 1), makeNode("b", "r", 1)] },
+      { nodes: { a: makeNodeResult("a", 300, 0.5), b: makeNodeResult("b", 100, 1) } },
+    );
+
+    expect(totals.peakEuT).toBe(400);
+    expect(totals.actualEuT).toBe(250);
+  });
+});
+
+describe("buildMachineUsage", () => {
+  const recipes = [
+    makeRecipe("ebf", "Electric Blast Furnace"),
+    makeRecipe("chem", "Chemical Reactor"),
+  ];
+
+  it("weights group utilization by draw, not by node count", () => {
+    // Two chem reactors: 300 EU/t at 100% and 100 EU/t at 0%. A plain node
+    // average would say 50%; weighted by draw the group runs at 75%.
+    const usage = buildMachineUsage(
+      { nodes: [makeNode("a", "chem", 1), makeNode("b", "chem", 1)], recipes },
+      { nodes: { a: makeNodeResult("a", 300, 1), b: makeNodeResult("b", 100, 0) } },
+    );
+
+    expect(usage).toHaveLength(1);
+    expect(usage[0].nodeCount).toBe(2);
+    expect(usage[0].peakEuT).toBe(400);
+    expect(usage[0].actualEuT).toBe(300);
+    expect(usage[0].utilization).toBeCloseTo(0.75);
+  });
+
+  it("keeps fully idle machines in the roster and sorts by nameplate draw", () => {
+    const usage = buildMachineUsage(
+      { nodes: [makeNode("a", "chem", 1), makeNode("b", "ebf", 1)], recipes },
+      { nodes: { a: makeNodeResult("a", 100, 0), b: makeNodeResult("b", 500, 0.6) } },
+    );
+
+    expect(usage.map((slice) => slice.label)).toEqual([
+      "Electric Blast Furnace",
+      "Chemical Reactor",
+    ]);
+    expect(usage[1].utilization).toBe(0);
+    expect(usage[1].actualEuT).toBe(0);
   });
 });

@@ -9,8 +9,65 @@ export interface PowerSlice {
   share: number;
 }
 
+export interface MachineUsageSlice {
+  key: string;
+  label: string;
+  /** Nameplate draw of every machine in the group, EU/t. */
+  peakEuT: number;
+  /** Utilization-scaled draw, EU/t. */
+  actualEuT: number;
+  /** actualEuT / peakEuT, 0..1 — weighted by draw, not a plain node average. */
+  utilization: number;
+  nodeCount: number;
+}
+
+/**
+ * Peak is nameplate draw — every machine running flat out. Actual scales each
+ * node by its solved utilization, so a starved machine only counts the share of
+ * time it actually runs.
+ */
+export type PowerMode = "peak" | "actual";
+
 /** Rows past this fold into a single "Other" slice. */
 export const MACHINE_SLICE_LIMIT = 5;
+
+function clampUtilization(utilization: number): number {
+  if (!Number.isFinite(utilization)) {
+    return 1;
+  }
+
+  return Math.min(Math.max(utilization, 0), 1);
+}
+
+function nodeDraw(
+  result: Pick<ThroughputResult, "nodes">,
+  nodeId: string,
+  mode: PowerMode,
+): number {
+  const nodeResult = result.nodes[nodeId];
+  const euT = nodeResult?.euT ?? 0;
+  if (euT <= 0) {
+    return 0;
+  }
+
+  return mode === "actual" ? euT * clampUtilization(nodeResult?.utilization ?? 0) : euT;
+}
+
+/** Plan-wide totals for both modes, so the header can show "actual of peak". */
+export function computePowerTotals(
+  project: Pick<FactoryProject, "nodes">,
+  result: Pick<ThroughputResult, "nodes">,
+): { peakEuT: number; actualEuT: number } {
+  let peakEuT = 0;
+  let actualEuT = 0;
+
+  for (const node of project.nodes) {
+    peakEuT += nodeDraw(result, node.id, "peak");
+    actualEuT += nodeDraw(result, node.id, "actual");
+  }
+
+  return { peakEuT, actualEuT };
+}
 
 /**
  * Power grouped by the voltage tier each machine has to be fed at.
@@ -20,23 +77,29 @@ export const MACHINE_SLICE_LIMIT = 5;
  * voltage line and its hatches have to reach. Summing first would report a row
  * of twenty LV machines as a UV load, which is the opposite of the answer.
  *
+ * The tier is always classified from the nameplate draw — a machine idling at
+ * 30% is still wired to the same voltage line — only the summed EU/t is scaled
+ * when `mode` is "actual".
+ *
  * Ordered low tier to high, because the tier axis is ordinal — the order is the
  * meaning, and the ramp that colours it reads in the same direction.
  */
 export function buildPowerByTier(
   project: Pick<FactoryProject, "nodes">,
   result: Pick<ThroughputResult, "nodes">,
+  mode: PowerMode = "peak",
 ): PowerSlice[] {
   const byTier = new Map<string, number>();
   let total = 0;
 
   for (const node of project.nodes) {
-    const euT = result.nodes[node.id]?.euT ?? 0;
-    if (euT <= 0) {
+    const peakEuT = nodeDraw(result, node.id, "peak");
+    if (peakEuT <= 0) {
       continue;
     }
 
-    const perMachineEuT = euT / Math.max(1, node.machineCount);
+    const euT = nodeDraw(result, node.id, mode);
+    const perMachineEuT = peakEuT / Math.max(1, node.machineCount);
     const tier = getVoltageTierForEuT(perMachineEuT);
     byTier.set(tier, (byTier.get(tier) ?? 0) + euT);
     total += euT;
@@ -47,6 +110,7 @@ export function buildPowerByTier(
   }
 
   return [...byTier.entries()]
+    .filter(([, euT]) => euT > 0)
     .sort((left, right) => getVoltageTierIndex(left[0] as never) - getVoltageTierIndex(right[0] as never))
     .map(([tier, euT]) => ({ key: tier, label: tier, euT, share: euT / total }));
 }
@@ -61,6 +125,7 @@ export function buildPowerByTier(
 export function buildPowerByMachine(
   project: Pick<FactoryProject, "nodes" | "recipes">,
   result: Pick<ThroughputResult, "nodes">,
+  mode: PowerMode = "peak",
   limit: number = MACHINE_SLICE_LIMIT,
 ): PowerSlice[] {
   const machineTypeByRecipeId = new Map(
@@ -70,14 +135,15 @@ export function buildPowerByMachine(
   let total = 0;
 
   for (const node of project.nodes) {
-    const nodeResult = result.nodes[node.id];
-    const euT = nodeResult?.euT ?? 0;
+    const euT = nodeDraw(result, node.id, mode);
     if (euT <= 0) {
       continue;
     }
 
     const label =
-      machineTypeByRecipeId.get(node.recipeId) || nodeResult?.recipeName || "Unknown machine";
+      machineTypeByRecipeId.get(node.recipeId) ||
+      result.nodes[node.id]?.recipeName ||
+      "Unknown machine";
     byMachine.set(label, (byMachine.get(label) ?? 0) + euT);
     total += euT;
   }
@@ -108,4 +174,48 @@ export function buildPowerByMachine(
   }
 
   return slices;
+}
+
+/**
+ * Every powered machine with how hard it is actually working: actual draw over
+ * nameplate draw. Nothing folds into "Other" — the point of this view is the
+ * full roster, and an idle machine at the bottom is exactly what the reader is
+ * scanning for. Sorted by nameplate draw so the expensive machines lead.
+ */
+export function buildMachineUsage(
+  project: Pick<FactoryProject, "nodes" | "recipes">,
+  result: Pick<ThroughputResult, "nodes">,
+): MachineUsageSlice[] {
+  const machineTypeByRecipeId = new Map(
+    project.recipes.map((recipe) => [recipe.id, recipe.machineType]),
+  );
+  const byMachine = new Map<string, { peakEuT: number; actualEuT: number; nodeCount: number }>();
+
+  for (const node of project.nodes) {
+    const peakEuT = nodeDraw(result, node.id, "peak");
+    if (peakEuT <= 0) {
+      continue;
+    }
+
+    const label =
+      machineTypeByRecipeId.get(node.recipeId) ||
+      result.nodes[node.id]?.recipeName ||
+      "Unknown machine";
+    const group = byMachine.get(label) ?? { peakEuT: 0, actualEuT: 0, nodeCount: 0 };
+    group.peakEuT += peakEuT;
+    group.actualEuT += nodeDraw(result, node.id, "actual");
+    group.nodeCount += 1;
+    byMachine.set(label, group);
+  }
+
+  return [...byMachine.entries()]
+    .sort((left, right) => right[1].peakEuT - left[1].peakEuT)
+    .map(([label, group]) => ({
+      key: label,
+      label,
+      peakEuT: group.peakEuT,
+      actualEuT: group.actualEuT,
+      utilization: group.peakEuT > 0 ? group.actualEuT / group.peakEuT : 0,
+      nodeCount: group.nodeCount,
+    }));
 }
