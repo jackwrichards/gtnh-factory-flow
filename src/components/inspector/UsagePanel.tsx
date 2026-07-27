@@ -114,7 +114,7 @@ function UsageCellButton({
           without reading as a box. */}
       <span
         className={[
-          "pointer-events-none absolute inset-x-0 bottom-0 text-center text-[10px] font-bold leading-none tabular-nums",
+          "pointer-events-none absolute inset-x-0 -bottom-[2px] text-center text-[10px] font-bold leading-none tabular-nums",
           "[text-shadow:0_0_3px_rgba(255,255,255,0.95),0_1px_2px_rgba(255,255,255,0.9)] dark:[text-shadow:0_0_3px_rgba(0,0,0,0.9),0_1px_2px_rgba(0,0,0,0.95)]",
           STATUS_TEXT[cell.status] ?? "text-fg",
         ].join(" ")}
