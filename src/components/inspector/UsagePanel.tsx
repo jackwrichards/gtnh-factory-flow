@@ -56,7 +56,7 @@ export function UsagePanel() {
 
       <div
         className="mt-1.5 grid max-h-56 gap-1 overflow-y-auto overscroll-contain"
-        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))" }}
+        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(64px, 1fr))" }}
       >
         {cells.map((cell) => (
           <UsageCellButton
@@ -91,9 +91,11 @@ function UsageCellButton({
       title={`${cell.label}${cell.machineCount > 1 ? ` ×${cell.machineCount}` : ""} — ${
         cell.recipeName
       } — running at ${formatUsagePercent(cell.utilization)}`}
-      className="flex flex-col items-center gap-0.5 rounded border border-transparent p-1 hover:border-cyan-300 hover:bg-cyan-50 dark:hover:border-cyan-500/60 dark:hover:bg-cyan-500/10"
+      className="relative aspect-square overflow-hidden rounded border border-transparent hover:border-cyan-300 hover:bg-cyan-50 dark:hover:border-cyan-500/60 dark:hover:bg-cyan-500/10"
     >
-      <span className="flex h-14 w-14 items-center justify-center overflow-hidden">
+      {/* The icon owns the whole cell; the percent floats over it so growing
+          the art never grows the cell. */}
+      <span className="absolute inset-0 flex items-center justify-center overflow-hidden p-0.5">
         {cell.icon ? (
           <ResourceIcon
             resource={{ ...cell.icon, amount: 1 }}
@@ -101,16 +103,16 @@ function UsageCellButton({
             bare
             showAmount={false}
             tooltip={false}
-            className="!h-14 !w-14"
+            className="!h-full !w-full"
           />
         ) : (
-          <span className="h-14 w-14 rounded bg-surface-sunken" aria-hidden />
+          <span className="h-full w-full rounded bg-surface-sunken" aria-hidden />
         )}
       </span>
       <span
         className={[
-          "text-xs font-semibold leading-none tabular-nums",
-          STATUS_TEXT[cell.status] ?? "text-fg-muted",
+          "absolute bottom-0.5 right-0.5 rounded bg-surface/85 px-1 py-0.5 text-[11px] font-bold leading-none tabular-nums backdrop-blur-[2px]",
+          STATUS_TEXT[cell.status] ?? "text-fg",
         ].join(" ")}
       >
         {formatUsagePercent(cell.utilization)}
