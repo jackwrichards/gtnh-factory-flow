@@ -46,6 +46,7 @@ export async function listCommunityPlans(
   if (params.search) search.set("search", params.search);
   if (params.maxTier) search.set("maxTierIndex", params.maxTier);
   if (params.mine) search.set("mine", "1");
+  if (params.gameVersion) search.set("gameVersion", params.gameVersion);
   if (params.page) search.set("page", String(params.page));
   if (params.pageSize) search.set("pageSize", String(params.pageSize));
   search.set("deviceId", getDeviceId());

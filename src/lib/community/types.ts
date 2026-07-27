@@ -62,6 +62,8 @@ export interface CommunityPlanListRequest {
   maxTier?: string;
   /** Only the signed-in user's own posts. */
   mine?: boolean;
+  /** Exact game version, e.g. "2.8.0". */
+  gameVersion?: string;
   page?: number;
   pageSize?: number;
   deviceId?: string;
@@ -72,6 +74,8 @@ export interface CommunityPlanListResponse {
   total: number;
   page: number;
   pageSize: number;
+  /** Every game version currently present in the hub, newest-ish first. */
+  gameVersions: string[];
 }
 
 export interface CommunityUploadRequest {

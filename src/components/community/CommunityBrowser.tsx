@@ -50,6 +50,7 @@ interface LoadedPlans {
   key: string;
   plans: CommunityPlanSummary[];
   total: number;
+  gameVersions: string[];
 }
 
 export function CommunityBrowser() {
@@ -60,6 +61,7 @@ export function CommunityBrowser() {
   const [sort, setSort] = useState<CommunityPlanSort>("new");
   const [search, setSearch] = useState("");
   const [maxTier, setMaxTier] = useState("");
+  const [gameVersion, setGameVersion] = useState("");
   // "My posts" can be deep-linked from the account menu (?mine=1).
   const [mineOnly, setMineOnly] = useState(() => searchParams.get("mine") === "1");
   const [error, setError] = useState<string>();
@@ -69,7 +71,7 @@ export function CommunityBrowser() {
   // Loading state is derived: whenever the query params move past what was
   // last fetched, we are loading. No sync setState inside effects needed.
   const [loaded, setLoaded] = useState<LoadedPlans>();
-  const queryKey = `${sort}|${debouncedSearch}|${maxTier}|${page}|${mineOnly}|${user?.username ?? ""}`;
+  const queryKey = `${sort}|${debouncedSearch}|${maxTier}|${gameVersion}|${page}|${mineOnly}|${user?.username ?? ""}`;
 
   useEffect(() => {
     window.clearTimeout(searchTimerRef.current);
@@ -85,6 +87,7 @@ export function CommunityBrowser() {
           sort,
           search: debouncedSearch || undefined,
           maxTier: maxTier || undefined,
+          gameVersion: gameVersion || undefined,
           mine: mineOnly || undefined,
           page,
           pageSize: PAGE_SIZE,
@@ -94,24 +97,30 @@ export function CommunityBrowser() {
         }
 
         setError(undefined);
-        setLoaded({ key: queryKey, plans: response.plans, total: response.total });
+        setLoaded({
+          key: queryKey,
+          plans: response.plans,
+          total: response.total,
+          gameVersions: response.gameVersions ?? [],
+        });
       } catch (loadError) {
         if (cancelled) {
           return;
         }
 
         setError(loadError instanceof Error ? loadError.message : "Loading plans failed.");
-        setLoaded({ key: queryKey, plans: [], total: 0 });
+        setLoaded({ key: queryKey, plans: [], total: 0, gameVersions: [] });
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, maxTier, mineOnly, page, queryKey, sort]);
+  }, [debouncedSearch, gameVersion, maxTier, mineOnly, page, queryKey, sort]);
 
   const plans = loaded?.plans ?? [];
   const total = loaded?.total ?? 0;
+  const gameVersions = loaded?.gameVersions ?? [];
   const isLoading = loaded?.key !== queryKey;
 
   const patchPlans = useCallback(
@@ -241,6 +250,22 @@ export function CommunityBrowser() {
           {SORT_OPTIONS.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={gameVersion}
+          onChange={(event) => {
+            setGameVersion(event.target.value);
+            setPage(1);
+          }}
+          className="rounded border border-line-strong bg-surface px-2 py-1.5 text-sm"
+          aria-label="Filter by game version"
+        >
+          <option value="">All versions</option>
+          {gameVersions.map((version) => (
+            <option key={version} value={version}>
+              GTNH {version}
             </option>
           ))}
         </select>

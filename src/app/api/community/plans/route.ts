@@ -53,6 +53,7 @@ export async function GET(request: Request) {
     );
     const deviceId = url.searchParams.get("deviceId") ?? undefined;
     const mineOnly = url.searchParams.get("mine") === "1";
+    const gameVersion = url.searchParams.get("gameVersion")?.slice(0, 60) ?? "";
     const sessionUser = await getSessionUser(request);
 
     const db = getCommunityDb();
@@ -63,9 +64,12 @@ export async function GET(request: Request) {
     if (Number.isFinite(maxTierIndex) && maxTierIndex >= 0) {
       query = query.lte("highest_tier_index", maxTierIndex);
     }
+    if (gameVersion) {
+      query = query.eq("game_version", gameVersion);
+    }
     if (mineOnly) {
       if (!sessionUser) {
-        return NextResponse.json({ plans: [], total: 0, page: 1, pageSize });
+        return NextResponse.json({ plans: [], total: 0, page: 1, pageSize, gameVersions: [] });
       }
       query = query.eq("user_id", sessionUser.id);
     }
@@ -87,11 +91,22 @@ export async function GET(request: Request) {
       await attachMyVotes(plans, makeActorKey(request, deviceId));
     }
 
+    // Distinct versions across the whole hub feed the filter dropdown.
+    const { data: versionRows } = await db
+      .from("community_plans")
+      .select("game_version")
+      .limit(1000)
+      .returns<Array<{ game_version: string }>>();
+    const gameVersions = [
+      ...new Set((versionRows ?? []).map((row) => row.game_version).filter(Boolean)),
+    ].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+
     const response: CommunityPlanListResponse = {
       plans,
       total: count ?? plans.length,
       page,
       pageSize,
+      gameVersions,
     };
     return NextResponse.json(response, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
