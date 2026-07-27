@@ -1,12 +1,15 @@
 "use client";
 
 import {
+  Check,
   ChevronDown,
   Download,
   FileImage,
   ImageDown,
+  Link2,
   LoaderCircle,
   Moon,
+  Pencil,
   Redo2,
   Share2,
   Sun,
@@ -46,6 +49,9 @@ import {
 import { useFactoryStore } from "@/store/factory-store";
 import { useThemeStore } from "@/store/theme-store";
 import { SharePlanDialog } from "./community/SharePlanDialog";
+import { listCommunityPlans } from "@/lib/community/client";
+import type { CommunityPlanSummary } from "@/lib/community/types";
+import { useCommunityUser } from "./community/auth";
 
 /**
  * Board actions — undo/redo, optimise, clean, import/export, theme.
@@ -61,6 +67,11 @@ export function BoardActions() {
     { format: "json" | "svg" | "png"; requestId: string } | undefined
   >();
   const [isShareOpen, setShareOpen] = useState(false);
+  const linkMenuRef = useRef<HTMLDivElement>(null);
+  const [isLinkMenuOpen, setLinkMenuOpen] = useState(false);
+  const [myPosts, setMyPosts] = useState<CommunityPlanSummary[]>();
+  const [copiedLink, setCopiedLink] = useState<string>();
+  const { user } = useCommunityUser();
   const project = useFactoryStore((state) => state.project);
   const manifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
@@ -157,15 +168,49 @@ export function BoardActions() {
   };
 
   useEffect(() => {
-    const closeExportMenu = (event: MouseEvent) => {
+    const closeMenus = (event: MouseEvent) => {
       if (!exportMenuRef.current?.contains(event.target as Node)) {
         setExportMenuOpen(false);
       }
+      if (!linkMenuRef.current?.contains(event.target as Node)) {
+        setLinkMenuOpen(false);
+      }
     };
 
-    window.addEventListener("mousedown", closeExportMenu);
-    return () => window.removeEventListener("mousedown", closeExportMenu);
+    window.addEventListener("mousedown", closeMenus);
+    return () => window.removeEventListener("mousedown", closeMenus);
   }, []);
+
+  const toggleLinkMenu = () => {
+    setLinkMenuOpen((isOpen) => !isOpen);
+    // Refresh the post list on every open so freshly shared plans appear.
+    if (!isLinkMenuOpen && user) {
+      void listCommunityPlans({ mine: true, pageSize: 48 }).then(
+        (response) => setMyPosts(response.plans),
+        () => setMyPosts([]),
+      );
+    }
+  };
+
+  const copyPostLink = async (post: CommunityPlanSummary, kind: "view" | "edit") => {
+    const url =
+      kind === "edit"
+        ? `${window.location.origin}/?plan=${post.id}`
+        : `${window.location.origin}/community?plan=${post.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      window.prompt("Copy this link:", url);
+      return;
+    }
+
+    const key = `${post.id}:${kind}`;
+    setCopiedLink(key);
+    window.setTimeout(
+      () => setCopiedLink((current) => (current === key ? undefined : current)),
+      1500,
+    );
+  };
 
   useEffect(() => {
     const handleImageExportComplete = (event: Event) => {
@@ -293,6 +338,66 @@ export function BoardActions() {
           disabled={project.nodes.length === 0}
           onClick={() => setShareOpen(true)}
         />
+        <div ref={linkMenuRef} className="relative">
+          <button
+            type="button"
+            onClick={toggleLinkMenu}
+            title="Copy links to your shared posts"
+            aria-label="Copy links to your shared posts"
+            aria-expanded={isLinkMenuOpen}
+            className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised"
+          >
+            <Link2 className="h-3.5 w-3.5" />
+          </button>
+          {isLinkMenuOpen ? (
+            <div className="absolute right-0 top-8 z-50 w-64 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
+              {!user ? (
+                <p className="px-3 py-2 text-fg-muted">
+                  Sign in (top right) to get links to your shared posts.
+                </p>
+              ) : myPosts === undefined ? (
+                <p className="px-3 py-2 text-fg-muted">Loading your posts…</p>
+              ) : myPosts.length === 0 ? (
+                <p className="px-3 py-2 text-fg-muted">
+                  No posts yet — use the Share button first.
+                </p>
+              ) : (
+                myPosts.map((post) => (
+                  <div
+                    key={post.id}
+                    className="flex items-center gap-1 px-2 py-1 hover:bg-surface-raised"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => void copyPostLink(post, "view")}
+                      title="Copy link to this post"
+                      className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+                    >
+                      {copiedLink === `${post.id}:view` ? (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                      ) : (
+                        <Link2 className="h-3.5 w-3.5 shrink-0 text-fg-muted" />
+                      )}
+                      <span className="truncate">{post.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyPostLink(post, "edit")}
+                      title="Copy edit link (opens in a friend's editor)"
+                      className="shrink-0 rounded p-1 text-fg-muted hover:text-fg"
+                    >
+                      {copiedLink === `${post.id}:edit` ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-500" />
+                      ) : (
+                        <Pencil className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : null}
+        </div>
         <ToolbarButton
           icon={theme === "dark" ? Sun : Moon}
           label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
