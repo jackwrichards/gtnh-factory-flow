@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeEdgeRate,
   formatEdgeRateLabel,
   isEdgeStarved,
   isEdgeSurplus,
@@ -142,5 +143,34 @@ describe("surplus", () => {
   it("stays quiet when capacity was withheld for a split producer", () => {
     expect(isEdgeSurplus(makeEdge({ demand: 5 }))).toBe(false);
     expect(formatEdgeRateLabel(makeEdge({ demand: 5 }))).toBe("5 /s");
+  });
+});
+
+describe("describeEdgeRate", () => {
+  it("explains a starved line from the consumer's side", () => {
+    expect(
+      describeEdgeRate(
+        makeEdge({ demand: 2, transferred: 2, nameplateDemand: 10, isSupplyCapped: true }),
+      ),
+    ).toBe(
+      "The machine downstream wants 10 /s but only 2 /s is arriving — it needs more supply.",
+    );
+  });
+
+  it("explains a surplus line from the producer's side, with the spare amount", () => {
+    expect(describeEdgeRate(makeEdge({ demand: 2, sourceCapacity: 10 }))).toBe(
+      "The producer could make 10 /s but only 2 /s is being taken — 8 /s to spare.",
+    );
+  });
+
+  it("explains a perfectly matched line", () => {
+    expect(describeEdgeRate(makeEdge({ demand: 10, sourceCapacity: 10 }))).toBe(
+      "Flowing at the producer's full 10 /s — supply and demand match exactly.",
+    );
+  });
+
+  it("falls back to the plain rate when there is nothing to compare", () => {
+    expect(describeEdgeRate(makeEdge({ demand: 4 }))).toBe("Flowing 4 /s.");
+    expect(describeEdgeRate(undefined)).toBe("");
   });
 });

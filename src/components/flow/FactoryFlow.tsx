@@ -78,9 +78,9 @@ import { GT_NODE_COLORS, GT_NODE_COLOR_PALETTE } from "./node-colors";
 import { getDeleteCursor, getPaintBrushCursor } from "./paint-cursor";
 import { makeResourceHandleId, parseResourceHandleId } from "./resource-handles";
 import {
+  describeEdgeRate,
   formatEdgeRateLabel,
   formatEdgeValue,
-  getEdgeSurplusCapacity,
   isEdgeStarved,
   isEdgeSurplus,
 } from "./edge-labels";
@@ -1991,13 +1991,9 @@ function ResourceEdgeComponent({
               opacity: isHighlighted ? 1 : isGlobalView ? 0.78 : 0.94,
               boxShadow: isHighlighted ? "0 0 0 2px rgba(34,211,238,0.9)" : undefined,
             }}
-            title={`${data.resource.displayName ?? data.resource.id}: ${rate}${
-              isEdgeStarved(data)
-                ? " — starved, consumer wants the full amount"
-                : getEdgeSurplusCapacity(data) !== undefined
-                  ? " — flowing / what the producer could make"
-                  : ""
-            }. Drag along cable. Double click to reset label.`}
+            title={`${data.resource.displayName ?? data.resource.id}: ${describeEdgeRate(
+              data,
+            )} Drag along cable. Double click to reset label.`}
             onPointerDown={(event) => {
               event.stopPropagation();
               window.dispatchEvent(

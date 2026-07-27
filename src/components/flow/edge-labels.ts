@@ -36,6 +36,27 @@ export function isEdgeStarved(data: EdgeLabelInput | undefined): boolean {
 }
 
 /**
+ * The numbers every label decision reads, resolved once: single-target bundles
+ * report totals for the whole group, which win over the individual edge's.
+ */
+function getEdgeFlowFigures(data: EdgeLabelInput): {
+  flowing: number;
+  nameplate?: number;
+  capacity?: number;
+  starved: boolean;
+} {
+  const bundle = data.bundle;
+  const bundled = Boolean(bundle?.demand);
+
+  return {
+    flowing: bundled ? bundle!.demand! : (data.transferred ?? data.demand),
+    nameplate: bundled ? bundle!.nameplateDemand : data.nameplateDemand,
+    capacity: bundled ? bundle!.sourceCapacity : data.sourceCapacity,
+    starved: bundled ? bundle!.isSupplyCapped : data.isSupplyCapped,
+  };
+}
+
+/**
  * The producer's capacity on this line, when a "flowing / capacity" fraction
  * should be shown: the consumer is fed, something is flowing, and the capacity
  * is a real number — drawers and tanks report an infinite supply, and
@@ -47,11 +68,7 @@ export function getEdgeSurplusCapacity(data: EdgeLabelInput | undefined): number
     return undefined;
   }
 
-  const bundle = data.bundle;
-  const bundled = Boolean(bundle?.demand);
-  const flowing = bundled ? bundle!.demand! : (data.transferred ?? data.demand);
-  const capacity = bundled ? bundle!.sourceCapacity : data.sourceCapacity;
-
+  const { flowing, capacity } = getEdgeFlowFigures(data);
   if (capacity === undefined || !Number.isFinite(capacity) || flowing <= 1e-6) {
     return undefined;
   }
@@ -66,10 +83,36 @@ export function isEdgeSurplus(data: EdgeLabelInput | undefined): boolean {
     return false;
   }
 
-  const bundle = data!.bundle;
-  const bundled = Boolean(bundle?.demand);
-  const flowing = bundled ? bundle!.demand! : (data!.transferred ?? data!.demand);
-  return capacity > flowing + 1e-6;
+  return capacity > getEdgeFlowFigures(data!).flowing + 1e-6;
+}
+
+/**
+ * One plain-English sentence saying what the label's numbers mean, for the
+ * hover tooltip. Same precedence as formatEdgeRateLabel, so the sentence
+ * always explains the fraction actually on screen.
+ */
+export function describeEdgeRate(data: EdgeLabelInput | undefined): string {
+  if (!data) {
+    return "";
+  }
+
+  const { flowing, nameplate, starved } = getEdgeFlowFigures(data);
+  const unit = data.unit;
+
+  if (starved && nameplate !== undefined && nameplate > flowing + 1e-6) {
+    return `The machine downstream wants ${formatEdgeValue(nameplate)} ${unit} but only ${formatEdgeValue(flowing)} ${unit} is arriving — it needs more supply.`;
+  }
+
+  const capacity = getEdgeSurplusCapacity(data);
+  if (capacity !== undefined && capacity > flowing + 1e-6) {
+    return `The producer could make ${formatEdgeValue(capacity)} ${unit} but only ${formatEdgeValue(flowing)} ${unit} is being taken — ${formatEdgeValue(capacity - flowing)} ${unit} to spare.`;
+  }
+
+  if (capacity !== undefined) {
+    return `Flowing at the producer's full ${formatEdgeValue(capacity)} ${unit} — supply and demand match exactly.`;
+  }
+
+  return `Flowing ${formatEdgeValue(flowing)} ${unit}.`;
 }
 
 export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {
@@ -77,15 +120,9 @@ export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {
     return "";
   }
 
-  // A single-target bundle reports the summed rate for the whole group, so its
-  // totals win over the individual edge's.
-  const bundle = data.bundle;
-  const bundled = Boolean(bundle?.demand);
-  // transferred is only populated when the edge is starved, so this stays the
-  // plain flow rate in the healthy case.
-  const flowing = bundled ? bundle!.demand! : (data.transferred ?? data.demand);
-  const nameplate = bundled ? bundle!.nameplateDemand : data.nameplateDemand;
-  const starved = bundled ? bundle!.isSupplyCapped : data.isSupplyCapped;
+  // transferred is only populated when the edge is starved, so flowing stays
+  // the plain flow rate in the healthy case.
+  const { flowing, nameplate, starved } = getEdgeFlowFigures(data);
 
   if (starved && nameplate !== undefined && nameplate > flowing + 1e-6) {
     return `${formatEdgeValue(flowing)} / ${formatEdgeValue(nameplate)} ${data.unit}`;
