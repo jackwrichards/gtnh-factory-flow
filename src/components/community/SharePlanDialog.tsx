@@ -1,6 +1,6 @@
 "use client";
 
-import { ImageOff, LoaderCircle, Share2, X } from "lucide-react";
+import { Check, ImageOff, Link2, LoaderCircle, Pencil, Share2, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -42,7 +42,8 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
   const [thumbnail, setThumbnail] = useState<ThumbnailState>({ status: "capturing" });
   const [isUploading, setUploading] = useState(false);
   const [error, setError] = useState<string>();
-  const [shared, setShared] = useState<"created" | "updated">();
+  const [shared, setShared] = useState<{ kind: "created" | "updated"; planId: string }>();
+  const [copiedLink, setCopiedLink] = useState<"view" | "edit">();
 
   const stats = useMemo(() => computeCommunityPlanStats(project, result), [project, result]);
   const datasetVersion = manifest?.versions.find(
@@ -126,16 +127,39 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
 
       if (updateTargetId) {
         await updateCommunityPlan(updateTargetId, payload);
-        setShared("updated");
+        setShared({ kind: "updated", planId: updateTargetId });
       } else {
-        await uploadCommunityPlan(payload);
-        setShared("created");
+        const { id } = await uploadCommunityPlan(payload);
+        setShared({ kind: "created", planId: id });
       }
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : "Sharing failed.");
     } finally {
       setUploading(false);
     }
+  };
+
+  const copyShareLink = async (kind: "view" | "edit") => {
+    if (!shared) {
+      return;
+    }
+
+    const url =
+      kind === "edit"
+        ? `${window.location.origin}/?plan=${shared.planId}`
+        : `${window.location.origin}/community?plan=${shared.planId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      window.prompt("Copy this link:", url);
+      return;
+    }
+
+    setCopiedLink(kind);
+    window.setTimeout(
+      () => setCopiedLink((current) => (current === kind ? undefined : current)),
+      1500,
+    );
   };
 
   return (
@@ -158,10 +182,37 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
         {shared ? (
           <div className="space-y-3">
             <p className="text-sm">
-              {shared === "updated"
+              {shared.kind === "updated"
                 ? "Your post has been updated."
                 : "Your plan is live. Thanks for sharing!"}
             </p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void copyShareLink("view")}
+                className="inline-flex items-center gap-1.5 rounded border border-line-strong px-3 py-1.5 text-sm hover:bg-surface-raised"
+              >
+                {copiedLink === "view" ? (
+                  <Check className="h-4 w-4 text-emerald-500" />
+                ) : (
+                  <Link2 className="h-4 w-4" />
+                )}
+                Copy link
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyShareLink("edit")}
+                title="A link that opens this plan directly in a friend's editor"
+                className="inline-flex items-center gap-1.5 rounded border border-line-strong px-3 py-1.5 text-sm hover:bg-surface-raised"
+              >
+                {copiedLink === "edit" ? (
+                  <Check className="h-4 w-4 text-emerald-500" />
+                ) : (
+                  <Pencil className="h-4 w-4" />
+                )}
+                Copy edit link
+              </button>
+            </div>
             <Link
               href="/community"
               className="inline-flex rounded border border-cyan-700 bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500"
