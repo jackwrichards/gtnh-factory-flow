@@ -1726,6 +1726,29 @@ function PaintToolbar({
   );
 }
 
+/** Matches rate tokens like "10/s", "1,200.5/s" or "12 L/s" in a sentence. */
+const RATE_TOKEN_PATTERN = /(\d[\d,]*(?:\.\d+)?(?:\s?L)?\/[a-z]+)/g;
+
+/**
+ * Lifts the rates out of a plain-English sentence so they read as figures:
+ * slightly brighter, semibold, tabular, tinted with the edge's status colour.
+ */
+function renderRateSentence(sentence: string, accentColor: string) {
+  return sentence.split(RATE_TOKEN_PATTERN).map((part, index) =>
+    index % 2 === 1 ? (
+      <span
+        key={index}
+        className="font-semibold tabular-nums"
+        style={{ color: accentColor }}
+      >
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}
+
 function ResourceEdgeComponent({
   id,
   sourceX,
@@ -2079,7 +2102,7 @@ function ResourceEdgeComponent({
               bare
               className="!h-[22px] !w-[22px]"
             />
-            <span className="leading-none">{rate}</span>
+            <span className="font-semibold leading-none tracking-tight tabular-nums">{rate}</span>
           </div>
           {isLabelHovered && !isLabelDragging ? (
             <div
@@ -2098,23 +2121,20 @@ function ResourceEdgeComponent({
                   bare
                   className="!h-[20px] !w-[20px]"
                 />
-                <span className="truncate text-[12px] font-semibold text-white">
+                <span className="truncate text-[11px] font-semibold text-white">
                   {data.resource.displayName ?? data.resource.id}
                 </span>
                 {labelToneWord ? (
                   <span
-                    className="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-wide"
+                    className="ml-auto shrink-0 text-[9px] font-bold uppercase tracking-wide"
                     style={{ color: labelAccentColor }}
                   >
                     {labelToneWord}
                   </span>
                 ) : null}
               </div>
-              <p className="mt-1.5 text-[11px] leading-snug text-slate-300">
-                {describeEdgeRate(data)}
-              </p>
-              <p className="mt-1.5 border-t border-white/10 pt-1 text-[10px] leading-tight text-slate-500">
-                Drag to slide along the cable · double-click to reset
+              <p className="mt-1 text-[10px] leading-snug text-slate-300">
+                {renderRateSentence(describeEdgeRate(data), labelAccentColor)}
               </p>
             </div>
           ) : null}

@@ -100,19 +100,19 @@ export function describeEdgeRate(data: EdgeLabelInput | undefined): string {
   const unit = data.unit;
 
   if (starved && nameplate !== undefined && nameplate > flowing + 1e-6) {
-    return `The machine downstream wants ${formatEdgeValue(nameplate)} ${unit} but only ${formatEdgeValue(flowing)} ${unit} is arriving — it needs more supply.`;
+    return `The machine downstream wants ${withUnit(nameplate, unit)} but only ${withUnit(flowing, unit)} is arriving — it needs more supply.`;
   }
 
   const capacity = getEdgeSurplusCapacity(data);
   if (capacity !== undefined && capacity > flowing + 1e-6) {
-    return `The producer could make ${formatEdgeValue(capacity)} ${unit} but only ${formatEdgeValue(flowing)} ${unit} is being taken — ${formatEdgeValue(capacity - flowing)} ${unit} to spare.`;
+    return `The producer could make ${withUnit(capacity, unit)} but only ${withUnit(flowing, unit)} is being taken — ${withUnit(capacity - flowing, unit)} to spare.`;
   }
 
   if (capacity !== undefined) {
-    return `Flowing at the producer's full ${formatEdgeValue(capacity)} ${unit} — supply and demand match exactly.`;
+    return `Flowing at the producer's full ${withUnit(capacity, unit)} — supply and demand match exactly.`;
   }
 
-  return `Flowing ${formatEdgeValue(flowing)} ${unit}.`;
+  return `Flowing ${withUnit(flowing, unit)}.`;
 }
 
 export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {
@@ -125,7 +125,7 @@ export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {
   const { flowing, nameplate, starved } = getEdgeFlowFigures(data);
 
   if (starved && nameplate !== undefined && nameplate > flowing + 1e-6) {
-    return `${formatEdgeValue(flowing)} / ${formatEdgeValue(nameplate)} ${data.unit}`;
+    return `${formatEdgeValue(flowing)} / ${withUnit(nameplate, data.unit)}`;
   }
 
   // The mirror image of the starved ratio: flowing over what the producer
@@ -133,14 +133,19 @@ export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {
   // a plain rate.
   const surplusCapacity = getEdgeSurplusCapacity(data);
   if (surplusCapacity !== undefined) {
-    return `${formatEdgeValue(flowing)} / ${formatEdgeValue(surplusCapacity)} ${data.unit}`;
+    return `${formatEdgeValue(flowing)} / ${withUnit(surplusCapacity, data.unit)}`;
   }
 
-  return `${formatEdgeValue(flowing)} ${data.unit}`;
+  return withUnit(flowing, data.unit);
 }
 
 export function formatEdgeValue(value: number): string {
   const abs = Math.abs(value);
   const digits = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
   return formatNumberWithThousands(trimTrailingDecimalZeros(value.toFixed(digits)));
+}
+
+/** "10/s" reads as one token; "12 L/s" needs the space to stay a unit. */
+function withUnit(value: number, unit: string): string {
+  return unit.startsWith("/") ? `${formatEdgeValue(value)}${unit}` : `${formatEdgeValue(value)} ${unit}`;
 }
