@@ -8,12 +8,20 @@ export interface EdgeLabelInput {
   demand: number;
   transferred?: number;
   nameplateDemand?: number;
+  /**
+   * What the producer could emit at 100% utilisation. Only set when this edge
+   * (or its single-target bundle) is the producer's sole outlet for the
+   * resource — the solver reports the producer's total, so splitting it across
+   * several consumers would show the same headroom on every line.
+   */
+  sourceCapacity?: number;
   unit: string;
   isLimited: boolean;
   isSupplyCapped: boolean;
   bundle?: {
     demand?: number;
     nameplateDemand?: number;
+    sourceCapacity?: number;
     isSupplyCapped: boolean;
   };
 }
@@ -25,6 +33,33 @@ export interface EdgeLabelInput {
  */
 export function isEdgeStarved(data: EdgeLabelInput | undefined): boolean {
   return data?.isSupplyCapped === true || data?.isLimited === true;
+}
+
+/**
+ * The producer's spare headroom on this line, when it is worth showing: the
+ * consumer is fed, something is flowing, and the producer could push
+ * meaningfully more. Returns the producer's full capacity, or undefined when
+ * the label should stay a plain rate.
+ */
+export function getEdgeSurplusCapacity(data: EdgeLabelInput | undefined): number | undefined {
+  if (!data || isEdgeStarved(data)) {
+    return undefined;
+  }
+
+  const bundle = data.bundle;
+  const bundled = Boolean(bundle?.demand);
+  const flowing = bundled ? bundle!.demand! : (data.transferred ?? data.demand);
+  const capacity = bundled ? bundle!.sourceCapacity : data.sourceCapacity;
+
+  if (capacity === undefined || flowing <= 1e-6 || capacity <= flowing + 1e-6) {
+    return undefined;
+  }
+
+  return capacity;
+}
+
+export function isEdgeSurplus(data: EdgeLabelInput | undefined): boolean {
+  return getEdgeSurplusCapacity(data) !== undefined;
 }
 
 export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {
@@ -44,6 +79,14 @@ export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {
 
   if (starved && nameplate !== undefined && nameplate > flowing + 1e-6) {
     return `${formatEdgeValue(flowing)} / ${formatEdgeValue(nameplate)} ${data.unit}`;
+  }
+
+  // The mirror image of the starved ratio: flowing over what the producer
+  // could make, so slack capacity reads at a glance instead of hiding behind
+  // a plain rate.
+  const surplusCapacity = getEdgeSurplusCapacity(data);
+  if (surplusCapacity !== undefined) {
+    return `${formatEdgeValue(flowing)} / ${formatEdgeValue(surplusCapacity)} ${data.unit}`;
   }
 
   return `${formatEdgeValue(flowing)} ${data.unit}`;

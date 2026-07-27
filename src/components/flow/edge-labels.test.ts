@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { formatEdgeRateLabel, isEdgeStarved, type EdgeLabelInput } from "./edge-labels";
+import {
+  formatEdgeRateLabel,
+  isEdgeStarved,
+  isEdgeSurplus,
+  type EdgeLabelInput,
+} from "./edge-labels";
 
 function makeEdge(overrides: Partial<EdgeLabelInput> = {}): EdgeLabelInput {
   return {
@@ -86,5 +91,50 @@ describe("formatEdgeRateLabel", () => {
 
   it("returns an empty string without data", () => {
     expect(formatEdgeRateLabel(undefined)).toBe("");
+  });
+});
+
+describe("surplus", () => {
+  it("shows flowing over producer capacity when the line has headroom", () => {
+    const edge = makeEdge({ demand: 1, sourceCapacity: 10 });
+    expect(isEdgeSurplus(edge)).toBe(true);
+    expect(formatEdgeRateLabel(edge)).toBe("1 / 10 /s");
+  });
+
+  it("stays a plain rate when capacity matches the flow", () => {
+    const edge = makeEdge({ demand: 10, sourceCapacity: 10 });
+    expect(isEdgeSurplus(edge)).toBe(false);
+    expect(formatEdgeRateLabel(edge)).toBe("10 /s");
+  });
+
+  it("never shows surplus on a starved edge — the shortfall ratio wins", () => {
+    const edge = makeEdge({
+      demand: 1,
+      transferred: 1,
+      nameplateDemand: 100,
+      sourceCapacity: 10,
+      isSupplyCapped: true,
+    });
+    expect(isEdgeSurplus(edge)).toBe(false);
+    expect(formatEdgeRateLabel(edge)).toBe("1 / 100 /s");
+  });
+
+  it("shows nothing on a dead line", () => {
+    // "0 / 10" in green would read as praise for a line carrying nothing.
+    expect(isEdgeSurplus(makeEdge({ demand: 0, sourceCapacity: 10 }))).toBe(false);
+  });
+
+  it("uses the bundle's shared capacity for single-target bundles", () => {
+    const edge = makeEdge({
+      demand: 1,
+      sourceCapacity: undefined,
+      bundle: { demand: 3, sourceCapacity: 12, isSupplyCapped: false },
+    });
+    expect(formatEdgeRateLabel(edge)).toBe("3 / 12 /s");
+  });
+
+  it("stays quiet when capacity was withheld for a split producer", () => {
+    expect(isEdgeSurplus(makeEdge({ demand: 5 }))).toBe(false);
+    expect(formatEdgeRateLabel(makeEdge({ demand: 5 }))).toBe("5 /s");
   });
 });

@@ -77,7 +77,7 @@ import { RecipeNode, type RecipeFlowNode } from "./RecipeNode";
 import { GT_NODE_COLORS, GT_NODE_COLOR_PALETTE } from "./node-colors";
 import { getDeleteCursor, getPaintBrushCursor } from "./paint-cursor";
 import { makeResourceHandleId, parseResourceHandleId } from "./resource-handles";
-import { formatEdgeRateLabel, formatEdgeValue, isEdgeStarved } from "./edge-labels";
+import { formatEdgeRateLabel, formatEdgeValue, isEdgeStarved, isEdgeSurplus } from "./edge-labels";
 import {
   EDGE_DETAIL_ARROWS,
   EDGE_DETAIL_GLOBAL,
@@ -161,6 +161,8 @@ type ResourceEdgeData = {
   transferred?: number;
   /** What the consumer wants at 100%, so a shortfall can be shown as a ratio. */
   nameplateDemand?: number;
+  /** Producer's full output rate; set only when this edge is its sole outlet. */
+  sourceCapacity?: number;
   unit: string;
   isLimited: boolean;
   /** Producer is maxed out and the consumer is going hungry. */
@@ -187,6 +189,7 @@ type ResourceEdgeData = {
     demand?: number;
     transferred?: number;
     nameplateDemand?: number;
+    sourceCapacity?: number;
     isLimited: boolean;
     isSupplyCapped: boolean;
   };
@@ -539,6 +542,14 @@ export function FactoryFlow() {
   const edges = useMemo<ResourceFlowEdge[]>(() => {
     const edgeBundles = getEdgeBundles(project, project.edges, result.edges);
     const endpointOffsets = getEdgeEndpointOffsets(project);
+    // How many lines each producer splits a resource across. The solver's
+    // sourceCapacityPerSecond is the producer's total, so the surplus ratio is
+    // only honest when a single edge (or single-target bundle) carries it all.
+    const outletCounts = new Map<string, number>();
+    for (const edge of project.edges) {
+      const key = [edge.source, edge.resourceKind, edge.resourceId].join("|");
+      outletCounts.set(key, (outletCounts.get(key) ?? 0) + 1);
+    }
 
     return project.edges.map((edge, edgeIndex) => {
       const edgeResult = result.edges[edge.id];
@@ -585,6 +596,10 @@ export function FactoryFlow() {
           demand,
           transferred: isStarvedEdge ? transferred : undefined,
           nameplateDemand: edgeResult?.nameplateDemandPerSecond,
+          sourceCapacity:
+            outletCounts.get([edge.source, edge.resourceKind, edge.resourceId].join("|")) === 1
+              ? edgeResult?.sourceCapacityPerSecond
+              : undefined,
           unit,
           isLimited: edgeResult?.isLimited === true,
           isSupplyCapped,
@@ -1961,12 +1976,22 @@ function ResourceEdgeComponent({
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: "all",
-              color: isEdgeStarved(data) ? "#fecaca" : "#f8fafc",
+              color: isEdgeStarved(data)
+                ? "#fecaca"
+                : isEdgeSurplus(data)
+                  ? "#bbf7d0"
+                  : "#f8fafc",
               borderColor: edgeColor,
               opacity: isHighlighted ? 1 : isGlobalView ? 0.78 : 0.94,
               boxShadow: isHighlighted ? "0 0 0 2px rgba(34,211,238,0.9)" : undefined,
             }}
-            title={`${data.resource.displayName ?? data.resource.id}: ${rate}. Drag along cable. Double click to reset label.`}
+            title={`${data.resource.displayName ?? data.resource.id}: ${rate}${
+              isEdgeStarved(data)
+                ? " — starved, consumer wants the full amount"
+                : isEdgeSurplus(data)
+                  ? " — flowing / what the producer could make"
+                  : ""
+            }. Drag along cable. Double click to reset label.`}
             onPointerDown={(event) => {
               event.stopPropagation();
               window.dispatchEvent(
@@ -2089,6 +2114,7 @@ function getEdgeBundles(
       transferredPerSecond?: number;
       isLimited?: boolean;
       nameplateDemandPerSecond?: number;
+      sourceCapacityPerSecond?: number;
       constraint?: EdgeThroughput["constraint"];
     }
   >,
@@ -2151,6 +2177,12 @@ function getEdgeBundles(
       (sum, edge) => sum + (edgeResults[edge.id]?.nameplateDemandPerSecond ?? 0),
       0,
     );
+    // Every edge in the group leaves the same producer, so its capacity is one
+    // shared total, not a per-edge amount to sum.
+    const sourceCapacity = group.reduce(
+      (max, edge) => Math.max(max, edgeResults[edge.id]?.sourceCapacityPerSecond ?? 0),
+      0,
+    );
     const primarySourceHandleId = primaryEdge.sourceHandle ?? sourceHandleIds[0];
     const edgeIds = group.map((edge) => edge.id);
     if (!primarySourceHandleId) {
@@ -2168,6 +2200,8 @@ function getEdgeBundles(
         demand: mode === "single-target" ? demand : undefined,
         transferred: mode === "single-target" && isLimited ? transferred : undefined,
         nameplateDemand: mode === "single-target" ? nameplateDemand : undefined,
+        sourceCapacity:
+          mode === "single-target" && sourceCapacity > 0 ? sourceCapacity : undefined,
         isLimited,
         isSupplyCapped,
       });
