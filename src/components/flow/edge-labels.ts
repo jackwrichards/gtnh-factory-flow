@@ -36,10 +36,11 @@ export function isEdgeStarved(data: EdgeLabelInput | undefined): boolean {
 }
 
 /**
- * The producer's spare headroom on this line, when it is worth showing: the
- * consumer is fed, something is flowing, and the producer could push
- * meaningfully more. Returns the producer's full capacity, or undefined when
- * the label should stay a plain rate.
+ * The producer's capacity on this line, when a "flowing / capacity" fraction
+ * should be shown: the consumer is fed, something is flowing, and the capacity
+ * is a real number — drawers and tanks report an infinite supply, and
+ * "1 / Infinity" helps nobody. A 1:1 fraction still shows, so a line running
+ * exactly at capacity reads "10 / 10" rather than hiding the comparison.
  */
 export function getEdgeSurplusCapacity(data: EdgeLabelInput | undefined): number | undefined {
   if (!data || isEdgeStarved(data)) {
@@ -51,15 +52,24 @@ export function getEdgeSurplusCapacity(data: EdgeLabelInput | undefined): number
   const flowing = bundled ? bundle!.demand! : (data.transferred ?? data.demand);
   const capacity = bundled ? bundle!.sourceCapacity : data.sourceCapacity;
 
-  if (capacity === undefined || flowing <= 1e-6 || capacity <= flowing + 1e-6) {
+  if (capacity === undefined || !Number.isFinite(capacity) || flowing <= 1e-6) {
     return undefined;
   }
 
   return capacity;
 }
 
+/** True only when the producer could push meaningfully more than is flowing. */
 export function isEdgeSurplus(data: EdgeLabelInput | undefined): boolean {
-  return getEdgeSurplusCapacity(data) !== undefined;
+  const capacity = getEdgeSurplusCapacity(data);
+  if (capacity === undefined) {
+    return false;
+  }
+
+  const bundle = data!.bundle;
+  const bundled = Boolean(bundle?.demand);
+  const flowing = bundled ? bundle!.demand! : (data!.transferred ?? data!.demand);
+  return capacity > flowing + 1e-6;
 }
 
 export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {

@@ -77,7 +77,13 @@ import { RecipeNode, type RecipeFlowNode } from "./RecipeNode";
 import { GT_NODE_COLORS, GT_NODE_COLOR_PALETTE } from "./node-colors";
 import { getDeleteCursor, getPaintBrushCursor } from "./paint-cursor";
 import { makeResourceHandleId, parseResourceHandleId } from "./resource-handles";
-import { formatEdgeRateLabel, formatEdgeValue, isEdgeStarved, isEdgeSurplus } from "./edge-labels";
+import {
+  formatEdgeRateLabel,
+  formatEdgeValue,
+  getEdgeSurplusCapacity,
+  isEdgeStarved,
+  isEdgeSurplus,
+} from "./edge-labels";
 import {
   EDGE_DETAIL_ARROWS,
   EDGE_DETAIL_GLOBAL,
@@ -1988,7 +1994,7 @@ function ResourceEdgeComponent({
             title={`${data.resource.displayName ?? data.resource.id}: ${rate}${
               isEdgeStarved(data)
                 ? " — starved, consumer wants the full amount"
-                : isEdgeSurplus(data)
+                : getEdgeSurplusCapacity(data) !== undefined
                   ? " — flowing / what the producer could make"
                   : ""
             }. Drag along cable. Double click to reset label.`}

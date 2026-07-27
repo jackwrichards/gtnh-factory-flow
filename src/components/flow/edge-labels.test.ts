@@ -101,10 +101,16 @@ describe("surplus", () => {
     expect(formatEdgeRateLabel(edge)).toBe("1 / 10 /s");
   });
 
-  it("stays a plain rate when capacity matches the flow", () => {
+  it("still shows the fraction at 1:1, just not as surplus", () => {
     const edge = makeEdge({ demand: 10, sourceCapacity: 10 });
     expect(isEdgeSurplus(edge)).toBe(false);
-    expect(formatEdgeRateLabel(edge)).toBe("10 /s");
+    expect(formatEdgeRateLabel(edge)).toBe("10 / 10 /s");
+  });
+
+  it("never shows a fraction from an infinite source like a drawer", () => {
+    const edge = makeEdge({ demand: 4, sourceCapacity: Number.POSITIVE_INFINITY });
+    expect(isEdgeSurplus(edge)).toBe(false);
+    expect(formatEdgeRateLabel(edge)).toBe("4 /s");
   });
 
   it("never shows surplus on a starved edge — the shortfall ratio wins", () => {
