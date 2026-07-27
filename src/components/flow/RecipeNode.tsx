@@ -90,7 +90,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   );
   const isNodeBottleneckHighlighted =
     (hoveredNodeBottlenecks || selectedNodeBottlenecks) && result?.status === "bottleneck";
-  const isInspectorHighlighted = isFlowResourceHighlighted || isNodeBottleneckHighlighted;
+  const isUsageHighlighted = useFactoryStore(
+    (state) => state.hoveredUsageNodeId === projectNode.id,
+  );
+  const isInspectorHighlighted =
+    isFlowResourceHighlighted || isNodeBottleneckHighlighted || isUsageHighlighted;
   const nodeColor = projectNode.colorTag ? GT_NODE_COLORS[projectNode.colorTag] : undefined;
   const paintCursor =
     nodeColorPaintMode !== undefined

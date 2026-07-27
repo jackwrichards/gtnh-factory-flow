@@ -17,6 +17,7 @@ import {
   type FlowSectionTone,
 } from "./inspector/flow-sections";
 import { PowerBreakdown } from "./inspector/PowerBreakdown";
+import { UsagePanel } from "./inspector/UsagePanel";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
 const FLOW_FILTER_DEBOUNCE_MS = 120;
@@ -72,6 +73,8 @@ function SummaryPanel() {
       </div>
 
       <PowerBreakdown />
+
+      <UsagePanel />
 
       <FlowIOPanel />
     </div>

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FactoryNode, NodeThroughputResult, Recipe } from "@/lib/model/types";
 import {
-  buildMachineUsage,
   buildPowerByMachine,
   buildPowerByTier,
   computePowerTotals,
@@ -249,41 +248,5 @@ describe("computePowerTotals", () => {
 
     expect(totals.peakEuT).toBe(400);
     expect(totals.actualEuT).toBe(250);
-  });
-});
-
-describe("buildMachineUsage", () => {
-  const recipes = [
-    makeRecipe("ebf", "Electric Blast Furnace"),
-    makeRecipe("chem", "Chemical Reactor"),
-  ];
-
-  it("weights group utilization by draw, not by node count", () => {
-    // Two chem reactors: 300 EU/t at 100% and 100 EU/t at 0%. A plain node
-    // average would say 50%; weighted by draw the group runs at 75%.
-    const usage = buildMachineUsage(
-      { nodes: [makeNode("a", "chem", 1), makeNode("b", "chem", 1)], recipes },
-      { nodes: { a: makeNodeResult("a", 300, 1), b: makeNodeResult("b", 100, 0) } },
-    );
-
-    expect(usage).toHaveLength(1);
-    expect(usage[0].nodeCount).toBe(2);
-    expect(usage[0].peakEuT).toBe(400);
-    expect(usage[0].actualEuT).toBe(300);
-    expect(usage[0].utilization).toBeCloseTo(0.75);
-  });
-
-  it("keeps fully idle machines in the roster and sorts by nameplate draw", () => {
-    const usage = buildMachineUsage(
-      { nodes: [makeNode("a", "chem", 1), makeNode("b", "ebf", 1)], recipes },
-      { nodes: { a: makeNodeResult("a", 100, 0), b: makeNodeResult("b", 500, 0.6) } },
-    );
-
-    expect(usage.map((slice) => slice.label)).toEqual([
-      "Electric Blast Furnace",
-      "Chemical Reactor",
-    ]);
-    expect(usage[1].utilization).toBe(0);
-    expect(usage[1].actualEuT).toBe(0);
   });
 });

@@ -4,11 +4,9 @@ import { useMemo, useState } from "react";
 import { formatRate } from "@/lib/model";
 import { useFactoryStore } from "@/store/factory-store";
 import {
-  buildMachineUsage,
   buildPowerByMachine,
   buildPowerByTier,
   computePowerTotals,
-  type MachineUsageSlice,
   type PowerMode,
   type PowerSlice,
 } from "./power-breakdown";
@@ -25,12 +23,11 @@ const ORDINAL_RAMP = [
   "var(--viz-ordinal-5)",
 ];
 
-type PowerView = "tier" | "machine" | "usage";
+type PowerView = "tier" | "machine";
 
 const VIEW_LABELS: Record<PowerView, string> = {
   tier: "Tier",
   machine: "Machine",
-  usage: "Usage",
 };
 
 const MODE_LABELS: Record<PowerMode, string> = {
@@ -85,10 +82,8 @@ export function PowerBreakdown() {
     () => buildPowerByMachine(project, result, mode),
     [project, result, mode],
   );
-  const usage = useMemo(() => buildMachineUsage(project, result), [project, result]);
-
   const totalEuT = mode === "actual" ? totals.actualEuT : totals.peakEuT;
-  const hasSlices = view === "usage" ? usage.length > 0 : (view === "tier" ? tiers : machines).length > 0;
+  const hasSlices = (view === "tier" ? tiers : machines).length > 0;
 
   return (
     <section className="shrink-0 rounded border border-line bg-surface-raised p-2">
@@ -129,7 +124,7 @@ export function PowerBreakdown() {
       ) : null}
 
       <div className="mt-1.5 flex overflow-hidden rounded border border-line">
-        {(["tier", "machine", "usage"] as const).map((option) => (
+        {(["tier", "machine"] as const).map((option) => (
           <button
             key={option}
             type="button"
@@ -151,10 +146,8 @@ export function PowerBreakdown() {
         <p className="mt-1.5 text-xs text-fg-muted">No machines drawing power yet.</p>
       ) : view === "tier" ? (
         <TierBar slices={tiers} />
-      ) : view === "machine" ? (
-        <MachineBars slices={machines} />
       ) : (
-        <UsageBars slices={usage} />
+        <MachineBars slices={machines} />
       )}
     </section>
   );
@@ -246,45 +239,3 @@ function MachineBars({ slices }: { slices: PowerSlice[] }) {
   );
 }
 
-/**
- * Every powered machine with how hard it works: the bar is utilization on a
- * fixed 0–100% track, so bars are comparable as "how busy", not "how big".
- * The EU/t pair on the right carries the magnitude the bar deliberately drops.
- */
-function UsageBars({ slices }: { slices: MachineUsageSlice[] }) {
-  return (
-    <ul className="mt-2 space-y-1.5">
-      {slices.map((slice) => (
-        <li
-          key={slice.key}
-          title={`${slice.label} — running at ${formatShare(slice.utilization)}: ${formatEuT(
-            slice.actualEuT,
-          )} of ${formatEuT(slice.peakEuT)} nameplate${
-            slice.nodeCount > 1 ? ` across ${slice.nodeCount} nodes` : ""
-          }`}
-        >
-          <div className="flex items-baseline justify-between gap-2 text-[11px] leading-tight">
-            <span className="truncate text-fg">{slice.label}</span>
-            <span className="shrink-0 font-semibold tabular-nums text-fg">
-              {formatShare(slice.utilization)}
-            </span>
-          </div>
-          <div className="mt-0.5 flex items-center gap-2">
-            <div className="h-2 flex-1 rounded-[4px] bg-surface-sunken">
-              <div
-                style={{
-                  width: `${Math.min(Math.max(slice.utilization * 100, 1), 100)}%`,
-                  backgroundColor: "var(--viz-series-1)",
-                }}
-                className="h-full rounded-[4px]"
-              />
-            </div>
-            <span className="shrink-0 text-[10px] tabular-nums text-fg-subtle">
-              {formatRate(slice.actualEuT, 0)} / {formatEuT(slice.peakEuT)}
-            </span>
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}

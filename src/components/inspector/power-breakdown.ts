@@ -9,18 +9,6 @@ export interface PowerSlice {
   share: number;
 }
 
-export interface MachineUsageSlice {
-  key: string;
-  label: string;
-  /** Nameplate draw of every machine in the group, EU/t. */
-  peakEuT: number;
-  /** Utilization-scaled draw, EU/t. */
-  actualEuT: number;
-  /** actualEuT / peakEuT, 0..1 — weighted by draw, not a plain node average. */
-  utilization: number;
-  nodeCount: number;
-}
-
 /**
  * Peak is nameplate draw — every machine running flat out. Actual scales each
  * node by its solved utilization, so a starved machine only counts the share of
@@ -174,48 +162,4 @@ export function buildPowerByMachine(
   }
 
   return slices;
-}
-
-/**
- * Every powered machine with how hard it is actually working: actual draw over
- * nameplate draw. Nothing folds into "Other" — the point of this view is the
- * full roster, and an idle machine at the bottom is exactly what the reader is
- * scanning for. Sorted by nameplate draw so the expensive machines lead.
- */
-export function buildMachineUsage(
-  project: Pick<FactoryProject, "nodes" | "recipes">,
-  result: Pick<ThroughputResult, "nodes">,
-): MachineUsageSlice[] {
-  const machineTypeByRecipeId = new Map(
-    project.recipes.map((recipe) => [recipe.id, recipe.machineType]),
-  );
-  const byMachine = new Map<string, { peakEuT: number; actualEuT: number; nodeCount: number }>();
-
-  for (const node of project.nodes) {
-    const peakEuT = nodeDraw(result, node.id, "peak");
-    if (peakEuT <= 0) {
-      continue;
-    }
-
-    const label =
-      machineTypeByRecipeId.get(node.recipeId) ||
-      result.nodes[node.id]?.recipeName ||
-      "Unknown machine";
-    const group = byMachine.get(label) ?? { peakEuT: 0, actualEuT: 0, nodeCount: 0 };
-    group.peakEuT += peakEuT;
-    group.actualEuT += nodeDraw(result, node.id, "actual");
-    group.nodeCount += 1;
-    byMachine.set(label, group);
-  }
-
-  return [...byMachine.entries()]
-    .sort((left, right) => right[1].peakEuT - left[1].peakEuT)
-    .map(([label, group]) => ({
-      key: label,
-      label,
-      peakEuT: group.peakEuT,
-      actualEuT: group.actualEuT,
-      utilization: group.peakEuT > 0 ? group.actualEuT / group.peakEuT : 0,
-      nodeCount: group.nodeCount,
-    }));
 }

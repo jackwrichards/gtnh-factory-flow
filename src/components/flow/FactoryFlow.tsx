@@ -368,6 +368,7 @@ export function FactoryFlow() {
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
   const hoveredNodeBottlenecks = useFactoryStore((state) => state.hoveredNodeBottlenecks);
   const selectedNodeBottlenecks = useFactoryStore((state) => state.selectedNodeBottlenecks);
+  const hoveredUsageNodeId = useFactoryStore((state) => state.hoveredUsageNodeId);
   const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
   const activeFlowResourceKey = hoveredFlowResourceKey ?? selectedFlowResourceKey;
@@ -390,11 +391,13 @@ export function FactoryFlow() {
           type: "recipeNode",
           position: node.position,
           zIndex:
-            activeNodeBottlenecks && result.nodes[node.id]?.status === "bottleneck"
+            hoveredUsageNodeId === node.id
               ? 1500
-              : activeFlowResourceKey && recipeContainsResourceKey(recipe, activeFlowResourceKey)
+              : activeNodeBottlenecks && result.nodes[node.id]?.status === "bottleneck"
                 ? 1500
-                : undefined,
+                : activeFlowResourceKey && recipeContainsResourceKey(recipe, activeFlowResourceKey)
+                  ? 1500
+                  : undefined,
           // Reusing the previous `data` object when nothing in it moved is what
           // lets RecipeNode's memo actually hold. Rebuilding it â€” which this memo
           // does whenever a resource is hovered or the solver re-runs â€” otherwise
@@ -444,6 +447,7 @@ export function FactoryFlow() {
     [
       activeFlowResourceKey,
       activeNodeBottlenecks,
+      hoveredUsageNodeId,
       project.annotations,
       project.nodes,
       project.storages,
