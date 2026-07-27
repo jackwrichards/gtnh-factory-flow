@@ -21,18 +21,22 @@ function usagePercentColor(utilization: number, status?: NodeThroughputResult["s
   return "#f8fafc";
 }
 
-function entryPercent(entry: UsageLimitEntry): string {
-  if (!Number.isFinite(entry.fraction)) {
-    return "∞";
+function limitHeadline(entry: UsageLimitEntry): string | undefined {
+  if (entry.kind === "no-demand") {
+    return undefined;
   }
 
-  return formatSatisfactionPercent(entry.fraction);
+  if (entry.kind === "machines") {
+    return "Not enough machines.";
+  }
+
+  return `${entry.label} is the limit.`;
 }
 
 /**
- * The shared "why is this machine at X%" panel: the binding limit first, then
- * who would take over if it were fixed. Bars carry the message; the only words
- * are names and the LIMIT / NEXT tags.
+ * The shared "why is this machine at X%" panel, written as plain English: what
+ * limits it now, and what would take over if that were fixed. Storage-fed
+ * lines never limit anything, so they are left out of the story.
  */
 export function UsageLimitContent({
   title,
@@ -45,6 +49,10 @@ export function UsageLimitContent({
   status?: NodeThroughputResult["status"];
   entries: UsageLimitEntry[];
 }) {
+  const visible = entries.filter((entry) => Number.isFinite(entry.fraction));
+  const limit = visible[0];
+  const runnersUp = visible.slice(1, 3);
+
   return (
     <div className="w-64">
       <div className="flex items-baseline gap-2 border-b border-white/15 pb-1.5">
@@ -57,45 +65,30 @@ export function UsageLimitContent({
         </span>
       </div>
 
-      {entries.length > 0 ? (
-        <ul className="mt-2 space-y-2">
-          {entries.map((entry, index) => {
-            const isActive = index === 0;
-            const barColor = isActive ? "#fbbf24" : "#64748b";
-            const fill = Number.isFinite(entry.fraction)
-              ? Math.min(Math.max(entry.fraction, 0), 1) * 100
-              : 100;
+      {limit ? (
+        <div className="mt-2">
+          {limitHeadline(limit) ? (
+            <p className="text-[13px] font-semibold leading-snug text-amber-300">
+              {limitHeadline(limit)}
+            </p>
+          ) : null}
+          <p className="mt-0.5 text-[13px] leading-relaxed text-slate-100">{limit.detail}</p>
+        </div>
+      ) : null}
 
-            return (
-              <li key={entry.key}>
-                <div className="flex items-baseline gap-1.5 text-[12px] leading-none">
-                  <span
-                    className="w-10 shrink-0 text-[10px] font-bold uppercase tracking-wide"
-                    style={{ color: isActive ? "#fbbf24" : "#64748b" }}
-                  >
-                    {isActive ? "Limit" : "Next"}
-                  </span>
-                  <span className="truncate font-semibold text-white">{entry.label}</span>
-                  <span className="ml-auto shrink-0 text-[11px] tabular-nums text-slate-400">
-                    {entry.detail}
-                  </span>
-                  <span
-                    className="w-11 shrink-0 text-right text-[12px] font-bold tabular-nums"
-                    style={{ color: isActive ? "#fbbf24" : "#cbd5e1" }}
-                  >
-                    {entryPercent(entry)}
-                  </span>
-                </div>
-                <div className="ml-[46px] mt-1 h-[5px] overflow-hidden rounded-sm bg-white/10">
-                  <div
-                    className="h-full rounded-sm"
-                    style={{ width: `${fill}%`, backgroundColor: barColor }}
-                  />
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+      {runnersUp.length > 0 ? (
+        <div className="mt-2.5 border-t border-white/10 pt-2">
+          {runnersUp.map((entry, index) => (
+            <p key={entry.key} className="text-[12px] leading-relaxed text-slate-400">
+              {index === 0 ? "If fixed, " : "After that, "}
+              {entry.label.toLowerCase()} caps it at{" "}
+              <span className="font-semibold text-slate-300">
+                {formatSatisfactionPercent(entry.fraction)}
+              </span>
+              .
+            </p>
+          ))}
+        </div>
       ) : null}
     </div>
   );

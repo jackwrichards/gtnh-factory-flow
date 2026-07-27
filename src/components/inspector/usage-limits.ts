@@ -15,7 +15,7 @@ export interface UsageLimitEntry {
    * machine at 50%, Infinity never limits (storage-fed lines).
    */
   fraction: number;
-  /** Compact figures for the row, e.g. "5/s of 10/s" or "5 needed". No prose. */
+  /** One plain sentence explaining this factor, used when it is the limit. */
   detail: string;
   /** True on the factor that is setting the usage right now. */
   active: boolean;
@@ -102,7 +102,7 @@ export function buildUsageLimitChain(
         kind: "machines",
         label: "Machine count",
         fraction,
-        detail: `${machinesNeeded} needed`,
+        detail: `Takers want ${rateWithUnit(wanted, outputFlow.kind)} but it can only make ${rateWithUnit(capacity, outputFlow.kind)}. Add ${Math.max(machinesNeeded - node.machineCount, 1)} more machines.`,
         active: false,
       };
     } else {
@@ -111,7 +111,7 @@ export function buildUsageLimitChain(
         kind: "demand",
         label: `${name} demand`,
         fraction,
-        detail: `${rateWithUnit(wanted, outputFlow.kind)} of ${rateWithUnit(capacity, outputFlow.kind)}`,
+        detail: `Takers only use ${rateWithUnit(wanted, outputFlow.kind)} of the ${rateWithUnit(capacity, outputFlow.kind)} it can make.`,
         active: false,
       };
     }
@@ -123,7 +123,7 @@ export function buildUsageLimitChain(
       kind: "no-demand",
       label: "No takers",
       fraction: 1,
-      detail: "runs free",
+      detail: "Nothing uses its output yet, so it runs at full speed.",
       active: false,
     };
   }
@@ -166,7 +166,7 @@ export function buildUsageLimitChain(
         kind: "supply",
         label: `${name} supply`,
         fraction: Number.POSITIVE_INFINITY,
-        detail: "from storage",
+        detail: "Fed from storage, so it never runs short.",
         active: false,
       });
       continue;
@@ -178,7 +178,7 @@ export function buildUsageLimitChain(
       kind: "supply",
       label: `${name} supply`,
       fraction,
-      detail: `${rateWithUnit(incoming.capacity, inputFlow.kind)} of ${rateWithUnit(need, inputFlow.kind)}`,
+      detail: `It can get ${rateWithUnit(incoming.capacity, inputFlow.kind)} but needs ${rateWithUnit(need, inputFlow.kind)}.`,
       active: incoming.binding,
     });
   }
