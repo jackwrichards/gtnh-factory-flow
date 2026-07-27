@@ -81,6 +81,7 @@ import {
   describeEdgeRate,
   formatEdgeRateLabel,
   formatEdgeValue,
+  getEdgeSurplusCapacity,
   isEdgeStarved,
   isEdgeSurplus,
 } from "./edge-labels";
@@ -1752,6 +1753,7 @@ function ResourceEdgeComponent({
   const storedLabelOffset = { x: storedLabelOffsetX, y: storedLabelOffsetY };
   const [draftLabelOffset, setDraftLabelOffset] = useState(storedLabelOffset);
   const [isLabelDragging, setLabelDragging] = useState(false);
+  const [isLabelHovered, setLabelHovered] = useState(false);
   const labelDragRef = useRef<
     | {
         pointerId: number;
@@ -1805,6 +1807,28 @@ function ResourceEdgeComponent({
   const visualSource = visualSourceCandidates[0];
   const visualTarget = visualTargetCandidates[0];
   const rate = formatEdgeRateLabel(data);
+  // One accent per flow state, shared by the label text, the hover ring and
+  // the popover: red = starved consumer, green = producer headroom, cyan =
+  // nothing to flag.
+  const labelTone = isEdgeStarved(data)
+    ? "starved"
+    : isEdgeSurplus(data)
+      ? "surplus"
+      : getEdgeSurplusCapacity(data) !== undefined
+        ? "matched"
+        : "normal";
+  const labelTextColor =
+    labelTone === "starved" ? "#fecaca" : labelTone === "surplus" ? "#bbf7d0" : "#f8fafc";
+  const labelAccentColor =
+    labelTone === "starved" ? "#f87171" : labelTone === "surplus" ? "#4ade80" : "#22d3ee";
+  const labelToneWord =
+    labelTone === "starved"
+      ? "Starved"
+      : labelTone === "surplus"
+        ? "Spare capacity"
+        : labelTone === "matched"
+          ? "Matched"
+          : undefined;
   const isHiddenBundleMember =
     data?.bundle?.role === "member" && data.bundle.mode === "single-target";
   const showLabel = Boolean(
@@ -1978,22 +2002,22 @@ function ResourceEdgeComponent({
       {showLabel && data ? (
         <EdgeLabelRenderer>
           <div
-            className="nodrag nopan absolute flex cursor-grab items-center gap-1.5 border border-[var(--mc-15)] bg-[#2b2d32] px-2 py-1 text-[13px] font-medium text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.55)] active:cursor-grabbing"
+            className="nodrag nopan absolute flex cursor-grab items-center gap-1.5 border border-[var(--mc-15)] bg-[#2b2d32] px-2 py-1 text-[13px] font-medium text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.55)] transition-shadow duration-100 active:cursor-grabbing"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: "all",
-              color: isEdgeStarved(data)
-                ? "#fecaca"
-                : isEdgeSurplus(data)
-                  ? "#bbf7d0"
-                  : "#f8fafc",
-              borderColor: edgeColor,
-              opacity: isHighlighted ? 1 : isGlobalView ? 0.78 : 0.94,
-              boxShadow: isHighlighted ? "0 0 0 2px rgba(34,211,238,0.9)" : undefined,
+              color: labelTextColor,
+              borderColor: isLabelHovered ? labelAccentColor : edgeColor,
+              opacity: isHighlighted || isLabelHovered ? 1 : isGlobalView ? 0.78 : 0.94,
+              boxShadow: isLabelHovered
+                ? `0 0 0 2px ${labelAccentColor}, 0 0 12px ${labelAccentColor}66`
+                : isHighlighted
+                  ? "0 0 0 2px rgba(34,211,238,0.9)"
+                  : undefined,
+              zIndex: isLabelHovered ? 60 : undefined,
             }}
-            title={`${data.resource.displayName ?? data.resource.id}: ${describeEdgeRate(
-              data,
-            )} Drag along cable. Double click to reset label.`}
+            onMouseEnter={() => setLabelHovered(true)}
+            onMouseLeave={() => setLabelHovered(false)}
             onPointerDown={(event) => {
               event.stopPropagation();
               window.dispatchEvent(
@@ -2057,6 +2081,43 @@ function ResourceEdgeComponent({
             />
             <span className="leading-none">{rate}</span>
           </div>
+          {isLabelHovered && !isLabelDragging ? (
+            <div
+              className="nodrag nopan pointer-events-none absolute w-60 border-2 bg-[#2b2d32] px-3 py-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14),inset_-1px_-1px_0_rgba(0,0,0,0.55),0_6px_16px_rgba(0,0,0,0.55)]"
+              style={{
+                transform: `translate(-50%, -100%) translate(${labelX}px, ${labelY - 22}px)`,
+                borderColor: labelAccentColor,
+                zIndex: 70,
+              }}
+            >
+              <div className="flex items-center gap-1.5">
+                <ResourceIcon
+                  resource={data.resource}
+                  size="sm"
+                  showAmount={false}
+                  bare
+                  className="!h-[20px] !w-[20px]"
+                />
+                <span className="truncate text-[12px] font-semibold text-white">
+                  {data.resource.displayName ?? data.resource.id}
+                </span>
+                {labelToneWord ? (
+                  <span
+                    className="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-wide"
+                    style={{ color: labelAccentColor }}
+                  >
+                    {labelToneWord}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1.5 text-[11px] leading-snug text-slate-300">
+                {describeEdgeRate(data)}
+              </p>
+              <p className="mt-1.5 border-t border-white/10 pt-1 text-[10px] leading-tight text-slate-500">
+                Drag to slide along the cable · double-click to reset
+              </p>
+            </div>
+          ) : null}
         </EdgeLabelRenderer>
       ) : null}
     </>
