@@ -48,15 +48,17 @@ export function UsagePanel() {
   }
 
   return (
-    <section className="shrink-0 rounded border border-line bg-surface-raised p-2">
-      <div className="flex items-baseline gap-1.5">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wide text-fg-muted">Usage</h2>
-        <span className="text-[10px] text-fg-subtle">hover to find on canvas</span>
-      </div>
+    <section className="shrink-0 rounded border border-line bg-surface-raised p-1.5">
+      <h2
+        className="text-[10px] font-semibold uppercase leading-none tracking-wide text-fg-muted"
+        title="One cell per machine on the board — hover to find it on the canvas, click to select it."
+      >
+        Usage
+      </h2>
 
       <div
-        className="mt-1.5 grid max-h-56 gap-1 overflow-y-auto overscroll-contain"
-        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(64px, 1fr))" }}
+        className="mt-1 grid max-h-56 gap-0.5 overflow-y-auto overscroll-contain"
+        style={{ gridTemplateColumns: "repeat(auto-fill, minmax(68px, 1fr))" }}
       >
         {cells.map((cell) => (
           <UsageCellButton
@@ -95,7 +97,7 @@ function UsageCellButton({
     >
       {/* The icon owns the whole cell; the percent floats over it so growing
           the art never grows the cell. */}
-      <span className="absolute inset-0 flex items-center justify-center overflow-hidden p-0.5">
+      <span className="absolute inset-0 flex items-center justify-center overflow-hidden">
         {cell.icon ? (
           <ResourceIcon
             resource={{ ...cell.icon, amount: 1 }}
@@ -113,7 +115,7 @@ function UsageCellButton({
           without reading as a box. */}
       <span
         className={[
-          "pointer-events-none absolute inset-x-0 bottom-0.5 text-center text-[11px] font-bold leading-none tabular-nums",
+          "pointer-events-none absolute inset-x-0 bottom-0 text-center text-[10px] font-bold leading-none tabular-nums",
           "[text-shadow:0_0_3px_rgba(255,255,255,0.95),0_1px_2px_rgba(255,255,255,0.9)] dark:[text-shadow:0_0_3px_rgba(0,0,0,0.9),0_1px_2px_rgba(0,0,0,0.95)]",
           STATUS_TEXT[cell.status] ?? "text-fg",
         ].join(" ")}
