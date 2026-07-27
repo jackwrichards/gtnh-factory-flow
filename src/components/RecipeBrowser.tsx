@@ -756,7 +756,7 @@ function ResourceHistoryPanel({
   }
 
   return (
-    <div className="pointer-events-auto z-20 shrink-0 border-t border-neutral-800 bg-[#111317] px-2 pb-2 pt-1.5">
+    <div className="pointer-events-auto z-20 shrink-0 border-t border-neutral-700 bg-[#2a2d33] px-2 pb-2 pt-1.5">
       <p className="mb-1 px-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
         Recent
       </p>
@@ -782,7 +782,7 @@ function ResourceHistoryPanel({
           >
             <ResourceIcon
               resource={{ ...resource, amount: 1 }}
-              size="md"
+              size="lg"
               bare
               showAmount={false}
               tooltip={false}
@@ -794,7 +794,7 @@ function ResourceHistoryPanel({
   );
 }
 
-const HISTORY_CELL_SIZE = 52;
+const HISTORY_CELL_SIZE = 62;
 const HISTORY_ROWS = 3;
 
 function useVisibleResourceHistorySlots(resourceCount: number) {
