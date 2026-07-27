@@ -14,7 +14,7 @@ import {
 } from "@/lib/datasets/browser-loader";
 import { loadResourceHistory, useFactoryStore } from "@/store/factory-store";
 import { useDesignStore } from "@/store/design-store";
-import { takePendingEditorImport } from "@/lib/community/client";
+import { downloadCommunityPlan, takePendingEditorImport } from "@/lib/community/client";
 import { parseFactoryProjectJson } from "@/lib/import-export";
 import { useThemeStore } from "@/store/theme-store";
 import { BoardActions } from "./BoardActions";
@@ -91,16 +91,37 @@ export function FactoryPlannerApp() {
         .then(async () => {
           // A plan handed off from the community hub becomes its own design
           // tab, so it never overwrites whatever the user was working on.
-          const pending = takePendingEditorImport();
-          if (!pending) {
-            return;
-          }
-
-          try {
-            const project = parseFactoryProjectJson(JSON.stringify(pending));
+          const importAsDesign = async (raw: unknown) => {
+            const project = parseFactoryProjectJson(JSON.stringify(raw));
             await useDesignStore
               .getState()
               .importProjectAsDesign(project, project.name || "Community plan");
+          };
+
+          try {
+            const pending = takePendingEditorImport();
+            if (pending) {
+              await importAsDesign(pending);
+              return;
+            }
+
+            // Shared "open to edit" links: /?plan=<community id>.
+            const params = new URLSearchParams(window.location.search);
+            const sharedPlanId = params.get("plan");
+            if (sharedPlanId) {
+              try {
+                const { plan } = await downloadCommunityPlan(sharedPlanId);
+                await importAsDesign(plan);
+              } finally {
+                params.delete("plan");
+                const query = params.toString();
+                window.history.replaceState(
+                  null,
+                  "",
+                  `${window.location.pathname}${query ? `?${query}` : ""}`,
+                );
+              }
+            }
           } catch (error) {
             console.error(
               error instanceof Error ? error.message : "Importing the community plan failed.",

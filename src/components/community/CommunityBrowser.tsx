@@ -3,9 +3,11 @@
 import {
   ArrowBigDown,
   ArrowBigUp,
+  Check,
   Download,
   Eye,
   Factory,
+  Link2,
   LoaderCircle,
   Pencil,
   Search,
@@ -66,6 +68,7 @@ export function CommunityBrowser() {
   const [mineOnly, setMineOnly] = useState(() => searchParams.get("mine") === "1");
   const [error, setError] = useState<string>();
   const [preview, setPreview] = useState<CommunityPlanSummary>();
+  const [copiedKey, setCopiedKey] = useState<string>();
   const searchTimerRef = useRef<number>(undefined);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   // Loading state is derived: whenever the query params move past what was
@@ -213,12 +216,59 @@ export function CommunityBrowser() {
 
   const openPreview = async (plan: CommunityPlanSummary) => {
     setPreview(plan);
+    syncPlanUrlParam(plan.id);
     try {
       // Detail fetch counts the view and refreshes counters.
       setPreview(await getCommunityPlan(plan.id));
     } catch {
       // The card data is already shown; a failed refresh is not fatal.
     }
+  };
+
+  const closePreview = () => {
+    setPreview(undefined);
+    syncPlanUrlParam(undefined);
+  };
+
+  // Shared links (/community?plan=<id>) open the preview directly.
+  const sharedPlanId = searchParams.get("plan");
+  useEffect(() => {
+    if (!sharedPlanId) {
+      return;
+    }
+
+    let cancelled = false;
+    void getCommunityPlan(sharedPlanId).then(
+      (plan) => {
+        if (!cancelled) {
+          setPreview(plan);
+        }
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [sharedPlanId]);
+
+  const copyPlanLink = async (plan: CommunityPlanSummary, kind: "view" | "edit") => {
+    const url =
+      kind === "edit"
+        ? `${window.location.origin}/?plan=${plan.id}`
+        : `${window.location.origin}/community?plan=${plan.id}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      window.prompt("Copy this link:", url);
+      return;
+    }
+
+    const key = `${plan.id}:${kind}`;
+    setCopiedKey(key);
+    window.setTimeout(
+      () => setCopiedKey((current) => (current === key ? undefined : current)),
+      1500,
+    );
   };
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -325,11 +375,13 @@ export function CommunityBrowser() {
               key={plan.id}
               plan={plan}
               canManage={plan.isMine === true || user?.isAdmin === true}
+              copiedKey={copiedKey}
               onVote={vote}
               onPreview={openPreview}
               onDownload={downloadJson}
               onOpen={openInEditor}
               onDelete={removeMyPost}
+              onCopyLink={copyPlanLink}
             />
           ))}
         </div>
@@ -363,11 +415,13 @@ export function CommunityBrowser() {
         <PlanPreviewModal
           plan={preview}
           canManage={preview.isMine === true || user?.isAdmin === true}
-          onClose={() => setPreview(undefined)}
+          copiedKey={copiedKey}
+          onClose={closePreview}
           onVote={vote}
           onDownload={downloadJson}
           onOpen={openInEditor}
           onDelete={removeMyPost}
+          onCopyLink={copyPlanLink}
         />
       ) : null}
     </div>
@@ -377,21 +431,26 @@ export function CommunityBrowser() {
 function PlanCard({
   plan,
   canManage,
+  copiedKey,
   onVote,
   onPreview,
   onDownload,
   onOpen,
   onDelete,
+  onCopyLink,
 }: {
   plan: CommunityPlanSummary;
   canManage: boolean;
+  copiedKey?: string;
   onVote: (plan: CommunityPlanSummary, value: 1 | -1) => void;
   onPreview: (plan: CommunityPlanSummary) => void;
   onDownload: (plan: CommunityPlanSummary) => void;
   onOpen: (plan: CommunityPlanSummary) => void;
   onDelete: (plan: CommunityPlanSummary) => void;
+  onCopyLink: (plan: CommunityPlanSummary, kind: "view" | "edit") => void;
 }) {
   const isMine = plan.isMine === true;
+  const isLinkCopied = copiedKey === `${plan.id}:view`;
   return (
     <div className="flex flex-col overflow-hidden rounded border border-line bg-surface shadow-sm">
       <button
@@ -494,6 +553,18 @@ function PlanCard({
             </button>
             <button
               type="button"
+              onClick={() => onCopyLink(plan, "view")}
+              title={isLinkCopied ? "Link copied!" : "Copy link to this post"}
+              className={`inline-flex items-center rounded border px-2 py-1 ${
+                isLinkCopied
+                  ? "border-emerald-600 text-emerald-500"
+                  : "border-line-strong hover:bg-surface-raised"
+              }`}
+            >
+              {isLinkCopied ? <Check className="h-3 w-3" /> : <Link2 className="h-3 w-3" />}
+            </button>
+            <button
+              type="button"
               onClick={() => onDownload(plan)}
               title="Download JSON"
               className="inline-flex items-center rounded border border-line-strong px-2 py-1 hover:bg-surface-raised"
@@ -544,6 +615,22 @@ function VoteControls({
         <ArrowBigDown className="h-4 w-4" fill={plan.myVote === -1 ? "currentColor" : "none"} />
       </button>
     </span>
+  );
+}
+
+/** Keeps ?plan=<id> in the address bar in sync with the open preview. */
+function syncPlanUrlParam(planId: string | undefined) {
+  const params = new URLSearchParams(window.location.search);
+  if (planId) {
+    params.set("plan", planId);
+  } else {
+    params.delete("plan");
+  }
+  const query = params.toString();
+  window.history.replaceState(
+    null,
+    "",
+    `${window.location.pathname}${query ? `?${query}` : ""}`,
   );
 }
 
@@ -602,19 +689,23 @@ function ResourceIconRow({
 function PlanPreviewModal({
   plan,
   canManage,
+  copiedKey,
   onClose,
   onVote,
   onDownload,
   onOpen,
   onDelete,
+  onCopyLink,
 }: {
   plan: CommunityPlanSummary;
   canManage: boolean;
+  copiedKey?: string;
   onClose: () => void;
   onVote: (plan: CommunityPlanSummary, value: 1 | -1) => void;
   onDownload: (plan: CommunityPlanSummary) => void;
   onOpen: (plan: CommunityPlanSummary) => void;
   onDelete: (plan: CommunityPlanSummary) => void;
+  onCopyLink: (plan: CommunityPlanSummary, kind: "view" | "edit") => void;
 }) {
   return (
     <div
@@ -671,7 +762,7 @@ function PlanPreviewModal({
         <PreviewResourceList label="Needs" stats={plan.needs} />
         <PreviewResourceList label="Makes" stats={plan.outputs} />
 
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
           {canManage ? (
             <button
               type="button"
@@ -681,6 +772,31 @@ function PlanPreviewModal({
               <Trash2 className="h-4 w-4" /> Take down
             </button>
           ) : null}
+          <button
+            type="button"
+            onClick={() => onCopyLink(plan, "view")}
+            className="inline-flex items-center gap-1.5 rounded border border-line-strong px-3 py-1.5 text-sm hover:bg-surface-raised"
+          >
+            {copiedKey === `${plan.id}:view` ? (
+              <Check className="h-4 w-4 text-emerald-500" />
+            ) : (
+              <Link2 className="h-4 w-4" />
+            )}
+            Copy link
+          </button>
+          <button
+            type="button"
+            onClick={() => onCopyLink(plan, "edit")}
+            title="A link that opens this plan directly in the editor"
+            className="inline-flex items-center gap-1.5 rounded border border-line-strong px-3 py-1.5 text-sm hover:bg-surface-raised"
+          >
+            {copiedKey === `${plan.id}:edit` ? (
+              <Check className="h-4 w-4 text-emerald-500" />
+            ) : (
+              <Pencil className="h-4 w-4" />
+            )}
+            Copy edit link
+          </button>
           <button
             type="button"
             onClick={() => onDownload(plan)}
