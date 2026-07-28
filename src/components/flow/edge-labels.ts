@@ -34,6 +34,11 @@ export interface EdgeLabelInput {
  * converged node utilisation down to match available supply.
  */
 export function isEdgeStarved(data: EdgeLabelInput | undefined): boolean {
+  // Storage soaks up whatever arrives; a line into a barrel is never starved.
+  if (data?.isStorageTarget) {
+    return false;
+  }
+
   if (data?.isSupplyCapped === true || data?.isLimited === true) {
     return true;
   }
@@ -71,7 +76,8 @@ function getEdgeFlowFigures(data: EdgeLabelInput): {
  * to nowhere has no need to satisfy.
  */
 export function getEdgeSupplyRatio(data: EdgeLabelInput | undefined): number | undefined {
-  if (!data) {
+  // A barrel has no need to satisfy - storage lines carry no percent at all.
+  if (!data || data.isStorageTarget) {
     return undefined;
   }
 
@@ -114,6 +120,12 @@ export function describeEdgeRate(data: EdgeLabelInput | undefined): string {
 
   const { flowing, nameplate } = getEdgeFlowFigures(data);
   const unit = data.unit;
+
+  // Dead simple for barrels: they take whatever arrives, end of story.
+  if (data.isStorageTarget) {
+    return `Flows into storage at ${withUnit(flowing, unit)}.`;
+  }
+
   const need = nameplate !== undefined && nameplate > 1e-6 ? nameplate : flowing;
 
   // Careful with claims here: this line only knows about one resource. The
@@ -121,26 +133,18 @@ export function describeEdgeRate(data: EdgeLabelInput | undefined): string {
   // machine's by its other ingredients - so speak about the line, never about
   // how fast either machine runs. That is the usage grid's job.
   const ratio = getEdgeSupplyRatio(data);
-  const storage = data.isStorageTarget === true;
   if (ratio !== undefined && ratio < 1 - 1e-6) {
     const canDeliver = ratio * need;
-    const times = formatEdgeValue(1 / Math.max(ratio, 1e-6));
-    return storage
-      ? `Machines pulling from this storage need ${withUnit(need, unit)} but this line only brings ${withUnit(canDeliver, unit)}. It takes ${times}× the current supply to keep up.`
-      : `The machine this feeds needs ${withUnit(need, unit)} but this line can only deliver ${withUnit(canDeliver, unit)}. It takes ${times}× the current supply to fill it.`;
+    return `The machine this feeds needs ${withUnit(need, unit)} but this line can only deliver ${withUnit(canDeliver, unit)}. It takes ${formatEdgeValue(1 / Math.max(ratio, 1e-6))}× the current supply to fill it.`;
   }
 
   if (ratio !== undefined && ratio > 1 + 1e-6) {
     const canDeliver = ratio * need;
-    return storage
-      ? `The maker can send ${withUnit(canDeliver, unit)}; ${withUnit(need, unit)} flows into storage now. ${withUnit(canDeliver - need, unit)} is spare.`
-      : `The maker can send ${withUnit(canDeliver, unit)} but only ${withUnit(need, unit)} is needed. ${withUnit(canDeliver - need, unit)} is spare.`;
+    return `The maker can send ${withUnit(canDeliver, unit)} but only ${withUnit(need, unit)} is needed. ${withUnit(canDeliver - need, unit)} is spare.`;
   }
 
   if (ratio !== undefined) {
-    return storage
-      ? `Storage takes everything the maker sends: ${withUnit(need, unit)}.`
-      : `The maker sends exactly the ${withUnit(need, unit)} that is needed.`;
+    return `The maker sends exactly the ${withUnit(need, unit)} that is needed.`;
   }
 
   return `Carrying ${withUnit(flowing, unit)}.`;
