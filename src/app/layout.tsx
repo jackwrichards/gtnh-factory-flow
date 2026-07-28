@@ -18,12 +18,14 @@ const monocraft = localFont({
   display: "swap",
 });
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://gtnh.samiracle.fr";
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://gtnh.samiracle.fr"),
+  metadataBase: new URL(siteUrl),
   applicationName: "GTNH Planner",
   title: "GTNH Planner | GregTech New Horizons Factory Calculator",
   description:
-    "Plan and optimize GregTech: New Horizons factories with a GTNH recipe flowchart, throughput calculator, machine ratios, and dataset-backed production chains.",
+    "Plan and optimize GregTech: New Horizons factories on an interactive flowchart. Full recipe data for GTNH 2.8.4 and 2.9, throughput and power calculation, machine ratios, and community-shared plans.",
   alternates: {
     canonical: "/",
   },
@@ -49,15 +51,16 @@ export const metadata: Metadata = {
   openGraph: {
     title: "GTNH Planner | GregTech New Horizons Factory Calculator",
     description:
-      "Build GTNH recipe flowcharts, calculate throughput, balance machine ratios, and plan production chains for GregTech: New Horizons.",
+      "Free factory planner for GregTech: New Horizons with full recipe data for GTNH 2.8.4 and 2.9. Draw production chains, balance machine ratios, find bottlenecks, and share plans with the community.",
     siteName: "GTNH Planner",
     type: "website",
+    url: "/",
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
     title: "GTNH Planner | GregTech New Horizons Factory Calculator",
     description:
-      "Build GTNH recipe flowcharts, calculate throughput, balance machine ratios, and plan production chains for GregTech: New Horizons.",
+      "Free factory planner for GregTech: New Horizons with full recipe data for GTNH 2.8.4 and 2.9. Draw production chains, balance machine ratios, find bottlenecks, and share plans with the community.",
   },
   icons: {
     icon: "/site-icon.png",
