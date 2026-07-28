@@ -175,6 +175,8 @@ type ResourceEdgeData = {
   isLimited: boolean;
   /** Producer is maxed out and the consumer is going hungry. */
   isSupplyCapped: boolean;
+  /** The line ends in a barrel or tank rather than a machine. */
+  isStorageTarget?: boolean;
   isStorageEdge: boolean;
   showLabel: boolean;
   labelOffset?: { x: number; y: number };
@@ -625,6 +627,7 @@ export function FactoryFlow() {
           unit,
           isLimited: edgeResult?.isLimited === true,
           isSupplyCapped,
+          isStorageTarget: Boolean(targetStorage),
           isStorageEdge,
           showLabel: true,
           labelOffset: edge.labelOffset,

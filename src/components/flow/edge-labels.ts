@@ -18,6 +18,8 @@ export interface EdgeLabelInput {
   unit: string;
   isLimited: boolean;
   isSupplyCapped: boolean;
+  /** The line ends in a barrel or tank; demand on it comes from whatever drains that storage. */
+  isStorageTarget?: boolean;
   bundle?: {
     demand?: number;
     nameplateDemand?: number;
@@ -119,18 +121,26 @@ export function describeEdgeRate(data: EdgeLabelInput | undefined): string {
   // machine's by its other ingredients - so speak about the line, never about
   // how fast either machine runs. That is the usage grid's job.
   const ratio = getEdgeSupplyRatio(data);
+  const storage = data.isStorageTarget === true;
   if (ratio !== undefined && ratio < 1 - 1e-6) {
     const canDeliver = ratio * need;
-    return `The machine this feeds needs ${withUnit(need, unit)} but this line can only deliver ${withUnit(canDeliver, unit)}. It takes ${formatEdgeValue(1 / Math.max(ratio, 1e-6))}× the current supply to fill it.`;
+    const times = formatEdgeValue(1 / Math.max(ratio, 1e-6));
+    return storage
+      ? `Machines pulling from this storage need ${withUnit(need, unit)} but this line only brings ${withUnit(canDeliver, unit)}. It takes ${times}× the current supply to keep up.`
+      : `The machine this feeds needs ${withUnit(need, unit)} but this line can only deliver ${withUnit(canDeliver, unit)}. It takes ${times}× the current supply to fill it.`;
   }
 
   if (ratio !== undefined && ratio > 1 + 1e-6) {
     const canDeliver = ratio * need;
-    return `The maker can send ${withUnit(canDeliver, unit)} but only ${withUnit(need, unit)} is needed. ${withUnit(canDeliver - need, unit)} is spare.`;
+    return storage
+      ? `The maker can send ${withUnit(canDeliver, unit)}; ${withUnit(need, unit)} flows into storage now. ${withUnit(canDeliver - need, unit)} is spare.`
+      : `The maker can send ${withUnit(canDeliver, unit)} but only ${withUnit(need, unit)} is needed. ${withUnit(canDeliver - need, unit)} is spare.`;
   }
 
   if (ratio !== undefined) {
-    return `The maker sends exactly the ${withUnit(need, unit)} that is needed.`;
+    return storage
+      ? `Storage takes everything the maker sends: ${withUnit(need, unit)}.`
+      : `The maker sends exactly the ${withUnit(need, unit)} that is needed.`;
   }
 
   return `Carrying ${withUnit(flowing, unit)}.`;

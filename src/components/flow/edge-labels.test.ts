@@ -182,6 +182,25 @@ describe("describeEdgeRate", () => {
     );
   });
 
+  it("speaks about storage when the line ends in a barrel", () => {
+    expect(
+      describeEdgeRate(
+        makeEdge({
+          demand: 3,
+          transferred: 3,
+          nameplateDemand: 111,
+          isSupplyCapped: true,
+          isStorageTarget: true,
+        }),
+      ),
+    ).toBe(
+      "Machines pulling from this storage need 111/s but this line only brings 3/s. It takes 37× the current supply to keep up.",
+    );
+    expect(describeEdgeRate(makeEdge({ demand: 5, sourceCapacity: 5, isStorageTarget: true }))).toBe(
+      "Storage takes everything the maker sends: 5/s.",
+    );
+  });
+
   it("falls back to the plain rate when there is nothing to compare", () => {
     expect(describeEdgeRate(makeEdge({ demand: 4 }))).toBe("Carrying 4/s.");
     expect(describeEdgeRate(undefined)).toBe("");
