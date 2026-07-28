@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { Check, ImageOff, Link2, LoaderCircle, Pencil, Share2, X } from "lucide-react";
 import Link from "next/link";
@@ -10,6 +10,7 @@ import {
 } from "@/lib/community/client";
 import { computeCommunityPlanStats } from "@/lib/community/plan-stats";
 import type { CommunityPlanSummary } from "@/lib/community/types";
+import { randomUUID } from "@/lib/random-id";
 import { formatRate } from "@/lib/model";
 import {
   FLOW_IMAGE_EXPORT_COMPLETE_EVENT,
@@ -78,7 +79,7 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
   // Ask the canvas for a thumbnail capture as soon as the dialog opens; if
   // nothing comes back we fall back to a no-image share instead of hanging.
   useEffect(() => {
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     const timeout = window.setTimeout(() => {
       setThumbnail((current) => (current.status === "capturing" ? { status: "failed" } : current));
     }, 10_000);
@@ -234,7 +235,7 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
         ) : !user ? (
           <div className="space-y-3">
             <p className="text-sm text-fg-subtle">
-              Sharing needs an account so your posts stay yours — just a username and password.
+              Sharing needs an account so your posts stay yours â€” just a username and password.
             </p>
             <AuthForm onSignedIn={setUser} />
           </div>
@@ -253,7 +254,7 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
                     checked={!postAsNew}
                     onChange={() => setPostAsNew(false)}
                   />
-                  Update “{linkedPost.name}”
+                  Update â€œ{linkedPost.name}â€
                 </label>
                 <label className="flex items-center gap-1.5">
                   <input
@@ -284,14 +285,14 @@ export function SharePlanDialog({ onClose }: { onClose: () => void }) {
                   </div>
                 ) : (
                   <div className="grid h-full w-full place-items-center text-xs text-fg-muted">
-                    Capturing…
+                    Capturingâ€¦
                   </div>
                 )}
               </div>
               <div className="min-w-0 flex-1 text-xs text-fg-subtle">
                 <p>
-                  {stats.nodeCount} nodes · {stats.machineCount} machines
-                  {stats.highestTier ? ` · up to ${stats.highestTier}` : ""}
+                  {stats.nodeCount} nodes Â· {stats.machineCount} machines
+                  {stats.highestTier ? ` Â· up to ${stats.highestTier}` : ""}
                 </p>
                 <p>{formatRate(Math.abs(stats.totalEuT), 3)} EU/t</p>
                 <p className="truncate">

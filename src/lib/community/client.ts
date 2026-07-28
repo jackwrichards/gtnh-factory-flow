@@ -1,5 +1,6 @@
 "use client";
 
+import { randomUUID } from "@/lib/random-id";
 import type {
   CommunityPlanListRequest,
   CommunityPlanListResponse,
@@ -20,7 +21,7 @@ export function getDeviceId(): string {
 
   let deviceId = window.localStorage.getItem(DEVICE_ID_STORAGE_KEY);
   if (!deviceId) {
-    deviceId = crypto.randomUUID();
+    deviceId = randomUUID();
     window.localStorage.setItem(DEVICE_ID_STORAGE_KEY, deviceId);
   }
 

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   Check,
@@ -23,6 +23,7 @@ import {
   serializeFactoryProject,
 } from "@/lib/import-export";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
+import { randomUUID } from "@/lib/random-id";
 import {
   getRecipeDatasetRecipe,
   getRecipeDatasetRecipeIds,
@@ -48,7 +49,7 @@ import { useFactoryStore } from "@/store/factory-store";
 import { SharePlanDialog } from "./community/SharePlanDialog";
 
 /**
- * Board actions — undo/redo, optimise, clean, import/export, theme.
+ * Board actions â€” undo/redo, optimise, clean, import/export, theme.
  *
  * Lives on the right of the design tab strip: everything here acts on the plan
  * that strip is switching between, so the two belong on the same bar.
@@ -78,7 +79,7 @@ export function BoardActions() {
   const redo = useFactoryStore((state) => state.redo);
 
   const exportJson = async () => {
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     setExportMenuOpen(false);
     setPendingExport({ format: "json", requestId });
     await nextAnimationFrame();
@@ -97,7 +98,7 @@ export function BoardActions() {
   };
 
   const exportImage = async (format: "svg" | "png") => {
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     setExportMenuOpen(false);
     setPendingExport({ format, requestId });
     await nextPaint();
