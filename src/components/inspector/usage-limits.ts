@@ -50,10 +50,13 @@ export function buildUsageLimitChain(
 
   const storageIds = new Set((project.storages ?? []).map((storage) => storage.id));
 
-  // Demand side: what every taker would want at its own full speed. Storage
-  // edges settle to what actually flows in, which is the honest number for a
-  // sink that accepts anything.
+  // Demand side: what every machine downstream would want at its own full
+  // speed. Storage sinks are different in kind, not degree - a drawer soaks up
+  // any surplus, and the solver runs the node at full speed for it - so a
+  // resource with a storage sink can never be demand-limited, and its flow
+  // into the drawer must not be dressed up as a demand number.
   const wantedByOutput = new Map<ResourceKey, number>();
+  let hasStorageSink = false;
   for (const edge of project.edges) {
     if (edge.source !== nodeId) {
       continue;
@@ -64,11 +67,16 @@ export function buildUsageLimitChain(
       continue;
     }
 
+    if (storageIds.has(edge.target)) {
+      hasStorageSink = true;
+      continue;
+    }
+
     const key = makeResourceKey(edge.resourceKind, edge.resourceId);
-    const wanted = storageIds.has(edge.target)
-      ? edgeResult.transferredPerSecond
-      : edgeResult.nameplateDemandPerSecond;
-    wantedByOutput.set(key, (wantedByOutput.get(key) ?? 0) + wanted);
+    wantedByOutput.set(
+      key,
+      (wantedByOutput.get(key) ?? 0) + edgeResult.nameplateDemandPerSecond,
+    );
   }
 
   if (node.targetOutput) {
@@ -102,7 +110,7 @@ export function buildUsageLimitChain(
         kind: "machines",
         label: "Machine count",
         fraction,
-        detail: `Takers want ${rateWithUnit(wanted, outputFlow.kind)} but it can only make ${rateWithUnit(capacity, outputFlow.kind)}. Add ${Math.max(machinesNeeded - node.machineCount, 1)} more machines.`,
+        detail: `Demand is ${rateWithUnit(wanted, outputFlow.kind)} but it can only make ${rateWithUnit(capacity, outputFlow.kind)}. Add ${Math.max(machinesNeeded - node.machineCount, 1)} more machines.`,
         active: false,
       };
     } else {
@@ -111,17 +119,29 @@ export function buildUsageLimitChain(
         kind: "demand",
         label: `${name} demand`,
         fraction,
-        detail: `Takers only use ${rateWithUnit(wanted, outputFlow.kind)} of the ${rateWithUnit(capacity, outputFlow.kind)} it can make.`,
+        detail: `Only ${rateWithUnit(wanted, outputFlow.kind)} of the ${rateWithUnit(capacity, outputFlow.kind)} it can make is asked for.`,
         active: false,
       };
     }
   }
 
-  if (!demandEntry) {
+  // A drawer soaks up whatever demanded outputs leave over, so with a storage
+  // sink attached, demand below full speed stops being a limit. Overdemand
+  // (needing more machines) still stands - a drawer cannot make more ingots.
+  if (hasStorageSink && (!demandEntry || demandEntry.fraction <= 1 + EPSILON)) {
+    demandEntry = {
+      key: "storage-sink",
+      kind: "no-demand",
+      label: "Storage",
+      fraction: 1,
+      detail: "Extra output goes into storage, so it runs at full speed.",
+      active: false,
+    };
+  } else if (!demandEntry) {
     demandEntry = {
       key: "no-demand",
       kind: "no-demand",
-      label: "No takers",
+      label: "No demand",
       fraction: 1,
       detail: "Nothing uses its output yet, so it runs at full speed.",
       active: false,

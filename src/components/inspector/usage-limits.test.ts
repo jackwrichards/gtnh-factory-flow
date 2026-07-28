@@ -242,6 +242,40 @@ describe("buildUsageLimitChain", () => {
     expect(chain[chain.length - 1]).toBe(storageEntry);
   });
 
+  it("never blames demand when the output feeds a drawer", () => {
+    // The drawer soaks up everything the machine makes; the trickle flowing
+    // into it is a consequence of the machine's speed, not a demand limit.
+    const chain = buildUsageLimitChain(
+      {
+        nodes: [makeNode("smelter")],
+        edges: [makeEdge("out", "smelter", "drawer", "ingot")],
+        storages: [
+          { id: "drawer", kind: "item", resourceId: "ingot", position: { x: 0, y: 0 } },
+        ],
+      },
+      {
+        nodes: {
+          smelter: makeNodeResult("smelter", {
+            utilization: 1,
+            outputs: { "item:ingot": makeFlow("ingot", 10, "Iron Ingot") },
+          }),
+        },
+        edges: {
+          out: makeEdgeResult("out", "ingot", {
+            transferredPerSecond: 10,
+            nameplateDemandPerSecond: 10,
+            sourceCapacityPerSecond: 10,
+          }),
+        },
+      },
+      "smelter",
+    );
+
+    expect(chain[0].kind).toBe("no-demand");
+    expect(chain[0].detail).toContain("storage");
+    expect(chain[0].active).toBe(true);
+  });
+
   it("returns nothing for disabled or missing nodes", () => {
     expect(
       buildUsageLimitChain(
