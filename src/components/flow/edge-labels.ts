@@ -22,6 +22,7 @@ export interface EdgeLabelInput {
   isStorageTarget?: boolean;
   bundle?: {
     demand?: number;
+    transferred?: number;
     nameplateDemand?: number;
     sourceCapacity?: number;
     isSupplyCapped: boolean;
@@ -61,7 +62,11 @@ function getEdgeFlowFigures(data: EdgeLabelInput): {
   const bundled = Boolean(bundle?.demand);
 
   return {
-    flowing: bundled ? bundle!.demand! : (data.transferred ?? data.demand),
+    // The real flow always wins; demand is only a fallback for callers that
+    // never solved the edge.
+    flowing: bundled
+      ? (bundle!.transferred ?? bundle!.demand!)
+      : (data.transferred ?? data.demand),
     nameplate: bundled ? bundle!.nameplateDemand : data.nameplateDemand,
     capacity: bundled ? bundle!.sourceCapacity : data.sourceCapacity,
     starved: bundled ? bundle!.isSupplyCapped : data.isSupplyCapped,
@@ -155,8 +160,6 @@ export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {
     return "";
   }
 
-  // transferred is only populated when the edge is starved, so flowing stays
-  // the plain flow rate in the healthy case.
   const { flowing } = getEdgeFlowFigures(data);
 
   // The left side is always the real flow; the percent is how much of the

@@ -619,7 +619,10 @@ export function FactoryFlow() {
           resource,
           color: edgeColor,
           demand,
-          transferred: isStarvedEdge ? transferred : undefined,
+          // Always the real flow. demand can sit at the full-speed rate on
+          // lines the solver never converges (storage sinks), and a label
+          // must never show more than actually moves.
+          transferred,
           nameplateDemand: targetStorage ? undefined : edgeResult?.nameplateDemandPerSecond,
           sourceCapacity:
             outletCounts.get([edge.source, edge.resourceKind, edge.resourceId].join("|")) === 1 &&
@@ -2270,9 +2273,10 @@ function getEdgeBundles(
     const transferred = group.reduce(
       (sum, edge) =>
         sum +
-        (edgeResults[edge.id]?.isLimited
-          ? (edgeResults[edge.id]?.transferredPerSecond ?? 0)
-          : (edgeResults[edge.id]?.demandPerSecond ?? edge.ratePerSecond ?? 0)),
+        (edgeResults[edge.id]?.transferredPerSecond ??
+          edgeResults[edge.id]?.demandPerSecond ??
+          edge.ratePerSecond ??
+          0),
       0,
     );
     const isLimited = group.some((edge) => edgeResults[edge.id]?.isLimited === true);
@@ -2304,7 +2308,7 @@ function getEdgeBundles(
         primarySourceHandleId,
         edgeIds,
         demand: mode === "single-target" ? demand : undefined,
-        transferred: mode === "single-target" && isLimited ? transferred : undefined,
+        transferred: mode === "single-target" ? transferred : undefined,
         nameplateDemand: mode === "single-target" ? nameplateDemand : undefined,
         sourceCapacity:
           mode === "single-target" && sourceCapacity > 0 ? sourceCapacity : undefined,

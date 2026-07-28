@@ -538,6 +538,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   ) : null}
                   <MinecraftTooltip
                     label={slot.resource.tooltip ?? slot.resource.displayName ?? slot.resource.id}
+                    content={renderSlotRateContent(slot, result)}
                   >
                     <Handle
                       id={handleId}
@@ -598,6 +599,68 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
 }
 
 export const RecipeNode = memo(RecipeNodeComponent);
+
+function formatSlotRate(value: number, kind: string): string {
+  const unit = kind === "fluid" ? " L/s" : "/s";
+  return `${formatRate(value, value >= 100 ? 0 : value >= 10 ? 1 : 2)}${unit}`;
+}
+
+/**
+ * The slot hover panel: what this item flows at right now, and what it would
+ * flow at with the machine running 100%. Falls back to the plain name label
+ * when the solver has no flow for the slot (unconnected boards, NC slots).
+ */
+function renderSlotRateContent(
+  slot: NeiPositionedSlot,
+  result: NodeThroughputResult | undefined,
+) {
+  if (!result) {
+    return undefined;
+  }
+
+  const isInput = slot.side === "input";
+  const flows = isInput ? result.inputs : result.outputs;
+  const key = makeResourceKey(slot.resource.kind, slot.resource.id);
+  const flow =
+    flows[key] ??
+    Object.values(flows).find(
+      (candidate) => candidate.resourceId === slot.resource.id,
+    );
+  if (!flow || flow.amountPerSecond <= 1e-9) {
+    return undefined;
+  }
+
+  const maxRate = flow.amountPerSecond;
+  const speed = Number.isFinite(result.utilization)
+    ? Math.min(Math.max(result.utilization, 0), 1)
+    : 0;
+  const nowRate = maxRate * speed;
+
+  return (
+    <div className="w-48">
+      <div className="flex items-baseline gap-2">
+        <span className="truncate text-[13px] font-semibold text-white">
+          {slot.resource.displayName ?? slot.resource.id}
+        </span>
+        <span className="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+          {isInput ? "Input" : "Output"}
+        </span>
+      </div>
+      <div className="mt-1.5 flex items-baseline justify-between gap-3 text-[12px]">
+        <span className="text-slate-400">Now</span>
+        <span className="font-bold tabular-nums text-cyan-300">
+          {formatSlotRate(nowRate, flow.kind)}
+        </span>
+      </div>
+      <div className="mt-0.5 flex items-baseline justify-between gap-3 text-[12px]">
+        <span className="text-slate-400">At 100%</span>
+        <span className="font-semibold tabular-nums text-slate-300">
+          {formatSlotRate(maxRate, flow.kind)}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 /**
  * The Usage stat, coloured by the solver's status bands, with the "what limits
