@@ -2036,4 +2036,175 @@ describe("calculateThroughput", () => {
     expect(edge.nameplateDemandPerSecond).toBeCloseTo(1);
     expect(edge.constraint).toBe("full");
   });
+
+  it("rations a split output so two consumers cannot both take the whole thing", () => {
+    // One 10/s gas output feeding two machines that each want 10/s: each gets
+    // 5/s, both throttle to 50%, and nothing pretends 20/s left a 10/s pipe.
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "split-even",
+      name: "Even split",
+      recipes: [
+        {
+          id: "gas-maker",
+          name: "Gas maker",
+          machineType: "Centrifuge",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [],
+          outputs: [{ kind: "item", id: "gas", amount: 10 }],
+        },
+        {
+          id: "gas-user",
+          name: "Gas user",
+          machineType: "Chemical Reactor",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [{ kind: "item", id: "gas", amount: 10 }],
+          outputs: [{ kind: "item", id: "product", amount: 1 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "maker",
+          recipeId: "gas-maker",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "user-a",
+          recipeId: "gas-user",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "user-b",
+          recipeId: "gas-user",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [
+        { id: "to-a", source: "maker", target: "user-a", resourceKind: "item", resourceId: "gas" },
+        { id: "to-b", source: "maker", target: "user-b", resourceKind: "item", resourceId: "gas" },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    expect(result.edges["to-a"].transferredPerSecond).toBeCloseTo(5);
+    expect(result.edges["to-b"].transferredPerSecond).toBeCloseTo(5);
+    expect(result.nodes["user-a"].utilization).toBeCloseTo(0.5);
+    expect(result.nodes["user-b"].utilization).toBeCloseTo(0.5);
+    expect(result.nodes.maker.utilization).toBeCloseTo(1);
+  });
+
+  it("satisfies the small consumer first and rations only the big one", () => {
+    // Max-min fairness: needing 2/s and 18/s from a 10/s output gives 2 and 8,
+    // not a proportional 1 and 9.
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "split-maxmin",
+      name: "Max-min split",
+      recipes: [
+        {
+          id: "gas-maker",
+          name: "Gas maker",
+          machineType: "Centrifuge",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [],
+          outputs: [{ kind: "item", id: "gas", amount: 10 }],
+        },
+        {
+          id: "sipper",
+          name: "Sipper",
+          machineType: "Chemical Reactor",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [{ kind: "item", id: "gas", amount: 2 }],
+          outputs: [{ kind: "item", id: "trickle", amount: 1 }],
+        },
+        {
+          id: "guzzler",
+          name: "Guzzler",
+          machineType: "Large Chemical Reactor",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [{ kind: "item", id: "gas", amount: 18 }],
+          outputs: [{ kind: "item", id: "torrent", amount: 1 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "maker",
+          recipeId: "gas-maker",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "sipper",
+          recipeId: "sipper",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "guzzler",
+          recipeId: "guzzler",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [
+        {
+          id: "to-sipper",
+          source: "maker",
+          target: "sipper",
+          resourceKind: "item",
+          resourceId: "gas",
+        },
+        {
+          id: "to-guzzler",
+          source: "maker",
+          target: "guzzler",
+          resourceKind: "item",
+          resourceId: "gas",
+        },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    // The little machine gets everything it needs; only the big one is cut.
+    expect(result.edges["to-sipper"].transferredPerSecond).toBeCloseTo(2);
+    expect(result.edges["to-guzzler"].transferredPerSecond).toBeCloseTo(8);
+    expect(result.nodes.sipper.utilization).toBeCloseTo(1);
+    expect(result.nodes.guzzler.utilization).toBeCloseTo(8 / 18);
+    expect(result.nodes.maker.utilization).toBeCloseTo(1);
+  });
 });

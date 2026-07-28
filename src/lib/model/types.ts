@@ -374,6 +374,13 @@ export interface EdgeThroughput {
   /** What the producer could emit at 100% utilisation. */
   sourceCapacityPerSecond: number;
   /**
+   * This edge's max-min fair share of the producer's real output, when the
+   * producer splits one output across several machines. Satisfied edges carry
+   * their demand plus any unclaimed leftover; rationed edges carry exactly
+   * their share. Absent on storage-touching edges.
+   */
+  fairSharePerSecond?: number;
+  /**
    * Which end is holding the flow back:
    * - `supply`  producer is maxed out and the consumer is starved
    * - `demand`  both ends have slack; the plan just doesn't need more

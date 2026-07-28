@@ -660,6 +660,40 @@ function calculateStorageIncomingSupply(
   return supply;
 }
 
+/**
+ * Max-min fair split of a producer's real output among competing machine
+ * consumers (progressive filling): everyone gets an equal share until their
+ * demand is met, small consumers are satisfied first, and nobody is starved
+ * to feed a giant. Returns each edge's allocation plus its cap - the most it
+ * could claim right now, which is its allocation plus any unclaimed leftover
+ * when it is already satisfied.
+ */
+function allocateMaxMinShares(
+  availablePerSecond: number,
+  demands: Array<{ edgeId: string; demandPerSecond: number }>,
+): Map<string, { allocatedPerSecond: number; capPerSecond: number }> {
+  const shares = new Map<string, { allocatedPerSecond: number; capPerSecond: number }>();
+  const sorted = [...demands].sort((left, right) => left.demandPerSecond - right.demandPerSecond);
+  let remaining = Math.max(0, availablePerSecond);
+
+  sorted.forEach((entry, index) => {
+    const equalShare = remaining / (sorted.length - index);
+    const allocated = Math.min(Math.max(entry.demandPerSecond, 0), equalShare);
+    remaining -= allocated;
+    shares.set(entry.edgeId, { allocatedPerSecond: allocated, capPerSecond: allocated });
+  });
+
+  // Whatever nobody claimed stays on offer to every satisfied edge.
+  for (const [edgeId, share] of shares) {
+    const demand = demands.find((entry) => entry.edgeId === edgeId)?.demandPerSecond ?? 0;
+    if (share.allocatedPerSecond + EPSILON >= demand) {
+      shares.set(edgeId, { ...share, capPerSecond: share.allocatedPerSecond + remaining });
+    }
+  }
+
+  return shares;
+}
+
 function refreshEdgeResultsFromNodeUtilization(
   project: FactoryProject,
   recipesById: Map<string, Recipe>,
@@ -687,6 +721,56 @@ function refreshEdgeResultsFromNodeUtilization(
     incomingEdgeCounts,
     storagesById,
   );
+  // Ration each machine producer's real output among its machine consumers
+  // with max-min fairness, so one 10/s output cannot feed two machines 10/s
+  // each. Storage stays out of the ration entirely: it has the lowest
+  // priority and only ever sees what direct consumers leave behind.
+  const machineDemandsBySourceResource = new Map<
+    string,
+    Array<{ edgeId: string; demandPerSecond: number }>
+  >();
+  const rationAvailableBySourceResource = new Map<string, number>();
+  for (const edge of project.edges) {
+    if (storagesById.has(edge.source) || storagesById.has(edge.target)) {
+      continue;
+    }
+
+    const sourceResult = nodes[edge.source];
+    const targetResult = nodes[edge.target];
+    if (!sourceResult || !targetResult) {
+      continue;
+    }
+
+    const key = makeResourceKey(edge.resourceKind, edge.resourceId);
+    const targetDemandKey = getEdgeTargetDemandKey(project, edge) ?? key;
+    const targetCount = incomingEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1;
+    const demandPerSecond =
+      getEffectiveFlowRate(targetResult.inputs[targetDemandKey], targetResult.utilization) /
+      targetCount;
+    const groupKey = `${edge.source}|${key}`;
+    const group = machineDemandsBySourceResource.get(groupKey) ?? [];
+    group.push({ edgeId: edge.id, demandPerSecond });
+    machineDemandsBySourceResource.set(groupKey, group);
+    if (!rationAvailableBySourceResource.has(groupKey)) {
+      rationAvailableBySourceResource.set(
+        groupKey,
+        getEffectiveFlowRate(getCompatibleOutputFlow(sourceResult, edge), sourceResult.utilization),
+      );
+    }
+  }
+
+  const rationByEdge = new Map<string, { allocatedPerSecond: number; capPerSecond: number }>();
+  for (const [groupKey, demands] of machineDemandsBySourceResource) {
+    const available = rationAvailableBySourceResource.get(groupKey) ?? 0;
+    if (!Number.isFinite(available)) {
+      continue;
+    }
+
+    for (const [edgeId, share] of allocateMaxMinShares(available, demands)) {
+      rationByEdge.set(edgeId, share);
+    }
+  }
+
   for (const edge of project.edges) {
     const key = makeResourceKey(edge.resourceKind, edge.resourceId);
     const targetDemandKey = getEdgeTargetDemandKey(project, edge) ?? key;
@@ -727,13 +811,16 @@ function refreshEdgeResultsFromNodeUtilization(
             sourceResult.utilization,
           );
     const sourceStorageCapacityBase = targetStorage ? sourceFullCapacity : sourceEffectiveCapacity;
+    const ration = rationByEdge.get(edge.id);
     const sourceCapacity = targetStorage
       ? Math.max(
           0,
           sourceStorageCapacityBase -
             (directDemandBySourceResource.get(`${edge.source}|${key}`) ?? 0),
         ) / (storageSinkCounts.get(`${edge.source}|${key}`) ?? 1)
-      : sourceEffectiveCapacity;
+      : ration
+        ? Math.min(sourceEffectiveCapacity, ration.capPerSecond)
+        : sourceEffectiveCapacity;
     const targetDemand = targetStorage
       ? sourceCapacity
       : !targetResult
@@ -757,7 +844,9 @@ function refreshEdgeResultsFromNodeUtilization(
       // Total output rather than this edge's share of it. When a producer feeds
       // several consumers that understates how maxed out it is, so the split
       // case falls back to "demand" - under-flagging rather than crying wolf.
+      // The rationed per-edge share travels separately as fairSharePerSecond.
       sourceCapacityPerSecond: sourceFullCapacity,
+      fairSharePerSecond: ration?.capPerSecond,
     });
   }
 }
@@ -1257,7 +1346,11 @@ function buildEdgeResult(
   key: ResourceKey,
   demandPerSecond: number,
   transferredPerSecond: number,
-  capacities?: { nameplateDemandPerSecond: number; sourceCapacityPerSecond: number },
+  capacities?: {
+    nameplateDemandPerSecond: number;
+    sourceCapacityPerSecond: number;
+    fairSharePerSecond?: number;
+  },
 ): EdgeThroughput {
   // Falling back to the converged demand keeps callers that have no nameplate
   // context reporting "full" rather than inventing a shortfall.
@@ -1278,6 +1371,7 @@ function buildEdgeResult(
     isLimited: transferredPerSecond + EPSILON < demandPerSecond,
     nameplateDemandPerSecond,
     sourceCapacityPerSecond,
+    fairSharePerSecond: capacities?.fairSharePerSecond,
     constraint: classifyEdgeConstraint(
       transferredPerSecond,
       nameplateDemandPerSecond,

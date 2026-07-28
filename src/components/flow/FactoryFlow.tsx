@@ -583,14 +583,6 @@ export function FactoryFlow() {
         );
       }
     }
-    // How many lines each producer splits a resource across. The solver's
-    // sourceCapacityPerSecond is the producer's total, so the surplus ratio is
-    // only honest when a single edge (or single-target bundle) carries it all.
-    const outletCounts = new Map<string, number>();
-    for (const edge of project.edges) {
-      const key = [edge.source, edge.resourceKind, edge.resourceId].join("|");
-      outletCounts.set(key, (outletCounts.get(key) ?? 0) + 1);
-    }
 
     return project.edges.map((edge, edgeIndex) => {
       const edgeResult = result.edges[edge.id];
@@ -656,10 +648,23 @@ export function FactoryFlow() {
           // must never show more than actually moves.
           transferred,
           nameplateDemand: targetStorage ? undefined : edgeResult?.nameplateDemandPerSecond,
+          // What this line could deliver if the machine here asked for more:
+          // the producer's potential (nameplate scaled by its own input
+          // ceiling) minus what its other machine consumers already take.
+          // Storage never competes - it yields its leftover on demand.
           sourceCapacity:
-            outletCounts.get([edge.source, edge.resourceKind, edge.resourceId].join("|")) === 1 &&
-            edgeResult?.sourceCapacityPerSecond !== undefined
-              ? edgeResult.sourceCapacityPerSecond * ceilingFor(edge.source)
+            !sourceStorage &&
+            edgeResult &&
+            Number.isFinite(edgeResult.sourceCapacityPerSecond)
+              ? Math.max(
+                  0,
+                  edgeResult.sourceCapacityPerSecond * ceilingFor(edge.source) -
+                    Math.max(
+                      0,
+                      (directTakenBySourceResource.get(`${edge.source}|${resourceKey}`) ?? 0) -
+                        (edgeResult.transferredPerSecond ?? 0),
+                    ),
+                )
               : undefined,
           unit,
           isLimited: edgeResult?.isLimited === true && !targetStorage,
