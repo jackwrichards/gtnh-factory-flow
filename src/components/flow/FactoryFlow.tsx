@@ -81,7 +81,7 @@ import {
   describeEdgeRate,
   formatEdgeRateLabel,
   formatEdgeValue,
-  getEdgeSurplusCapacity,
+  getEdgeSupplyRatio,
   isEdgeStarved,
   isEdgeSurplus,
 } from "./edge-labels";
@@ -1852,7 +1852,7 @@ function ResourceEdgeComponent({
     ? "starved"
     : isEdgeSurplus(data)
       ? "surplus"
-      : getEdgeSurplusCapacity(data) !== undefined
+      : getEdgeSupplyRatio(data) !== undefined
         ? "matched"
         : "normal";
   const labelTextColor =

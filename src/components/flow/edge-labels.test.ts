@@ -63,12 +63,12 @@ describe("formatEdgeRateLabel", () => {
     ).toBe("12 L/s · 3%");
   });
 
-  it("does not show a ratio when the shortfall is negligible", () => {
+  it("reads 100% when the shortfall is negligible", () => {
     expect(
       formatEdgeRateLabel(
         makeEdge({ demand: 100, transferred: 100, nameplateDemand: 100, isSupplyCapped: true }),
       ),
-    ).toBe("100/s");
+    ).toBe("100/s · 100%");
   });
 
   it("does not show a ratio for demand-capped edges with slack", () => {
@@ -96,12 +96,21 @@ describe("formatEdgeRateLabel", () => {
 });
 
 describe("surplus", () => {
-  it("shows the flow with the producer's used share when the line has headroom", () => {
-    // The producer could make 10 but only 2 is taken, so the line runs at 20% -
-    // the same number the machine's usage cell shows.
+  it("shows can-deliver over need: offering 10 to a machine needing 2 reads 500%", () => {
     const edge = makeEdge({ demand: 2, sourceCapacity: 10 });
     expect(isEdgeSurplus(edge)).toBe(true);
-    expect(formatEdgeRateLabel(edge)).toBe("2/s · 20%");
+    expect(formatEdgeRateLabel(edge)).toBe("2/s · 500%");
+  });
+
+  it("making 10 for a machine taking 1 reads 1000%", () => {
+    expect(formatEdgeRateLabel(makeEdge({ demand: 1, sourceCapacity: 10 }))).toBe("1/s · 1000%");
+  });
+
+  it("able to make 1 for a machine needing 2 reads 50%, and counts as starved", () => {
+    const edge = makeEdge({ demand: 1, nameplateDemand: 2, sourceCapacity: 1 });
+    expect(formatEdgeRateLabel(edge)).toBe("1/s · 50%");
+    expect(isEdgeStarved(edge)).toBe(true);
+    expect(isEdgeSurplus(edge)).toBe(false);
   });
 
   it("still shows 100% at 1:1, just not as surplus", () => {
@@ -116,7 +125,9 @@ describe("surplus", () => {
     expect(formatEdgeRateLabel(edge)).toBe("4/s");
   });
 
-  it("never shows surplus on a starved edge, the shortfall percent wins", () => {
+  it("uses the line's real capacity against the need on a starved edge", () => {
+    // The consumer wants 100 and the line could carry 10 of it: 10%, not the
+    // 1% currently trickling through.
     const edge = makeEdge({
       demand: 1,
       transferred: 1,
@@ -125,7 +136,7 @@ describe("surplus", () => {
       isSupplyCapped: true,
     });
     expect(isEdgeSurplus(edge)).toBe(false);
-    expect(formatEdgeRateLabel(edge)).toBe("1/s · 1%");
+    expect(formatEdgeRateLabel(edge)).toBe("1/s · 10%");
   });
 
   it("shows nothing on a dead line", () => {
@@ -139,7 +150,7 @@ describe("surplus", () => {
       sourceCapacity: undefined,
       bundle: { demand: 3, sourceCapacity: 12, isSupplyCapped: false },
     });
-    expect(formatEdgeRateLabel(edge)).toBe("3/s · 25%");
+    expect(formatEdgeRateLabel(edge)).toBe("3/s · 400%");
   });
 
   it("stays quiet when capacity was withheld for a split producer", () => {
@@ -155,19 +166,19 @@ describe("describeEdgeRate", () => {
         makeEdge({ demand: 2, transferred: 2, nameplateDemand: 10, isSupplyCapped: true }),
       ),
     ).toBe(
-      "The machine this feeds needs 10/s but only gets 2/s (20%). It takes 5× the current supply to fill it.",
+      "The machine this feeds needs 10/s but this line can only deliver 2/s. It takes 5× the current supply to fill it.",
     );
   });
 
-  it("explains a surplus line from the producer's side, with the spare amount", () => {
+  it("explains a surplus line from the maker's side, with the spare amount", () => {
     expect(describeEdgeRate(makeEdge({ demand: 2, sourceCapacity: 10 }))).toBe(
-      "The maker can produce 10/s but only 2/s is taken (20%). 8/s is free for new machines.",
+      "The maker can send 10/s but only 2/s is needed. 8/s is spare.",
     );
   });
 
   it("explains a perfectly matched line", () => {
     expect(describeEdgeRate(makeEdge({ demand: 10, sourceCapacity: 10 }))).toBe(
-      "All of the maker's 10/s is being used (100%). Supply and demand match.",
+      "The maker sends exactly the 10/s that is needed.",
     );
   });
 

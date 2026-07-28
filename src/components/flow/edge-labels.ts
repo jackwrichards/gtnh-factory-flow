@@ -32,7 +32,12 @@ export interface EdgeLabelInput {
  * converged node utilisation down to match available supply.
  */
 export function isEdgeStarved(data: EdgeLabelInput | undefined): boolean {
-  return data?.isSupplyCapped === true || data?.isLimited === true;
+  if (data?.isSupplyCapped === true || data?.isLimited === true) {
+    return true;
+  }
+
+  const ratio = getEdgeSupplyRatio(data);
+  return ratio !== undefined && ratio < 1 - 1e-6;
 }
 
 /**
@@ -57,33 +62,42 @@ function getEdgeFlowFigures(data: EdgeLabelInput): {
 }
 
 /**
- * The producer's capacity on this line, when a satisfaction percent should be
- * shown: the consumer is fed, something is flowing, and the capacity is a real
- * number — drawers and tanks report an infinite supply, which is no
- * comparison at all. A 1:1 line still shows its 100%, rather than hiding the
- * comparison.
+ * The line's one number: what it CAN deliver over what the consumer NEEDS.
+ * Under 1 the machine here is going short, over 1 there is spare on offer,
+ * exactly 1 is a perfect match. Undefined when there is no honest comparison:
+ * drawers offer infinity, split producers withhold their capacity, and a line
+ * to nowhere has no need to satisfy.
  */
-export function getEdgeSurplusCapacity(data: EdgeLabelInput | undefined): number | undefined {
-  if (!data || isEdgeStarved(data)) {
+export function getEdgeSupplyRatio(data: EdgeLabelInput | undefined): number | undefined {
+  if (!data) {
     return undefined;
   }
 
-  const { flowing, capacity } = getEdgeFlowFigures(data);
-  if (capacity === undefined || !Number.isFinite(capacity) || flowing <= 1e-6) {
+  const { flowing, nameplate, capacity, starved } = getEdgeFlowFigures(data);
+  const need = nameplate !== undefined && nameplate > 1e-6 ? nameplate : flowing;
+  if (need <= 1e-6) {
     return undefined;
   }
 
-  return capacity;
+  // A starved line with no known capacity still tells the truth: everything
+  // it delivers is everything there is.
+  const canDeliver =
+    capacity !== undefined && Number.isFinite(capacity)
+      ? capacity
+      : starved || data.isLimited
+        ? flowing
+        : undefined;
+  if (canDeliver === undefined) {
+    return undefined;
+  }
+
+  return canDeliver / need;
 }
 
-/** True only when the producer could push meaningfully more than is flowing. */
+/** True only when the line offers meaningfully more than the consumer needs. */
 export function isEdgeSurplus(data: EdgeLabelInput | undefined): boolean {
-  const capacity = getEdgeSurplusCapacity(data);
-  if (capacity === undefined) {
-    return false;
-  }
-
-  return capacity > getEdgeFlowFigures(data!).flowing + 1e-6;
+  const ratio = getEdgeSupplyRatio(data);
+  return ratio !== undefined && ratio > 1 + 1e-6;
 }
 
 /**
@@ -96,24 +110,27 @@ export function describeEdgeRate(data: EdgeLabelInput | undefined): string {
     return "";
   }
 
-  const { flowing, nameplate, starved } = getEdgeFlowFigures(data);
+  const { flowing, nameplate } = getEdgeFlowFigures(data);
   const unit = data.unit;
+  const need = nameplate !== undefined && nameplate > 1e-6 ? nameplate : flowing;
 
   // Careful with claims here: this line only knows about one resource. The
   // maker's real run speed can be set by its other products, and the fed
   // machine's by its other ingredients - so speak about the line, never about
   // how fast either machine runs. That is the usage grid's job.
-  if (starved && nameplate !== undefined && nameplate > flowing + 1e-6) {
-    return `The machine this feeds needs ${withUnit(nameplate, unit)} but only gets ${withUnit(flowing, unit)} (${formatSatisfactionPercent(flowing / nameplate)}). It takes ${formatEdgeValue(nameplate / Math.max(flowing, 1e-6))}× the current supply to fill it.`;
+  const ratio = getEdgeSupplyRatio(data);
+  if (ratio !== undefined && ratio < 1 - 1e-6) {
+    const canDeliver = ratio * need;
+    return `The machine this feeds needs ${withUnit(need, unit)} but this line can only deliver ${withUnit(canDeliver, unit)}. It takes ${formatEdgeValue(1 / Math.max(ratio, 1e-6))}× the current supply to fill it.`;
   }
 
-  const capacity = getEdgeSurplusCapacity(data);
-  if (capacity !== undefined && capacity > flowing + 1e-6) {
-    return `The maker can produce ${withUnit(capacity, unit)} but only ${withUnit(flowing, unit)} is taken (${formatSatisfactionPercent(flowing / capacity)}). ${withUnit(capacity - flowing, unit)} is free for new machines.`;
+  if (ratio !== undefined && ratio > 1 + 1e-6) {
+    const canDeliver = ratio * need;
+    return `The maker can send ${withUnit(canDeliver, unit)} but only ${withUnit(need, unit)} is needed. ${withUnit(canDeliver - need, unit)} is spare.`;
   }
 
-  if (capacity !== undefined) {
-    return `All of the maker's ${withUnit(capacity, unit)} is being used (100%). Supply and demand match.`;
+  if (ratio !== undefined) {
+    return `The maker sends exactly the ${withUnit(need, unit)} that is needed.`;
   }
 
   return `Carrying ${withUnit(flowing, unit)}.`;
@@ -126,22 +143,23 @@ export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {
 
   // transferred is only populated when the edge is starved, so flowing stays
   // the plain flow rate in the healthy case.
-  const { flowing, nameplate, starved } = getEdgeFlowFigures(data);
+  const { flowing } = getEdgeFlowFigures(data);
 
   // The left side is always the real flow; the percent is how much of the
-  // line's potential that flow covers. Red: share of what the consumer needs.
-  // Green: share of what the producer could make - a machine giving 1 of a
-  // possible 10 reads 10%, the same number its usage cell shows.
-  if (starved && nameplate !== undefined && nameplate > flowing + 1e-6) {
-    return `${withUnit(flowing, data.unit)} · ${formatSatisfactionPercent(flowing / nameplate)}`;
-  }
-
-  const surplusCapacity = getEdgeSurplusCapacity(data);
-  if (surplusCapacity !== undefined && flowing > 1e-6) {
-    return `${withUnit(flowing, data.unit)} · ${formatSatisfactionPercent(flowing / surplusCapacity)}`;
+  // consumer's need the line can supply. A maker offering 10 to a machine
+  // needing 1 reads 1000%; offering 1 to a machine needing 2 reads 50%.
+  const ratio = getEdgeSupplyRatio(data);
+  if (ratio !== undefined) {
+    return `${withUnit(flowing, data.unit)} · ${formatSupplyPercent(ratio)}`;
   }
 
   return withUnit(flowing, data.unit);
+}
+
+/** Uncapped except against absurdity: a drawer-scale ratio stays readable. */
+export function formatSupplyPercent(ratio: number): string {
+  const percent = Math.round(ratio * 100);
+  return percent > 9999 ? "9999%+" : `${percent}%`;
 }
 
 export function formatEdgeValue(value: number): string {
