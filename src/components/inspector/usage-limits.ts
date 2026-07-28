@@ -148,9 +148,33 @@ export function buildUsageLimitChain(
     };
   }
 
-  // Supply side: one entry per connected ingredient.
+  // How much each producer already ships out per resource, across the whole
+  // board. What a producer can still offer this node is what it sends now
+  // plus its unclaimed leftover - never its whole capacity, which it may be
+  // spending on other machines.
+  const takenBySourceResource = new Map<string, number>();
+  for (const edge of project.edges) {
+    const edgeResult = result.edges[edge.id];
+    if (!edgeResult) {
+      continue;
+    }
+
+    const takenKey = `${edge.source}|${makeResourceKey(edge.resourceKind, edge.resourceId)}`;
+    takenBySourceResource.set(
+      takenKey,
+      (takenBySourceResource.get(takenKey) ?? 0) + edgeResult.transferredPerSecond,
+    );
+  }
+
+  // Supply side: one entry per connected ingredient. What a producer can give
+  // this node *today* is scaled by how fast that producer actually runs - a
+  // starved producer's nameplate is a promise, not a supply. The nameplate
+  // ceiling is kept separately, as the "even with upstream fixed" line.
   const supplyEntries: UsageLimitEntry[] = [];
-  const incomingByInput = new Map<ResourceKey, { capacity: number; binding: boolean }>();
+  const incomingByInput = new Map<
+    ResourceKey,
+    { capacityNow: number; capacityMax: number; binding: boolean; upstreamSlow: boolean }
+  >();
   for (const edge of project.edges) {
     if (edge.target !== nodeId) {
       continue;
@@ -166,9 +190,24 @@ export function buildUsageLimitChain(
       continue;
     }
 
-    const current = incomingByInput.get(key) ?? { capacity: 0, binding: false };
-    current.capacity += edgeResult.sourceCapacityPerSecond;
+    const producerUtilization = result.nodes[edge.source]?.utilization;
+    const producerSpeed =
+      producerUtilization !== undefined && Number.isFinite(producerUtilization)
+        ? Math.min(Math.max(producerUtilization, 0), 1)
+        : 1;
+    const taken = takenBySourceResource.get(`${edge.source}|${key}`) ?? 0;
+    const capacityMax = edgeResult.sourceCapacityPerSecond;
+    const capacityNow = capacityMax * producerSpeed;
+    const current = incomingByInput.get(key) ?? {
+      capacityNow: 0,
+      capacityMax: 0,
+      binding: false,
+      upstreamSlow: false,
+    };
+    current.capacityNow += edgeResult.transferredPerSecond + Math.max(0, capacityNow - taken);
+    current.capacityMax += edgeResult.transferredPerSecond + Math.max(0, capacityMax - taken);
     current.binding = current.binding || edgeResult.constraint === "supply";
+    current.upstreamSlow = current.upstreamSlow || producerSpeed < 1 - EPSILON;
     incomingByInput.set(key, current);
   }
 
@@ -180,7 +219,7 @@ export function buildUsageLimitChain(
     }
 
     const name = inputFlow.displayName ?? inputFlow.resourceId;
-    if (!Number.isFinite(incoming.capacity)) {
+    if (!Number.isFinite(incoming.capacityNow)) {
       supplyEntries.push({
         key: `supply:${key}`,
         kind: "supply",
@@ -192,38 +231,64 @@ export function buildUsageLimitChain(
       continue;
     }
 
-    const fraction = incoming.capacity / need;
+    const fraction = incoming.capacityNow / need;
     supplyEntries.push({
       key: `supply:${key}`,
       kind: "supply",
       label: `${name} supply`,
       fraction,
-      detail: `It can get ${rateWithUnit(incoming.capacity, inputFlow.kind)} but needs ${rateWithUnit(need, inputFlow.kind)}.`,
+      detail: `It gets ${rateWithUnit(incoming.capacityNow, inputFlow.kind)} of the ${rateWithUnit(need, inputFlow.kind)} it needs.${
+        incoming.upstreamSlow ? " The machine making it is running slow too." : ""
+      }`,
       active: incoming.binding,
     });
+
+    // The deeper "and then what": even with every upstream machine at full
+    // speed, supply still tops out at the producers' nameplate.
+    if (
+      incoming.upstreamSlow &&
+      Number.isFinite(incoming.capacityMax) &&
+      incoming.capacityMax > incoming.capacityNow + EPSILON
+    ) {
+      supplyEntries.push({
+        key: `supply-max:${key}`,
+        kind: "supply",
+        label: "upstream supply",
+        fraction: incoming.capacityMax / need,
+        detail: `With upstream at full speed it could get ${rateWithUnit(incoming.capacityMax, inputFlow.kind)}.`,
+        active: false,
+      });
+    }
   }
 
-  // Pick the active factor from solver truth, not from the estimates: a
-  // supply-capped edge marks its ingredient, overdemand marks machine count,
-  // and otherwise demand is what sets the pace.
-  const bindingSupply = supplyEntries
+  // The active factor is the lowest ceiling, so the story always agrees with
+  // the header percent. Overdemand outranks everything (a fully fed machine
+  // can still be swamped), a solver-flagged starving edge outranks estimates,
+  // and near-ties go to the demand-side entry, whose sentence explains the
+  // running speed rather than restating a supply that just about suffices.
+  const flaggedSupply = supplyEntries
     .filter((entry) => entry.active)
     .sort((left, right) => left.fraction - right.fraction)[0];
-  for (const entry of supplyEntries) {
-    entry.active = entry === bindingSupply;
+  let active: UsageLimitEntry = demandEntry;
+  if (nodeResult.utilization > 1 + EPSILON && demandEntry.fraction > 1 + EPSILON) {
+    active = demandEntry;
+  } else if (flaggedSupply) {
+    active = flaggedSupply;
+  } else {
+    for (const entry of supplyEntries) {
+      if (Number.isFinite(entry.fraction) && entry.fraction < active.fraction - 1e-3) {
+        active = entry;
+      }
+    }
   }
 
-  if (!bindingSupply) {
-    demandEntry.active = true;
+  for (const entry of [demandEntry, ...supplyEntries]) {
+    entry.active = entry === active;
   }
 
   const rest = [demandEntry, ...supplyEntries]
     .filter((entry) => !entry.active)
     .sort((left, right) => left.fraction - right.fraction);
-  const chain = [
-    ...(bindingSupply ? [bindingSupply] : [demandEntry]),
-    ...rest,
-  ];
 
-  return chain.slice(0, 4);
+  return [active, ...rest].slice(0, 4);
 }

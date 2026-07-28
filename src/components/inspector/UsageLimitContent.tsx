@@ -80,12 +80,18 @@ export function UsageLimitContent({
         <div className="mt-2.5 border-t border-white/10 pt-2">
           {runnersUp.map((entry, index) => (
             <p key={entry.key} className="text-[12px] leading-relaxed text-slate-400">
-              {index === 0 ? "If fixed, " : "After that, "}
-              {entry.label.toLowerCase()} caps it at{" "}
-              <span className="font-semibold text-slate-300">
-                {formatSatisfactionPercent(entry.fraction)}
-              </span>
-              .
+              {entry.kind === "no-demand" ? (
+                <>{index === 0 ? "If fixed, " : "After that, "}nothing else holds it back.</>
+              ) : (
+                <>
+                  {index === 0 ? "If fixed, " : "After that, "}
+                  {entry.label.toLowerCase()} caps it at{" "}
+                  <span className="font-semibold text-slate-300">
+                    {formatSatisfactionPercent(entry.fraction)}
+                  </span>
+                  .
+                </>
+              )}
             </p>
           ))}
         </div>

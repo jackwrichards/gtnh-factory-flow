@@ -276,6 +276,110 @@ describe("buildUsageLimitChain", () => {
     expect(chain[0].active).toBe(true);
   });
 
+  it("blames a shared supplier even when the solver never flags the edge", () => {
+    // The freezer gets a trickle because its supplier's output is spoken for
+    // by another machine. The solver under-flags split producers (constraint
+    // stays "demand"), and the output goes to a drawer - the old logic then
+    // claimed "runs at full speed" while the header said 2%.
+    const chain = buildUsageLimitChain(
+      {
+        nodes: [makeNode("freezer"), makeNode("rival")],
+        edges: [
+          makeEdge("in", "ebf", "freezer", "hot_ingot"),
+          makeEdge("rival-in", "ebf", "rival", "hot_ingot"),
+          makeEdge("out", "freezer", "drawer", "ingot"),
+        ],
+        storages: [
+          { id: "drawer", kind: "item", resourceId: "ingot", position: { x: 0, y: 0 } },
+        ],
+      },
+      {
+        nodes: {
+          freezer: makeNodeResult("freezer", {
+            utilization: 0.02,
+            inputs: { "item:hot_ingot": makeFlow("hot_ingot", 10, "Hot Titanium Ingot") },
+            outputs: { "item:ingot": makeFlow("ingot", 10, "Titanium Ingot") },
+          }),
+        },
+        edges: {
+          in: makeEdgeResult("in", "hot_ingot", {
+            transferredPerSecond: 0.2,
+            nameplateDemandPerSecond: 10,
+            sourceCapacityPerSecond: 10,
+            constraint: "demand",
+          }),
+          "rival-in": makeEdgeResult("rival-in", "hot_ingot", {
+            transferredPerSecond: 9.8,
+            nameplateDemandPerSecond: 9.8,
+            sourceCapacityPerSecond: 10,
+          }),
+          out: makeEdgeResult("out", "ingot", {
+            transferredPerSecond: 0.2,
+            nameplateDemandPerSecond: 0.2,
+            sourceCapacityPerSecond: 10,
+          }),
+        },
+      },
+      "freezer",
+    );
+
+    expect(chain[0].kind).toBe("supply");
+    expect(chain[0].label).toBe("Hot Titanium Ingot supply");
+    // Available = the 0.2/s it gets + nothing left over at the producer.
+    expect(chain[0].fraction).toBeCloseTo(0.02);
+    expect(chain[0].active).toBe(true);
+  });
+
+  it("scales supply by how fast the producer really runs, with nameplate as the next step", () => {
+    // The freezer's one supplier could cover 18% of its need at nameplate, but
+    // that supplier is itself starved to ~11% speed, so only 2% arrives. The
+    // limit must read 2% now, with 18% as the "even with upstream fixed" step.
+    const chain = buildUsageLimitChain(
+      {
+        nodes: [makeNode("freezer"), makeNode("ebf")],
+        edges: [
+          makeEdge("in", "ebf", "freezer", "hot_ingot"),
+          makeEdge("out", "freezer", "drawer", "ingot"),
+        ],
+        storages: [
+          { id: "drawer", kind: "item", resourceId: "ingot", position: { x: 0, y: 0 } },
+        ],
+      },
+      {
+        nodes: {
+          freezer: makeNodeResult("freezer", {
+            utilization: 0.02,
+            inputs: { "item:hot_ingot": makeFlow("hot_ingot", 10, "Hot Titanium Ingot") },
+            outputs: { "item:ingot": makeFlow("ingot", 10, "Titanium Ingot") },
+          }),
+          ebf: makeNodeResult("ebf", { utilization: 1 / 9 }),
+        },
+        edges: {
+          in: makeEdgeResult("in", "hot_ingot", {
+            transferredPerSecond: 0.2,
+            nameplateDemandPerSecond: 10,
+            sourceCapacityPerSecond: 1.8,
+            constraint: "demand",
+          }),
+          out: makeEdgeResult("out", "ingot", {
+            transferredPerSecond: 0.2,
+            nameplateDemandPerSecond: 0.2,
+            sourceCapacityPerSecond: 10,
+          }),
+        },
+      },
+      "freezer",
+    );
+
+    expect(chain[0].kind).toBe("supply");
+    expect(chain[0].label).toBe("Hot Titanium Ingot supply");
+    expect(chain[0].fraction).toBeCloseTo(0.02);
+    expect(chain[0].active).toBe(true);
+    expect(chain[0].detail).toContain("running slow");
+    expect(chain[1].label).toBe("upstream supply");
+    expect(chain[1].fraction).toBeCloseTo(0.18);
+  });
+
   it("returns nothing for disabled or missing nodes", () => {
     expect(
       buildUsageLimitChain(
