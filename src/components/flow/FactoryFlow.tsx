@@ -565,6 +565,27 @@ export function FactoryFlow() {
     };
     const edgeBundles = getEdgeBundles(project, project.edges, result.edges, ceilingFor);
     const endpointOffsets = getEdgeEndpointOffsets(project);
+    // What is really drawn out of each storage, so a line into a barrel is
+    // only "starved" when machines actually drain that barrel faster than the
+    // line fills it. The solver's own numbers on storage edges reflect the
+    // maker's full-speed rate, not downstream demand.
+    const storageDrainNeed = new Map<string, number>();
+    const storageInflowCounts = new Map<string, number>();
+    for (const edge of project.edges) {
+      const key = makeResourceKey(edge.resourceKind, edge.resourceId);
+      if (storagesById.has(edge.source)) {
+        const drainKey = `${edge.source}|${key}`;
+        storageDrainNeed.set(
+          drainKey,
+          (storageDrainNeed.get(drainKey) ?? 0) +
+            (result.edges[edge.id]?.nameplateDemandPerSecond ?? 0),
+        );
+      }
+      if (storagesById.has(edge.target)) {
+        const inflowKey = `${edge.target}|${key}`;
+        storageInflowCounts.set(inflowKey, (storageInflowCounts.get(inflowKey) ?? 0) + 1);
+      }
+    }
     // How many lines each producer splits a resource across. The solver's
     // sourceCapacityPerSecond is the producer's total, so the surplus ratio is
     // only honest when a single edge (or single-target bundle) carries it all.
@@ -579,13 +600,27 @@ export function FactoryFlow() {
       const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
       const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
       const transferred = edgeResult?.transferredPerSecond ?? demand;
+      const sourceStorage = storagesById.get(edge.source);
+      const targetStorage = storagesById.get(edge.target);
+      // A line into storage only starves when the storage is really drained
+      // faster than this line fills it; a dead-end barrel takes any trickle
+      // happily.
+      const resourceKey = makeResourceKey(edge.resourceKind, edge.resourceId);
+      const storageDrainTotal = targetStorage
+        ? (storageDrainNeed.get(`${edge.target}|${resourceKey}`) ?? 0)
+        : 0;
+      const storageNeed =
+        targetStorage && storageDrainTotal > 1e-6
+          ? storageDrainTotal /
+            (storageInflowCounts.get(`${edge.target}|${resourceKey}`) ?? 1)
+          : undefined;
+      const storageCalm = Boolean(targetStorage) && storageNeed === undefined;
       // isLimited almost never survives the solver's utilisation convergence,
       // since demand gets scaled down to whatever supply exists. The nameplate
       // comparison is what actually catches a starved machine.
-      const isSupplyCapped = edgeResult?.constraint === "supply";
-      const isStarvedEdge = isSupplyCapped || edgeResult?.isLimited === true;
-      const sourceStorage = storagesById.get(edge.source);
-      const targetStorage = storagesById.get(edge.target);
+      const isSupplyCapped = edgeResult?.constraint === "supply" && !storageCalm;
+      const isStarvedEdge =
+        isSupplyCapped || (edgeResult?.isLimited === true && !storageCalm);
       const isStorageEdge = Boolean(sourceStorage || targetStorage);
       const storageResourceKey = sourceStorage
         ? `${sourceStorage.kind}:${sourceStorage.resourceId}`
@@ -618,14 +653,14 @@ export function FactoryFlow() {
           color: edgeColor,
           demand,
           transferred: isStarvedEdge ? transferred : undefined,
-          nameplateDemand: edgeResult?.nameplateDemandPerSecond,
+          nameplateDemand: targetStorage ? storageNeed : edgeResult?.nameplateDemandPerSecond,
           sourceCapacity:
             outletCounts.get([edge.source, edge.resourceKind, edge.resourceId].join("|")) === 1 &&
             edgeResult?.sourceCapacityPerSecond !== undefined
               ? edgeResult.sourceCapacityPerSecond * ceilingFor(edge.source)
               : undefined,
           unit,
-          isLimited: edgeResult?.isLimited === true,
+          isLimited: edgeResult?.isLimited === true && !storageCalm,
           isSupplyCapped,
           isStorageTarget: Boolean(targetStorage),
           isStorageEdge,
