@@ -25,17 +25,125 @@ const EPSILON = 1e-6;
 
 function rateWithUnit(value: number, kind: string): string {
   const unit = kind === "fluid" ? " L/s" : "/s";
-  return `${formatRate(value, value >= 100 ? 0 : 1)}${unit}`;
+  return `${formatRate(value, value >= 100 ? 0 : value >= 10 ? 1 : 2)}${unit}`;
+}
+
+interface InputAvailability {
+  /** What this ingredient's suppliers can deliver at their current speed. */
+  capacityNow: number;
+  /** What they could deliver if every upstream machine ran at full speed. */
+  capacityMax: number;
+  /** The solver flagged one of the lines as starving the consumer. */
+  binding: boolean;
+  /** At least one supplier is itself running below full speed. */
+  upstreamSlow: boolean;
+}
+
+/**
+ * What each connected ingredient's suppliers can actually deliver. A starved
+ * producer's nameplate is a promise, not a supply: `capacityNow` scales each
+ * producer by its own solved utilization, plus whatever it ships elsewhere is
+ * subtracted from the leftover it could still offer.
+ */
+export function computeInputAvailability(
+  project: Pick<FactoryProject, "nodes" | "edges" | "storages">,
+  result: Pick<ThroughputResult, "nodes" | "edges">,
+  nodeId: string,
+): Map<ResourceKey, InputAvailability> {
+  const availability = new Map<ResourceKey, InputAvailability>();
+  const nodeResult = result.nodes[nodeId];
+  if (!nodeResult) {
+    return availability;
+  }
+
+  // How much each producer already ships out per resource, across the whole
+  // board, so the leftover a producer can still offer is real.
+  const takenBySourceResource = new Map<string, number>();
+  for (const edge of project.edges) {
+    const edgeResult = result.edges[edge.id];
+    if (!edgeResult) {
+      continue;
+    }
+
+    const takenKey = `${edge.source}|${makeResourceKey(edge.resourceKind, edge.resourceId)}`;
+    takenBySourceResource.set(
+      takenKey,
+      (takenBySourceResource.get(takenKey) ?? 0) + edgeResult.transferredPerSecond,
+    );
+  }
+
+  for (const edge of project.edges) {
+    if (edge.target !== nodeId) {
+      continue;
+    }
+
+    const edgeResult = result.edges[edge.id];
+    if (!edgeResult) {
+      continue;
+    }
+
+    const key = makeResourceKey(edge.resourceKind, edge.resourceId);
+    if (!nodeResult.inputs[key]) {
+      continue;
+    }
+
+    const producerUtilization = result.nodes[edge.source]?.utilization;
+    const producerSpeed =
+      producerUtilization !== undefined && Number.isFinite(producerUtilization)
+        ? Math.min(Math.max(producerUtilization, 0), 1)
+        : 1;
+    const taken = takenBySourceResource.get(`${edge.source}|${key}`) ?? 0;
+    const capacityMax = edgeResult.sourceCapacityPerSecond;
+    const capacityNow = capacityMax * producerSpeed;
+    const current = availability.get(key) ?? {
+      capacityNow: 0,
+      capacityMax: 0,
+      binding: false,
+      upstreamSlow: false,
+    };
+    current.capacityNow += edgeResult.transferredPerSecond + Math.max(0, capacityNow - taken);
+    current.capacityMax += edgeResult.transferredPerSecond + Math.max(0, capacityMax - taken);
+    current.binding = current.binding || edgeResult.constraint === "supply";
+    current.upstreamSlow = current.upstreamSlow || producerSpeed < 1 - EPSILON;
+    availability.set(key, current);
+  }
+
+  return availability;
+}
+
+/**
+ * How fast this node could run on its current ingredient deliveries, 0..1.
+ * This is what the node can honestly promise a consumer: a machine starved to
+ * 15% cannot offer its nameplate downstream, while a machine merely idle for
+ * lack of demand can (its ceiling stays 1).
+ */
+export function getSupplyCeiling(
+  project: Pick<FactoryProject, "nodes" | "edges" | "storages">,
+  result: Pick<ThroughputResult, "nodes" | "edges">,
+  nodeId: string,
+): number {
+  const nodeResult = result.nodes[nodeId];
+  if (!nodeResult) {
+    return 1;
+  }
+
+  let ceiling = 1;
+  for (const [key, incoming] of computeInputAvailability(project, result, nodeId)) {
+    const need = nodeResult.inputs[key]?.amountPerSecond ?? 0;
+    if (need <= EPSILON || !Number.isFinite(incoming.capacityNow)) {
+      continue;
+    }
+
+    ceiling = Math.min(ceiling, incoming.capacityNow / need);
+  }
+
+  return Math.max(0, ceiling);
 }
 
 /**
  * Ranks everything that could cap a node's usage, the binding factor first and
- * the rest in the order they would take over.
- *
- * Supply ceilings are estimated from producer capacity, which is a producer's
- * total rather than this node's share, so a supplier feeding several machines
- * reads a touch optimistic. The *active* factor never relies on the estimate:
- * it comes from the solver's own edge constraints and utilization.
+ * the rest in the order they would take over. Built on the shared
+ * availability model, so it tells the same story as the edge labels.
  */
 export function buildUsageLimitChain(
   project: Pick<FactoryProject, "nodes" | "edges" | "storages">,
@@ -148,70 +256,11 @@ export function buildUsageLimitChain(
     };
   }
 
-  // How much each producer already ships out per resource, across the whole
-  // board. What a producer can still offer this node is what it sends now
-  // plus its unclaimed leftover - never its whole capacity, which it may be
-  // spending on other machines.
-  const takenBySourceResource = new Map<string, number>();
-  for (const edge of project.edges) {
-    const edgeResult = result.edges[edge.id];
-    if (!edgeResult) {
-      continue;
-    }
-
-    const takenKey = `${edge.source}|${makeResourceKey(edge.resourceKind, edge.resourceId)}`;
-    takenBySourceResource.set(
-      takenKey,
-      (takenBySourceResource.get(takenKey) ?? 0) + edgeResult.transferredPerSecond,
-    );
-  }
-
-  // Supply side: one entry per connected ingredient. What a producer can give
-  // this node *today* is scaled by how fast that producer actually runs - a
-  // starved producer's nameplate is a promise, not a supply. The nameplate
-  // ceiling is kept separately, as the "even with upstream fixed" line.
+  // Supply side: one entry per connected ingredient, from the shared
+  // availability model. The nameplate ceiling is kept separately, as the
+  // "even with upstream fixed" line.
   const supplyEntries: UsageLimitEntry[] = [];
-  const incomingByInput = new Map<
-    ResourceKey,
-    { capacityNow: number; capacityMax: number; binding: boolean; upstreamSlow: boolean }
-  >();
-  for (const edge of project.edges) {
-    if (edge.target !== nodeId) {
-      continue;
-    }
-
-    const edgeResult = result.edges[edge.id];
-    if (!edgeResult) {
-      continue;
-    }
-
-    const key = makeResourceKey(edge.resourceKind, edge.resourceId);
-    if (!nodeResult.inputs[key]) {
-      continue;
-    }
-
-    const producerUtilization = result.nodes[edge.source]?.utilization;
-    const producerSpeed =
-      producerUtilization !== undefined && Number.isFinite(producerUtilization)
-        ? Math.min(Math.max(producerUtilization, 0), 1)
-        : 1;
-    const taken = takenBySourceResource.get(`${edge.source}|${key}`) ?? 0;
-    const capacityMax = edgeResult.sourceCapacityPerSecond;
-    const capacityNow = capacityMax * producerSpeed;
-    const current = incomingByInput.get(key) ?? {
-      capacityNow: 0,
-      capacityMax: 0,
-      binding: false,
-      upstreamSlow: false,
-    };
-    current.capacityNow += edgeResult.transferredPerSecond + Math.max(0, capacityNow - taken);
-    current.capacityMax += edgeResult.transferredPerSecond + Math.max(0, capacityMax - taken);
-    current.binding = current.binding || edgeResult.constraint === "supply";
-    current.upstreamSlow = current.upstreamSlow || producerSpeed < 1 - EPSILON;
-    incomingByInput.set(key, current);
-  }
-
-  for (const [key, incoming] of incomingByInput) {
+  for (const [key, incoming] of computeInputAvailability(project, result, nodeId)) {
     const inputFlow = nodeResult.inputs[key];
     const need = inputFlow?.amountPerSecond ?? 0;
     if (!inputFlow || need <= EPSILON) {

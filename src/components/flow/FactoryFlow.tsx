@@ -85,6 +85,7 @@ import {
   isEdgeStarved,
   isEdgeSurplus,
 } from "./edge-labels";
+import { getSupplyCeiling } from "@/components/inspector/usage-limits";
 import {
   EDGE_DETAIL_ARROWS,
   EDGE_DETAIL_GLOBAL,
@@ -547,7 +548,20 @@ export function FactoryFlow() {
   );
 
   const edges = useMemo<ResourceFlowEdge[]>(() => {
-    const edgeBundles = getEdgeBundles(project, project.edges, result.edges);
+    // A producer starved of its own inputs cannot offer its nameplate, so
+    // every capacity the labels see is scaled by the producer's real ceiling.
+    // A machine merely idle for lack of demand keeps a ceiling of 1 - hooking
+    // up a new consumer genuinely would speed it up.
+    const supplyCeilings = new Map<string, number>();
+    const ceilingFor = (sourceId: string) => {
+      let ceiling = supplyCeilings.get(sourceId);
+      if (ceiling === undefined) {
+        ceiling = getSupplyCeiling(project, result, sourceId);
+        supplyCeilings.set(sourceId, ceiling);
+      }
+      return ceiling;
+    };
+    const edgeBundles = getEdgeBundles(project, project.edges, result.edges, ceilingFor);
     const endpointOffsets = getEdgeEndpointOffsets(project);
     // How many lines each producer splits a resource across. The solver's
     // sourceCapacityPerSecond is the producer's total, so the surplus ratio is
@@ -604,8 +618,9 @@ export function FactoryFlow() {
           transferred: isStarvedEdge ? transferred : undefined,
           nameplateDemand: edgeResult?.nameplateDemandPerSecond,
           sourceCapacity:
-            outletCounts.get([edge.source, edge.resourceKind, edge.resourceId].join("|")) === 1
-              ? edgeResult?.sourceCapacityPerSecond
+            outletCounts.get([edge.source, edge.resourceKind, edge.resourceId].join("|")) === 1 &&
+            edgeResult?.sourceCapacityPerSecond !== undefined
+              ? edgeResult.sourceCapacityPerSecond * ceilingFor(edge.source)
               : undefined,
           unit,
           isLimited: edgeResult?.isLimited === true,
@@ -2201,6 +2216,7 @@ function getEdgeBundles(
       constraint?: EdgeThroughput["constraint"];
     }
   >,
+  ceilingFor: (sourceId: string) => number = () => 1,
 ) {
   const groups = new Map<string, FactoryEdge[]>();
 
@@ -2261,11 +2277,13 @@ function getEdgeBundles(
       0,
     );
     // Every edge in the group leaves the same producer, so its capacity is one
-    // shared total, not a per-edge amount to sum.
-    const sourceCapacity = group.reduce(
-      (max, edge) => Math.max(max, edgeResults[edge.id]?.sourceCapacityPerSecond ?? 0),
-      0,
-    );
+    // shared total, not a per-edge amount to sum - scaled by how fast that
+    // producer can actually run on its own inputs.
+    const sourceCapacity =
+      group.reduce(
+        (max, edge) => Math.max(max, edgeResults[edge.id]?.sourceCapacityPerSecond ?? 0),
+        0,
+      ) * ceilingFor(group[0].source);
     const primarySourceHandleId = primaryEdge.sourceHandle ?? sourceHandleIds[0];
     const edgeIds = group.map((edge) => edge.id);
     if (!primarySourceHandleId) {

@@ -6,7 +6,7 @@ import type {
   NodeThroughputResult,
   ResourceFlow,
 } from "@/lib/model/types";
-import { buildUsageLimitChain } from "./usage-limits";
+import { buildUsageLimitChain, getSupplyCeiling } from "./usage-limits";
 
 function makeNode(id: string, machineCount = 1): FactoryNode {
   return {
@@ -378,6 +378,35 @@ describe("buildUsageLimitChain", () => {
     expect(chain[0].detail).toContain("running slow");
     expect(chain[1].label).toBe("upstream supply");
     expect(chain[1].fraction).toBeCloseTo(0.18);
+  });
+
+  it("caps a starved node's own ceiling so edges cannot promise its nameplate", () => {
+    // The smelter gets half its ore, so anything downstream can only ever be
+    // offered half its nameplate output; a node with free-flowing inputs
+    // keeps a ceiling of 1 even when idle from lack of demand.
+    const project = {
+      nodes: [makeNode("smelter")],
+      edges: [makeEdge("in", "mine", "smelter", "ore")],
+    };
+    const result = {
+      nodes: {
+        smelter: makeNodeResult("smelter", {
+          utilization: 0.5,
+          inputs: { "item:ore": makeFlow("ore", 10, "Iron Ore") },
+        }),
+      },
+      edges: {
+        in: makeEdgeResult("in", "ore", {
+          transferredPerSecond: 5,
+          nameplateDemandPerSecond: 10,
+          sourceCapacityPerSecond: 5,
+          constraint: "supply",
+        }),
+      },
+    };
+
+    expect(getSupplyCeiling(project, result, "smelter")).toBeCloseTo(0.5);
+    expect(getSupplyCeiling(project, result, "mine")).toBe(1);
   });
 
   it("returns nothing for disabled or missing nodes", () => {
