@@ -565,6 +565,24 @@ export function FactoryFlow() {
     };
     const edgeBundles = getEdgeBundles(project, project.edges, result.edges, ceilingFor);
     const endpointOffsets = getEdgeEndpointOffsets(project);
+    // The solver reports storage-bound edges at the producer's full-speed
+    // rate on purpose - that is the mechanism that lets drawers absorb
+    // surplus. For display we want what actually flows in: the producer's
+    // real output minus what its machine consumers take, split across sinks.
+    const directTakenBySourceResource = new Map<string, number>();
+    const storageSinkCounts = new Map<string, number>();
+    for (const edge of project.edges) {
+      const key = `${edge.source}|${makeResourceKey(edge.resourceKind, edge.resourceId)}`;
+      if (storagesById.has(edge.target)) {
+        storageSinkCounts.set(key, (storageSinkCounts.get(key) ?? 0) + 1);
+      } else {
+        directTakenBySourceResource.set(
+          key,
+          (directTakenBySourceResource.get(key) ?? 0) +
+            (result.edges[edge.id]?.transferredPerSecond ?? 0),
+        );
+      }
+    }
     // How many lines each producer splits a resource across. The solver's
     // sourceCapacityPerSecond is the producer's total, so the surplus ratio is
     // only honest when a single edge (or single-target bundle) carries it all.
@@ -578,9 +596,23 @@ export function FactoryFlow() {
       const edgeResult = result.edges[edge.id];
       const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
       const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
-      const transferred = edgeResult?.transferredPerSecond ?? demand;
       const sourceStorage = storagesById.get(edge.source);
       const targetStorage = storagesById.get(edge.target);
+      const sourceResult = result.nodes[edge.source];
+      // For machine-to-storage lines, derive the real inflow from the maker's
+      // actual output; the solver's transferred is the full-speed surplus.
+      const resourceKey = makeResourceKey(edge.resourceKind, edge.resourceId);
+      let transferred = edgeResult?.transferredPerSecond ?? demand;
+      if (targetStorage && !sourceStorage && sourceResult) {
+        const speed = Number.isFinite(sourceResult.utilization)
+          ? Math.min(Math.max(sourceResult.utilization, 0), 1)
+          : 0;
+        const effectiveOutput =
+          (sourceResult.outputs[resourceKey]?.amountPerSecond ?? 0) * speed;
+        const taken = directTakenBySourceResource.get(`${edge.source}|${resourceKey}`) ?? 0;
+        const sinks = storageSinkCounts.get(`${edge.source}|${resourceKey}`) ?? 1;
+        transferred = Math.min(transferred, Math.max(0, effectiveOutput - taken) / sinks);
+      }
       // isLimited almost never survives the solver's utilisation convergence,
       // since demand gets scaled down to whatever supply exists. The nameplate
       // comparison is what actually catches a starved machine. Storage soaks
