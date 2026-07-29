@@ -159,8 +159,11 @@ export function CropPickerMenu({
                       tooltip={false}
                       showAmount={false}
                       showConsumedState={false}
-                      iconPixelSize={32}
-                      className="h-8 w-8"
+                      // The rendered sprites carry transparent padding: draw
+                      // them ~25% larger than the frame and let the frame crop
+                      // it, exactly like the NEI config slots do.
+                      iconPixelSize={50}
+                      className="h-10 w-10"
                     />
                   ) : null}
                 </span>

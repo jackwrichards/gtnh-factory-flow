@@ -399,8 +399,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                     tooltip={false}
                     showAmount={false}
                     showConsumedState={false}
-                    iconPixelSize={20}
-                    className="mr-1 h-5 w-5 shrink-0 !overflow-visible"
+                    iconPixelSize={25}
+                    className="mr-1 h-5 w-5 shrink-0"
                   />
                 ) : isCropFarmNode ? (
                   <Sprout className="mr-1 h-4 w-4 shrink-0" />
