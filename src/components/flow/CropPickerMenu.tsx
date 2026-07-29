@@ -149,7 +149,7 @@ export function CropPickerMenu({
                 onClick={() => void handlePick(crop)}
                 className="flex w-full items-center gap-2.5 border-2 border-transparent px-1.5 py-1.5 text-left text-[var(--mc-ink)] hover:border-[var(--mc-47)] hover:bg-[var(--mc-100)]"
               >
-                <span className="grid h-10 w-10 shrink-0 place-items-center border border-[var(--mc-33)] bg-[var(--mc-55)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]">
+                <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-[var(--mc-33)] bg-[var(--mc-55)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]">
                   {crop.outputs[0] ? (
                     <ResourceIcon
                       // Hide the chance badge here: chances are spelled out in
@@ -159,8 +159,8 @@ export function CropPickerMenu({
                       tooltip={false}
                       showAmount={false}
                       showConsumedState={false}
-                      iconPixelSize={64}
-                      className="h-9 w-9 !overflow-visible"
+                      iconPixelSize={32}
+                      className="h-8 w-8"
                     />
                   ) : null}
                 </span>
