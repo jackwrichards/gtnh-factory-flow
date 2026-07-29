@@ -117,6 +117,8 @@ const solenoidTiers = [
   },
 ];
 
+import { wikiStatsForMachine } from "./machine-wiki-stats.mjs";
+
 // ---------------------------------------------------------------------------
 // Recipe-level machine config controls
 // ---------------------------------------------------------------------------
@@ -292,6 +294,9 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
     }
 
     const stats = multiblock ? parseMultiblockCatalystStats(tooltip, machineType) : {};
+    if (multiblock) {
+      applyWikiStats(stats, label, machineType);
+    }
     families.set(familyKey, {
       id: slug(label),
       label,
@@ -425,6 +430,34 @@ function parseStatLines(lines, { allLines }) {
       /reduce recipe time by a factor 4 instead of 2/i.test(line)
     ) {
       perfectOverclock = true;
+      continue;
+    }
+
+    // Dual-state machines (Hot Isostatic Pressurization Unit) write their
+    // normal/overheated stats as slash pairs; the planner models the normal
+    // state, so the first value applies.
+    const dualSpeed = /(\d+(?:[.,]\d+)?)\s*%\s+faster\/slower/i.exec(line);
+    if (dualSpeed) {
+      const bonus = parseTooltipNumber(dualSpeed[1]) / 100;
+      if (bonus > 0 && bonus <= 50) {
+        durationMultiplier = 1 / (1 + bonus);
+      }
+      continue;
+    }
+    const dualEu = /^Uses (\d+(?:[.,]\d+)?)%\/(\d+(?:[.,]\d+)?)% the EU\/?t/i.exec(line);
+    if (dualEu) {
+      const factor = parseTooltipNumber(dualEu[1]) / 100;
+      if (factor > 0 && factor !== 1 && factor <= 5) {
+        eutMultiplier = factor;
+      }
+      continue;
+    }
+    const dualParallel = /^Gains (\d+)\/(\d+) parallels? per voltage tier$/i.exec(line);
+    if (dualParallel) {
+      const count = Number.parseInt(dualParallel[1], 10);
+      if (count > 0 && count <= 1024) {
+        controls.push(voltageParallelControl(count, []));
+      }
       continue;
     }
 
@@ -724,6 +757,29 @@ function parseStatLines(lines, { allLines }) {
     perfectOverclock,
     controls: controls.filter(Boolean),
   };
+}
+
+/**
+ * Fill tooltip gaps with wiki-sourced stats and append the machine's item or
+ * casing selector control. Tooltip-parsed values always win.
+ */
+function applyWikiStats(stats, label, machineType) {
+  const wiki = wikiStatsForMachine(label, machineType);
+  if (!wiki) {
+    return;
+  }
+  if (stats.durationMultiplier === undefined && wiki.durationMultiplier !== undefined) {
+    stats.durationMultiplier = wiki.durationMultiplier;
+  }
+  if (stats.eutMultiplier === undefined && wiki.eutMultiplier !== undefined) {
+    stats.eutMultiplier = wiki.eutMultiplier;
+  }
+  if (wiki.selector) {
+    stats.machineConfigControls = mergeMachineConfigControls([
+      ...(stats.machineConfigControls ?? []),
+      wiki.selector,
+    ]);
+  }
 }
 
 function normalizeStatVoltageTier(value) {

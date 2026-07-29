@@ -195,7 +195,10 @@ export function getMachineParallelMultiplier(
   return getRecipeMachineConfigTierControls(recipe, node).reduce((multiplier, control) => {
     const fixed = control.current.parallelMultiplier ?? 1;
     const perTier = control.current.parallelPerVoltageTier;
-    const scaled = Number.isFinite(perTier) ? Math.max(1, (perTier as number) * tierOrdinal) : 1;
+    const base = control.current.parallelVoltageBase ?? 0;
+    const scaled = Number.isFinite(perTier)
+      ? Math.max(1, Math.floor(base + (perTier as number) * tierOrdinal))
+      : 1;
     return multiplier * fixed * scaled;
   }, 1);
 }

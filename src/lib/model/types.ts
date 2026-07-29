@@ -159,6 +159,8 @@ export interface MachineConfigTierOption {
   parallelMultiplier?: number;
   /** Parallels that scale with the machine's voltage tier (GT++ "Voltage Tier * n Parallels"). */
   parallelPerVoltageTier?: number;
+  /** Additive base for voltage-scaled parallels: floor(base + n * tier), e.g. Zhuhai 2 * (tier + 1). */
+  parallelVoltageBase?: number;
   resource: ResourceAmount;
 }
 

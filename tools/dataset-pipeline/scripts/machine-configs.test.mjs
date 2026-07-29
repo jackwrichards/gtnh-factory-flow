@@ -149,9 +149,10 @@ describe("buildMachineHandlerTemplates", () => {
     const dangote = templates.find((template) => template.label === "Dangote Distillus");
     expect(dangote.durationMultiplier).toBeCloseTo(1 / 2);
     expect(dangote.eutMultiplier).toBeCloseTo(0.15);
-    // The height/voltage parallel formula is unquantifiable, so no
-    // parallel control is invented for distillery mode.
-    expect(dangote.machineConfigControls).toBeUndefined();
+    // The tooltip's height formula is unquantifiable, but the wiki layer
+    // resolves it (full-height tower is mandatory: 8 per voltage tier).
+    const ids = (dangote.machineConfigControls ?? []).map((control) => control.id);
+    expect(ids).toEqual(["voltageParallel"]);
   });
 
   it("skips deprecated machines entirely", () => {
@@ -324,6 +325,58 @@ describe("buildMachineHandlerTemplates", () => {
     expect(parallel).toHaveLength(1);
     expect(parallel[0].tiers.map((tier) => tier.parallelMultiplier)).toEqual([16]);
     expect(mk2.durationTicks).toBe(667);
+  });
+
+  it("models the normal state of dual-state slash tooltips (HIP)", () => {
+    const templates = buildMachineHandlerTemplates("Compressor", [
+      catalyst("Compressor", { sourceClass: SINGLE_CLASS }),
+      catalyst("Hot Isostatic Pressurization Unit", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: [
+          "250% faster/slower than singleblock machines of the same voltage",
+          "Uses 75%/110% the EU/t normally required",
+          "Gains 4/1 parallels per voltage tier",
+        ],
+      }),
+    ]);
+
+    const hip = templates.find((template) => template.label.startsWith("Hot Isostatic"));
+    expect(hip.durationMultiplier).toBeCloseTo(1 / 3.5);
+    expect(hip.eutMultiplier).toBeCloseTo(0.75);
+    const control = hip.machineConfigControls.find((c) => c.id === "voltageParallel");
+    expect(control.tiers[0].parallelPerVoltageTier).toBe(4);
+  });
+
+  it("appends wiki-sourced selector controls (Cutting Factory, Zhuhai, Dangote distillery)", () => {
+    const icf = buildMachineHandlerTemplates("Cutting Machine", [
+      catalyst("Cutting Machine", { sourceClass: SINGLE_CLASS }),
+      catalyst("Industrial Cutting Factory", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: ["Requires a Sawblade in the controller slot to use"],
+      }),
+    ]).find((template) => template.label === "Industrial Cutting Factory");
+    const sawblade = icf.machineConfigControls.find((c) => c.id === "cuttingSawblade");
+    expect(sawblade.tiers).toHaveLength(4);
+    expect(sawblade.tiers[0].durationMultiplier).toBeCloseTo(1 / 2.5);
+    expect(sawblade.tiers[3].parallelPerVoltageTier).toBe(6);
+
+    const zhuhai = buildMachineHandlerTemplates("Zhuhai - Fishing Port", [
+      catalyst("Zhuhai - Fishing Port", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: ["Can process (Tier + 1) * 2 recipes"],
+      }),
+    ])[0];
+    const affine = zhuhai.machineConfigControls.find((c) => c.id === "voltageParallel");
+    expect(affine.tiers[0].parallelPerVoltageTier).toBe(2);
+    expect(affine.tiers[0].parallelVoltageBase).toBe(2);
+
+    const dangote = buildMachineHandlerTemplates("Distillery", [
+      catalyst("Distillery", { sourceClass: SINGLE_CLASS }),
+      catalyst("Dangote Distillus", { sourceClass: GTPP_MULTI_CLASS, tooltip: DANGOTE_TOOLTIP }),
+    ]).find((template) => template.label === "Dangote Distillus");
+    const perTier = dangote.machineConfigControls.find((c) => c.id === "voltageParallel");
+    expect(perTier.tiers[0].parallelPerVoltageTier).toBe(8);
+    expect(dangote.eutMultiplier).toBeCloseTo(0.15);
   });
 
   it("reads perfect overclock statements", () => {

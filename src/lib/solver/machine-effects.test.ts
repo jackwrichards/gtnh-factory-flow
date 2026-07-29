@@ -7,7 +7,55 @@ import {
   getMachineDurationMultiplier,
   getMachineEutMultiplier,
   getMachineOutputMultiplier,
+  getMachineParallelMultiplier,
 } from "./machine-effects";
+
+describe("voltage-scaled parallels", () => {
+  const recipeWithControl = (tier: Record<string, number>): Recipe => ({
+    id: "test",
+    name: "test",
+    machineType: "Zhuhai - Fishing Port",
+    minimumTier: "LV",
+    durationTicks: 20,
+    eut: 8,
+    inputs: [],
+    outputs: [{ kind: "item", id: "fish", amount: 1 }],
+    machineConfigControls: [
+      {
+        id: "voltageParallel",
+        label: "Parallels per Tier",
+        minimumKey: "only",
+        defaultKey: "only",
+        tiers: [
+          {
+            key: "only",
+            label: "only",
+            ...tier,
+            resource: { kind: "item", id: "x", amount: 1 },
+          },
+        ],
+      },
+    ],
+  });
+
+  it("scales linearly with the run tier", () => {
+    const recipe = recipeWithControl({ parallelPerVoltageTier: 2 });
+    expect(getMachineParallelMultiplier(recipe, { overclockTier: "LV" })).toBe(2);
+    expect(getMachineParallelMultiplier(recipe, { overclockTier: "EV" })).toBe(8);
+  });
+
+  it("supports affine base with floor (Zhuhai and Density^2 forms)", () => {
+    const zhuhai = recipeWithControl({ parallelPerVoltageTier: 2, parallelVoltageBase: 2 });
+    expect(getMachineParallelMultiplier(zhuhai, { overclockTier: "LV" })).toBe(4);
+    expect(getMachineParallelMultiplier(zhuhai, { overclockTier: "UV" })).toBe(18);
+
+    const density = recipeWithControl({ parallelPerVoltageTier: 0.5, parallelVoltageBase: 1 });
+    expect(getMachineParallelMultiplier(density, { overclockTier: "LV" })).toBe(1);
+    expect(getMachineParallelMultiplier(density, { overclockTier: "MV" })).toBe(2);
+    expect(getMachineParallelMultiplier(density, { overclockTier: "HV" })).toBe(2);
+    expect(getMachineParallelMultiplier(density, { overclockTier: "EV" })).toBe(3);
+  });
+});
 
 describe("passive production machine effects", () => {
   it("applies IC2 crop stat presets as generic config multipliers", () => {

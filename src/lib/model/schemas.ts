@@ -151,6 +151,7 @@ export const machineConfigControlSchema = z.object({
         outputMultiplier: z.number().nonnegative().optional(),
         parallelMultiplier: z.number().positive().optional(),
         parallelPerVoltageTier: z.number().positive().optional(),
+        parallelVoltageBase: z.number().nonnegative().optional(),
         resource: resourceAmountSchema,
       }),
     )
