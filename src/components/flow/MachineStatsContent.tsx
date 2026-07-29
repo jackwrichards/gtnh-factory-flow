@@ -64,7 +64,7 @@ function speedAndPowerControls(recipe: Recipe): string[] {
 
 function StatRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 text-[13px] leading-relaxed">
+    <div className="flex items-baseline justify-between gap-3 text-[15px] leading-relaxed">
       <span className="shrink-0 text-slate-400">{label}</span>
       <span className="text-right text-slate-100">{children}</span>
     </div>
@@ -98,10 +98,10 @@ export function MachineStatsContent({
     (recipe.runtimeCalculation?.variants.length ?? 0) > 0;
 
   return (
-    <div className="w-72">
+    <div className="w-80">
       <div className="flex items-baseline gap-2 border-b border-white/15 pb-1.5">
-        <span className="truncate text-[14px] font-semibold text-white">{handler.label}</span>
-        <span className="ml-auto shrink-0 text-[11px] uppercase tracking-wide text-slate-400">
+        <span className="truncate text-[16px] font-semibold text-white">{handler.label}</span>
+        <span className="ml-auto shrink-0 text-[12px] uppercase tracking-wide text-slate-400">
           {handler.kind === "multiblock" ? "Multiblock" : "Single block"}
         </span>
       </div>
@@ -152,22 +152,22 @@ export function MachineStatsContent({
       </div>
 
       <div className="mt-2.5 border-t border-white/10 pt-2">
-        <p className="text-[13px] font-semibold leading-snug text-amber-300">Overclocking.</p>
+        <p className="text-[15px] font-semibold leading-snug text-amber-300">Overclocking.</p>
         {hasExactOverclocks ? (
-          <p className="mt-0.5 text-[13px] leading-relaxed text-slate-100">
+          <p className="mt-0.5 text-[14px] leading-relaxed text-slate-100">
             Exact. The dataset was exported with the game running, and GregTech&apos;s own
             calculator supplied the time and power for every voltage tier. Heat bonuses and
             perfect overclocks are included.
           </p>
         ) : isDefault ? (
-          <p className="mt-0.5 text-[13px] leading-relaxed text-slate-100">
+          <p className="mt-0.5 text-[14px] leading-relaxed text-slate-100">
             Estimated. Each tier above{" "}
             <span style={{ color: RATE_COLOR }}>{String(applied.minimumTier).toUpperCase()}</span>{" "}
             runs <span style={{ color: BONUS_COLOR }}>2&times;</span> faster and draws{" "}
             <span style={{ color: PENALTY_COLOR }}>4&times;</span> the power.
           </p>
         ) : (
-          <p className="mt-0.5 text-[13px] leading-relaxed text-slate-100">
+          <p className="mt-0.5 text-[14px] leading-relaxed text-slate-100">
             Estimated for this machine. Each tier above{" "}
             <span style={{ color: RATE_COLOR }}>{String(applied.minimumTier).toUpperCase()}</span>{" "}
             runs <span style={{ color: BONUS_COLOR }}>2&times;</span> faster and draws{" "}

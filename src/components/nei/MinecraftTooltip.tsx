@@ -29,6 +29,7 @@ export function MinecraftTooltip({
   const [position, setPosition] = useState<{ x: number; y: number } | undefined>();
   const frameRef = useRef<number | undefined>(undefined);
   const pendingPositionRef = useRef<{ x: number; y: number } | undefined>(undefined);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(
     () => () => {
@@ -52,9 +53,13 @@ export function MinecraftTooltip({
       return;
     }
 
+    // Clamp to the measured panel so wide or tall tooltips stay fully on
+    // screen; before the first paint we fall back to a generous estimate.
+    const panelWidth = panelRef.current?.offsetWidth ?? (hasContent ? 340 : 260);
+    const panelHeight = panelRef.current?.offsetHeight ?? (hasContent ? 240 : 80);
     pendingPositionRef.current = {
-      x: Math.min(event.clientX + 12, window.innerWidth - 260),
-      y: Math.min(event.clientY + 12, window.innerHeight - 80),
+      x: Math.max(4, Math.min(event.clientX + 12, window.innerWidth - panelWidth - 8)),
+      y: Math.max(4, Math.min(event.clientY + 12, window.innerHeight - panelHeight - 8)),
     };
 
     if (frameRef.current !== undefined) {
@@ -123,14 +128,16 @@ export function MinecraftTooltip({
         ? createPortal(
             hasContent ? (
               <div
+                ref={panelRef}
                 data-minecraft-tooltip="true"
-                className="pointer-events-none fixed z-[9999] max-w-[280px] border-2 border-[#2a005f] bg-[#100010] px-2.5 py-2 text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)]"
+                className="pointer-events-none fixed z-[9999] max-w-[360px] border-2 border-[#2a005f] bg-[#100010] px-3 py-2.5 text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)]"
                 style={{ left: position.x, top: position.y }}
               >
                 {content}
               </div>
             ) : (
               <div
+                ref={panelRef}
                 data-minecraft-tooltip="true"
                 className="pointer-events-none fixed z-[9999] max-w-[260px] border-2 border-[#2a005f] bg-[#100010] px-2 py-1 font-mono text-[16px] leading-[18px] text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)] [text-shadow:2px_2px_0_#3f3f3f]"
                 style={{ left: position.x, top: position.y }}
