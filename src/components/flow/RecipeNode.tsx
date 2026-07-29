@@ -2,7 +2,7 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { memo, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { AlertTriangle, ChevronDown, Sprout, WandSparkles } from "lucide-react";
+import { AlertTriangle, ChevronDown, Minus, Plus, Sprout, WandSparkles } from "lucide-react";
 import type {
   FactoryNode,
   MachineTier,
@@ -1660,10 +1660,36 @@ function MachineCountStat({
     }
   };
 
+  const stepBy = (direction: 1 | -1, event: React.MouseEvent) => {
+    // Shift-click steps by 100, Ctrl-click (or Cmd on mac) by 10.
+    const step = event.shiftKey ? 100 : event.ctrlKey || event.metaKey ? 10 : 1;
+    const next = Math.max(1, machineCount + direction * step);
+    if (next !== machineCount) {
+      setDraftState({ machineCount: next, draft: String(next) });
+      onChange(next);
+    }
+  };
+
+  const stepButtonClassName =
+    "nodrag flex h-4 w-4 shrink-0 items-center justify-center border border-[var(--mc-33)] bg-[var(--mc-82)] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-47)] hover:bg-[var(--mc-100)] active:shadow-[inset_1px_1px_0_var(--mc-47),inset_-1px_-1px_0_var(--mc-100)]";
+
   return (
     <div className="min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
       <div className="truncate text-[9px] uppercase text-[var(--mc-ink-muted)]">{label}</div>
-      <div className="flex min-w-0 items-center gap-1">
+      <div className="flex min-w-0 items-center gap-0.5">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            stepBy(-1, event);
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          className={stepButtonClassName}
+          title="Remove 1 (Shift: 100, Ctrl: 10)"
+          aria-label={`Decrease ${label.toLowerCase()} count`}
+        >
+          <Minus className="h-3 w-3" />
+        </button>
         <input
           value={draft}
           onChange={(event) => {
@@ -1681,8 +1707,21 @@ function MachineCountStat({
           inputMode="numeric"
           aria-label={`${label} count`}
           title={`Edit ${label.toLowerCase()} count`}
-          className="nodrag h-[18px] w-0 min-w-0 flex-1 border border-[var(--mc-47)] bg-[var(--mc-85)] px-1 text-[12px] font-medium leading-4 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-[var(--mc-100)] focus:ring-1 focus:ring-cyan-400"
+          className="nodrag h-[18px] w-0 min-w-0 flex-1 border border-[var(--mc-47)] bg-[var(--mc-85)] px-1 text-center text-[12px] font-medium leading-4 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-[var(--mc-100)] focus:ring-1 focus:ring-cyan-400"
         />
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            stepBy(1, event);
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          className={stepButtonClassName}
+          title="Add 1 (Shift: 100, Ctrl: 10)"
+          aria-label={`Increase ${label.toLowerCase()} count`}
+        >
+          <Plus className="h-3 w-3" />
+        </button>
         <button
           type="button"
           onClick={(event) => {
