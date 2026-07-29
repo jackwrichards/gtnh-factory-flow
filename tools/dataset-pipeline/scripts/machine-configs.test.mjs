@@ -89,6 +89,53 @@ describe("buildMachineHandlerTemplates", () => {
     expect(volcanus.machineConfigControls[0].tiers[0].parallelMultiplier).toBe(8);
   });
 
+  it("reads real GT++ total-percent stats (Volcanus)", () => {
+    const templates = buildMachineHandlerTemplates("Blast Furnace", [
+      catalyst("Electric Blast Furnace", { sourceClass: MULTI_CLASS }),
+      catalyst("Volcanus", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: [
+          "Volcanus",
+          "Machine Type: Blast Furnace",
+          "Factory Grade Advanced Blast Furnace",
+          "8 Parallels",
+          "220% Speed",
+          "90% EU Usage",
+          "500 Pollution per second",
+        ],
+      }),
+    ]);
+
+    const volcanus = templates.find((template) => template.label === "Volcanus");
+    expect(volcanus.durationMultiplier).toBeCloseTo(1 / 2.2);
+    expect(volcanus.eutMultiplier).toBeCloseTo(0.9);
+    expect(volcanus.machineConfigControls[0].tiers[0].parallelMultiplier).toBe(8);
+  });
+
+  it("lets a later tooltip mode section override an earlier one (Dangote)", () => {
+    const templates = buildMachineHandlerTemplates("Distillation Tower", [
+      catalyst("Distillation Tower", { sourceClass: MULTI_CLASS }),
+      catalyst("Dangote Distillus", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: [
+          "Distillery Mode",
+          "(2 * floor(Height / 3)) * Voltage Tier Parallels",
+          "200% Speed",
+          "15% EU Usage",
+          "Distillation Tower Mode",
+          "12 Parallels",
+          "350% Speed",
+          "100% EU Usage",
+        ],
+      }),
+    ]);
+
+    const dangote = templates.find((template) => template.label === "Dangote Distillus");
+    expect(dangote.durationMultiplier).toBeCloseTo(1 / 3.5);
+    expect(dangote.eutMultiplier).toBeUndefined();
+    expect(dangote.machineConfigControls[0].tiers[0].parallelMultiplier).toBe(12);
+  });
+
   it("does not misread tier-scaled bonuses as static bonuses", () => {
     const templates = buildMachineHandlerTemplates("Chemical Plant", [
       catalyst("ExxonMobil Chemical Plant", {
@@ -201,6 +248,23 @@ describe("machineConfigControlsForOracleRecipe", () => {
     expect(byKey.get("kanthal").durationMultiplier).toBeCloseTo(1);
     expect(byKey.get("nichrome").durationMultiplier).toBeCloseTo(2 / 3);
     expect(byKey.get("kanthal").eutMultiplier).toBeUndefined();
+  });
+
+  it("gives the Industrial Coke Oven a slices control matching the in-game parallels", () => {
+    const controls = machineConfigControlsForOracleRecipe("Industrial Coke Oven", 0, []);
+    const slices = controls.find((control) => control.id === "cokeOvenSlices");
+    const casing = controls.find((control) => control.id === "cokeOvenCasing");
+    expect(slices.tiers).toHaveLength(16);
+    expect(slices.defaultKey).toBe("slice-1");
+
+    const heatResistant = casing.tiers.find((tier) => tier.key === "heat_resistant");
+    const heatProof = casing.tiers.find((tier) => tier.key === "heat_proof");
+    const oneSlice = slices.tiers.find((tier) => tier.key === "slice-1");
+    const sixteenSlices = slices.tiers.find((tier) => tier.key === "slice-16");
+    expect(heatResistant.parallelMultiplier * oneSlice.parallelMultiplier).toBe(16);
+    expect(heatResistant.parallelMultiplier * sixteenSlices.parallelMultiplier).toBe(16 + 8 * 15);
+    expect(heatProof.parallelMultiplier * oneSlice.parallelMultiplier).toBe(32);
+    expect(heatProof.parallelMultiplier * sixteenSlices.parallelMultiplier).toBe(32 + 16 * 15);
   });
 
   it("keeps the catalyst-derived controls of the primary machine", () => {

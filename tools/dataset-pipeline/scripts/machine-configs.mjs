@@ -225,6 +225,32 @@ export function machineConfigControlsForOracleRecipe(machineType, specialValue, 
         },
       ],
     });
+    // Slices: "16 base and +8 Parallels per extra slice with Heat Resistant
+    // Casing" (32/+16 for Heat Proof), max 15 extra slices. Expressed as a
+    // multiplier on the casing parallels: (slices + 1) / 2, so Heat
+    // Resistant 16 x mult and Heat Proof 32 x mult give the in-game counts.
+    controls.push({
+      id: "cokeOvenSlices",
+      label: "Slices",
+      minimumKey: "slice-1",
+      defaultKey: "slice-1",
+      tiers: Array.from({ length: 16 }, (_, index) => {
+        const slices = index + 1;
+        return {
+          key: `slice-${slices}`,
+          label: `${slices} Slice${slices === 1 ? "" : "s"}`,
+          parallelMultiplier: (slices + 1) / 2,
+          resource: machineConfigResource(
+            `factoryflow:machine_config/coke_oven_slice_${slices}`,
+            `${slices} Slice${slices === 1 ? "" : "s"}`,
+            [
+              "Industrial Coke Oven width",
+              `Parallels: ${8 * (slices + 1)} with Heat Resistant, ${16 * (slices + 1)} with Heat Proof`,
+            ],
+          ),
+        };
+      }),
+    });
   }
 
   return mergeMachineConfigControls(controls);
@@ -340,6 +366,21 @@ function parseMultiblockCatalystStats(tooltip) {
       continue;
     }
 
+    // GT++ machines state totals ("220% Speed", "90% EU Usage"); a few
+    // others state bonuses ("Speed: +120%", "50% faster"). Multi-mode
+    // machines (Dangote Distillus) list one section per mode, so a later
+    // section overrides an earlier one and an explicit 100% resets the stat.
+    const speedTotal = /^(\d+(?:[.,]\d+)?)\s*%\s+Speed$/i.exec(line);
+    if (speedTotal) {
+      const factor = parseTooltipNumber(speedTotal[1]) / 100;
+      if (factor === 1) {
+        durationMultiplier = undefined;
+      } else if (factor > 0.01 && factor <= 100) {
+        durationMultiplier = 1 / factor;
+      }
+      continue;
+    }
+
     const speed =
       /^Speed:\s*\+\s*(\d+(?:[.,]\d+)?)\s*%/i.exec(line) ??
       /\+\s*(\d+(?:[.,]\d+)?)\s*%\s+faster/i.exec(line) ??
@@ -353,11 +394,14 @@ function parseMultiblockCatalystStats(tooltip) {
     }
 
     const euUsage =
+      /^(\d+(?:[.,]\d+)?)\s*%\s+EU\s*Usage$/i.exec(line) ??
       /^EU\s*Usage:\s*(\d+(?:[.,]\d+)?)\s*%/i.exec(line) ??
       /uses?\s+(\d+(?:[.,]\d+)?)\s*%\s+(?:of\s+the\s+)?(?:EU|power|energy)/i.exec(line);
     if (euUsage) {
       const factor = parseTooltipNumber(euUsage[1]) / 100;
-      if (factor > 0 && factor !== 1 && factor <= 5) {
+      if (factor === 1) {
+        eutMultiplier = undefined;
+      } else if (factor > 0 && factor <= 5) {
         eutMultiplier = factor;
       }
       continue;
