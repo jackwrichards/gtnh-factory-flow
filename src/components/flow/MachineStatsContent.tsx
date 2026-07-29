@@ -3,21 +3,8 @@
 import type { MachineHandler, Recipe } from "@/lib/model/types";
 import { applyMachineHandlerToRecipe, getRecipeMachineHandlers } from "@/lib/model/recipe-rules";
 
-const RATE_COLOR = "#67e8f9";
 const BONUS_COLOR = "#4ade80";
 const PENALTY_COLOR = "#f87171";
-
-function formatSeconds(ticks: number): string {
-  const seconds = ticks / 20;
-  if (seconds >= 100) {
-    return `${Math.round(seconds).toLocaleString()}s`;
-  }
-  return `${seconds.toLocaleString(undefined, { maximumFractionDigits: 2 })}s`;
-}
-
-function formatEu(eut: number): string {
-  return `${Math.round(eut).toLocaleString()} EU/t`;
-}
 
 function formatMultiplier(value: number): string {
   return `${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}×`;
@@ -64,7 +51,7 @@ function speedAndPowerControls(recipe: Recipe): string[] {
 
 function StatRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 text-[15px] leading-relaxed">
+    <div className="flex items-baseline justify-between gap-3 text-[16px] leading-snug">
       <span className="shrink-0 text-slate-400">{label}</span>
       <span className="text-right text-slate-100">{children}</span>
     </div>
@@ -72,10 +59,9 @@ function StatRow({ label, children }: { label: string; children: React.ReactNode
 }
 
 /**
- * Hover panel for a machine choice: what this exact machine does to the
- * recipe (speed, power, parallels, structure options) and an honest note on
- * how the simulator handles its overclocking. Shown on the node's machine
- * name and on every entry of the machine dropdown.
+ * Hover panel for a machine choice. Only says what the screen does not
+ * already show: what this exact machine changes (speed, power discount,
+ * parallels, structure tuning) and how the simulator overclocks it.
  */
 export function MachineStatsContent({
   recipe,
@@ -97,82 +83,78 @@ export function MachineStatsContent({
     recipe.runtimeCalculation?.status === "computed" &&
     (recipe.runtimeCalculation?.variants.length ?? 0) > 0;
 
+  const hasSpeedRow = Math.abs(speedFactor - 1) > 0.01;
+  const hasPowerRow = recipe.eut > 0 && Math.abs(powerFactor - 1) > 0.01;
+  const hasBonusRows =
+    hasSpeedRow ||
+    hasPowerRow ||
+    parallels.fixed !== undefined ||
+    parallels.scaling.length > 0 ||
+    tuningControls.length > 0;
+
   return (
     <div className="w-80">
       <div className="flex items-baseline gap-2 border-b border-white/15 pb-1.5">
-        <span className="truncate text-[16px] font-semibold text-white">{handler.label}</span>
+        <span className="truncate text-[17px] font-semibold text-white">{handler.label}</span>
         <span className="ml-auto shrink-0 text-[12px] uppercase tracking-wide text-slate-400">
           {handler.kind === "multiblock" ? "Multiblock" : "Single block"}
         </span>
       </div>
 
-      <div className="mt-2 space-y-0.5">
-        <StatRow label="Needs">
-          <span style={{ color: RATE_COLOR }}>{String(applied.minimumTier).toUpperCase()}</span>
-          <span className="text-slate-400"> power or better</span>
-        </StatRow>
-        <StatRow label="Time">
-          <span style={{ color: RATE_COLOR }}>{formatSeconds(applied.durationTicks)}</span>
-          {Math.abs(speedFactor - 1) > 0.01 ? (
+      <div className="mt-2 space-y-1">
+        {hasSpeedRow ? (
+          <StatRow label="Speed">
             <span style={{ color: speedFactor > 1 ? BONUS_COLOR : PENALTY_COLOR }}>
-              {" "}
-              ({formatMultiplier(speedFactor)} speed)
+              {formatMultiplier(speedFactor)}
             </span>
-          ) : null}
-        </StatRow>
-        {applied.eut > 0 ? (
+          </StatRow>
+        ) : null}
+        {hasPowerRow ? (
           <StatRow label="Power">
-            <span style={{ color: RATE_COLOR }}>{formatEu(applied.eut)}</span>
-            {Math.abs(powerFactor - 1) > 0.01 ? (
-              <span style={{ color: powerFactor < 1 ? BONUS_COLOR : PENALTY_COLOR }}>
-                {" "}
-                ({Math.round(powerFactor * 100)}% of normal)
-              </span>
-            ) : null}
+            <span style={{ color: powerFactor < 1 ? BONUS_COLOR : PENALTY_COLOR }}>
+              {Math.round(powerFactor * 100)}%
+            </span>
+            <span className="text-slate-400"> of normal</span>
           </StatRow>
         ) : null}
         {parallels.fixed !== undefined ? (
           <StatRow label="Parallels">
             <span style={{ color: BONUS_COLOR }}>{parallels.fixed.toLocaleString()}</span>
-            <span className="text-slate-400"> recipes at once</span>
+            <span className="text-slate-400"> at once</span>
           </StatRow>
         ) : null}
         {parallels.scaling.map((entry) => (
           <StatRow key={entry.label} label="Parallels">
             <span className="text-slate-400">up to </span>
             <span style={{ color: BONUS_COLOR }}>{formatMultiplier(entry.max)}</span>
-            <span className="text-slate-400"> from {entry.label} tiers</span>
+            <span className="text-slate-400"> from {entry.label}</span>
           </StatRow>
         ))}
         {tuningControls.length > 0 ? (
-          <StatRow label="Tuning">
+          <StatRow label="Tuned by">
             <span className="text-slate-300">{tuningControls.join(", ")}</span>
           </StatRow>
+        ) : null}
+        {!hasBonusRows ? (
+          <p className="text-[16px] leading-snug text-slate-300">
+            No special bonuses. Runs recipes at their listed time and power.
+          </p>
         ) : null}
       </div>
 
       <div className="mt-2.5 border-t border-white/10 pt-2">
-        <p className="text-[15px] font-semibold leading-snug text-amber-300">Overclocking.</p>
+        <p className="text-[16px] font-semibold leading-snug text-amber-300">Overclocking.</p>
         {hasExactOverclocks ? (
-          <p className="mt-0.5 text-[14px] leading-relaxed text-slate-100">
-            Exact. The dataset was exported with the game running, and GregTech&apos;s own
-            calculator supplied the time and power for every voltage tier. Heat bonuses and
-            perfect overclocks are included.
-          </p>
-        ) : isDefault ? (
-          <p className="mt-0.5 text-[14px] leading-relaxed text-slate-100">
-            Estimated. Each tier above{" "}
-            <span style={{ color: RATE_COLOR }}>{String(applied.minimumTier).toUpperCase()}</span>{" "}
-            runs <span style={{ color: BONUS_COLOR }}>2&times;</span> faster and draws{" "}
-            <span style={{ color: PENALTY_COLOR }}>4&times;</span> the power.
+          <p className="mt-0.5 text-[15px] leading-relaxed text-slate-100">
+            Exact. The numbers for every voltage tier came from GregTech&apos;s own calculator
+            while the game was running, so heat bonuses and perfect overclocks are included.
           </p>
         ) : (
-          <p className="mt-0.5 text-[14px] leading-relaxed text-slate-100">
-            Estimated for this machine. Each tier above{" "}
-            <span style={{ color: RATE_COLOR }}>{String(applied.minimumTier).toUpperCase()}</span>{" "}
-            runs <span style={{ color: BONUS_COLOR }}>2&times;</span> faster and draws{" "}
-            <span style={{ color: PENALTY_COLOR }}>4&times;</span> the power. If it has perfect
-            overclocks in game, it will beat these numbers at high tiers.
+          <p className="mt-0.5 text-[15px] leading-relaxed text-slate-100">
+            Estimated. Each tier of extra power runs{" "}
+            <span style={{ color: BONUS_COLOR }}>2&times;</span> faster for{" "}
+            <span style={{ color: PENALTY_COLOR }}>4&times;</span> the power.
+            {!isDefault ? " If it has perfect overclocks in game, it will beat this." : null}
           </p>
         )}
       </div>
