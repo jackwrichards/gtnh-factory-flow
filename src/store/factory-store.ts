@@ -628,7 +628,13 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     });
   },
   addCropFarmNode: () => {
-    set((state) => addRecipeNodeToState(state, createCropFarmPlaceholderRecipe()));
+    // Crop sources spawn green by default, like drawers/tanks spawn with the
+    // active paint color; the user can still repaint them.
+    set((state) =>
+      addRecipeNodeToState(state, createCropFarmPlaceholderRecipe(), undefined, {
+        colorTag: "green",
+      }),
+    );
   },
   setNodeRecipe: (nodeId, recipe) => {
     set((state) => {
@@ -1321,6 +1327,7 @@ function addRecipeNodeToState(
   state: FactoryStore,
   recipe: Recipe,
   resource?: RecipeInputContextResource,
+  options?: { colorTag?: FactoryNodeColorTag },
 ): Partial<FactoryStore> {
   const index = state.project.nodes.length;
   const viewportPosition = state.flowViewportCenter
@@ -1336,6 +1343,7 @@ function addRecipeNodeToState(
     parallel: 1,
     overclockTier: recipe.minimumTier,
     recipeInputOverrides: resource ? buildRecipeInputOverrides(recipe, resource) : undefined,
+    colorTag: options?.colorTag,
     enabled: true,
     position: viewportPosition ?? {
       x: 100 + index * 90,
