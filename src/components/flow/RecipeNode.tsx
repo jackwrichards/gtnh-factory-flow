@@ -399,7 +399,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                     tooltip={false}
                     showAmount={false}
                     showConsumedState={false}
-                    iconPixelSize={25}
                     className="mr-1 h-5 w-5 shrink-0"
                   />
                 ) : isCropFarmNode ? (

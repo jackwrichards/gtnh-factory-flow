@@ -159,10 +159,9 @@ export function CropPickerMenu({
                       tooltip={false}
                       showAmount={false}
                       showConsumedState={false}
-                      // The rendered sprites carry transparent padding: draw
-                      // them ~25% larger than the frame and let the frame crop
-                      // it, exactly like the NEI config slots do.
-                      iconPixelSize={50}
+                      // No explicit pixel size: ResourceIcon's default draws
+                      // the sprite at 200% of the box and crops the rendered
+                      // padding away - the exact sizing the sidebar list uses.
                       className="h-10 w-10"
                     />
                   ) : null}
