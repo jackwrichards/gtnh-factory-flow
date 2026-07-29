@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { memo, useMemo, useState, type CSSProperties } from "react";
+import { memo, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, ChevronDown, Sprout, WandSparkles } from "lucide-react";
 import type {
   FactoryNode,
@@ -285,7 +285,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         className={CROP_CONFIG_PANEL_WIDTH_CLASS}
         controls={cropProductionControls}
         onSelect={updateMachineConfigTier}
-        getControlHelp={(controlId) => cropControlHelpLines(effectiveRecipe, controlId)}
+        getControlHelp={(controlId) => cropControlHelp(effectiveRecipe, controlId)}
       />
     ) : beePanelControls.length > 0 ? (
       <PassiveProductionConfigPanel
@@ -1330,8 +1330,8 @@ function PassiveProductionConfigPanel({
   className?: string;
   controls: MachineConfigTierControl[];
   onSelect: (controlId: string, nextTier: string) => void;
-  /** Hover math explanation per control (crop stat formulas etc.). */
-  getControlHelp?: (controlId: string) => string[] | undefined;
+  /** Hover explanation per control (what the knob does and why it matters). */
+  getControlHelp?: (controlId: string) => ReactNode;
 }) {
   if (controls.length === 0) {
     return null;
@@ -1346,7 +1346,7 @@ function PassiveProductionConfigPanel({
     >
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
         {controls.map((control) => (
-          <MinecraftTooltip key={control.id} label={getControlHelp?.(control.id)}>
+          <MinecraftTooltip key={control.id} content={getControlHelp?.(control.id)}>
           <label className="min-w-0">
             <span className="mb-0.5 block truncate text-[8px] font-bold uppercase leading-3 text-[var(--mc-ink-muted)]">
               {control.label}
@@ -1375,79 +1375,179 @@ function PassiveProductionConfigPanel({
   );
 }
 
+const CROP_HELP_GOOD = "#4ade80";
+const CROP_HELP_BAD = "#f87171";
+
+function CropHelpPanel({
+  title,
+  children,
+  finePrint,
+  feeding,
+}: {
+  title: string;
+  children: ReactNode;
+  /** The exact formula, tucked away for the curious. */
+  finePrint?: ReactNode;
+  /** Shared "how feeding works" footer for the environment knobs. */
+  feeding?: { tier: number };
+}) {
+  return (
+    <div className="w-[400px]">
+      <p className="text-[18px] font-semibold leading-snug text-amber-300">{title}</p>
+      <div className="mt-1.5 space-y-2 text-[16px] leading-relaxed text-slate-100">{children}</div>
+      {feeding ? (
+        <p className="mt-2.5 border-t border-white/10 pt-2 text-[16px] leading-relaxed text-slate-100">
+          Feeding basics: this crop is Tier {feeding.tier}, so it wants{" "}
+          <span className="text-white">{feeding.tier * 10}</span> food out of a possible 275. Every
+          point of extra food makes it grow{" "}
+          <span style={{ color: CROP_HELP_GOOD }}>a little faster</span>; every missing point slows
+          it <span style={{ color: CROP_HELP_BAD }}>four times as hard</span> — and if it&apos;s 25
+          or more short, it <span style={{ color: CROP_HELP_BAD }}>stops growing completely</span>.
+        </p>
+      ) : null}
+      {finePrint ? (
+        <p className="mt-2 border-t border-white/10 pt-1.5 text-[13px] leading-relaxed text-slate-400">
+          For the curious: {finePrint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /**
- * Hover math for the crop source dropdowns: the exact in-game formula each
- * knob feeds, with this crop's numbers plugged in.
+ * Friendly hover explainers for the crop source dropdowns, with this crop's
+ * own numbers. Plain words first, the exact formula as fine print.
  */
-function cropControlHelpLines(recipe: Recipe, controlId: string): string[] | undefined {
+function cropControlHelp(recipe: Recipe, controlId: string): ReactNode {
   const stats = getCropsNhStats(recipe);
   if (!stats) {
     return undefined;
   }
-  const demand = stats.tier * 10;
-  const nutrientFootnote = [
-    "",
-    `Nutrient score × 5 = supply, vs demand ${demand}`,
-    `(Tier ${stats.tier} × 10). Every spare point = +1% growth`,
-    "speed; every missing point = -4%. 25 or more",
-    "short and the crop stops growing entirely.",
-  ];
   const meta = (recipe.metadata as { cropsNh?: { biomeTags?: string[] } } | undefined)?.cropsNh;
   const biomeTags = Array.isArray(meta?.biomeTags) ? meta.biomeTags : [];
+  const good = (text: string) => <span style={{ color: CROP_HELP_GOOD }}>{text}</span>;
+  const bad = (text: string) => <span style={{ color: CROP_HELP_BAD }}>{text}</span>;
 
   switch (controlId) {
     case "cropGrowthStat":
-      return [
-        "Growth stat (1-31)",
-        "Points gained per growth cycle = (6 + Growth),",
-        "multiplied by the nutrient speed bonus.",
-        "A growth cycle is 256 ticks (12.8 seconds).",
-        `This crop matures at ${stats.growthPoints.toLocaleString()} points and`,
-        "regrows from 0 after every harvest.",
-      ];
+      return (
+        <CropHelpPanel
+          title="Growth — how fast it regrows"
+          finePrint={
+            <>
+              every 12.8 s the plant gains (6 + Growth) points, scaled by feeding. This crop is
+              ripe at {stats.growthPoints.toLocaleString()} points and restarts from 0 after each
+              harvest.
+            </>
+          }
+        >
+          <p>
+            The higher the Growth stat, the sooner each harvest comes around. A 31-Growth plant
+            regrows {good("about five times faster")} than a 1-Growth one.
+          </p>
+          <p className="text-slate-300">
+            In the game you raise Growth by cross-breeding crops between double crop sticks.
+          </p>
+        </CropHelpPanel>
+      );
     case "cropGainStat":
-      return [
-        "Gain stat (1-31)",
-        `Drop rounds per harvest = ${stats.dropChance.toFixed(4)} × 1.03^Gain`,
-        `(this crop's base chance is ×${stats.dropChance.toFixed(4)}).`,
-        "Each successful drop roll also has a (Gain + 1)%",
-        "chance of one bonus item. Gain 31 gives about",
-        `${(stats.dropChance * 1.03 ** 31).toFixed(2)} rounds and a 32% bonus chance.`,
-      ];
+      return (
+        <CropHelpPanel
+          title="Gain — how much loot per harvest"
+          finePrint={
+            <>
+              drop rounds = {stats.dropChance.toFixed(3)} × 1.03^Gain, and every successful drop
+              has a (Gain + 1)% chance of one bonus item.
+            </>
+          }
+        >
+          <p>
+            The higher the Gain stat, the more items each harvest gives. At 31 you collect{" "}
+            {good("roughly 2.5× as much")} as at 1.
+          </p>
+          <p className="text-slate-300">
+            Like Growth, it&apos;s raised by cross-breeding. It never changes how fast the plant
+            grows — only how much falls out.
+          </p>
+        </CropHelpPanel>
+      );
     case "cropWater":
-      return [
-        "Water storage (0-100)",
-        "Nutrient bonus = floor((water + 9) / 10):",
-        "0 water = +1, 50 = +5, 100 = +10.",
-        "A Crop Manager keeps crops fully watered.",
-        ...nutrientFootnote,
-      ];
+      return (
+        <CropHelpPanel
+          title="Water — keep it topped up"
+          feeding={{ tier: stats.tier }}
+          finePrint={<>water bonus = floor((water + 9) ÷ 10): 0 → +1, 50 → +5, 100 → +10.</>}
+        >
+          <p>
+            A well-watered crop is a well-fed crop: full water is {good("+10 food")}, one of the
+            two biggest boosts you control.
+          </p>
+          <p className="text-slate-300">
+            A Crop Manager keeps water at full automatically, so &quot;Full&quot; matches an
+            automated farm.
+          </p>
+        </CropHelpPanel>
+      );
     case "cropFertilizer":
-      return [
-        "Fertilizer storage (0-100)",
-        "Nutrient bonus = floor((fertilizer + 9) / 10):",
-        "none = +1, 50 = +5, 100 = +10.",
-        ...nutrientFootnote,
-      ];
+      return (
+        <CropHelpPanel
+          title="Fertilizer — food from a bag"
+          feeding={{ tier: stats.tier }}
+          finePrint={<>fertilizer bonus = floor((fertilizer + 9) ÷ 10): 0 → +1, 50 → +5, 100 → +10.</>}
+        >
+          <p>
+            Fertilizer works exactly like water: keeping it full is {good("+10 food")}. Skip it and
+            a hungry high-tier crop will {bad("crawl or stall")}.
+          </p>
+          <p className="text-slate-300">
+            Crop Managers and Industrial Farms can supply it for you (Fertilia crops literally grow
+            the stuff).
+          </p>
+        </CropHelpPanel>
+      );
     case "cropSky":
-      return [
-        "Sky access",
-        "+2 nutrient points when the crop stick",
-        "can see the sky, +0 when covered.",
-        ...nutrientFootnote,
-      ];
+      return (
+        <CropHelpPanel
+          title="Sky — a little sunshine"
+          feeding={{ tier: stats.tier }}
+          finePrint={<>sky bonus = +2 when the block above the crop can see the sky.</>}
+        >
+          <p>
+            Plants under open sky get a small {good("+2 food")} bonus. Roofed or underground farms
+            lose it — usually fine, unless the crop is right on the edge of being underfed.
+          </p>
+        </CropHelpPanel>
+      );
     case "cropBiome":
-      return [
-        "Biome bonus = max(humidity, tags)",
-        "Each matching liked biome tag = +14",
-        "(both tags = +28, the maximum).",
-        biomeTags.length > 0
-          ? `This crop likes: ${biomeTags.join(", ").toLowerCase()}.`
-          : "This crop has no liked biome tags.",
-        "In a non-matching biome, 80%+ humidity",
-        "still gives up to +14.",
-        ...nutrientFootnote,
-      ];
+      return (
+        <CropHelpPanel
+          title="Biome — plant it where it's happy"
+          feeding={{ tier: stats.tier }}
+          finePrint={
+            <>
+              biome bonus = max(humidity, likes): each matching tag +14, capped at 2 tags; humidity
+              scales 0–14 between 50% and 80% biome humidity.
+            </>
+          }
+        >
+          <p>
+            {biomeTags.length > 0 ? (
+              <>
+                This crop likes{" "}
+                <span className="text-white">{biomeTags.join(" and ").toLowerCase()}</span> places.
+              </>
+            ) : (
+              <>This crop has no favourite biome.</>
+            )}{" "}
+            Each matching like is {good("+14 food")}, so hitting both is {good("+28")} — the
+            biggest feeding boost there is.
+          </p>
+          <p className="text-slate-300">
+            No matching biome nearby? A wet one (80%+ humidity, like a swamp or jungle) still gives
+            up to +14.
+          </p>
+        </CropHelpPanel>
+      );
     default:
       return undefined;
   }

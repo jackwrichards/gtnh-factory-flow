@@ -126,25 +126,22 @@ function CropSourceStatsContent({
 
       {/* Fixed crop card data straight from the game export. */}
       <div className="mt-2 space-y-1">
-        <StatRow label="Growth points">
+        <StatRow label="Ripens at">
           <span className="text-slate-100">{stats.growthPoints.toLocaleString()}</span>
-          <span className="text-slate-400"> to mature (regrows from 0 after every harvest)</span>
-        </StatRow>
-        <StatRow label="Base drop chance">
-          <span className="text-slate-100">×{formatNumber(stats.dropChance, 4)}</span>
-          <span className="text-slate-400"> drop rounds before Gain</span>
+          <span className="text-slate-400"> growth points, restarting after every harvest</span>
         </StatRow>
         {dropLines.map((drop) => (
-          <StatRow key={drop.name} label="Drop">
+          <StatRow key={drop.name} label="Drops">
             <span className="text-slate-100">
               {drop.stackSize > 1 ? `${formatNumber(drop.stackSize, 0)}× ` : ""}
               {drop.name}
             </span>
             {drop.weightPercent < 100 ? (
-              <span className="text-slate-400"> at {formatNumber(drop.weightPercent, 2)}% per round</span>
-            ) : (
-              <span className="text-slate-400"> every round</span>
-            )}
+              <span className="text-slate-400">
+                {" "}
+                ({formatNumber(drop.weightPercent, 1)}% of loot rolls)
+              </span>
+            ) : null}
           </StatRow>
         ))}
         {stats.machineOnly ? (
@@ -164,104 +161,99 @@ function CropSourceStatsContent({
         ))}
       </div>
 
-      {/* Step 1: nutrients with the node's current settings. */}
+      {/* How well fed is it, with the node's current settings. */}
       <div className="mt-2.5 border-t border-white/10 pt-2">
-        <p className="text-[16px] font-semibold leading-snug text-amber-300">
-          1. Nutrients (your current settings).
+        <p className="text-[17px] font-semibold leading-snug text-amber-300">
+          How well fed is it right now?
         </p>
-        <p className="mt-0.5 text-[15px] leading-relaxed text-slate-100">
-          5 base + {waterBonus} water + {fertilizerBonus} fertilizer + {skyBonus} sky +{" "}
-          {env.biomeBonus} biome = <span className="text-white">{score}</span> score. Supply ={" "}
-          {score} × 5 = <span className="text-white">{supply}</span> vs demand Tier {stats.tier} ×
-          10 = <span className="text-white">{demand}</span>.{" "}
+        <p className="mt-1 text-[16px] leading-relaxed text-slate-100">
+          Your settings feed it <span className="text-white">{supply}</span> food (
+          {waterBonus > 1 ? "watered" : "dry"}
+          {fertilizerBonus > 1 ? ", fertilized" : ", no fertilizer"}
+          {env.sky ? ", open sky" : ", covered"}
+          {env.biomeBonus > 0 ? ", nice biome" : ", wrong biome"}). Being Tier {stats.tier}, it
+          wants <span className="text-white">{demand}</span>.{" "}
           {surplus >= 0 ? (
             <span>
-              <span style={{ color: BONUS_COLOR }}>{surplus} spare</span>
-              <span className="text-slate-400"> → +1% speed each → </span>
-              <span style={{ color: BONUS_COLOR }}>{speedPercent}% speed</span>.
+              That&apos;s <span style={{ color: BONUS_COLOR }}>{surplus} more than it needs</span>,
+              so it grows at{" "}
+              <span style={{ color: BONUS_COLOR }}>{speedPercent}% speed</span> — a well-fed crop
+              grows faster.
+            </span>
+          ) : supply + 25 <= demand ? (
+            <span style={{ color: PENALTY_COLOR }}>
+              That&apos;s {-surplus} less than it needs — far too hungry. It will not grow at all
+              until you feed it better (more water, fertilizer, sky or a better biome).
             </span>
           ) : (
             <span>
-              <span style={{ color: PENALTY_COLOR }}>{-surplus} short</span>
-              <span className="text-slate-400"> → −4% speed each → </span>
-              <span style={{ color: speedPercent > 0 ? PENALTY_COLOR : PENALTY_COLOR }}>
-                {speedPercent}% speed
-              </span>
-              {supply + 25 <= demand ? (
-                <span style={{ color: PENALTY_COLOR }}> — the crop cannot grow at all.</span>
-              ) : null}
+              That&apos;s <span style={{ color: PENALTY_COLOR }}>{-surplus} less than it needs</span>
+              , and hunger hurts four times harder than surplus helps: it limps along at{" "}
+              <span style={{ color: PENALTY_COLOR }}>{speedPercent}% speed</span>.
             </span>
           )}
         </p>
       </div>
 
-      {/* Step 2: growth time. */}
+      {/* How long until harvest. */}
       <div className="mt-2 border-t border-white/10 pt-2">
-        <p className="text-[16px] font-semibold leading-snug text-amber-300">2. Growth time.</p>
+        <p className="text-[17px] font-semibold leading-snug text-amber-300">
+          How long until each harvest?
+        </p>
         {growing ? (
-          <p className="mt-0.5 text-[15px] leading-relaxed text-slate-100">
-            (6 + {env.growth} growth) × {speedPercent}% ={" "}
-            <span className="text-white">{rate}</span> points per 256-tick cycle (12.8 s).{" "}
-            {stats.growthPoints.toLocaleString()} ÷ {rate} ={" "}
-            <span className="text-white">{cycles}</span> cycles ={" "}
-            <span style={{ color: BONUS_COLOR }}>{formatNumber(harvestSeconds, 1)} s</span> per
-            harvest.
+          <p className="mt-1 text-[16px] leading-relaxed text-slate-100">
+            With Growth {env.growth} and that feeding, the plant ripens in about{" "}
+            <span style={{ color: BONUS_COLOR }}>{formatNumber(harvestSeconds, 1)} seconds</span>,
+            over and over.{" "}
+            <span className="text-slate-400">
+              (It gains {rate} of its {stats.growthPoints.toLocaleString()} growth points every
+              12.8 s — {cycles} rounds in total.)
+            </span>
           </p>
         ) : (
-          <p className="mt-0.5 text-[15px] leading-relaxed" style={{ color: PENALTY_COLOR }}>
-            Growth rate is 0: nutrient supply is 25+ under demand, so the crop never matures (and
-            risks getting sick). Raise water, fertilizer, sky access or biome match.
+          <p className="mt-1 text-[16px] leading-relaxed" style={{ color: PENALTY_COLOR }}>
+            Never — it&apos;s too hungry to grow. Fix the feeding above and this section comes back
+            to life.
           </p>
         )}
       </div>
 
-      {/* Step 3: yield. */}
+      {/* What you get. */}
       <div className="mt-2 border-t border-white/10 pt-2">
-        <p className="text-[16px] font-semibold leading-snug text-amber-300">
-          3. Yield per harvest.
+        <p className="text-[17px] font-semibold leading-snug text-amber-300">
+          What do you get each harvest?
         </p>
-        <p className="mt-0.5 text-[15px] leading-relaxed text-slate-100">
-          {formatNumber(stats.dropChance, 4)} × 1.03^{env.gain} gain ={" "}
-          <span className="text-white">{formatNumber(rounds, 2)}</span> drop rounds. Each
-          successful drop also has a {env.gain + 1}% chance of +1 item.
+        <p className="mt-1 text-[16px] leading-relaxed text-slate-100">
+          Gain {env.gain} shakes the loot table about{" "}
+          <span className="text-white">{formatNumber(rounds, 1)} times</span> per harvest, with a
+          small chance of bonus items on top. On average:
         </p>
         <div className="mt-1 space-y-0.5">
           {dropLines.map((drop) => (
             <StatRow key={drop.name} label={drop.name}>
-              <span style={{ color: BONUS_COLOR }}>{formatNumber(drop.expected, 3)}</span>
-              <span className="text-slate-400"> avg per harvest</span>
+              <span style={{ color: BONUS_COLOR }}>{formatNumber(drop.expected, 2)}</span>
+              <span className="text-slate-400"> each harvest</span>
             </StatRow>
           ))}
         </div>
         {growing ? (
-          <p className="mt-1 text-[15px] leading-relaxed text-slate-100">
-            ≈ <span style={{ color: BONUS_COLOR }}>{formatNumber(totalPerHarvest, 2)}</span> items
-            every {formatNumber(harvestSeconds, 1)} s per crop
-            {cropCount > 1 ? (
-              <span>
-                {" "}
-                × {cropCount} crops ={" "}
-                <span style={{ color: BONUS_COLOR }}>
-                  {formatNumber((totalPerHarvest * cropCount * 60) / harvestSeconds, 1)}/min
-                </span>
-              </span>
-            ) : (
-              <span>
-                {" "}
-                = <span style={{ color: BONUS_COLOR }}>
-                  {formatNumber((totalPerHarvest * 60) / harvestSeconds, 1)}/min
-                </span>
-              </span>
-            )}
-            .
+          <p className="mt-1.5 text-[16px] leading-relaxed text-slate-100">
+            With your {cropCount === 1 ? "single crop" : `${cropCount} crops`}, that works out to{" "}
+            <span style={{ color: BONUS_COLOR }}>
+              about {formatNumber((totalPerHarvest * cropCount * 60) / harvestSeconds, 1)} items per
+              minute
+            </span>
+            . Plant more seeds to scale it up.
           </p>
         ) : null}
       </div>
 
-      <p className="mt-2 border-t border-white/10 pt-2 text-[14px] leading-relaxed text-slate-400">
-        All formulas are the game&apos;s own (verified against CropsNH 2.9 code). Resistance only
-        affects weeds, sickness and seed recovery — never steady-state rates. The Seeds counter
-        multiplies output exactly like machine count.
+      <p className="mt-2 border-t border-white/10 pt-2 text-[13px] leading-relaxed text-slate-400">
+        For the curious: food = (5 + water + fertilizer + sky + biome) × 5 vs Tier × 10 demand
+        (+1% speed per spare point, −4% per missing); growth = (6 + Growth) points per 12.8 s;
+        loot rolls = {formatNumber(stats.dropChance, 3)} × 1.03^Gain with a (Gain + 1)% bonus roll.
+        Straight from the game&apos;s own code. Resistance never changes these rates — it only
+        fights weeds and sickness.
       </p>
     </div>
   );
