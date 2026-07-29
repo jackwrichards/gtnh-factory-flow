@@ -27,6 +27,7 @@ import {
   restoreCrossKindInputOverrideVisuals,
   getRecipePowerTier,
   getSelectedMachineHandler,
+  getCropsNhStats,
   getVoltageTierIndex,
   BEE_INDUSTRIAL_PRODUCTION_CONTROL_ID,
   BEE_INDUSTRIAL_SPEED_CONTROL_ID,
@@ -284,6 +285,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         className={CROP_CONFIG_PANEL_WIDTH_CLASS}
         controls={cropProductionControls}
         onSelect={updateMachineConfigTier}
+        getControlHelp={(controlId) => cropControlHelpLines(effectiveRecipe, controlId)}
       />
     ) : beePanelControls.length > 0 ? (
       <PassiveProductionConfigPanel
@@ -364,7 +366,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 isCropFarmPlaceholder ? (
                   "Click to pick a crop"
                 ) : (
-                  <MachineStatsContent recipe={recipe} handler={selectedMachineHandler} />
+                  <MachineStatsContent
+                    recipe={recipe}
+                    handler={selectedMachineHandler}
+                    node={projectNode}
+                  />
                 )
               }
             >
@@ -1319,10 +1325,13 @@ function PassiveProductionConfigPanel({
   className = "",
   controls,
   onSelect,
+  getControlHelp,
 }: {
   className?: string;
   controls: MachineConfigTierControl[];
   onSelect: (controlId: string, nextTier: string) => void;
+  /** Hover math explanation per control (crop stat formulas etc.). */
+  getControlHelp?: (controlId: string) => string[] | undefined;
 }) {
   if (controls.length === 0) {
     return null;
@@ -1337,7 +1346,8 @@ function PassiveProductionConfigPanel({
     >
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
         {controls.map((control) => (
-          <label key={control.id} className="min-w-0">
+          <MinecraftTooltip key={control.id} label={getControlHelp?.(control.id)}>
+          <label className="min-w-0">
             <span className="mb-0.5 block truncate text-[8px] font-bold uppercase leading-3 text-[var(--mc-ink-muted)]">
               {control.label}
             </span>
@@ -1358,10 +1368,89 @@ function PassiveProductionConfigPanel({
               ))}
             </select>
           </label>
+          </MinecraftTooltip>
         ))}
       </div>
     </div>
   );
+}
+
+/**
+ * Hover math for the crop source dropdowns: the exact in-game formula each
+ * knob feeds, with this crop's numbers plugged in.
+ */
+function cropControlHelpLines(recipe: Recipe, controlId: string): string[] | undefined {
+  const stats = getCropsNhStats(recipe);
+  if (!stats) {
+    return undefined;
+  }
+  const demand = stats.tier * 10;
+  const nutrientFootnote = [
+    "",
+    `Nutrient score × 5 = supply, vs demand ${demand}`,
+    `(Tier ${stats.tier} × 10). Every spare point = +1% growth`,
+    "speed; every missing point = -4%. 25 or more",
+    "short and the crop stops growing entirely.",
+  ];
+  const meta = (recipe.metadata as { cropsNh?: { biomeTags?: string[] } } | undefined)?.cropsNh;
+  const biomeTags = Array.isArray(meta?.biomeTags) ? meta.biomeTags : [];
+
+  switch (controlId) {
+    case "cropGrowthStat":
+      return [
+        "Growth stat (1-31)",
+        "Points gained per growth cycle = (6 + Growth),",
+        "multiplied by the nutrient speed bonus.",
+        "A growth cycle is 256 ticks (12.8 seconds).",
+        `This crop matures at ${stats.growthPoints.toLocaleString()} points and`,
+        "regrows from 0 after every harvest.",
+      ];
+    case "cropGainStat":
+      return [
+        "Gain stat (1-31)",
+        `Drop rounds per harvest = ${stats.dropChance.toFixed(4)} × 1.03^Gain`,
+        `(this crop's base chance is ×${stats.dropChance.toFixed(4)}).`,
+        "Each successful drop roll also has a (Gain + 1)%",
+        "chance of one bonus item. Gain 31 gives about",
+        `${(stats.dropChance * 1.03 ** 31).toFixed(2)} rounds and a 32% bonus chance.`,
+      ];
+    case "cropWater":
+      return [
+        "Water storage (0-100)",
+        "Nutrient bonus = floor((water + 9) / 10):",
+        "0 water = +1, 50 = +5, 100 = +10.",
+        "A Crop Manager keeps crops fully watered.",
+        ...nutrientFootnote,
+      ];
+    case "cropFertilizer":
+      return [
+        "Fertilizer storage (0-100)",
+        "Nutrient bonus = floor((fertilizer + 9) / 10):",
+        "none = +1, 50 = +5, 100 = +10.",
+        ...nutrientFootnote,
+      ];
+    case "cropSky":
+      return [
+        "Sky access",
+        "+2 nutrient points when the crop stick",
+        "can see the sky, +0 when covered.",
+        ...nutrientFootnote,
+      ];
+    case "cropBiome":
+      return [
+        "Biome bonus = max(humidity, tags)",
+        "Each matching liked biome tag = +14",
+        "(both tags = +28, the maximum).",
+        biomeTags.length > 0
+          ? `This crop likes: ${biomeTags.join(", ").toLowerCase()}.`
+          : "This crop has no liked biome tags.",
+        "In a non-matching biome, 80%+ humidity",
+        "still gives up to +14.",
+        ...nutrientFootnote,
+      ];
+    default:
+      return undefined;
+  }
 }
 
 function shortConfigLabel(resource: ResourceAmount) {

@@ -104,7 +104,7 @@ export function CropPickerMenu({
 
   return (
     <div
-      className="nodrag absolute left-0 top-7 z-[140] w-[300px] border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
+      className="nodrag absolute left-0 top-7 z-[140] w-[360px] border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
@@ -130,38 +130,54 @@ export function CropPickerMenu({
       ) : error ? (
         <div className="px-2 py-3 text-[12px] font-bold text-red-700">{error}</div>
       ) : (
-        <div className="max-h-[320px] overflow-y-auto">
-          {filtered.map((crop) => (
-            <button
-              key={crop.id}
-              type="button"
-              onClick={() => void handlePick(crop)}
-              className="flex w-full items-center gap-2 border-2 border-transparent px-1.5 py-1 text-left text-[12px] font-bold text-[var(--mc-ink)] hover:border-[var(--mc-47)] hover:bg-[var(--mc-100)]"
-              title={crop.outputs
-                .map((output) => output.displayName ?? output.id)
-                .join(", ")}
-            >
-              {crop.outputs[0] ? (
-                <ResourceIcon
-                  resource={crop.outputs[0]}
-                  bare
-                  tooltip={false}
-                  showAmount={false}
-                  showConsumedState={false}
-                  iconPixelSize={24}
-                  className="h-6 w-6 shrink-0 !overflow-visible"
-                />
-              ) : (
-                <span className="h-6 w-6 shrink-0" />
-              )}
-              <span className="min-w-0 flex-1 truncate">{cropDisplayName(crop.name)}</span>
-              <span className="shrink-0 text-[10px] uppercase text-[var(--mc-ink-muted)]">
-                {(crop.metadata as { cropsNh?: { tier?: number } } | undefined)?.cropsNh?.tier
-                  ? `T${(crop.metadata as { cropsNh?: { tier?: number } }).cropsNh?.tier}`
-                  : ""}
-              </span>
-            </button>
-          ))}
+        <div className="max-h-[380px] overflow-y-auto">
+          {filtered.map((crop) => {
+            const tier = (crop.metadata as { cropsNh?: { tier?: number } } | undefined)?.cropsNh
+              ?.tier;
+            const dropsLine = crop.outputs
+              .map((output) => {
+                const name = output.displayName ?? output.id;
+                return output.chance !== undefined && output.chance < 1
+                  ? `${name} ${Math.round(output.chance * 1000) / 10}%`
+                  : name;
+              })
+              .join(", ");
+            return (
+              <button
+                key={crop.id}
+                type="button"
+                onClick={() => void handlePick(crop)}
+                className="flex w-full items-center gap-2.5 border-2 border-transparent px-1.5 py-1.5 text-left text-[var(--mc-ink)] hover:border-[var(--mc-47)] hover:bg-[var(--mc-100)]"
+              >
+                <span className="grid h-10 w-10 shrink-0 place-items-center border border-[var(--mc-33)] bg-[var(--mc-55)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]">
+                  {crop.outputs[0] ? (
+                    <ResourceIcon
+                      // Hide the chance badge here: chances are spelled out in
+                      // the drops line below instead.
+                      resource={{ ...crop.outputs[0], chance: undefined }}
+                      bare
+                      tooltip={false}
+                      showAmount={false}
+                      showConsumedState={false}
+                      iconPixelSize={64}
+                      className="h-9 w-9 !overflow-visible"
+                    />
+                  ) : null}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-bold leading-4">
+                    {cropDisplayName(crop.name)}
+                  </span>
+                  <span className="block truncate text-[10px] leading-4 text-[var(--mc-ink-muted)]">
+                    {dropsLine}
+                  </span>
+                </span>
+                <span className="shrink-0 text-[10px] font-bold uppercase text-[var(--mc-ink-muted)]">
+                  {tier ? `T${tier}` : ""}
+                </span>
+              </button>
+            );
+          })}
           {filtered.length === 0 ? (
             <div className="px-2 py-3 text-[12px] font-bold text-[var(--mc-ink-muted)]">
               No crops match.

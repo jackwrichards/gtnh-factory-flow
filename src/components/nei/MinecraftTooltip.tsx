@@ -130,7 +130,7 @@ export function MinecraftTooltip({
               <div
                 ref={panelRef}
                 data-minecraft-tooltip="true"
-                className="pointer-events-none fixed z-[9999] max-w-[360px] border-2 border-[#2a005f] bg-[#100010] px-3 py-2.5 text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)]"
+                className="pointer-events-none fixed z-[9999] max-w-[560px] border-2 border-[#2a005f] bg-[#100010] px-3 py-2.5 text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)]"
                 style={{ left: position.x, top: position.y }}
               >
                 {content}
@@ -139,7 +139,7 @@ export function MinecraftTooltip({
               <div
                 ref={panelRef}
                 data-minecraft-tooltip="true"
-                className="pointer-events-none fixed z-[9999] max-w-[260px] border-2 border-[#2a005f] bg-[#100010] px-2 py-1 font-mono text-[16px] leading-[18px] text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)] [text-shadow:2px_2px_0_#3f3f3f]"
+                className="pointer-events-none fixed z-[9999] max-w-[340px] border-2 border-[#2a005f] bg-[#100010] px-2 py-1 font-mono text-[16px] leading-[19px] text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.8)] [text-shadow:2px_2px_0_#3f3f3f]"
                 style={{ left: position.x, top: position.y }}
               >
                 {lines.map((line, index) => (
