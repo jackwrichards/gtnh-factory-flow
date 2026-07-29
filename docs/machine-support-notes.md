@@ -53,41 +53,147 @@ The parser is grammar-based; nothing below is hardcoded per machine.
 - Density^2 - speed/EU totals. Affine "1 + (Tier/2) Parallels" not
   modeled (needs an affine voltage-parallel primitive): WIKI leftover.
 
-## WIKI (numbers exist but not in the tooltip - send wiki pages or wait for structured exporter)
+## WIKI (numbers now sourced from wiki.gtnewhorizons.com, 2026-07-29 - ready to implement)
 
-- Draconic Evolution Fusion Crafter - 1 perfect OC per casing tier
-  above recipe; needs casing tier list.
-- Naquadah Fuel Refinery - coil tier gates fuel types + perfect OCs;
-  counts unstated.
-- Hyper-Intensity Laser Engraver - parallels = cube root of laser
-  source amperage; needs a laser-hatch selector concept.
-- Industrial Cutting Factory - sawblade bonuses live in sawblade item
-  tooltips; exporter could capture the sawblade items.
-- Industrial Arc Furnace - electrode-driven speed/parallel/OC; electrode
-  stats live on electrode items.
-- Magnetic Flux Exhibitor - electromagnet bonuses live on magnet items.
-- Exo-Foundry - module system (2-4 slots, 7 options each); module stats
-  shown in NEI/controller, not the controller tooltip.
-- Spinmatron-2737 - turbine-slot parallels ("4 per sum of turbine
-  tier") depend on inserted turbines; kerosene upkeep unmodeled.
-- PCB Factory - nanite-count parallels (n^0.75, max 256) and cooling
-  upgrades (liquid = normal OC, thermosink = perfect OC); needs a
-  nanite-count input and upgrade selector.
-- Precise Auto-Assembler MT-3662 - casing tier limits recipe tier; fine
-  as-is for math (no rate effect stated).
-- Component Assembly Line - "halves recipe time per casing tier above
-  recipe" needs the casing-tier control concept (like EBF coils but for
-  CoAL casings).
-- Nanochip Assembly Complex + modules (Assembly Matrix, Etching Array,
-  Optical Organizer, Immersion Device, Encasement Wrapper) - grade/
-  calibration bonuses partially quantified; system is deeply stateful.
-- Zhuhai Fishing Port - "(Tier + 1) * 2 recipes" affine parallels.
-- Hot Isostatic Pressurization Unit - dual-state 250%/75%/4-per-tier
-  normal stats vs overheated; normal-state numbers are parseable in
-  principle but the slash phrasing is ambiguous; also DYNAMIC heat.
-- Fusion Control Computers / Compact Fusion - EU/t caps per hatch and
-  startup energy are informational for tier gating; startup cost not
-  modeled.
+Each entry lists the exact values a control needs. Implementation shape in
+brackets: [item selector] = a control whose tiers are the insertable items,
+[casing control] = a tiered structure control, [formula] = new primitive.
+
+### Industrial Arc Furnace (LuV) [item selector: electrode]
+Per-electrode stats. OC column is speed-x/power-x per overclock step
+(2.0/4 = imperfect, 4.0/4 = perfect). Surge affects startup power only.
+
+| Electrode | Speed | Parallels | OC | EU amps/parallel |
+|---|---|---|---|---|
+| Graphite | 100% | 4 | 2.0/4 | 1.0 |
+| Tantalum | 120% | 2 | 4.0/4 | 1.2 |
+| Molybdenum | 90% | 16 | 3.0/4 | 0.8 |
+| Tungsten | 100% | 128 | 1.0/4 | 1.1 |
+| Tungstensteel | 80% | 256 | 1.0/4 | 1.2 |
+| Graphene | 250% | 16 | 2.0/4 | 1.0 |
+| YBCO | 120% | 8 | 6.0/4 | 0.8 |
+| Netherite | 220% | 64 | 1.5/4 | 1.3 |
+| Tritanium | 300% | 48 | 2.0/4 | 1.7 |
+| Infinity | 420% | 1 (doubles per recipe) | 1.0/4 | 1.0 |
+| Hypogen | 650% | 256 | 1.0/4 | 1.5 |
+| Neutronium Nanite | 500% | 64 | 2.0/4 | 2.0 |
+| Transcendent Nanite | 750% | 512 | 4.0/4 | 2.0 |
+| Universium Nanite | 1000% | 1024 | 8.0/4 | 2.0 |
+
+Blast mode runs EBF recipes at 16x power. Warm-up/cool-down (6s each)
+and durability wear are DYNAMIC extras. Fractional OC ratios (1.0/4,
+3.0/4, 6.0/4...) need a generalized overclock-factor primitive beyond
+the current perfect/imperfect pair.
+
+### Industrial Cutting Factory (IV) [item selector: sawblade]
+| Sawblade | Speed | EU/t | Parallels per voltage tier |
+|---|---|---|---|
+| Tungsten Titanium Carbide | 250% | 90% | 2 |
+| Mysterious Crystal | 300% | 80% | 3 |
+| Neutronium | 350% | 70% | 4 |
+| Transcendent Metal | 450% | 60% | 6 |
+
+Directly expressible with existing primitives (durationMultiplier,
+eutMultiplier, parallelPerVoltageTier per selector tier).
+
+### Magnetic Flux Exhibitor (IV) [item selector: electromagnet]
+| Magnet | Speed | EU/t | Parallels |
+|---|---|---|---|
+| Iron | 110% | 80% | 8 |
+| Steel | 125% | 75% | 24 |
+| Neodymium | 150% | 70% | 48 |
+| Samarium | 200% | 60% | 96 |
+| Tengam | 250% | 50% | 256 |
+
+Directly expressible with existing primitives.
+
+### Spinmatron-2737 (ZPM) [item selector: turbines, simplified]
+Standard mode: 300% speed, 70% EU/t, parallels = 4 x sum of turbine
+tiers (huge 100%, large 75%, normal 50%, small 25% of tier value; tier
+values range Alduorite 1 to Universium 30; slots = 2 per structure tier
+T1-T4). Light mode: +100% speed, recipe tier capped at VT-3. Heavy
+mode: parallels / 32. Biocatalyzed propulsion fluid: parallels x1.25.
+Full modeling needs turbine-loadout input; a simplified selector with
+a few representative loadouts would cover planning.
+
+### Exo-Foundry (UEV) [module selector, simplified]
+Base: 150% speed, 16 parallels/VT, tiers T1/T2/T3 = 2/3/4 module slots.
+Modules: SCB +12 parallels/VT each; PVS EU x0.8 and -10% per unit;
+SC +150% speed additive each; HR (2+: +75% speed, -10% EU each; 3+: +6
+parallels/VT each); Hypercooler +1..3 OC via coolant; Sentient
+Overclocker +0.35 OC factor; Universal Collapser 2x speed 4x EU.
+Pairings add more. Full modeling needs a module-loadout builder; a
+simplified "common loadouts" selector is the pragmatic version.
+
+### PCB Factory (UV) [formula + upgrade selector]
+Parallels = ceil(nanites^0.75), cap 256 (needs a nanite-count input).
+Cooling: none = no OCs; T1 liquid cooling (10 L/s distilled water) =
+imperfect OCs; T2 thermosink (10 L/s super coolant) = perfect OCs.
+Upgrade power penalty: EU x sqrt(upgrade count). Trace size 50-200um:
+output x(100/T), duration x(100/T)^2.
+
+### Hyper-Intensity Laser Engraver (IV) [formula: laser hatch]
+350% speed, 80% EU/t (already parsed from tooltip). Parallels =
+cbrt(laser source amperage): 256A=6, 4096A=16, 16.7M A=256. Needs a
+laser-source-hatch selector (amperage list is the standard hatch
+ladder). Max recipe tier = laser tier + 1.
+
+### Draconic Evolution Fusion Crafter (UHV) [casing control]
+Casings: T1 Bloody Ichorium, T2 Draconium, T3 Wyvern, T4 Awakened
+Draconium, T5 Chaotic. Each casing tier above the recipe's minimum =
+1 perfect overclock; further voltage OCs are imperfect. No parallels.
+Same shape as the EBF coil mechanic (casing control + per-recipe
+minimum tier).
+
+### Naquadah Fuel Refinery (UHV) [casing control]
+Coils T1-T4 (Field Restriction / Advanced / Ultimate / Temporal).
+Parallels = 4 x coil tier. Each coil tier above the recipe's minimum =
++1 perfect overclock. Not voltage-overclockable. Recipe coil minimums
+are per-recipe (like EBF heat).
+
+### Component Assembly Line (UV) [casing control]
+All recipes: inputs and duration x0.75 (already baked into recipes?
+verify against dataset). Casing tier must be >= component tier; each
+casing tier above the minimum halves recipe time. Casing per voltage
+tier ZPM..UXV. Same shape as EBF coils.
+
+### Precise Auto-Assembler MT-3662 (IV) [casing control]
+Normal (assembler) mode: 200% speed, parallels by Precise Casing:
+Mk-0=16, Mk-I=32, Mk-II=64, Mk-III=128, Mk-IV=256. Precise mode: no
+bonuses. Directly expressible as an enumerated parallel table control
+plus the 2x speed.
+
+### Hot Isostatic Pressurization Unit (ZPM) [dual-state, use normal]
+Normal state: 350% speed, 75% EU/t, 4 parallels per voltage tier.
+Overheated: 40% speed, 110% EU/t, 1 parallel/VT. Heat +5% x 0.9^(coil
+tier - 1) per second running; planner should model the normal state
+(sustained operation requires duty-cycling; steady-state throughput
+depends on run/cool cycle, which is DYNAMIC).
+
+### Zhuhai Fishing Port (IV) [affine formula]
+Parallels = 2 x (voltage tier + 1): LV 4 ... UV 18 ... MAX+ 32.
+Needs the affine voltage-parallel primitive (base + n x tier).
+
+### Density^2 (IV) [affine formula]
+200% speed (parsed already). Parallels = 1 + floor(tier / 2): LV 1,
+MV/HV 2, EV/IV 3 ... MAX 8. Needs affine primitive with floor.
+
+### Dangote Distillus distillery mode - RESOLVED
+Max tower height is 12 and distillery mode REQUIRES full height, so
+(2 x floor(12/3)) x VT = flat 8 parallels per voltage tier. Directly
+expressible with parallelPerVoltageTier=8 today; worth adding as a
+special-cased consequence of the "requires max height tower" line plus
+wiki-confirmed height, or waiting for the structured exporter.
+
+### Nanochip Assembly Complex (UEV) [defer]
+Static-plannable best case exists (perfect OCs 2/2 to a 5s floor,
+unlimited parallels, fixed water-grade table) but calibration state and
+impurity make honest modeling misleading. Defer until the machine
+leaves "Not Yet Implemented" status in the pack.
+
+### Fusion Control Computers / Compact Fusion - informational only
+EU/t caps and startup energy gate which recipes fit; no rate effect
+beyond tiering. No action needed for throughput math.
 
 ## DYNAMIC (deliberately not modeled)
 
