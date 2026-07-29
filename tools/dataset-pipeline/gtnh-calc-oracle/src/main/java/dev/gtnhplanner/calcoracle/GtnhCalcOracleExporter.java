@@ -1570,7 +1570,18 @@ public final class GtnhCalcOracleExporter {
                     if ("getResistance".equals(name)) return Byte.valueOf((byte) resistance);
                     if ("isAnalyzed".equals(name)) return Boolean.TRUE;
                     if ("copy".equals(name)) return proxy;
-                    if ("writeToNBT".equals(name) && args != null && args.length == 1) return args[0];
+                    if ("writeToNBT".equals(name) && args != null && args.length == 1) {
+                        // Write real stat NBT so seed items render as this crop's
+                        // analyzed seeds instead of the generic "Unknown Seeds".
+                        if (args[0] instanceof NBTTagCompound) {
+                            NBTTagCompound tag = (NBTTagCompound) args[0];
+                            tag.setByte("gr", (byte) growth);
+                            tag.setByte("ga", (byte) gain);
+                            tag.setByte("re", (byte) resistance);
+                            tag.setByte("scan", (byte) 1);
+                        }
+                        return args[0];
+                    }
                     if ("equals".equals(name) && args != null && args.length == 1) {
                         return Boolean.valueOf(args[0] == proxy);
                     }
