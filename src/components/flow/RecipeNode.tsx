@@ -1292,7 +1292,7 @@ function MachineConfigControlPanel({
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
                 disabled={control.tiers.length <= 1}
-                className="h-6 min-w-0 flex-1 border border-[var(--mc-33)] bg-[var(--mc-85)] px-1 text-[10px] font-bold leading-4 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-white disabled:cursor-not-allowed disabled:text-[var(--mc-33)]"
+                className="h-6 min-w-0 flex-1 border border-[var(--mc-33)] bg-[var(--mc-85)] px-1 text-[10px] font-bold leading-4 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-[var(--mc-100)] disabled:cursor-not-allowed disabled:text-[var(--mc-33)]"
                 title={`${control.label}: ${control.current.label}`}
                 aria-label={control.label}
               >
@@ -1346,7 +1346,7 @@ function PassiveProductionConfigPanel({
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => event.stopPropagation()}
               disabled={control.tiers.length <= 1}
-              className="h-6 w-full min-w-0 border border-[var(--mc-33)] bg-[var(--mc-85)] px-1 text-[10px] font-bold leading-4 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-white disabled:cursor-not-allowed disabled:text-[var(--mc-33)]"
+              className="h-6 w-full min-w-0 border border-[var(--mc-33)] bg-[var(--mc-85)] px-1 text-[10px] font-bold leading-4 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-[var(--mc-100)] disabled:cursor-not-allowed disabled:text-[var(--mc-33)]"
               title={`${control.label}: ${control.current.label}`}
               aria-label={control.label}
             >
@@ -1695,7 +1695,7 @@ function MachineCountStat({
           inputMode="numeric"
           aria-label={`${label} count`}
           title={`Edit ${label.toLowerCase()} count`}
-          className="nodrag h-[18px] w-0 min-w-0 flex-1 border border-[var(--mc-47)] bg-[var(--mc-85)] px-1 text-[12px] font-medium leading-4 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-white focus:ring-1 focus:ring-cyan-400"
+          className="nodrag h-[18px] w-0 min-w-0 flex-1 border border-[var(--mc-47)] bg-[var(--mc-85)] px-1 text-[12px] font-medium leading-4 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-[var(--mc-100)] focus:ring-1 focus:ring-cyan-400"
         />
         <button
           type="button"
