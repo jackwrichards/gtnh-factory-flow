@@ -135,6 +135,12 @@ export function MachineStatsContent({
             <span className="text-slate-300">{tuningControls.join(", ")}</span>
           </StatRow>
         ) : null}
+        {applied.machineProfile?.perfectOverclock ? (
+          <StatRow label="Overclocks">
+            <span style={{ color: BONUS_COLOR }}>Perfect</span>
+            <span className="text-slate-400"> (no wasted energy)</span>
+          </StatRow>
+        ) : null}
         {!hasBonusRows ? (
           <p className="text-[16px] leading-snug text-slate-300">
             No special bonuses. Runs recipes at their listed time and power.
@@ -148,6 +154,13 @@ export function MachineStatsContent({
           <p className="mt-0.5 text-[15px] leading-relaxed text-slate-100">
             Exact. The numbers for every voltage tier came from GregTech&apos;s own calculator
             while the game was running, so heat bonuses and perfect overclocks are included.
+          </p>
+        ) : applied.machineProfile?.perfectOverclock ? (
+          <p className="mt-0.5 text-[15px] leading-relaxed text-slate-100">
+            Perfect. Each tier of extra power runs{" "}
+            <span style={{ color: BONUS_COLOR }}>4&times;</span> faster for{" "}
+            <span style={{ color: PENALTY_COLOR }}>4&times;</span> the power, so the total energy
+            per craft never grows.
           </p>
         ) : (
           <p className="mt-0.5 text-[15px] leading-relaxed text-slate-100">

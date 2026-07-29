@@ -137,6 +137,8 @@ export interface MachineProfile {
   eut?: number;
   maxParallel?: number;
   eutLimit?: number;
+  /** True when the machine performs 4x speed / 4x power overclocks. */
+  perfectOverclock?: boolean;
   notes?: string;
 }
 
@@ -155,6 +157,8 @@ export interface MachineConfigTierOption {
   eutMultiplier?: number;
   outputMultiplier?: number;
   parallelMultiplier?: number;
+  /** Parallels that scale with the machine's voltage tier (GT++ "Voltage Tier * n Parallels"). */
+  parallelPerVoltageTier?: number;
   resource: ResourceAmount;
 }
 

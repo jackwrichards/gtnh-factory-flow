@@ -112,28 +112,159 @@ describe("buildMachineHandlerTemplates", () => {
     expect(volcanus.machineConfigControls[0].tiers[0].parallelMultiplier).toBe(8);
   });
 
-  it("lets a later tooltip mode section override an earlier one (Dangote)", () => {
+  const DANGOTE_TOOLTIP = [
+    "Dangote Distillus",
+    "Machine Type: Distillery, DT",
+    "Stats dictated by tower mode",
+    "-----------------------------------------",
+    "Distillery Mode",
+    "(2 * floor(Height / 3)) * Voltage Tier Parallels",
+    "200% Speed",
+    "15% EU Usage",
+    "-----------------------------------------",
+    "Distillation Tower Mode",
+    "12 Parallels",
+    "350% Speed",
+    "100% EU Usage",
+  ];
+
+  it("uses the mode matching the recipe map (Dangote on the DT map)", () => {
     const templates = buildMachineHandlerTemplates("Distillation Tower", [
       catalyst("Distillation Tower", { sourceClass: MULTI_CLASS }),
-      catalyst("Dangote Distillus", {
-        sourceClass: GTPP_MULTI_CLASS,
-        tooltip: [
-          "Distillery Mode",
-          "(2 * floor(Height / 3)) * Voltage Tier Parallels",
-          "200% Speed",
-          "15% EU Usage",
-          "Distillation Tower Mode",
-          "12 Parallels",
-          "350% Speed",
-          "100% EU Usage",
-        ],
-      }),
+      catalyst("Dangote Distillus", { sourceClass: GTPP_MULTI_CLASS, tooltip: DANGOTE_TOOLTIP }),
     ]);
 
     const dangote = templates.find((template) => template.label === "Dangote Distillus");
     expect(dangote.durationMultiplier).toBeCloseTo(1 / 3.5);
     expect(dangote.eutMultiplier).toBeUndefined();
     expect(dangote.machineConfigControls[0].tiers[0].parallelMultiplier).toBe(12);
+  });
+
+  it("uses the mode matching the recipe map (Dangote on the Distillery map)", () => {
+    const templates = buildMachineHandlerTemplates("Distillery", [
+      catalyst("Distillery", { sourceClass: SINGLE_CLASS }),
+      catalyst("Dangote Distillus", { sourceClass: GTPP_MULTI_CLASS, tooltip: DANGOTE_TOOLTIP }),
+    ]);
+
+    const dangote = templates.find((template) => template.label === "Dangote Distillus");
+    expect(dangote.durationMultiplier).toBeCloseTo(1 / 2);
+    expect(dangote.eutMultiplier).toBeCloseTo(0.15);
+    // The height/voltage parallel formula is unquantifiable, so no
+    // parallel control is invented for distillery mode.
+    expect(dangote.machineConfigControls).toBeUndefined();
+  });
+
+  it("skips deprecated machines entirely", () => {
+    const templates = buildMachineHandlerTemplates("Distillation Tower", [
+      catalyst("Distillation Tower", { sourceClass: MULTI_CLASS }),
+      catalyst("Mega Distillation Tower", {
+        sourceClass: MULTI_CLASS,
+        tooltip: ["DEPRECATED - Controller will be removed in next major update!", "256 Parallels"],
+      }),
+    ]);
+
+    expect(templates.map((template) => template.label)).toEqual(["Distillation Tower"]);
+  });
+
+  it("reads structure-height parallel formulas with a stated slice cap", () => {
+    const templates = buildMachineHandlerTemplates("Distillery", [
+      catalyst("Distillery", { sourceClass: SINGLE_CLASS }),
+      catalyst("Mega Distillation Tower", {
+        sourceClass: MULTI_CLASS,
+        tooltip: [
+          "Has up to 5 middle slices and 1 top slice, the amount of middle slices is the 'Tower Height'",
+          "-----------------------------------------",
+          "Distillery Mode",
+          "256 x (1 + Tower Height/2) Parallels",
+          "150% Speed",
+          "50% EU Usage",
+          "-----------------------------------------",
+          "Distillation Tower Mode",
+          "256 Parallels",
+          "120% Speed",
+          "90% EU Usage",
+        ],
+      }),
+    ]);
+
+    const mega = templates.find((template) => template.label === "Mega Distillation Tower");
+    expect(mega.durationMultiplier).toBeCloseTo(1 / 1.5);
+    expect(mega.eutMultiplier).toBeCloseTo(0.5);
+    const fixed = mega.machineConfigControls.find((control) => control.id === "machineParallel");
+    const height = mega.machineConfigControls.find((control) =>
+      control.id.startsWith("structure-"),
+    );
+    expect(fixed.tiers[0].parallelMultiplier).toBe(256);
+    expect(height.tiers).toHaveLength(5);
+    expect(height.tiers[0].parallelMultiplier).toBeCloseTo(1.5);
+    expect(height.tiers[4].parallelMultiplier).toBeCloseTo(3.5);
+  });
+
+  it("reads perfect overclock statements", () => {
+    const templates = buildMachineHandlerTemplates("Fusion Reactor", [
+      catalyst("Fusion Control Computer Mark I", { sourceClass: MULTI_CLASS }),
+      catalyst("FusionTech MK IV", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: ["Performs 4/4 overclocks"],
+      }),
+    ]);
+
+    const fusion = templates.find((template) => template.label === "FusionTech MK IV");
+    expect(fusion.perfectOverclock).toBe(true);
+  });
+
+  it("reads voltage-scaled parallels with upgrade options (Maceration Stack)", () => {
+    const templates = buildMachineHandlerTemplates("Macerator", [
+      catalyst("Macerator", { sourceClass: SINGLE_CLASS }),
+      catalyst("Industrial Maceration Stack", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: [
+          "Voltage Tier * n Parallels",
+          "n=2 initially. n=8 after inserting Maceration Upgrade Chip",
+        ],
+      }),
+    ]);
+
+    const stack = templates.find((template) => template.label === "Industrial Maceration Stack");
+    const control = stack.machineConfigControls.find((entry) => entry.id === "voltageParallel");
+    expect(control.tiers.map((tier) => tier.parallelPerVoltageTier)).toEqual([2, 8]);
+    expect(control.defaultKey).toBe("per-tier-2");
+  });
+
+  it("reads coil formula tooltips generically (chem plant and LFE)", () => {
+    const templates = buildMachineHandlerTemplates("Chemical Plant", [
+      catalyst("ExxonMobil Chemical Plant", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: [
+          "2 Parallels per Pipe Casing Tier",
+          "Speed is 50% times Heating Coil Tier",
+        ],
+      }),
+    ]);
+    const coil = templates[0].machineConfigControls.find(
+      (control) => control.id === "heatingCoil",
+    );
+    expect(coil.defaultKey).toBe("kanthal");
+    expect(coil.tiers[0].durationMultiplier).toBeCloseTo(2);
+    expect(coil.tiers[2].durationMultiplier).toBeCloseTo(2 / 3);
+
+    const lfe = buildMachineHandlerTemplates("Fluid Extractor", [
+      catalyst("Fluid Extractor (LV)", { sourceClass: SINGLE_CLASS }),
+      catalyst("Large Fluid Extractor", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: [
+          "150% Speed",
+          "80% EU Usage",
+          "Every coil tier gives a +10% speed bonus and a 10% EU/t discount (multiplicative)",
+        ],
+      }),
+    ]).find((template) => template.label === "Large Fluid Extractor");
+    const lfeCoil = lfe.machineConfigControls.find((control) => control.id === "heatingCoil");
+    expect(lfe.durationMultiplier).toBeCloseTo(1 / 1.5);
+    expect(lfe.eutMultiplier).toBeCloseTo(0.8);
+    expect(lfeCoil.tiers[0].eutMultiplier).toBeCloseTo(0.9);
+    expect(lfeCoil.tiers[1].eutMultiplier).toBeCloseTo(0.81);
+    expect(lfeCoil.tiers[0].durationMultiplier).toBeCloseTo(1 / 1.1);
   });
 
   it("does not misread tier-scaled bonuses as static bonuses", () => {
@@ -237,7 +368,17 @@ describe("instantiateRecipeMachineHandlers", () => {
 
 describe("machineConfigControlsForOracleRecipe", () => {
   it("gives the Chemical Plant a heating coil speed control defaulting to Kanthal", () => {
-    const controls = machineConfigControlsForOracleRecipe("Chemical Plant", 5, []);
+    const templates = buildMachineHandlerTemplates("Chemical Plant", [
+      catalyst("ExxonMobil Chemical Plant", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: ["Speed is 50% times Heating Coil Tier"],
+      }),
+    ]);
+    const controls = machineConfigControlsForOracleRecipe(
+      "Chemical Plant",
+      5,
+      primaryMachineHandlerControls(templates),
+    );
     const coil = controls.find((control) => control.id === "heatingCoil");
     expect(coil).toBeDefined();
     expect(coil.minimumKey).toBe("cupronickel");
@@ -271,7 +412,7 @@ describe("machineConfigControlsForOracleRecipe", () => {
     const templates = buildMachineHandlerTemplates("Chemical Plant", [
       catalyst("ExxonMobil Chemical Plant", {
         sourceClass: GTPP_MULTI_CLASS,
-        tooltip: ["2 Parallels per Pipe Casing Tier"],
+        tooltip: ["2 Parallels per Pipe Casing Tier", "Speed is 50% times Heating Coil Tier"],
       }),
     ]);
     const controls = machineConfigControlsForOracleRecipe(

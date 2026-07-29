@@ -131,6 +131,7 @@ export const machineProfileSchema = z.object({
   eut: z.number().min(0, "EU/t must be zero or positive").optional(),
   maxParallel: z.number().positive().optional(),
   eutLimit: z.number().positive().optional(),
+  perfectOverclock: z.boolean().optional(),
   notes: z.string().optional(),
 });
 
@@ -149,6 +150,7 @@ export const machineConfigControlSchema = z.object({
         eutMultiplier: z.number().positive().optional(),
         outputMultiplier: z.number().nonnegative().optional(),
         parallelMultiplier: z.number().positive().optional(),
+        parallelPerVoltageTier: z.number().positive().optional(),
         resource: resourceAmountSchema,
       }),
     )

@@ -182,13 +182,22 @@ function getTreeGrowthSimulatorToolMultiplier(
 }
 
 export function getMachineParallelMultiplier(
-  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
-  node: Pick<FactoryNode, "machineConfigTiers">,
+  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls" | "minimumTier">,
+  node: Pick<FactoryNode, "machineConfigTiers" | "overclockTier">,
 ): number {
-  return getRecipeMachineConfigTierControls(recipe, node).reduce(
-    (multiplier, control) => multiplier * (control.current.parallelMultiplier ?? 1),
+  // GT++ "Voltage Tier * n Parallels" scales with the tier the machine runs
+  // at; the GT tier ordinal counts ULV as 0, LV as 1, and so on.
+  const runTier = node.overclockTier ?? recipe.minimumTier ?? "LV";
+  const tierOrdinal = Math.max(
     1,
+    getVoltageTierIndex(runTier as Parameters<typeof getVoltageTierIndex>[0]),
   );
+  return getRecipeMachineConfigTierControls(recipe, node).reduce((multiplier, control) => {
+    const fixed = control.current.parallelMultiplier ?? 1;
+    const perTier = control.current.parallelPerVoltageTier;
+    const scaled = Number.isFinite(perTier) ? Math.max(1, (perTier as number) * tierOrdinal) : 1;
+    return multiplier * fixed * scaled;
+  }, 1);
 }
 
 export function getMachineDurationMultiplier(

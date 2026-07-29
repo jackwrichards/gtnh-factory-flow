@@ -91,6 +91,7 @@ export function applyMachineHandlerToRecipe(
       eut: handler.eut ?? recipe.machineProfile?.eut,
       maxParallel: handler.maxParallel ?? recipe.machineProfile?.maxParallel,
       eutLimit: handler.eutLimit ?? recipe.machineProfile?.eutLimit,
+      perfectOverclock: handler.perfectOverclock ?? recipe.machineProfile?.perfectOverclock,
       notes: handler.notes ?? recipe.machineProfile?.notes,
     },
   };

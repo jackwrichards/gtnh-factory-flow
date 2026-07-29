@@ -111,6 +111,11 @@ export function getOverclockedRecipeStats(
   const eutMultiplier = effectiveRecipe.machineType
     ? getMachineEutMultiplier(effectiveRecipe as Recipe, node)
     : 1;
+  // Machines that state perfect overclocks in their tooltip quarter the
+  // duration on every step instead of halving it.
+  const perfectSteps = effectiveRecipe.machineProfile?.perfectOverclock
+    ? heatOverclock.regularOverclockSteps
+    : 0;
 
   return {
     tier,
@@ -119,8 +124,8 @@ export function getOverclockedRecipeStats(
     durationTicks: Math.max(
       1,
       (effectiveRecipe.durationTicks /
-        4 ** heatOverclock.heatOverclockSteps /
-        2 ** heatOverclock.regularOverclockSteps) *
+        4 ** (heatOverclock.heatOverclockSteps + perfectSteps) /
+        2 ** (heatOverclock.regularOverclockSteps - perfectSteps)) *
         durationMultiplier,
     ),
     eut:

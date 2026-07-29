@@ -170,26 +170,6 @@ export function machineConfigControlsForOracleRecipe(machineType, specialValue, 
     );
   }
 
-  // GT++ ExxonMobil Chemical Plant: heating coils set the machine speed at
-  // 50% per coil tier (Cupronickel 50%, Kanthal 100%, Nichrome 150%, ...).
-  // EU/t is unchanged, so higher coils are an implicit total-EU discount.
-  // The exported recipe duration corresponds to the 100% speed baseline, so
-  // Kanthal is the default selection.
-  if (normalized === "chemical plant" || normalized === "exxonmobil chemical plant") {
-    controls.push(
-      heatingCoilControl({
-        minimumKey: "cupronickel",
-        defaultKey: "kanthal",
-        tooltip: (_tier, index) => [
-          `Speed: ${50 * (index + 1)}%`,
-          `Duration multiplier: ${formatTooltipMultiplier(2 / (1 + index))}x`,
-          "EU/t is not affected by coil tier",
-        ],
-        effect: (_tier, index) => ({ durationMultiplier: 2 / (1 + index) }),
-      }),
-    );
-  }
-
   if (normalized === "coke oven" || normalized === "industrial coke oven") {
     controls.push(
       heatingCoilControl({
@@ -277,6 +257,11 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
     const tooltip = (catalyst?.resource?.tooltip ?? [])
       .map((line) => cleanTooltipText(line))
       .filter(Boolean);
+    // Deprecated controllers are still registered in the game but slated for
+    // removal; they must not appear as choices.
+    if (tooltip.some((line) => /\bdeprecated\b/i.test(line))) {
+      continue;
+    }
     const multiblock = isMultiblockCatalyst(catalyst, tooltip);
 
     const tierSuffix = TIER_SUFFIX_PATTERN.exec(rawLabel)?.[1];
@@ -306,7 +291,7 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
       continue;
     }
 
-    const stats = multiblock ? parseMultiblockCatalystStats(tooltip) : {};
+    const stats = multiblock ? parseMultiblockCatalystStats(tooltip, machineType) : {};
     families.set(familyKey, {
       id: slug(label),
       label,
@@ -347,29 +332,201 @@ function isMultiblockCatalyst(catalyst, tooltip) {
   return tooltip.some((line) => /controller block|multiblock/i.test(line));
 }
 
-function parseMultiblockCatalystStats(tooltip) {
+const MODE_HEADER_PATTERN = /^(.{2,48}?)\s+Mode$/i;
+const SECTION_DIVIDER_PATTERN = /^-{4,}$/;
+
+/**
+ * Split a tooltip into its base lines and named mode sections. Multi-mode
+ * machines (Dangote Distillus, the newer Mega Distillation Tower) describe
+ * one section per mode; a divider line returns subsequent lines to the base.
+ */
+function splitTooltipModes(tooltip) {
+  const baseLines = [];
+  const modes = [];
+  let currentMode;
+  for (const line of tooltip) {
+    if (SECTION_DIVIDER_PATTERN.test(line)) {
+      currentMode = undefined;
+      continue;
+    }
+    const header = MODE_HEADER_PATTERN.exec(line);
+    if (header) {
+      currentMode = { name: header[1].trim(), lines: [] };
+      modes.push(currentMode);
+      continue;
+    }
+    (currentMode ? currentMode.lines : baseLines).push(line);
+  }
+  return { baseLines, modes };
+}
+
+function selectModeForMachineType(modes, machineType) {
+  const mapKey = normalizeLabel(machineType);
+  if (!mapKey) {
+    return undefined;
+  }
+  return modes.find((mode) => {
+    const modeKey = normalizeLabel(mode.name);
+    return modeKey === mapKey || modeKey.includes(mapKey) || mapKey.includes(modeKey);
+  });
+}
+
+function parseMultiblockCatalystStats(tooltip, machineType) {
+  const { baseLines, modes } = splitTooltipModes(tooltip);
+  const base = parseStatLines(baseLines, { allLines: tooltip });
+  // A machine with modes uses the stats of the mode matching this recipe
+  // map; if none matches, only the base (mode-independent) stats apply.
+  const mode = modes.length > 0 ? selectModeForMachineType(modes, machineType) : undefined;
+  const modeStats = mode ? parseStatLines(mode.lines, { allLines: tooltip }) : undefined;
+
+  const durationMultiplier = modeStats?.durationMultiplier ?? base.durationMultiplier;
+  const eutMultiplier = modeStats?.eutMultiplier ?? base.eutMultiplier;
+  const perfectOverclock = base.perfectOverclock || modeStats?.perfectOverclock || undefined;
+  const maxParallel = modeStats?.maxParallel ?? base.maxParallel;
+
+  const controls = [...base.controls, ...(modeStats?.controls ?? [])];
+  if (maxParallel !== undefined) {
+    controls.push(fixedParallelControl(maxParallel));
+  }
+
+  const merged = mergeMachineConfigControls(controls);
+  const stats = {};
+  if (durationMultiplier !== undefined) stats.durationMultiplier = durationMultiplier;
+  if (eutMultiplier !== undefined) stats.eutMultiplier = eutMultiplier;
+  if (perfectOverclock) stats.perfectOverclock = true;
+  if (merged) stats.machineConfigControls = merged;
+  return stats;
+}
+
+function parseStatLines(lines, { allLines }) {
   const controls = [];
   let durationMultiplier;
   let eutMultiplier;
   let maxParallel;
+  let perfectOverclock;
+  let voltageParallelBase;
+  const voltageParallelUpgrades = [];
 
-  for (const line of tooltip) {
+  for (const line of lines) {
     const tierControl = machineConfigControlFromTooltipLine(line);
     if (tierControl) {
       controls.push(tierControl);
       continue;
     }
+
+    // Perfect overclock statements come in a few phrasings.
+    if (
+      /performs?\s+4\/4\s+overclocks?/i.test(line) ||
+      /does not lose efficiency when overclocked/i.test(line) ||
+      /reduce recipe time by a factor 4 instead of 2/i.test(line)
+    ) {
+      perfectOverclock = true;
+      continue;
+    }
+
+    // "Speed is 50% times Heating Coil Tier": coil tier T runs at (T * x)%
+    // speed. The exported recipe duration is the 100%-speed baseline, so the
+    // default coil is the tier whose multiplier is exactly 1.
+    const coilSpeedTimes = /^Speed is (\d+(?:[.,]\d+)?)\s*%\s+times\s+(?:Heating\s+)?Coil Tier$/i.exec(
+      line,
+    );
+    if (coilSpeedTimes) {
+      const step = parseTooltipNumber(coilSpeedTimes[1]) / 100;
+      if (step > 0) {
+        controls.push(
+          coilFormulaControl({
+            line,
+            effect: (index) => ({ durationMultiplier: 1 / (step * (index + 1)) }),
+            neutral: (index) => Math.abs(step * (index + 1) - 1) < 1e-9,
+          }),
+        );
+      }
+      continue;
+    }
+
+    // "Every coil tier gives a +10% speed bonus and a 10% EU/t discount
+    // (multiplicative)": compounding per coil tier.
+    const coilCompound =
+      /every coil tier gives a \+(\d+(?:[.,]\d+)?)\s*%\s+speed bonus and a (\d+(?:[.,]\d+)?)\s*%\s+EU\/?t discount \(multiplicative\)/i.exec(
+        line,
+      );
+    if (coilCompound) {
+      const speedStep = 1 + parseTooltipNumber(coilCompound[1]) / 100;
+      const euStep = 1 - parseTooltipNumber(coilCompound[2]) / 100;
+      controls.push(
+        coilFormulaControl({
+          line,
+          effect: (index) => ({
+            durationMultiplier: 1 / Math.pow(speedStep, index + 1),
+            eutMultiplier: Math.pow(euStep, index + 1),
+          }),
+        }),
+      );
+      continue;
+    }
+
+    // "Processes Voltage Tier * Coil Tier items": parallels scale with both
+    // the coil choice and the machine's voltage tier.
+    if (/^Processes Voltage Tier\s*[*x]\s*Coil Tier items$/i.test(line)) {
+      controls.push(
+        coilFormulaControl({
+          line,
+          effect: (index) => ({ parallelPerVoltageTier: index + 1 }),
+        }),
+      );
+      continue;
+    }
+
+    // "Voltage Tier * n Parallels" with "n=2 initially. n=8 after inserting
+    // <upgrade>": a selectable control whose parallels scale with voltage.
+    if (/^Voltage Tier\s*[*x]\s*n\s+Parallels$/i.test(line)) {
+      voltageParallelBase = null; // marks the pattern as seen
+      for (const other of allLines) {
+        const initial = /n\s*=\s*(\d+)\s+initially/i.exec(other);
+        if (initial) {
+          voltageParallelBase = Number.parseInt(initial[1], 10);
+        }
+        const upgraded = /n\s*=\s*(\d+)\s+after\s+(?:inserting\s+)?(.{3,60}?)(?:\.|$)/i.exec(other);
+        if (upgraded) {
+          voltageParallelUpgrades.push({
+            count: Number.parseInt(upgraded[1], 10),
+            label: upgraded[2].trim(),
+          });
+        }
+      }
+      continue;
+    }
+
+    // "256 x (1 + Tower Height/2) Parallels" plus a base line like "Has up
+    // to 5 middle slices": a fixed base multiplied by a structure dimension.
+    const heightFormula =
+      /^(\d+)\s*[*x]\s*\(\s*1\s*\+\s*([A-Za-z][A-Za-z ]{2,24}?)\s*\/\s*(\d+)\s*\)\s*Parallels$/i.exec(
+        line,
+      );
+    if (heightFormula) {
+      const baseCount = Number.parseInt(heightFormula[1], 10);
+      const dimension = heightFormula[2].trim();
+      const divisor = Number.parseInt(heightFormula[3], 10);
+      const capMatch = allLines
+        .map((other) => /up to (\d+) (?:middle )?slices/i.exec(other))
+        .find(Boolean);
+      const cap = capMatch ? Number.parseInt(capMatch[1], 10) : undefined;
+      if (baseCount > 1 && divisor > 0 && cap && cap >= 1 && cap <= 32) {
+        maxParallel = baseCount;
+        controls.push(structureDimensionControl(dimension, divisor, cap, line));
+      }
+      continue;
+    }
+
     if (PER_TIER_LINE_PATTERN.test(line)) {
-      // Tier-scaled bonuses for subjects we cannot model (for example
-      // parallels per voltage tier) are skipped rather than misread as
-      // static bonuses.
+      // Tier-scaled bonuses for subjects we cannot model are skipped rather
+      // than misread as static bonuses.
       continue;
     }
 
     // GT++ machines state totals ("220% Speed", "90% EU Usage"); a few
-    // others state bonuses ("Speed: +120%", "50% faster"). Multi-mode
-    // machines (Dangote Distillus) list one section per mode, so a later
-    // section overrides an earlier one and an explicit 100% resets the stat.
+    // others state bonuses ("Speed: +120%", "50% faster"). An explicit 100%
+    // resets the stat, which matters for multi-mode tooltips.
     const speedTotal = /^(\d+(?:[.,]\d+)?)\s*%\s+Speed$/i.exec(line);
     if (speedTotal) {
       const factor = parseTooltipNumber(speedTotal[1]) / 100;
@@ -396,6 +553,7 @@ function parseMultiblockCatalystStats(tooltip) {
     const euUsage =
       /^(\d+(?:[.,]\d+)?)\s*%\s+EU\s*Usage$/i.exec(line) ??
       /^EU\s*Usage:\s*(\d+(?:[.,]\d+)?)\s*%/i.exec(line) ??
+      /^Power Usage:\s*(\d+(?:[.,]\d+)?)\s*%/i.exec(line) ??
       /uses?\s+(\d+(?:[.,]\d+)?)\s*%\s+(?:of\s+the\s+)?(?:EU|power|energy)/i.exec(line);
     if (euUsage) {
       const factor = parseTooltipNumber(euUsage[1]) / 100;
@@ -418,6 +576,7 @@ function parseMultiblockCatalystStats(tooltip) {
 
     const parallels =
       /^(?:Max\.?\s+)?Parallels?:\s*(\d+)\b/i.exec(line) ??
+      /^Has (\d+) parallels? by default$/i.exec(line) ??
       /(?:^|\b)(\d+)\s+Parallels?\s*$/i.exec(line);
     if (parallels) {
       const count = Number.parseInt(parallels[1], 10);
@@ -427,16 +586,101 @@ function parseMultiblockCatalystStats(tooltip) {
     }
   }
 
-  if (maxParallel !== undefined) {
-    controls.push(fixedParallelControl(maxParallel));
+  if (voltageParallelBase !== null && voltageParallelBase !== undefined) {
+    controls.push(voltageParallelControl(voltageParallelBase, voltageParallelUpgrades));
   }
 
-  const merged = mergeMachineConfigControls(controls);
-  const stats = {};
-  if (durationMultiplier !== undefined) stats.durationMultiplier = durationMultiplier;
-  if (eutMultiplier !== undefined) stats.eutMultiplier = eutMultiplier;
-  if (merged) stats.machineConfigControls = merged;
-  return stats;
+  return { durationMultiplier, eutMultiplier, maxParallel, perfectOverclock, controls };
+}
+
+function coilFormulaControl({ line, effect, neutral }) {
+  let defaultKey;
+  const tiers = heatingCoilTiers.map((tier, index) => {
+    if (neutral?.(index) && defaultKey === undefined) {
+      defaultKey = tier.key;
+    }
+    return {
+      key: tier.key,
+      label: tier.label,
+      heat: tier.heat,
+      ...effect(index),
+      resource: machineConfigResource(tier.blockId, `${tier.label} Coil Block`, [
+        "Heating coil tier",
+        line,
+      ]),
+    };
+  });
+  return {
+    id: "heatingCoil",
+    label: "Heating Coil",
+    minimumKey: heatingCoilTiers[0].key,
+    defaultKey: defaultKey ?? heatingCoilTiers[0].key,
+    tiers,
+  };
+}
+
+function structureDimensionControl(dimension, divisor, cap, line) {
+  const id = `structure-${slug(dimension)}`;
+  return {
+    id,
+    label: dimension,
+    minimumKey: `${slug(dimension)}-1`,
+    defaultKey: `${slug(dimension)}-1`,
+    tiers: Array.from({ length: cap }, (_, index) => {
+      const level = index + 1;
+      return {
+        key: `${slug(dimension)}-${level}`,
+        label: `${dimension} ${level}`,
+        parallelMultiplier: 1 + level / divisor,
+        resource: machineConfigResource(
+          `factoryflow:machine_config/${slug(dimension)}_${level}`,
+          `${dimension} ${level}`,
+          ["Imported from machine catalyst tooltip", line],
+        ),
+      };
+    }),
+  };
+}
+
+function voltageParallelControl(baseCount, upgrades) {
+  const tiers = [];
+  if (Number.isFinite(baseCount) && baseCount > 0) {
+    tiers.push({
+      key: `per-tier-${baseCount}`,
+      label: `${baseCount} per Voltage Tier`,
+      parallelPerVoltageTier: baseCount,
+      resource: machineConfigResource(
+        `factoryflow:machine_config/per_tier_${baseCount}`,
+        `${baseCount} Parallels per Voltage Tier`,
+        ["Imported from machine catalyst tooltip"],
+      ),
+    });
+  }
+  for (const upgrade of upgrades) {
+    if (!Number.isFinite(upgrade.count) || upgrade.count <= 0) {
+      continue;
+    }
+    tiers.push({
+      key: `per-tier-${upgrade.count}`,
+      label: `${upgrade.count} per Voltage Tier (${upgrade.label})`,
+      parallelPerVoltageTier: upgrade.count,
+      resource: machineConfigResource(
+        `factoryflow:machine_config/per_tier_${upgrade.count}`,
+        `${upgrade.count} Parallels per Voltage Tier`,
+        ["Imported from machine catalyst tooltip", upgrade.label],
+      ),
+    });
+  }
+  if (tiers.length === 0) {
+    return undefined;
+  }
+  return {
+    id: "voltageParallel",
+    label: "Parallels per Tier",
+    minimumKey: tiers[0].key,
+    defaultKey: tiers[0].key,
+    tiers,
+  };
 }
 
 function machineConfigControlFromTooltipLine(rawLine) {
@@ -545,6 +789,9 @@ export function instantiateRecipeMachineHandlers(templates, recipe) {
     }
     if (Number.isFinite(template.eutMultiplier) && template.eutMultiplier !== 1) {
       handler.eut = Math.max(0, Math.round(recipe.eut * template.eutMultiplier * 100) / 100);
+    }
+    if (template.perfectOverclock) {
+      handler.perfectOverclock = true;
     }
 
     // Handlers that add their own controls also inherit the recipe-level
