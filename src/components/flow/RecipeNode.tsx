@@ -45,6 +45,7 @@ import {
 } from "@/lib/model";
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
+import { MachineStatsContent } from "./MachineStatsContent";
 import { UsageLimitContent } from "@/components/inspector/UsageLimitContent";
 import { buildUsageLimitChain } from "@/components/inspector/usage-limits";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
@@ -331,12 +332,16 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           >
             -
           </button>
-          <div
-            className="minecraft-title h-6 truncate border-2 border-[var(--mc-33)] bg-[var(--mc-61)] px-2 text-center text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]"
-            style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
+          <MinecraftTooltip
+            content={<MachineStatsContent recipe={recipe} handler={selectedMachineHandler} />}
           >
-            {selectedMachineHandler.label}
-          </div>
+            <div
+              className="minecraft-title h-6 truncate border-2 border-[var(--mc-33)] bg-[var(--mc-61)] px-2 text-center text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]"
+              style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
+            >
+              {selectedMachineHandler.label}
+            </div>
+          </MinecraftTooltip>
           {tierControl && tierColor ? (
             <button
               type="button"
@@ -382,20 +387,23 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   onClick={(event) => event.stopPropagation()}
                 >
                   {machineHandlers.map((handler) => (
-                    <button
+                    <MinecraftTooltip
                       key={handler.id}
-                      type="button"
-                      onClick={() => updateMachineHandler(handler.id)}
-                      className={[
-                        "block w-full truncate border-2 px-2 py-1 text-left font-bold",
-                        handler.id === selectedMachineHandler.id
-                          ? "border-[#6b4fd1] bg-[#8b70dd] text-white"
-                          : "border-[var(--mc-47)] bg-[var(--mc-85)] text-[var(--mc-ink)] hover:bg-[var(--mc-100)]",
-                      ].join(" ")}
-                      title={handler.label}
+                      content={<MachineStatsContent recipe={recipe} handler={handler} />}
                     >
-                      {handler.label}
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => updateMachineHandler(handler.id)}
+                        className={[
+                          "block w-full truncate border-2 px-2 py-1 text-left font-bold",
+                          handler.id === selectedMachineHandler.id
+                            ? "border-[#6b4fd1] bg-[#8b70dd] text-white"
+                            : "border-[var(--mc-47)] bg-[var(--mc-85)] text-[var(--mc-ink)] hover:bg-[var(--mc-100)]",
+                        ].join(" ")}
+                      >
+                        {handler.label}
+                      </button>
+                    </MinecraftTooltip>
                   ))}
                 </div>
               ) : null}
