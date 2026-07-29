@@ -968,14 +968,17 @@ export function instantiateRecipeMachineHandlers(templates, recipe) {
 
     // Handlers that add their own controls also inherit the recipe-level
     // controls (for example the Volcanus keeps the EBF coil control next to
-    // its fixed 8 parallels). Handlers without their own controls fall back
-    // to the recipe-level controls in the app, so they carry nothing here.
+    // its fixed 8 parallels), but a handler's own control always replaces a
+    // recipe-level control with the same id (the Space Assembler MK-II's 16
+    // parallels must not merge with the MK-I's 4). Handlers without their
+    // own controls fall back to the recipe-level controls in the app.
     const ownControls = template.machineConfigControls ?? [];
     if (!template.isPrimary && ownControls.length > 0) {
-      handler.machineConfigControls = mergeMachineConfigControls([
-        ...(recipe.machineConfigControls ?? []),
+      const ownIds = new Set(ownControls.map((control) => control.id));
+      handler.machineConfigControls = [
         ...ownControls,
-      ]);
+        ...(recipe.machineConfigControls ?? []).filter((control) => !ownIds.has(control.id)),
+      ];
     }
 
     return handler;

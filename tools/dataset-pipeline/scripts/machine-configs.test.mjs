@@ -299,6 +299,33 @@ describe("buildMachineHandlerTemplates", () => {
     expect(control.tiers[0].parallelMultiplier).toBe(16);
   });
 
+  it("lets a handler's own control replace a same-id recipe-level control", () => {
+    const templates = buildMachineHandlerTemplates("Space Assembler", [
+      catalyst("Space Assembler Module MK-I", {
+        sourceClass: MULTI_CLASS,
+        tooltip: ["Runs at UHV with up to 4 parallels"],
+      }),
+      catalyst("Space Assembler Module MK-II", {
+        sourceClass: MULTI_CLASS,
+        tooltip: ["Runs at UIV at 150% speed with up to 16 parallels"],
+      }),
+    ]);
+    const recipeControls = primaryMachineHandlerControls(templates);
+    expect(recipeControls[0].tiers[0].parallelMultiplier).toBe(4);
+
+    const handlers = instantiateRecipeMachineHandlers(templates, {
+      minimumTier: "UHV",
+      durationTicks: 1000,
+      eut: 122880,
+      machineConfigControls: recipeControls,
+    });
+    const mk2 = handlers.find((handler) => handler.label === "Space Assembler Module MK-II");
+    const parallel = mk2.machineConfigControls.filter((c) => c.id === "machineParallel");
+    expect(parallel).toHaveLength(1);
+    expect(parallel[0].tiers.map((tier) => tier.parallelMultiplier)).toEqual([16]);
+    expect(mk2.durationTicks).toBe(667);
+  });
+
   it("reads perfect overclock statements", () => {
     const templates = buildMachineHandlerTemplates("Fusion Reactor", [
       catalyst("Fusion Control Computer Mark I", { sourceClass: MULTI_CLASS }),
