@@ -68,10 +68,16 @@ export function applyMachineHandlerToRecipe(
   recipe: Recipe,
   node: Pick<FactoryNode, "machineHandlerId">,
 ): Recipe {
-  const handler = getSelectedMachineHandler(recipe, node);
+  const handlers = getRecipeMachineHandlers(recipe);
+  const handler = handlers.find((entry) => entry.id === node.machineHandlerId) ?? handlers[0];
   const machineConfigControls = handler.machineConfigControls ?? recipe.machineConfigControls;
+  // Oracle runtime variants are computed in-game for the recipe map's
+  // default machine; a different selected machine must fall back to the
+  // static overclock math seeded with the handler's own duration/EU.
+  const runtimeCalculation = handler.id === handlers[0].id ? recipe.runtimeCalculation : undefined;
   return {
     ...recipe,
+    runtimeCalculation,
     machineType: handler.machineType,
     minimumTier: handler.minimumTier,
     durationTicks: handler.durationTicks ?? recipe.durationTicks,

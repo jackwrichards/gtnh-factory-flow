@@ -355,6 +355,49 @@ describe("multiblock machine config controls", () => {
   });
 });
 
+describe("machine handlers and runtime calculations", () => {
+  const runtimeCalculation = {
+    sourceKind: "gregtech-processing-logic" as const,
+    status: "computed" as const,
+    oracleEligible: true,
+    variants: [{ id: "tier-lv", durationTicks: 20, eut: 8 }],
+  };
+
+  const recipe: Recipe = {
+    ...testRecipe("Distillation Tower"),
+    runtimeCalculation,
+    machineHandlers: [
+      {
+        id: "dangote-distillus",
+        label: "Dangote Distillus",
+        machineType: "Dangote Distillus",
+        minimumTier: "EV",
+        kind: "multiblock",
+        durationTicks: 8,
+        eut: 480,
+      },
+    ],
+  };
+
+  it("keeps runtime variants for the default machine", () => {
+    expect(applyMachineHandlerToRecipe(recipe, {}).runtimeCalculation).toEqual(runtimeCalculation);
+    expect(
+      applyMachineHandlerToRecipe(recipe, { machineHandlerId: "distillation-tower" })
+        .runtimeCalculation,
+    ).toEqual(runtimeCalculation);
+  });
+
+  it("drops runtime variants when a different machine is selected", () => {
+    const applied = applyMachineHandlerToRecipe(recipe, {
+      machineHandlerId: "dangote-distillus",
+    });
+    expect(applied.runtimeCalculation).toBeUndefined();
+    expect(applied.durationTicks).toBe(8);
+    expect(applied.eut).toBe(480);
+    expect(applied.machineType).toBe("Dangote Distillus");
+  });
+});
+
 function testRecipe(machineType: string, minimumTier = "LV"): Recipe {
   return {
     id: machineType,
