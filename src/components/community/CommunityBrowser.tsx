@@ -547,10 +547,10 @@ function PlanCard({
             <button
               type="button"
               onClick={() => onOpen(plan)}
-              title="Open in editor"
+              title={plan.isMine ? "Open in editor" : "Open a copy in the editor"}
               className="inline-flex items-center gap-1 rounded border border-cyan-700 bg-cyan-600 px-2 py-1 font-medium text-white hover:bg-cyan-500"
             >
-              <Pencil className="h-3 w-3" /> Open
+              <Pencil className="h-3 w-3" /> {plan.isMine ? "Open" : "Open a copy"}
             </button>
             <button
               type="button"
@@ -810,7 +810,7 @@ function PlanPreviewModal({
             onClick={() => onOpen(plan)}
             className="inline-flex items-center gap-1.5 rounded border border-cyan-700 bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-500"
           >
-            <Pencil className="h-4 w-4" /> Open in editor
+            <Pencil className="h-4 w-4" /> {plan.isMine ? "Open in editor" : "Open a copy in the editor"}
           </button>
         </div>
       </div>
