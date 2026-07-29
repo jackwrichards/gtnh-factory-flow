@@ -62,6 +62,7 @@ normalizeSmelting(findDomain("smelting"));
 normalizeThaumcraft(findDomain("thaumcraft"));
 normalizeForestryBees(findDomain("forestryBees"));
 normalizeIc2Crops(findDomain("ic2Crops"));
+normalizeCropsNhCrops(findDomain("cropsNhCrops"));
 
 const dataset = {
   schemaVersion: 1,
@@ -733,6 +734,175 @@ function normalizeIc2Crops(domain) {
       },
     });
   }
+}
+
+// CropsNH steady-state reference point: perfect 31/31/31 seeds on a fully
+// supplied farm (water 100, fertilizer 100, sky access, both biome tags).
+// The app recomputes duration/output continuously from the same formulas
+// (verified against TileEntityCropSticks bytecode) when controls change.
+// Hoisted function: normalizeCropsNhCrops runs during module evaluation.
+function cropsNhReference() {
+  return { growth: 31, gain: 31, water: 100, fertilizer: 100, sky: true, biomeBonus: 28 };
+}
+
+function normalizeCropsNhCrops(domain) {
+  const CROPSNH_REFERENCE = cropsNhReference();
+  const machineType = "Crop Farm";
+  const crops = domain?.crops ?? [];
+  if (crops.length === 0) {
+    return;
+  }
+  const growthCycleTicks = positiveInt(domain?.config?.growthCycleTicks, 256);
+  const growthMultiplier = positiveNumber(domain?.config?.growthMultiplier, 1);
+
+  for (const crop of crops) {
+    const tier = positiveInt(crop.tier, 1);
+    const growthPoints = positiveInt(crop.growthDuration, 0);
+    const dropChance = positiveNumber(crop.dropChance, 0);
+    const dropTable = (crop.dropTable ?? [])
+      .map((entry) => ({
+        resource: resourceAmount(entry.resource),
+        stackSize: positiveNumber(entry.resource?.amount, 1),
+        weight: positiveInt(entry.weight, 0),
+      }))
+      .filter((entry) => entry.resource && entry.weight > 0);
+    if (growthPoints <= 0 || dropChance <= 0 || dropTable.length === 0) {
+      continue;
+    }
+
+    const durationTicks = cropsNhDurationTicks(
+      { tier, growthPoints, growthCycleTicks, growthMultiplier },
+      CROPSNH_REFERENCE,
+    );
+    if (!Number.isFinite(durationTicks) || durationTicks <= 0) {
+      continue;
+    }
+
+    const dropRounds = dropChance * 1.03 ** CROPSNH_REFERENCE.gain;
+    const outputSlot = (index) => ({
+      x: 124 + (index % 4) * 18,
+      y: dropTable.length > 4 ? 26 + Math.floor(index / 4) * 18 : 35,
+    });
+    const outputs = dropTable.map((entry, index) => ({
+      ...entry.resource,
+      amount: roundAmount(
+        dropRounds * (entry.weight / 10000) * (entry.stackSize + (CROPSNH_REFERENCE.gain + 1) / 100),
+      ),
+      chance: entry.weight < 10000 ? entry.weight / 10000 : undefined,
+      neiSlot: outputSlot(index),
+    }));
+
+    const input = cropsNhSeedInput(crop);
+    recipeMaps.add(machineType);
+    setRecipeMapIcon(machineType, crop.seed ?? crop.dropTable?.[0]?.resource);
+    addRecipe({
+      id: recipeId("cropsnh-crop", "cropsnh", crop.id ?? crop.name ?? hashRecipe(crop)),
+      name: `${machineType}: ${text(crop.name, crop.id ?? "Crop")}`,
+      kind: "crop_produce",
+      category: "cropsnh-crop",
+      machineType,
+      minimumTier: "NONE",
+      durationTicks,
+      eut: 0,
+      inputs: input ? [input] : [],
+      outputs,
+      metadata: {
+        cropsNh: removeUndefined({
+          cropId: text(crop.id, undefined),
+          tier,
+          growthPoints,
+          dropChance,
+          growthCycleTicks,
+          growthMultiplier,
+          minSeedBedTier: Number.isFinite(Number(crop.minSeedBedTier))
+            ? Number(crop.minSeedBedTier)
+            : undefined,
+          machineOnly: crop.machineOnly === true ? true : undefined,
+          biomeTags: normalizeStringArray(crop.likedBiomeTags),
+          requirements: normalizeStringArray(crop.growthRequirements),
+          soils: normalizeStringArray(
+            (crop.soils ?? []).map((entry) => entry?.displayName).filter(Boolean),
+          ),
+          drops: dropTable.map((entry) => ({
+            id: entry.resource.id,
+            stackSize: entry.stackSize,
+            weight: entry.weight,
+          })),
+        }),
+      },
+      notes: [
+        "Exported by the GTNH calculation oracle from the live CropsNH crop registry.",
+        `Tier ${tier}, ${growthPoints} growth points, base drop chance x${dropChance}.`,
+        crop.machineOnly === true ? "Grows only inside an Industrial Farm." : undefined,
+        ...(normalizeStringArray(crop.growthRequirements) ?? []),
+      ]
+        .filter(Boolean)
+        .join(" "),
+      source: {
+        datasetVersionId,
+        recipeMap: machineType,
+        exporter: "gtnh-oracle",
+        rawRecipeId: `cropsnh:${crop.id ?? crop.name ?? hashRecipe(crop)}`,
+      },
+      nei: {
+        slots: [
+          { side: "input", kind: "item", slotIndex: 0, x: 34, y: 35 },
+          ...outputs.map((output, index) => ({
+            side: "output",
+            kind: "item",
+            slotIndex: index,
+            ...outputSlot(index),
+          })),
+        ],
+        progressBars: [
+          { x: 78, y: 35, width: 24, height: 17, direction: "right", texture: "arrow" },
+        ],
+      },
+    });
+  }
+}
+
+// Mirrors TileEntityCropSticks.getNutrientsPerCycle + getGrowthRate + doGrowth.
+function cropsNhDurationTicks(crop, env) {
+  const waterBonus = Math.floor((Math.min(100, env.water) + 9) / 10);
+  const fertilizerBonus = Math.floor((Math.min(100, env.fertilizer) + 9) / 10);
+  const score = 5 + waterBonus + fertilizerBonus + (env.sky ? 2 : 0) + env.biomeBonus;
+  const supply = score * 5;
+  const demand = crop.tier * 10;
+  const base = 6 + env.growth;
+  const rate =
+    supply >= demand
+      ? Math.trunc((base * (100 + supply - demand)) / 100)
+      : Math.max(0, Math.trunc((base * (100 - (demand - supply) * 4)) / 100));
+  const perCycle = Math.trunc(rate * crop.growthMultiplier);
+  if (perCycle <= 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.ceil(crop.growthPoints / perCycle) * crop.growthCycleTicks;
+}
+
+function cropsNhSeedInput(crop) {
+  const icon = resourceAmount(crop.seed ?? crop.dropTable?.[0]?.resource, {
+    consumed: false,
+    defaultAmount: 1,
+  });
+  const name = text(crop.name, crop.id ?? hashRecipe(crop));
+  return removeUndefined({
+    kind: "item",
+    id: `factoryflow:cropsnh_seed:${slug(crop.id ?? name)}`,
+    amount: 1,
+    displayName: `${name} Seeds`,
+    iconPath: icon?.iconPath,
+    dominantColor: icon?.dominantColor,
+    modId: icon?.modId ?? "cropsnh",
+    tooltip: ["CropsNH crop seed", `Crop: ${name}`, crop.className].filter(Boolean),
+    consumed: false,
+    neiSlot: { x: 34, y: 35 },
+  });
+}
+
+function roundAmount(value) {
+  return Math.round(value * 1e6) / 1e6;
 }
 
 function beeSpeciesInput(species) {

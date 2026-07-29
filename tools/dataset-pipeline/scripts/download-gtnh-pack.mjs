@@ -6,6 +6,23 @@ if (!outputPath) {
   throw new Error("Usage: download-gtnh-pack.mjs <output.zip>");
 }
 
+// Local pack source for offline/pre-downloaded runs (used by the WSL rebuild
+// flow): skips every network path and copies the zip into the pack cache.
+const localZip = process.env.GTNH_PACK_LOCAL_ZIP;
+if (localZip) {
+  const source = path.resolve(localZip);
+  const stats = await fs.stat(source);
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  const existing = await fs.stat(outputPath).catch(() => undefined);
+  if (existing && existing.size === stats.size) {
+    console.log(`Using existing local GTNH pack copy: ${formatBytes(existing.size)}.`);
+  } else {
+    console.log(`Using local GTNH pack: ${source} (${formatBytes(stats.size)})`);
+    await fs.copyFile(source, outputPath);
+  }
+  process.exit(0);
+}
+
 const channel = requiredEnv("GTNH_DATASET_CHANNEL");
 const versionLabel = requiredEnv("GTNH_DATASET_VERSION_LABEL");
 const sourceKind = requiredEnv("GTNH_SOURCE_KIND");

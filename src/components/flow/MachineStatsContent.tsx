@@ -2,6 +2,7 @@
 
 import type { MachineHandler, Recipe } from "@/lib/model/types";
 import { applyMachineHandlerToRecipe, getRecipeMachineHandlers } from "@/lib/model/recipe-rules";
+import { getCropsNhStats } from "@/lib/model/passive-production";
 
 const BONUS_COLOR = "#4ade80";
 const PENALTY_COLOR = "#f87171";
@@ -49,6 +50,77 @@ function speedAndPowerControls(recipe: Recipe): string[] {
   return [...names];
 }
 
+/**
+ * Hover panel for a crop source node: the crop's fixed card data and how the
+ * simulator turns stats + environment into a rate. The pickable knobs
+ * themselves (stats, water, sky, biome, crop count) are already on screen.
+ */
+function CropSourceStatsContent({ recipe }: { recipe: Recipe }) {
+  const stats = getCropsNhStats(recipe);
+  if (!stats) {
+    return null;
+  }
+  const meta = (recipe.metadata as { cropsNh?: Record<string, unknown> } | undefined)?.cropsNh;
+  const requirements = Array.isArray(meta?.requirements)
+    ? (meta?.requirements as string[]).slice(0, 3)
+    : [];
+  const demand = stats.tier * 10;
+  const maxSupply = 55 * 5;
+  const cropName = recipe.name.includes(": ")
+    ? recipe.name.slice(recipe.name.indexOf(": ") + 2)
+    : recipe.name;
+
+  return (
+    <div className="w-80">
+      <div className="flex items-baseline gap-2 border-b border-white/15 pb-1.5">
+        <span className="truncate text-[17px] font-semibold text-white">{cropName}</span>
+        <span className="ml-auto shrink-0 text-[12px] uppercase tracking-wide text-slate-400">
+          Crop
+        </span>
+      </div>
+
+      <div className="mt-2 space-y-1">
+        <StatRow label="Crop tier">
+          <span className="text-slate-100">{stats.tier}</span>
+          <span className="text-slate-400"> (needs {demand} / {maxSupply} nutrients)</span>
+        </StatRow>
+        <StatRow label="Growth points">
+          <span className="text-slate-100">{stats.growthPoints.toLocaleString()}</span>
+        </StatRow>
+        <StatRow label="Drop rounds">
+          <span style={{ color: BONUS_COLOR }}>
+            {(stats.dropChance * 1.03 ** 31).toLocaleString(undefined, {
+              maximumFractionDigits: 2,
+            })}
+            ×
+          </span>
+          <span className="text-slate-400"> at 31 gain</span>
+        </StatRow>
+        {stats.machineOnly ? (
+          <StatRow label="Farm">
+            <span style={{ color: PENALTY_COLOR }}>Industrial Farm only</span>
+          </StatRow>
+        ) : null}
+        {requirements.map((requirement) => (
+          <p key={requirement} className="text-[15px] leading-snug text-slate-300">
+            {requirement}
+          </p>
+        ))}
+      </div>
+
+      <div className="mt-2.5 border-t border-white/10 pt-2">
+        <p className="text-[16px] font-semibold leading-snug text-amber-300">How the rate works.</p>
+        <p className="mt-0.5 text-[15px] leading-relaxed text-slate-100">
+          Every 256 ticks the crop gains (6 + Growth) points, scaled up by spare nutrients and down
+          4× as hard by missing ones — 25+ short and it stops growing. Each harvest rolls{" "}
+          <span style={{ color: BONUS_COLOR }}>1.03^Gain</span> more drop rounds plus a bonus item
+          chance. Crop count multiplies the rate like machine count.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function StatRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 text-[16px] leading-snug">
@@ -70,6 +142,11 @@ export function MachineStatsContent({
   recipe: Recipe;
   handler: MachineHandler;
 }) {
+  const cropStats = getCropsNhStats(recipe);
+  if (cropStats) {
+    return <CropSourceStatsContent recipe={recipe} />;
+  }
+
   const handlers = getRecipeMachineHandlers(recipe);
   const isDefault = handler.id === handlers[0]?.id;
   const applied = applyMachineHandlerToRecipe(recipe, { machineHandlerId: handler.id });

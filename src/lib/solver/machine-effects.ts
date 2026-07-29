@@ -7,9 +7,15 @@ import {
   BEE_ENVIRONMENT_CONTROL_ID,
   BEE_INDUSTRIAL_PRODUCTION_CONTROL_ID,
   BEE_INDUSTRIAL_SPEED_CONTROL_ID,
+  CROPSNH_REFERENCE_ENVIRONMENT,
   MEGA_APIARY_BATCH_CYCLES,
+  cropsNhEnvironmentFromTiers,
+  cropsNhExpectedDrop,
+  cropsNhGrowthRate,
+  cropsNhHarvestTicks,
   getBeeBaseProductionTerm,
   getBeeProductionTermModifier,
+  getCropsNhStats,
   isBeeFrameSlotControlId,
   isBeeProductionRecipe,
 } from "@/lib/model/passive-production";
@@ -21,11 +27,28 @@ type VoltageTier = Exclude<MachineTier, "DEMO">;
 const TGS_BASE_OUTPUT_MULTIPLIER = 5;
 
 export function getMachineOutputMultiplier(
-  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
+  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls" | "metadata">,
   node: Pick<FactoryNode, "machineConfigTiers">,
   output: RecipeOutput,
   tier: VoltageTier,
 ): number {
+  const cropStats = getCropsNhStats(recipe);
+  if (cropStats) {
+    const env = cropsNhEnvironmentFromTiers(node.machineConfigTiers);
+    if (cropsNhGrowthRate(cropStats, env) <= 0) {
+      // Nutrient supply is 25+ under demand: the crop never grows (and risks
+      // getting sick), so the farm produces nothing at all.
+      return 0;
+    }
+    const drop = cropStats.drops.find((entry) => entry.id === output.id);
+    if (!drop) {
+      return 1;
+    }
+    const reference = cropsNhExpectedDrop(cropStats, CROPSNH_REFERENCE_ENVIRONMENT.gain, drop);
+    const current = cropsNhExpectedDrop(cropStats, env.gain, drop);
+    return reference > 0 ? current / reference : 1;
+  }
+
   const configMultiplier = getRecipeMachineConfigTierControls(recipe, node)
     .filter(
       (control) =>
@@ -204,9 +227,22 @@ export function getMachineParallelMultiplier(
 }
 
 export function getMachineDurationMultiplier(
-  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
+  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls" | "metadata">,
   node: Pick<FactoryNode, "coilTier" | "machineConfigTiers">,
 ): number {
+  const cropStats = getCropsNhStats(recipe);
+  if (cropStats) {
+    const env = cropsNhEnvironmentFromTiers(node.machineConfigTiers);
+    const ticks = cropsNhHarvestTicks(cropStats, env);
+    const referenceTicks = cropsNhHarvestTicks(cropStats, CROPSNH_REFERENCE_ENVIRONMENT);
+    if (!Number.isFinite(ticks) || referenceTicks <= 0) {
+      // Non-growing crops are surfaced through a zero output multiplier;
+      // keep the duration finite so the solver stays stable.
+      return 1;
+    }
+    return ticks / referenceTicks;
+  }
+
   const coilControl = getRecipeCoilTierControl(recipe, node);
   const coilMultiplier = coilControl?.current.durationMultiplier ?? 1;
   const configMultiplier = getRecipeMachineConfigTierControls(recipe, node).reduce(

@@ -159,6 +159,19 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       ...overclockedStats,
     };
 
+    const cropSeedResource =
+      cropProductionControls.length > 0
+        ? effectiveRecipe.inputs.find(
+            (input) =>
+              input.id.startsWith("factoryflow:cropsnh_seed:") ||
+              input.id.startsWith("factoryflow:ic2_crop_seed:"),
+          )
+        : undefined;
+    const cropTitle =
+      cropSeedResource && recipe.name.includes(": ")
+        ? recipe.name.slice(recipe.name.indexOf(": ") + 2)
+        : undefined;
+
     return {
       machineHandlers,
       selectedMachineHandler,
@@ -168,6 +181,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       coilControl,
       coilResource,
       cropProductionControls,
+      cropSeedResource,
+      cropTitle,
       isCropProductionNode: cropProductionControls.length > 0,
       beeFrameControls,
       beePanelControls: getBeePanelControls(beeProductionControls),
@@ -195,6 +210,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     coilControl,
     coilResource,
     cropProductionControls,
+    cropSeedResource,
+    cropTitle,
     isCropProductionNode,
     beeFrameControls,
     beePanelControls,
@@ -336,10 +353,23 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             content={<MachineStatsContent recipe={recipe} handler={selectedMachineHandler} />}
           >
             <div
-              className="minecraft-title h-6 truncate border-2 border-[var(--mc-33)] bg-[var(--mc-61)] px-2 text-center text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]"
+              className="minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] px-2 text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]"
               style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
             >
-              {selectedMachineHandler.label}
+              {cropSeedResource?.iconPath || cropSeedResource?.iconAtlas ? (
+                <ResourceIcon
+                  resource={cropSeedResource}
+                  bare
+                  tooltip={false}
+                  showAmount={false}
+                  showConsumedState={false}
+                  iconPixelSize={20}
+                  className="mr-1 h-5 w-5 shrink-0 !overflow-visible"
+                />
+              ) : null}
+              <span className="mx-auto min-w-0 truncate">
+                {cropTitle ?? selectedMachineHandler.label}
+              </span>
             </div>
           </MinecraftTooltip>
           {tierControl && tierColor ? (
