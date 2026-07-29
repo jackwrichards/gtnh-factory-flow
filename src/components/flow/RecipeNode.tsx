@@ -47,6 +47,7 @@ import {
 } from "@/lib/model";
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
 import { CropPickerMenu } from "./CropPickerMenu";
+import { MinecraftSelect } from "./MinecraftSelect";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { MachineStatsContent } from "./MachineStatsContent";
 import { UsageLimitContent } from "@/components/inspector/UsageLimitContent";
@@ -1265,7 +1266,7 @@ function MachineConfigControlPanel({
       <div className="grid grid-cols-[repeat(auto-fit,minmax(128px,1fr))] gap-1">
         {controls.map((control) => (
           <label key={control.id} className="min-w-0">
-            <span className="mb-0.5 block truncate text-[8px] font-bold uppercase leading-3 text-[var(--mc-ink-muted)]">
+            <span className="mb-0.5 block truncate text-[10px] font-bold uppercase leading-4 text-[var(--mc-ink-muted)]">
               {control.label}
             </span>
             <span className="flex min-w-0 items-center gap-1">
@@ -1286,22 +1287,15 @@ function MachineConfigControlPanel({
                   </span>
                 )}
               </span>
-              <select
+              <MinecraftSelect
                 value={control.current.key}
-                onChange={(event) => onSelect(control.id, event.target.value)}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => event.stopPropagation()}
+                options={control.tiers}
+                onSelect={(key) => onSelect(control.id, key)}
                 disabled={control.tiers.length <= 1}
-                className="h-6 min-w-0 flex-1 border border-[var(--mc-33)] bg-[var(--mc-85)] px-1 text-[10px] font-bold leading-4 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-[var(--mc-100)] disabled:cursor-not-allowed disabled:text-[var(--mc-33)]"
                 title={`${control.label}: ${control.current.label}`}
-                aria-label={control.label}
-              >
-                {control.tiers.map((tier) => (
-                  <option key={tier.key} value={tier.key}>
-                    {tier.label}
-                  </option>
-                ))}
-              </select>
+                ariaLabel={control.label}
+                className="flex-1"
+              />
             </span>
           </label>
         ))}
@@ -1337,25 +1331,17 @@ function PassiveProductionConfigPanel({
         {controls.map((control) => (
           <MinecraftTooltip key={control.id} content={getControlHelp?.(control.id)}>
           <label className="min-w-0">
-            <span className="mb-0.5 block truncate text-[8px] font-bold uppercase leading-3 text-[var(--mc-ink-muted)]">
+            <span className="mb-0.5 block truncate text-[10px] font-bold uppercase leading-4 text-[var(--mc-ink-muted)]">
               {control.label}
             </span>
-            <select
+            <MinecraftSelect
               value={control.current.key}
-              onChange={(event) => onSelect(control.id, event.target.value)}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => event.stopPropagation()}
+              options={control.tiers}
+              onSelect={(key) => onSelect(control.id, key)}
               disabled={control.tiers.length <= 1}
-              className="h-6 w-full min-w-0 border border-[var(--mc-33)] bg-[var(--mc-85)] px-1 text-[10px] font-bold leading-4 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-[var(--mc-100)] disabled:cursor-not-allowed disabled:text-[var(--mc-33)]"
               title={`${control.label}: ${control.current.label}`}
-              aria-label={control.label}
-            >
-              {control.tiers.map((tier) => (
-                <option key={tier.key} value={tier.key}>
-                  {tier.label}
-                </option>
-              ))}
-            </select>
+              ariaLabel={control.label}
+            />
           </label>
           </MinecraftTooltip>
         ))}
