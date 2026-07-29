@@ -200,6 +200,105 @@ describe("buildMachineHandlerTemplates", () => {
     expect(height.tiers[4].parallelMultiplier).toBeCloseTo(3.5);
   });
 
+  it("reads flat voltage-scaled parallels (Elemental Duplicator)", () => {
+    const templates = buildMachineHandlerTemplates("Replicator", [
+      catalyst("Replicator", { sourceClass: SINGLE_CLASS }),
+      catalyst("Elemental Duplicator", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: [
+          "8 Parallels per Voltage Tier",
+          "200% Speed",
+          "100% EU Usage",
+          "Machine does not lose efficiency when overclocked",
+        ],
+      }),
+    ]);
+
+    const duplicator = templates.find((template) => template.label === "Elemental Duplicator");
+    expect(duplicator.durationMultiplier).toBeCloseTo(0.5);
+    expect(duplicator.eutMultiplier).toBeUndefined();
+    expect(duplicator.perfectOverclock).toBe(true);
+    const control = duplicator.machineConfigControls.find((c) => c.id === "voltageParallel");
+    expect(control.tiers[0].parallelPerVoltageTier).toBe(8);
+  });
+
+  it("takes the steady-state maximum of ranged stats (Industrial Centrifuge)", () => {
+    const templates = buildMachineHandlerTemplates("Multiblock Centrifuge", [
+      catalyst("Industrial Centrifuge", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: ["4 - 8 Parallels per Voltage Tier", "200% - 300% Speed", "90% EU Usage"],
+      }),
+    ]);
+
+    expect(templates[0].durationMultiplier).toBeCloseTo(1 / 3);
+    expect(templates[0].eutMultiplier).toBeCloseTo(0.9);
+    const control = templates[0].machineConfigControls.find((c) => c.id === "voltageParallel");
+    expect(control.tiers[0].parallelPerVoltageTier).toBe(8);
+  });
+
+  it("reads enumerated parallel tables (Solar Factory and EIC styles)", () => {
+    const solar = buildMachineHandlerTemplates("Solar Factory", [
+      catalyst("Solar Factory", {
+        sourceClass: MULTI_CLASS,
+        tooltip: [
+          "Precise Casing Tier determines Parallels",
+          "Mk-I/MK-II/MK-III/MK-IV->8/16/32/64 Parallels",
+        ],
+      }),
+    ])[0];
+    const solarControl = solar.machineConfigControls[0];
+    expect(solarControl.tiers.map((tier) => tier.parallelMultiplier)).toEqual([8, 16, 32, 64]);
+    expect(solarControl.defaultKey).toBe(solarControl.tiers[0].key);
+
+    const eic = buildMachineHandlerTemplates("Implosion Compressor", [
+      catalyst("New Implosion Compressor", {
+        sourceClass: MULTI_CLASS,
+        tooltip: [
+          "Parallels are determined by Containment Block Tier",
+          "Neutronium : 1 Parallel",
+          "Infinity : 4 Parallels",
+          "Spacetime : 64 Parallels",
+        ],
+      }),
+    ])[0];
+    const eicControl = eic.machineConfigControls[0];
+    expect(eicControl.tiers.map((tier) => tier.parallelMultiplier)).toEqual([1, 4, 64]);
+  });
+
+  it("adds the high-pressure choice on steam multiblocks", () => {
+    const templates = buildMachineHandlerTemplates("Macerator", [
+      catalyst("Macerator", { sourceClass: SINGLE_CLASS }),
+      catalyst("Steam Grinder", {
+        sourceClass: GTPP_MULTI_CLASS,
+        tooltip: [
+          "8 Parallels",
+          "125% Speed",
+          "62.5% Steam Usage",
+          "High-Pressure Doubles Speed and Steam Usage",
+        ],
+      }),
+    ]);
+
+    const grinder = templates.find((template) => template.label === "Steam Grinder");
+    const pressure = grinder.machineConfigControls.find((c) => c.id === "steamPressure");
+    expect(pressure.defaultKey).toBe("normal");
+    expect(pressure.tiers.find((tier) => tier.key === "high").durationMultiplier).toBe(0.5);
+  });
+
+  it("reads Runs-at lines from Space Elevator modules", () => {
+    const templates = buildMachineHandlerTemplates("Space Assembler", [
+      catalyst("Space Assembler Module MK-II", {
+        sourceClass: MULTI_CLASS,
+        tooltip: ["Runs at UIV at 150% speed with up to 16 parallels"],
+      }),
+    ]);
+
+    expect(templates[0].minimumTier).toBe("UIV");
+    expect(templates[0].durationMultiplier).toBeCloseTo(1 / 1.5);
+    const control = templates[0].machineConfigControls.find((c) => c.id === "machineParallel");
+    expect(control.tiers[0].parallelMultiplier).toBe(16);
+  });
+
   it("reads perfect overclock statements", () => {
     const templates = buildMachineHandlerTemplates("Fusion Reactor", [
       catalyst("Fusion Control Computer Mark I", { sourceClass: MULTI_CLASS }),
@@ -221,6 +320,8 @@ describe("buildMachineHandlerTemplates", () => {
         tooltip: [
           "Voltage Tier * n Parallels",
           "n=2 initially. n=8 after inserting Maceration Upgrade Chip",
+          "Tier 1: 160% speed",
+          "Tier 2: 640% speed",
         ],
       }),
     ]);
@@ -229,6 +330,8 @@ describe("buildMachineHandlerTemplates", () => {
     const control = stack.machineConfigControls.find((entry) => entry.id === "voltageParallel");
     expect(control.tiers.map((tier) => tier.parallelPerVoltageTier)).toEqual([2, 8]);
     expect(control.defaultKey).toBe("per-tier-2");
+    expect(control.tiers[0].durationMultiplier).toBeCloseTo(1 / 1.6);
+    expect(control.tiers[1].durationMultiplier).toBeCloseTo(1 / 6.4);
   });
 
   it("reads coil formula tooltips generically (chem plant and LFE)", () => {

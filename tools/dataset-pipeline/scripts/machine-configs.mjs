@@ -383,6 +383,7 @@ function parseMultiblockCatalystStats(tooltip, machineType) {
   const eutMultiplier = modeStats?.eutMultiplier ?? base.eutMultiplier;
   const perfectOverclock = base.perfectOverclock || modeStats?.perfectOverclock || undefined;
   const maxParallel = modeStats?.maxParallel ?? base.maxParallel;
+  const minimumTier = modeStats?.minimumTier ?? base.minimumTier;
 
   const controls = [...base.controls, ...(modeStats?.controls ?? [])];
   if (maxParallel !== undefined) {
@@ -394,6 +395,7 @@ function parseMultiblockCatalystStats(tooltip, machineType) {
   if (durationMultiplier !== undefined) stats.durationMultiplier = durationMultiplier;
   if (eutMultiplier !== undefined) stats.eutMultiplier = eutMultiplier;
   if (perfectOverclock) stats.perfectOverclock = true;
+  if (minimumTier !== undefined) stats.minimumTier = minimumTier;
   if (merged) stats.machineConfigControls = merged;
   return stats;
 }
@@ -403,6 +405,7 @@ function parseStatLines(lines, { allLines }) {
   let durationMultiplier;
   let eutMultiplier;
   let maxParallel;
+  let minimumTier;
   let perfectOverclock;
   let voltageParallelBase;
   const voltageParallelUpgrades = [];
@@ -418,9 +421,121 @@ function parseStatLines(lines, { allLines }) {
     if (
       /performs?\s+4\/4\s+overclocks?/i.test(line) ||
       /does not lose efficiency when overclocked/i.test(line) ||
+      /performs? perfect overclocks? on lower-tier recipes/i.test(line) ||
       /reduce recipe time by a factor 4 instead of 2/i.test(line)
     ) {
       perfectOverclock = true;
+      continue;
+    }
+
+    // "N Parallels per Voltage Tier" and ranged "4 - 8 Parallels per Voltage
+    // Tier" (momentum machines; the planner assumes sustained running, so
+    // the steady-state maximum applies).
+    const perVoltage =
+      /^(?:Gains\s+)?(\d+)\s+Parallels?\s+per\s+Voltage\s+Tier$/i.exec(line) ??
+      /^(\d+)\s*-\s*(\d+)\s+Parallels?\s+per\s+Voltage\s+Tier$/i.exec(line);
+    if (perVoltage) {
+      const count = Number.parseInt(perVoltage[2] ?? perVoltage[1], 10);
+      if (count > 0 && count <= 1024) {
+        controls.push(voltageParallelControl(count, []));
+      }
+      continue;
+    }
+
+    // Ranged speed totals ("200% - 300% Speed"): steady-state maximum.
+    const speedRange = /^(\d+(?:[.,]\d+)?)\s*%\s*-\s*(\d+(?:[.,]\d+)?)\s*%\s+Speed$/i.exec(line);
+    if (speedRange) {
+      const factor = parseTooltipNumber(speedRange[2]) / 100;
+      if (factor > 0.01 && factor <= 100 && factor !== 1) {
+        durationMultiplier = 1 / factor;
+      }
+      continue;
+    }
+
+    // "Runs at UHV with up to 4 parallels" / "Runs at UIV at 150% speed
+    // with up to 16 parallels" (Space Elevator modules).
+    const runsAt =
+      /^Runs at ([A-Za-z]{2,4})(?: at (\d+(?:[.,]\d+)?)% speed)? with up to (\d+) parallels?$/i.exec(
+        line,
+      );
+    if (runsAt) {
+      minimumTier = runsAt[1];
+      if (runsAt[2]) {
+        const factor = parseTooltipNumber(runsAt[2]) / 100;
+        if (factor > 0 && factor !== 1) {
+          durationMultiplier = 1 / factor;
+        }
+      }
+      const count = Number.parseInt(runsAt[3], 10);
+      if (count > 1) {
+        maxParallel = count;
+      }
+      continue;
+    }
+
+    // Steam multiblocks: high-pressure builds double speed (and steam use,
+    // which the EU-based power model does not track).
+    if (/^High-Pressure Doubles Speed and Steam Usage$/i.test(line)) {
+      controls.push({
+        id: "steamPressure",
+        label: "Pressure",
+        minimumKey: "normal",
+        defaultKey: "normal",
+        tiers: [
+          {
+            key: "normal",
+            label: "Normal Pressure",
+            resource: machineConfigResource(
+              "factoryflow:machine_config/steam_pressure_normal",
+              "Normal Pressure",
+              ["Steam machine build", line],
+            ),
+          },
+          {
+            key: "high",
+            label: "High Pressure",
+            durationMultiplier: 0.5,
+            resource: machineConfigResource(
+              "factoryflow:machine_config/steam_pressure_high",
+              "High Pressure",
+              ["Steam machine build", "Doubles speed and steam usage", line],
+            ),
+          },
+        ],
+      });
+      continue;
+    }
+
+    // Enumerated parallel tables. Two phrasings exist:
+    //   "Mk-I/MK-II/MK-III/MK-IV->8/16/32/64 Parallels" after a line like
+    //   "Precise Casing Tier determines Parallels" (Solar Factory), and
+    //   "Neutronium : 1 Parallel" rows after "Parallels are determined by
+    //   Containment Block Tier" (Electric Implosion Compressor).
+    const determinedBy = /^Parallels are determined by (.{3,40})$/i.exec(
+      line,
+    ) ?? /^(.{3,40}?) determines Parallels$/i.exec(line);
+    if (determinedBy) {
+      const label = determinedBy[1].trim();
+      const rows = [];
+      for (const other of allLines) {
+        const arrowTable = /^(.+?)->((?:\d+\/)+\d+)\s+Parallels?$/i.exec(other);
+        if (arrowTable) {
+          const names = arrowTable[1].split("/").map((name) => name.trim());
+          const counts = arrowTable[2].split("/").map((value) => Number.parseInt(value, 10));
+          if (names.length === counts.length) {
+            for (let index = 0; index < names.length; index += 1) {
+              rows.push({ name: names[index], count: counts[index] });
+            }
+          }
+        }
+        const colonRow = /^([A-Za-z][A-Za-z0-9 .'-]{1,32}?)\s*:\s*(\d+)\s+Parallels?$/.exec(other);
+        if (colonRow && !/L\/s|EU|%/.test(other)) {
+          rows.push({ name: colonRow[1].trim(), count: Number.parseInt(colonRow[2], 10) });
+        }
+      }
+      if (rows.length >= 2) {
+        controls.push(enumeratedParallelControl(label, rows));
+      }
       continue;
     }
 
@@ -481,6 +596,7 @@ function parseStatLines(lines, { allLines }) {
     // <upgrade>": a selectable control whose parallels scale with voltage.
     if (/^Voltage Tier\s*[*x]\s*n\s+Parallels$/i.test(line)) {
       voltageParallelBase = null; // marks the pattern as seen
+      const tierSpeeds = [];
       for (const other of allLines) {
         const initial = /n\s*=\s*(\d+)\s+initially/i.exec(other);
         if (initial) {
@@ -493,6 +609,16 @@ function parseStatLines(lines, { allLines }) {
             label: upgraded[2].trim(),
           });
         }
+        // "Tier 1: 160% speed" / "Tier 2: 640% speed" pair with the
+        // initial/upgraded options in order (Industrial Maceration Stack).
+        const tierSpeed = /^Tier (\d+):\s*(\d+(?:[.,]\d+)?)\s*%\s+speed$/i.exec(other);
+        if (tierSpeed) {
+          tierSpeeds[Number.parseInt(tierSpeed[1], 10) - 1] =
+            parseTooltipNumber(tierSpeed[2]) / 100;
+        }
+      }
+      if (tierSpeeds.length > 0) {
+        voltageParallelUpgrades.speeds = tierSpeeds;
       }
       continue;
     }
@@ -590,7 +716,44 @@ function parseStatLines(lines, { allLines }) {
     controls.push(voltageParallelControl(voltageParallelBase, voltageParallelUpgrades));
   }
 
-  return { durationMultiplier, eutMultiplier, maxParallel, perfectOverclock, controls };
+  return {
+    durationMultiplier,
+    eutMultiplier,
+    maxParallel,
+    minimumTier: normalizeStatVoltageTier(minimumTier),
+    perfectOverclock,
+    controls: controls.filter(Boolean),
+  };
+}
+
+function normalizeStatVoltageTier(value) {
+  if (!value) {
+    return undefined;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  return VOLTAGE_TIER_NAMES.find((tier) => tier.toLowerCase() === normalized);
+}
+
+function enumeratedParallelControl(label, rows) {
+  const id = `parallel-${slug(label)}`;
+  return {
+    id,
+    label,
+    minimumKey: slug(rows[0].name),
+    defaultKey: slug(rows[0].name),
+    tiers: rows
+      .filter((row) => Number.isFinite(row.count) && row.count >= 1 && row.count <= 4096)
+      .map((row) => ({
+        key: slug(row.name),
+        label: `${row.name} (${row.count} Parallels)`,
+        parallelMultiplier: row.count,
+        resource: machineConfigResource(
+          `factoryflow:machine_config/${slug(label)}_${slug(row.name)}`,
+          row.name,
+          [label, `Parallels: ${row.count}`],
+        ),
+      })),
+  };
 }
 
 function coilFormulaControl({ line, effect, neutral }) {
@@ -643,12 +806,20 @@ function structureDimensionControl(dimension, divisor, cap, line) {
 }
 
 function voltageParallelControl(baseCount, upgrades) {
+  const speeds = upgrades.speeds ?? [];
+  const speedEffect = (index) => {
+    const factor = speeds[index];
+    return Number.isFinite(factor) && factor > 0 && factor !== 1
+      ? { durationMultiplier: 1 / factor }
+      : {};
+  };
   const tiers = [];
   if (Number.isFinite(baseCount) && baseCount > 0) {
     tiers.push({
       key: `per-tier-${baseCount}`,
       label: `${baseCount} per Voltage Tier`,
       parallelPerVoltageTier: baseCount,
+      ...speedEffect(0),
       resource: machineConfigResource(
         `factoryflow:machine_config/per_tier_${baseCount}`,
         `${baseCount} Parallels per Voltage Tier`,
@@ -656,7 +827,7 @@ function voltageParallelControl(baseCount, upgrades) {
       ),
     });
   }
-  for (const upgrade of upgrades) {
+  for (const [upgradeIndex, upgrade] of upgrades.entries()) {
     if (!Number.isFinite(upgrade.count) || upgrade.count <= 0) {
       continue;
     }
@@ -664,6 +835,7 @@ function voltageParallelControl(baseCount, upgrades) {
       key: `per-tier-${upgrade.count}`,
       label: `${upgrade.count} per Voltage Tier (${upgrade.label})`,
       parallelPerVoltageTier: upgrade.count,
+      ...speedEffect(upgradeIndex + (Number.isFinite(baseCount) && baseCount > 0 ? 1 : 0)),
       resource: machineConfigResource(
         `factoryflow:machine_config/per_tier_${upgrade.count}`,
         `${upgrade.count} Parallels per Voltage Tier`,
