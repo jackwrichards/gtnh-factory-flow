@@ -379,6 +379,19 @@ describe("buildMachineHandlerTemplates", () => {
     expect(dangote.eutMultiplier).toBeCloseTo(0.15);
   });
 
+  it("applies wiki stats even when the class heuristic misjudges the machine", () => {
+    const templates = buildMachineHandlerTemplates("Assembler", [
+      catalyst("Assembling Machine", { sourceClass: SINGLE_CLASS }),
+      catalyst("Precise Auto-Assembler MT-3662", { sourceClass: SINGLE_CLASS }),
+    ]);
+
+    const paa = templates.find((template) => template.label.startsWith("Precise Auto-Assembler"));
+    expect(paa.kind).toBe("multiblock");
+    expect(paa.durationMultiplier).toBeCloseTo(0.5);
+    const casing = paa.machineConfigControls.find((c) => c.id === "preciseCasing");
+    expect(casing.tiers.map((tier) => tier.parallelMultiplier)).toEqual([16, 32, 64, 128, 256]);
+  });
+
   it("reads perfect overclock statements", () => {
     const templates = buildMachineHandlerTemplates("Fusion Reactor", [
       catalyst("Fusion Control Computer Mark I", { sourceClass: MULTI_CLASS }),

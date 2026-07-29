@@ -294,13 +294,13 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
     }
 
     const stats = multiblock ? parseMultiblockCatalystStats(tooltip, machineType) : {};
-    if (multiblock) {
-      applyWikiStats(stats, label, machineType);
-    }
+    // Wiki entries exist only for multiblocks; a match also corrects
+    // machines the class-name heuristic misjudged (Precise Auto-Assembler).
+    const hasWikiStats = applyWikiStats(stats, label, machineType);
     families.set(familyKey, {
       id: slug(label),
       label,
-      kind: multiblock ? "multiblock" : "single",
+      kind: multiblock || hasWikiStats ? "multiblock" : "single",
       minimumTier,
       ...stats,
     });
@@ -766,7 +766,7 @@ function parseStatLines(lines, { allLines }) {
 function applyWikiStats(stats, label, machineType) {
   const wiki = wikiStatsForMachine(label, machineType);
   if (!wiki) {
-    return;
+    return false;
   }
   if (stats.durationMultiplier === undefined && wiki.durationMultiplier !== undefined) {
     stats.durationMultiplier = wiki.durationMultiplier;
@@ -780,6 +780,7 @@ function applyWikiStats(stats, label, machineType) {
       wiki.selector,
     ]);
   }
+  return true;
 }
 
 function normalizeStatVoltageTier(value) {
