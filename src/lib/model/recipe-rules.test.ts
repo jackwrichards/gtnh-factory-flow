@@ -14,6 +14,13 @@ describe("recipe machine handlers", () => {
       ...testRecipe("Fluid Extractor"),
       machineHandlers: [
         {
+          id: "fluid-extractor",
+          label: "Fluid Extractor",
+          machineType: "Fluid Extractor",
+          minimumTier: "LV",
+          kind: "single" as const,
+        },
+        {
           id: "nei-catalyst-multiblock-fluid-extractor",
           label: "Multiblock Fluid Extractor",
           machineType: "Multiblock Fluid Extractor",
@@ -26,6 +33,33 @@ describe("recipe machine handlers", () => {
     expect(getRecipeMachineHandlers(recipe).map((handler) => handler.label)).toEqual([
       "Fluid Extractor",
       "Multiblock Fluid Extractor",
+    ]);
+  });
+
+  it("does not invent a category entry next to dataset handlers", () => {
+    const recipe = {
+      ...testRecipe("Blast Furnace"),
+      machineHandlers: [
+        {
+          id: "electric-blast-furnace",
+          label: "Electric Blast Furnace",
+          machineType: "Electric Blast Furnace",
+          minimumTier: "MV",
+          kind: "multiblock" as const,
+        },
+        {
+          id: "volcanus",
+          label: "Volcanus",
+          machineType: "Volcanus",
+          minimumTier: "MV",
+          kind: "multiblock" as const,
+        },
+      ],
+    };
+
+    expect(getRecipeMachineHandlers(recipe).map((handler) => handler.label)).toEqual([
+      "Electric Blast Furnace",
+      "Volcanus",
     ]);
   });
 
@@ -367,6 +401,13 @@ describe("machine handlers and runtime calculations", () => {
     ...testRecipe("Distillation Tower"),
     runtimeCalculation,
     machineHandlers: [
+      {
+        id: "distillation-tower",
+        label: "Distillation Tower",
+        machineType: "Distillation Tower",
+        minimumTier: "MV",
+        kind: "multiblock",
+      },
       {
         id: "dangote-distillus",
         label: "Dangote Distillus",

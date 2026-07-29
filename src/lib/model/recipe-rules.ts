@@ -22,15 +22,12 @@ export function expandMachineRecipeVariants(recipes: Recipe[]): Recipe[] {
 export function getRecipeMachineHandlers(
   recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers">,
 ): MachineHandler[] {
-  const baseMachineType = machineHandlerFamilyLabel(recipe.machineType);
-  const baseHandler: MachineHandler = {
-    id: slug(baseMachineType),
-    label: baseMachineType,
-    machineType: baseMachineType,
-    minimumTier: recipe.minimumTier,
-    kind: "single",
-  };
-  const handlersByFamily = new Map<string, MachineHandler>([[slug(baseMachineType), baseHandler]]);
+  // Dataset handler lists are authoritative and always start with the map's
+  // primary machine. Synthesizing an extra entry from the recipe map name
+  // would duplicate it under the category name ("Blast Furnace" next to the
+  // real Electric Blast Furnace), so the fallback only exists for recipes
+  // without exported handlers.
+  const handlersByFamily = new Map<string, MachineHandler>();
   for (const handler of recipe.machineHandlers ?? []) {
     const normalized = normalizeMachineHandler(handler);
     const familyId = slug(normalized.label);
@@ -38,8 +35,20 @@ export function getRecipeMachineHandlers(
       handlersByFamily.set(familyId, normalized);
     }
   }
+  if (handlersByFamily.size > 0) {
+    return [...handlersByFamily.values()];
+  }
 
-  return [...handlersByFamily.values()];
+  const baseMachineType = machineHandlerFamilyLabel(recipe.machineType);
+  return [
+    {
+      id: slug(baseMachineType),
+      label: baseMachineType,
+      machineType: baseMachineType,
+      minimumTier: recipe.minimumTier,
+      kind: "single",
+    },
+  ];
 }
 
 export function getSelectedMachineHandler(
