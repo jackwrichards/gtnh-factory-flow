@@ -6,6 +6,7 @@ import type { DatasetManifest, RecipeDataset } from "@/lib/datasets";
 import { normalizeProjectFuelProfiles } from "@/lib/model/fuels";
 import { calculateThroughput } from "@/lib/solver";
 import { applyRecipeInputOverrides } from "@/lib/model/recipe-input-overrides";
+import { createCropFarmPlaceholderRecipe } from "@/lib/model/passive-production";
 import { optimizeMachineCountsForProject } from "@/lib/solver/machine-count-optimizer";
 import {
   getFilledCellFluidEquivalent,
@@ -117,6 +118,10 @@ interface FactoryStore {
     resource: RecipeInputContextResource,
   ) => void;
   updateNode: (nodeId: string, patch: Partial<FactoryNode>) => void;
+  /** Drops an empty crop source node; a crop is picked on the node itself. */
+  addCropFarmNode: () => void;
+  /** Swaps the node onto another recipe (crop pick), resetting per-recipe state. */
+  setNodeRecipe: (nodeId: string, recipe: Recipe) => void;
   deleteNode: (nodeId: string) => void;
   addResourceStorage: (
     resource: Pick<
@@ -618,6 +623,53 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       );
       return withProjectHistory(state, {
         project,
+        lastResult: calculateThroughput(project),
+      });
+    });
+  },
+  addCropFarmNode: () => {
+    set((state) => addRecipeNodeToState(state, createCropFarmPlaceholderRecipe()));
+  },
+  setNodeRecipe: (nodeId, recipe) => {
+    set((state) => {
+      const node = state.project.nodes.find((entry) => entry.id === nodeId);
+      if (!node || node.recipeId === recipe.id) {
+        return state;
+      }
+
+      const recipeAlreadyInProject = state.project.recipes.some((entry) => entry.id === recipe.id);
+      const project = touchProject(
+        pruneOrphanStorages({
+          ...state.project,
+          recipes: recipeAlreadyInProject
+            ? state.project.recipes.map((entry) =>
+                entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
+              )
+            : [...state.project.recipes, recipe],
+          nodes: state.project.nodes.map((entry) =>
+            entry.id === nodeId
+              ? {
+                  ...entry,
+                  recipeId: recipe.id,
+                  overclockTier: recipe.minimumTier,
+                  machineConfigTiers: undefined,
+                  machineHandlerId: undefined,
+                  coilTier: undefined,
+                  recipeInputOverrides: undefined,
+                }
+              : entry,
+          ),
+          // The old recipe's resources no longer exist on this node.
+          edges: state.project.edges.filter(
+            (edge) => edge.source !== nodeId && edge.target !== nodeId,
+          ),
+        }),
+      );
+
+      return withProjectHistory(state, {
+        project,
+        selectedNodeId: nodeId,
+        selectedRecipeId: recipe.id,
         lastResult: calculateThroughput(project),
       });
     });

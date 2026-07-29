@@ -27,7 +27,16 @@ import {
   ViewportPortal,
 } from "@xyflow/react";
 import { toBlob, toSvg } from "html-to-image";
-import { LoaderCircle, MoveUpRight, Paintbrush, Square, Trash2, Type, X } from "lucide-react";
+import {
+  LoaderCircle,
+  MoveUpRight,
+  Paintbrush,
+  Sprout,
+  Square,
+  Trash2,
+  Type,
+  X,
+} from "lucide-react";
 import {
   memo,
   useCallback,
@@ -1556,7 +1565,33 @@ export function FactoryFlow() {
           setDeleteMode(enabled);
         }}
       />
+      <SourceToolbar />
       {isProjectImporting ? <FlowLoadingOverlay /> : null}
+    </div>
+  );
+}
+
+/**
+ * Board tools that drop in source-style nodes (things that produce without
+ * crafting, like crop farms). Lives top-left, mirroring the paint toolbar.
+ */
+function SourceToolbar() {
+  const addCropFarmNode = useFactoryStore((state) => state.addCropFarmNode);
+
+  return (
+    <div
+      data-board-toolbar
+      className="nodrag pointer-events-none absolute left-3 top-3 z-20 flex items-start"
+    >
+      <button
+        type="button"
+        onClick={addCropFarmNode}
+        className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
+        title="Add crop farm: pick a crop and stats, it produces at the computed rate"
+        aria-label="Add crop farm"
+      >
+        <Sprout className="h-4 w-4" />
+      </button>
     </div>
   );
 }

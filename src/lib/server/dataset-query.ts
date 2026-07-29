@@ -142,6 +142,11 @@ interface RecipeShardPayload {
   recipes: Recipe[];
 }
 
+// Source-style recipe maps live behind dedicated board tools (like drawers and
+// fluid tanks) instead of the recipe book: nothing is crafted, they only produce.
+const CROP_FARM_RECIPE_MAP = "Crop Farm";
+const HIDDEN_RECIPE_BOOK_MAPS = new Set([CROP_FARM_RECIPE_MAP]);
+
 const datasetRoot = path.join(process.cwd(), "public", "datasets", "gtnh");
 const loadedCatalogs = new Map<string, LoadedRecipeIndex>();
 const pendingCatalogLoads = new Map<string, Promise<LoadedRecipeIndex>>();
@@ -368,6 +373,7 @@ export async function queryDatasetRecipes(
     ? getResourceRecipeMaps(indexes.recipeMapsByResource, resourceScope!, request.mode)
     : [...new Set(indexes.recipeMaps.filter(Boolean))];
   const sortedRecipeMaps = eligibleRecipeMaps
+    .filter((recipeMap) => !HIDDEN_RECIPE_BOOK_MAPS.has(recipeMap))
     .filter((recipeMap) =>
       recipeMapHasMatchingIndexedRecipe(
         indexes,
@@ -403,6 +409,9 @@ export async function queryDatasetRecipes(
   let total = 0;
 
   for (const recipeIndex of scopedCandidates) {
+    if (HIDDEN_RECIPE_BOOK_MAPS.has(indexes.recipeMaps[recipeIndex] ?? "")) {
+      continue;
+    }
     if (!recipeMatchesTierIndex(indexes, recipeIndex, request.maxTier)) {
       continue;
     }
@@ -452,6 +461,35 @@ export async function queryDatasetRecipes(
   };
 }
 
+/**
+ * All crop source "recipes" for the crop farm board tool. These are excluded
+ * from recipe book queries (see HIDDEN_RECIPE_BOOK_MAPS) and listed here for
+ * the dedicated crop picker instead.
+ */
+export async function listDatasetCropFarmRecipes(versionId: string) {
+  const catalog = await loadCatalog(versionId);
+  if (!catalog.version.recipeLookupIndexPath) {
+    return { crops: [] };
+  }
+
+  const lookup = await loadRecipeLookupIndex(catalog.version);
+  const mapId = lookup.recipeMapIds.get(CROP_FARM_RECIPE_MAP);
+  if (mapId === undefined) {
+    return { crops: [] };
+  }
+
+  const recipeIndexes: number[] = [];
+  for (let recipeIndex = 0; recipeIndex < lookup.recipeCount; recipeIndex += 1) {
+    if (lookup.recipeMapIdsByRecipeIndex[recipeIndex] === mapId) {
+      recipeIndexes.push(recipeIndex);
+    }
+  }
+
+  const crops = await getRecipeSummariesByIndex(catalog, recipeIndexes);
+  crops.sort((left, right) => left.name.localeCompare(right.name));
+  return { crops };
+}
+
 async function queryDatasetRecipesFromLookup(
   catalog: LoadedRecipeIndex,
   request: {
@@ -478,6 +516,15 @@ async function queryDatasetRecipesFromLookup(
   const recipesByMap = resourceScope
     ? getLookupRecipesByMap(lookup, resourceScope, request.mode)
     : getLookupRecipesByMapForSearch(lookup, queryTokens);
+
+  // Source-style maps (crop farms) are spawned from dedicated board tools,
+  // not the recipe book: they are not crafting recipes.
+  for (const [recipeMapId] of [...recipesByMap.entries()]) {
+    const recipeMapName = lookup.recipeMaps[recipeMapId];
+    if (recipeMapName && HIDDEN_RECIPE_BOOK_MAPS.has(recipeMapName)) {
+      recipesByMap.delete(recipeMapId);
+    }
+  }
 
   for (const [recipeMapId, recipeIndexes] of recipesByMap.entries()) {
     const candidates = recipeIndexes.filter((recipeIndex) =>

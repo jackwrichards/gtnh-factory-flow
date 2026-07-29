@@ -270,6 +270,35 @@ export function isCropNhRecipe(recipe: PassiveProductionRecipeLabel) {
   return /\bcrops?nh\b/.test(label) || /\bcrop farm\b/.test(label);
 }
 
+export const CROP_FARM_RECIPE_MAP = "Crop Farm";
+export const CROP_FARM_PLACEHOLDER_RECIPE_ID = "factoryflow:crop-farm:empty";
+
+/** Crop farm sources spawn from the board toolbar, not the recipe book. */
+export function isCropFarmRecipe(recipe: PassiveProductionRecipeLabel) {
+  return /\bcrop farm\b/.test(passiveProductionLabel(recipe));
+}
+
+/**
+ * The empty crop source dropped in by the board button: it has no crop yet,
+ * so it produces nothing until one is picked on the node.
+ */
+export function createCropFarmPlaceholderRecipe(): Recipe {
+  return {
+    id: CROP_FARM_PLACEHOLDER_RECIPE_ID,
+    name: "Crop Farm",
+    kind: "crop_produce",
+    category: "cropsnh-crop",
+    machineType: CROP_FARM_RECIPE_MAP,
+    minimumTier: "NONE",
+    durationTicks: 256,
+    eut: 0,
+    inputs: [],
+    outputs: [],
+    notes: "Pick a crop to start producing.",
+    source: { recipeMap: CROP_FARM_RECIPE_MAP },
+  };
+}
+
 export function isBeeProductionRecipe(recipe: PassiveProductionRecipeLabel) {
   const label = passiveProductionLabel(recipe);
   return (
@@ -378,6 +407,15 @@ export function getCropStatsPreset(value: string | undefined): CropStatsPreset |
 
 function enrichCropProductionRecipe(recipe: Recipe): Recipe {
   const analyticStats = getCropsNhStats(recipe);
+  if (!analyticStats && isCropFarmRecipe(recipe)) {
+    // The empty crop-farm placeholder: no crop picked yet, nothing to tune.
+    return {
+      ...recipe,
+      minimumTier: "NONE",
+      eut: 0,
+      machineHandlers: [],
+    };
+  }
   const controls = analyticStats
     ? cropsNhAnalyticControls()
     : cropProductionControls(recipe);

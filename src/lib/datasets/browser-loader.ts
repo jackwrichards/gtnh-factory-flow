@@ -148,6 +148,19 @@ export async function queryRecipeDatasetRecipes(
   return fetchJson<RecipeDatasetQueryResult>(url.toString(), { signal: options.signal });
 }
 
+export async function listRecipeDatasetCrops(
+  _manifestUrl: string,
+  version: DatasetVersion,
+  options: { signal?: AbortSignal } = {},
+): Promise<{ crops: RecipeSummary[] }> {
+  const url = new URL(
+    `/api/datasets/${encodeURIComponent(version.id)}/crops`,
+    window.location.origin,
+  );
+  addDatasetCacheKey(url, version);
+  return fetchJson<{ crops: RecipeSummary[] }>(url.toString(), { signal: options.signal });
+}
+
 export async function queryRecipeDatasetResources(
   _manifestUrl: string,
   version: DatasetVersion,

@@ -2,7 +2,7 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { memo, useMemo, useState, type CSSProperties } from "react";
-import { AlertTriangle, ChevronDown, WandSparkles } from "lucide-react";
+import { AlertTriangle, ChevronDown, Sprout, WandSparkles } from "lucide-react";
 import type {
   FactoryNode,
   MachineTier,
@@ -34,6 +34,7 @@ import {
   isBeeFrameSlotControlId,
   isBeeProductionConfigControl,
   isBeeProductionRecipe,
+  isCropFarmRecipe,
   isCropProductionConfigControl,
   isCropProductionRecipe,
   isIndustrialApiaryMachineType,
@@ -44,6 +45,7 @@ import {
   type MachineConfigTierControl,
 } from "@/lib/model";
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
+import { CropPickerMenu } from "./CropPickerMenu";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { MachineStatsContent } from "./MachineStatsContent";
 import { UsageLimitContent } from "@/components/inspector/UsageLimitContent";
@@ -70,6 +72,7 @@ export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const { projectNode, recipe, result } = data;
   const [isMachineMenuOpen, setIsMachineMenuOpen] = useState(false);
+  const [isCropMenuOpen, setCropMenuOpen] = useState(false);
   const [openMachineConfigMenuId, setOpenMachineConfigMenuId] = useState<string>();
   const browseResource = useFactoryStore((state) => state.browseResource);
   const recipeSearch = useFactoryStore((state) => state.highlightSearch);
@@ -171,6 +174,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       cropSeedResource && recipe.name.includes(": ")
         ? recipe.name.slice(recipe.name.indexOf(": ") + 2)
         : undefined;
+    const isCropFarmNode = isCropFarmRecipe(effectiveRecipe);
+    const isCropFarmPlaceholder = isCropFarmNode && effectiveRecipe.outputs.length === 0;
 
     return {
       machineHandlers,
@@ -183,6 +188,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       cropProductionControls,
       cropSeedResource,
       cropTitle,
+      isCropFarmNode,
+      isCropFarmPlaceholder,
       isCropProductionNode: cropProductionControls.length > 0,
       beeFrameControls,
       beePanelControls: getBeePanelControls(beeProductionControls),
@@ -212,6 +219,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     cropProductionControls,
     cropSeedResource,
     cropTitle,
+    isCropFarmNode,
+    isCropFarmPlaceholder,
     isCropProductionNode,
     beeFrameControls,
     beePanelControls,
@@ -349,29 +358,62 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           >
             -
           </button>
-          <MinecraftTooltip
-            content={<MachineStatsContent recipe={recipe} handler={selectedMachineHandler} />}
-          >
-            <div
-              className="minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] px-2 text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]"
-              style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
+          <div className="relative min-w-0">
+            <MinecraftTooltip
+              content={
+                isCropFarmPlaceholder ? (
+                  "Click to pick a crop"
+                ) : (
+                  <MachineStatsContent recipe={recipe} handler={selectedMachineHandler} />
+                )
+              }
             >
-              {cropSeedResource?.iconPath || cropSeedResource?.iconAtlas ? (
-                <ResourceIcon
-                  resource={cropSeedResource}
-                  bare
-                  tooltip={false}
-                  showAmount={false}
-                  showConsumedState={false}
-                  iconPixelSize={20}
-                  className="mr-1 h-5 w-5 shrink-0 !overflow-visible"
-                />
-              ) : null}
-              <span className="mx-auto min-w-0 truncate">
-                {cropTitle ?? selectedMachineHandler.label}
-              </span>
-            </div>
-          </MinecraftTooltip>
+              <div
+                role={isCropFarmNode ? "button" : undefined}
+                tabIndex={isCropFarmNode ? 0 : undefined}
+                onClick={
+                  isCropFarmNode
+                    ? (event) => {
+                        event.stopPropagation();
+                        setCropMenuOpen((open) => !open);
+                      }
+                    : undefined
+                }
+                className={[
+                  "minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] px-2 text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]",
+                  isCropFarmNode ? "nodrag cursor-pointer hover:brightness-110" : "",
+                ].join(" ")}
+                style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
+                title={isCropFarmNode ? "Pick a crop" : undefined}
+              >
+                {cropSeedResource?.iconPath || cropSeedResource?.iconAtlas ? (
+                  <ResourceIcon
+                    resource={cropSeedResource}
+                    bare
+                    tooltip={false}
+                    showAmount={false}
+                    showConsumedState={false}
+                    iconPixelSize={20}
+                    className="mr-1 h-5 w-5 shrink-0 !overflow-visible"
+                  />
+                ) : isCropFarmNode ? (
+                  <Sprout className="mr-1 h-4 w-4 shrink-0" />
+                ) : null}
+                <span className="mx-auto min-w-0 truncate">
+                  {isCropFarmPlaceholder
+                    ? "Pick a crop..."
+                    : (cropTitle ?? selectedMachineHandler.label)}
+                </span>
+                {isCropFarmNode ? <ChevronDown className="ml-1 h-3 w-3 shrink-0" /> : null}
+              </div>
+            </MinecraftTooltip>
+            {isCropMenuOpen ? (
+              <CropPickerMenu
+                nodeId={projectNode.id}
+                onClose={() => setCropMenuOpen(false)}
+              />
+            ) : null}
+          </div>
           {tierControl && tierColor ? (
             <button
               type="button"
@@ -452,6 +494,18 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               : undefined
           }
         >
+          {isCropFarmPlaceholder ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setCropMenuOpen(true);
+              }}
+              className="nodrag mx-auto my-2 flex h-[72px] w-[240px] items-center justify-center gap-2 border-2 border-dashed border-[var(--mc-33)] bg-[var(--mc-71)] text-[14px] font-bold text-[var(--mc-ink)] hover:bg-[var(--mc-85)]"
+            >
+              <Sprout className="h-5 w-5" /> Pick a crop
+            </button>
+          ) : (
           <NeiRecipeWindow
             recipe={overclockedRecipe}
             scale={2}
@@ -599,11 +653,12 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               );
             }}
           />
+          )}
           {!usesNativeNeiRecipe ? machineConfigPanel : null}
           {!usesNativeNeiRecipe ? passiveProductionPanel : null}
         </div>
 
-        {!usesNativeNeiRecipe ? (
+        {!usesNativeNeiRecipe && !isCropFarmPlaceholder ? (
           <div
             className={[
               "mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-[var(--mc-ink)]",
