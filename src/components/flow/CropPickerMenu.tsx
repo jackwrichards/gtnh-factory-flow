@@ -104,7 +104,10 @@ export function CropPickerMenu({
 
   return (
     <div
-      className="nodrag absolute left-0 top-7 z-[140] w-[360px] border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
+      // "nowheel" stops React Flow from zooming the canvas when scrolling the
+      // list: its native wheel handler runs before React's synthetic one, so
+      // stopPropagation alone is not enough.
+      className="nodrag nowheel absolute left-0 top-7 z-[140] w-[360px] border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}

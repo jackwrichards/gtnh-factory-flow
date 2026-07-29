@@ -187,7 +187,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       coilControl,
       coilResource,
       cropProductionControls,
-      cropSeedResource,
       cropTitle,
       isCropFarmNode,
       isCropFarmPlaceholder,
@@ -218,7 +217,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     coilControl,
     coilResource,
     cropProductionControls,
-    cropSeedResource,
     cropTitle,
     isCropFarmNode,
     isCropFarmPlaceholder,
@@ -386,30 +384,22 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                     : undefined
                 }
                 className={[
-                  "minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] px-2 text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]",
-                  isCropFarmNode ? "nodrag cursor-pointer hover:brightness-110" : "",
+                  "minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]",
+                  // Symmetric padding keeps the crop name in the true middle;
+                  // the picker chevron floats on the right without shifting it.
+                  isCropFarmNode ? "nodrag relative cursor-pointer px-5 hover:brightness-110" : "px-2",
                 ].join(" ")}
                 style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
                 title={isCropFarmNode ? "Pick a crop" : undefined}
               >
-                {cropSeedResource?.iconPath || cropSeedResource?.iconAtlas ? (
-                  <ResourceIcon
-                    resource={cropSeedResource}
-                    bare
-                    tooltip={false}
-                    showAmount={false}
-                    showConsumedState={false}
-                    className="mr-1 h-5 w-5 shrink-0"
-                  />
-                ) : isCropFarmNode ? (
-                  <Sprout className="mr-1 h-4 w-4 shrink-0" />
-                ) : null}
                 <span className="mx-auto min-w-0 truncate">
                   {isCropFarmPlaceholder
                     ? "Pick a crop..."
                     : (cropTitle ?? selectedMachineHandler.label)}
                 </span>
-                {isCropFarmNode ? <ChevronDown className="ml-1 h-3 w-3 shrink-0" /> : null}
+                {isCropFarmNode ? (
+                  <ChevronDown className="absolute right-1 top-1/2 h-3 w-3 shrink-0 -translate-y-1/2" />
+                ) : null}
               </div>
             </MinecraftTooltip>
             {isCropMenuOpen ? (
