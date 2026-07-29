@@ -1522,19 +1522,18 @@ function isContextCompatibleItemInput(
   );
 }
 
-function getWildcardResource(
+export function getWildcardResource(
   resource: Pick<ResourceAmount, "kind" | "id">,
 ): Pick<ResourceAmount, "kind" | "id"> | undefined {
   if (resource.kind !== "item" || resource.id.endsWith("@32767")) {
     return undefined;
   }
 
+  // Bare ids are damage-0 items ("minecraft:log" is Oak Log); they match
+  // any-damage wildcard inputs just like their "@<damage>" siblings do.
   const separatorIndex = resource.id.lastIndexOf("@");
-  if (separatorIndex === -1) {
-    return undefined;
-  }
-
-  return { kind: "item", id: `${resource.id.slice(0, separatorIndex)}@32767` };
+  const baseId = separatorIndex === -1 ? resource.id : resource.id.slice(0, separatorIndex);
+  return { kind: "item", id: `${baseId}@32767` };
 }
 
 function resourceIdsAreCompatible(candidateId: string, selectedId: string): boolean {
