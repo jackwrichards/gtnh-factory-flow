@@ -34,7 +34,7 @@ const SLOT = {
 // then sized a hair under its box for a small breathing margin.
 const MACHINE_ART_SCALE = 256 / 126;
 
-function machineArtPixels(box: number): number {
+export function machineArtPixels(box: number): number {
   const margin = Math.max(2, Math.round(box * 0.055));
   return Math.round((box - margin * 2) * MACHINE_ART_SCALE);
 }

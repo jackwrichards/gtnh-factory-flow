@@ -34,6 +34,7 @@ import type { Recipe, ResourceAmount } from "@/lib/model/types";
 import { usesNativeNeiChrome } from "@/lib/nei/layout";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { AppIdentity } from "./AppIdentity";
+import { machineArtPixels } from "./flow/MachinePicker";
 import { useMachineHandlerIcons } from "./flow/machine-icons";
 import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
@@ -1437,7 +1438,7 @@ function CategoryRail({
             showAmount={false}
             tooltip={false}
             className="!h-full !w-full"
-            iconPixelSize={38}
+            iconPixelSize={machineArtPixels(48)}
           />
         </span>
         <span className="min-w-0 leading-[1.15]">
@@ -1477,7 +1478,7 @@ function CategoryRail({
                     showAmount={false}
                     tooltip={false}
                     className="!h-full !w-full"
-                    iconPixelSize={34}
+                    iconPixelSize={machineArtPixels(42)}
                   />
                 ) : null}
               </span>
@@ -1523,7 +1524,7 @@ function CategoryMachineStrip({ recipe }: { recipe?: RecipeSummary }) {
                 showAmount={false}
                 tooltip={false}
                 className="!h-full !w-full"
-                iconPixelSize={22}
+                iconPixelSize={machineArtPixels(28)}
               />
             ) : null}
           </span>
