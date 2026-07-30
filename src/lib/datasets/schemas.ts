@@ -63,6 +63,11 @@ export const recipeMapIconEntrySchema = z.object({
   }),
 });
 
+export const machineHandlerIconEntrySchema = z.object({
+  familyId: z.string().min(1),
+  resource: recipeMapIconEntrySchema.shape.resource,
+});
+
 export const recipeDatasetSchema = z.object({
   schemaVersion: z.literal(1),
   datasetVersionId: z.string().min(1),
@@ -74,6 +79,7 @@ export const recipeDatasetSchema = z.object({
   oreDictionary: z.record(z.string(), z.array(z.string())),
   recipeMaps: z.array(z.string()),
   recipeMapIcons: z.array(recipeMapIconEntrySchema).optional(),
+  machineHandlerIcons: z.array(machineHandlerIconEntrySchema).optional(),
   generatedAt: z.string(),
 });
 

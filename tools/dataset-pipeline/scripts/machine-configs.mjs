@@ -289,6 +289,9 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
           voltageTierIndex(minimumTier) < voltageTierIndex(existing.minimumTier))
       ) {
         existing.minimumTier = minimumTier;
+        // The family's face is its lowest-tier variant (Basic Electric
+        // Furnace, not Epic Atom Stimulator IV).
+        existing.catalystResource = catalyst.resource;
       }
       continue;
     }
@@ -302,6 +305,7 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
       label,
       kind: multiblock || hasWikiStats ? "multiblock" : "single",
       minimumTier,
+      catalystResource: catalyst.resource,
       ...stats,
     });
   }

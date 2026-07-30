@@ -57,6 +57,24 @@ const recipeMapIcons = new Map();
 // recipes; the recipes arrive through the "smelting" domain instead. Stash the
 // catalysts so normalizeSmelting can reattach the machines to those recipes.
 let furnaceCatalysts = [];
+// Machine handler families -> the item that represents them (the family's
+// lowest-tier catalyst). Shipped dataset-wide so the app can draw machine
+// tabs without guessing items from names. First registration wins.
+const machineHandlerIcons = new Map();
+
+function registerMachineHandlerIcons(templates) {
+  for (const template of templates ?? []) {
+    if (!template.catalystResource || machineHandlerIcons.has(template.id)) {
+      continue;
+    }
+    const resource = resourceAmount(template.catalystResource);
+    if (!resource?.iconPath) {
+      continue;
+    }
+    addResource(resource);
+    machineHandlerIcons.set(template.id, resource);
+  }
+}
 const recipeSignatures = new Set();
 const oreDictionaryAlternativesByName = new Map();
 const oreDictionary = normalizeOreDictionary(findDomain("oreDictionary")?.entries ?? {});
@@ -88,6 +106,9 @@ const dataset = {
   recipeMapIcons: [...recipeMapIcons.entries()]
     .map(([recipeMap, resource]) => ({ recipeMap, resource: compactRecipeResource(resource) }))
     .sort((left, right) => left.recipeMap.localeCompare(right.recipeMap)),
+  machineHandlerIcons: [...machineHandlerIcons.entries()]
+    .map(([familyId, resource]) => ({ familyId, resource: compactRecipeResource(resource) }))
+    .sort((left, right) => left.familyId.localeCompare(right.familyId)),
   generatedAt,
 };
 
@@ -114,6 +135,7 @@ function normalizeGregtech(domain) {
     // machine's bonuses no longer leak onto another (the Dangote Distillus
     // used to force 12 parallels onto the plain Distillation Tower).
     const handlerTemplates = buildMachineHandlerTemplates(machineType, recipeMap.catalysts);
+    registerMachineHandlerIcons(handlerTemplates);
     const catalystControls = primaryMachineHandlerControls(handlerTemplates);
     for (const rawRecipe of recipeMap.recipes ?? []) {
       const inputs = [
@@ -289,6 +311,7 @@ function normalizeSmelting(domain) {
  */
 function furnaceHandlerTemplates() {
   const templates = buildMachineHandlerTemplates("Furnace", furnaceCatalysts);
+  registerMachineHandlerIcons(templates);
   if (templates.length === 0) {
     return [];
   }
@@ -333,7 +356,7 @@ function overrideFurnaceRecipeMapIcon() {
   if (!recipeMaps.has("Furnace") || !furnace?.iconPath) {
     return;
   }
-  recipeMapIcons.set("Furnace", {
+  const furnaceIcon = {
     kind: furnace.kind,
     id: furnace.id,
     amount: 1,
@@ -341,7 +364,10 @@ function overrideFurnaceRecipeMapIcon() {
     iconPath: furnace.iconPath,
     dominantColor: furnace.dominantColor,
     modId: furnace.modId,
-  });
+  };
+  recipeMapIcons.set("Furnace", furnaceIcon);
+  // The synthetic vanilla-furnace handler has no catalyst to take a face from.
+  machineHandlerIcons.set("furnace", furnaceIcon);
 }
 
 function normalizeThaumcraft(domain) {

@@ -49,6 +49,12 @@ export interface RecipeMapIconEntry {
     Partial<Pick<ResourceAmount, "amount">>;
 }
 
+/** The item that represents a machine handler family (its lowest-tier variant). */
+export interface MachineHandlerIconEntry {
+  familyId: string;
+  resource: RecipeMapIconEntry["resource"];
+}
+
 export interface DatasetVersion {
   id: string;
   gtnhVersion: string;
@@ -81,6 +87,7 @@ export interface RecipeDataset {
   oreDictionary: Record<string, string[]>;
   recipeMaps: string[];
   recipeMapIcons?: RecipeMapIconEntry[];
+  machineHandlerIcons?: MachineHandlerIconEntry[];
   generatedAt: string;
 }
 

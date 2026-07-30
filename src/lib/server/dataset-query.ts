@@ -7,6 +7,7 @@ import type {
   DatasetResource,
   DatasetResourceIndexEntry,
   DatasetVersion,
+  MachineHandlerIconEntry,
   RecipeMapIconEntry,
   RecipeSummary,
 } from "@/lib/datasets/types";
@@ -42,6 +43,7 @@ interface LoadedRecipeIndex {
   resourceIndex: DatasetResourceIndexEntry[];
   recipeMaps: string[];
   recipeMapIcons?: RecipeMapIconEntry[];
+  machineHandlerIcons?: MachineHandlerIconEntry[];
   recipeCount: number;
   recipes?: RecipeSummary[];
   recipeSearchText?: string[];
@@ -175,6 +177,7 @@ export async function getDatasetCatalog(versionId: string) {
     oreDictionary: {},
     recipeMaps: catalog.recipeMaps,
     recipeMapIcons: catalog.recipeMapIcons,
+    machineHandlerIcons: catalog.machineHandlerIcons,
     generatedAt: catalog.version.publishedAt,
   };
 }
