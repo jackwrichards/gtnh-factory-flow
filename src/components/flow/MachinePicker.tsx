@@ -16,9 +16,9 @@ import type { MachineHandlerIcon } from "./machine-icons";
  *  - MachineTabStrip: big machine icons above the node; click switches,
  *    hover previews. The trailing "⋯" tab opens the compare table.
  *  - MachineGlanceBar: fixed-grid header row (icon | category eyebrow + name
- *    | TIME | POWER | PARALLEL). Nothing moves when the machine changes.
- *  - MachineStatsSidebox: machine facts (tier, parallels, controls, OC) shown
- *    beside the card's Total/Usage/Time lines; hover previews swap it live.
+ *    | TIME | POWER | PARALLEL). Nothing moves when the machine changes;
+ *    hovering a tab previews that machine here and in the card's
+ *    Total/Usage/Time lines.
  *  - MachineCompareTable: compact sortable per-recipe comparison; click a
  *    row to switch.
  */
@@ -139,8 +139,19 @@ function formatSeconds(seconds: number): string {
     : seconds.toLocaleString("en-US", { maximumFractionDigits: 1 });
 }
 
+/** Big numbers shrink to k/M so they always fit their fixed cells. */
+function formatCompact(value: number): string {
+  if (value >= 1_000_000) {
+    return `${formatRate(value / 1_000_000, value >= 10_000_000 ? 0 : 1)}M`;
+  }
+  if (value >= 10_000) {
+    return `${formatRate(value / 1000, value >= 100_000 ? 0 : 1)}k`;
+  }
+  return formatRate(value, 0);
+}
+
 function powerText(stats: HandlerRecipeStats): string {
-  return stats.eut > 0 ? `${formatRate(stats.eut, 0)} EU/t` : "none";
+  return stats.eut > 0 ? `${formatCompact(stats.eut)} EU/t` : "none";
 }
 
 function TierChip({ tier, className }: { tier: string; className?: string }) {
@@ -376,7 +387,7 @@ export function MachineGlanceBar({
       <GlanceCell label="POWER" value={powerText(stats)} dim={stats.eut <= 0} />
       <GlanceCell
         label="PARALLEL"
-        value={parallels !== undefined ? `×${formatRate(parallels, 0)}` : "—"}
+        value={parallels !== undefined ? `×${formatCompact(parallels)}` : "—"}
         dim={parallels === undefined}
       />
     </div>
@@ -399,46 +410,6 @@ function GlanceCell({ label, value, dim }: { label: string; value: string; dim?:
         {value}
       </span>
     </span>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Stats side-box (lives beside Total/Usage/Time on the card)          */
-/* ------------------------------------------------------------------ */
-
-export function MachineStatsSidebox({
-  recipe,
-  handler,
-}: {
-  recipe: Recipe;
-  handler: MachineHandler;
-}) {
-  const stats = getHandlerRecipeStats(recipe, handler);
-  const ocLabel = stats.exactOverclocks
-    ? "exact OC"
-    : stats.perfectOverclock
-      ? "perfect OC"
-      : "standard OC";
-  return (
-    <div className="flex max-w-[200px] flex-col items-end gap-[2px] text-right text-[10px] leading-[12px] text-[var(--mc-ink)]">
-      <div className="flex items-center gap-1">
-        {stats.fixedParallels !== undefined ? (
-          <span className="font-bold">×{formatRate(stats.fixedParallels, 0)} parallel</span>
-        ) : null}
-        <TierChip tier={stats.minimumTier} />
-      </div>
-      {stats.scalingParallels.length > 0 ? (
-        <span className="text-[var(--mc-ink-muted)]">
-          up to ×{formatRate(stats.scalingParallels[0].max, 0)} · {stats.scalingParallels[0].label}
-        </span>
-      ) : null}
-      {stats.controlSummaries.length > 0 ? (
-        <span className="max-w-full truncate font-bold">
-          {stats.controlSummaries.map((control) => `⚙ ${control.label}`).join(" · ")}
-        </span>
-      ) : null}
-      <span className="text-[var(--mc-ink-muted)]">{ocLabel}</span>
-    </div>
   );
 }
 

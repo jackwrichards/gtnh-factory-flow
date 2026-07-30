@@ -47,12 +47,7 @@ import {
 } from "@/lib/model";
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
 import { CropPickerMenu } from "./CropPickerMenu";
-import {
-  MachineCompareTable,
-  MachineGlanceBar,
-  MachineStatsSidebox,
-  MachineTabStrip,
-} from "./MachinePicker";
+import { MachineCompareTable, MachineGlanceBar, MachineTabStrip } from "./MachinePicker";
 import { useMachineHandlerIcons } from "./machine-icons";
 import { MinecraftSelect } from "./MinecraftSelect";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
@@ -534,14 +529,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               .join(" ")}
             canvasClassName={nodeColor ? "recipe-node-canvas-tint" : undefined}
             statsAction={
-              hasMachinePicker || machineParallelMultiplier > 1 ? (
-                <div className="flex items-start gap-1">
-                  {machineParallelMultiplier > 1 ? (
-                    <MachineParallelIndicator multiplier={machineParallelMultiplier} />
-                  ) : null}
-                  {hasMachinePicker ? (
-                    <MachineStatsSidebox recipe={recipe} handler={previewHandler} />
-                  ) : null}
+              machineParallelMultiplier > 1 ? (
+                <div className="flex gap-1">
+                  <MachineParallelIndicator multiplier={machineParallelMultiplier} />
                 </div>
               ) : undefined
             }
