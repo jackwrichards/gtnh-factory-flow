@@ -34,7 +34,6 @@ import type { Recipe, ResourceAmount } from "@/lib/model/types";
 import { usesNativeNeiChrome } from "@/lib/nei/layout";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { AppIdentity } from "./AppIdentity";
-import { MachineStatsContent } from "./flow/MachineStatsContent";
 import { useMachineHandlerIcons } from "./flow/machine-icons";
 import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
@@ -1428,9 +1427,9 @@ function CategoryRail({
   onRecipeMapHover: (recipeMap: string) => void;
 }) {
   return (
-    <div className="flex w-[228px] shrink-0 flex-col border-r-2 border-[var(--mc-47)] bg-[var(--mc-71)]">
-      <div className="flex items-center gap-2 border-b-2 border-[var(--mc-55)] p-2">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center bg-[var(--mc-55)] shadow-[inset_2px_2px_0_var(--mc-25),inset_-2px_-2px_0_var(--mc-100)]">
+    <div className="flex w-[290px] shrink-0 flex-col border-r-2 border-[var(--mc-47)] bg-[var(--mc-71)]">
+      <div className="flex items-center gap-2.5 border-b-2 border-[var(--mc-55)] p-2.5">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center bg-[var(--mc-55)] shadow-[inset_2px_2px_0_var(--mc-25),inset_-2px_-2px_0_var(--mc-100)]">
           <ResourceIcon
             resource={{ ...activeResource, amount: 1 }}
             size="sm"
@@ -1438,22 +1437,22 @@ function CategoryRail({
             showAmount={false}
             tooltip={false}
             className="!h-full !w-full"
-            iconPixelSize={28}
+            iconPixelSize={38}
           />
         </span>
         <span className="min-w-0 leading-[1.15]">
-          <span className="block text-[8px] font-bold uppercase tracking-[0.14em] text-[var(--mc-ink-muted)]">
+          <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--mc-ink-muted)]">
             {mode === "uses" ? "Uses of" : "Recipes for"}
           </span>
-          <span className="block truncate text-[13px] font-bold text-[var(--mc-ink)]">
+          <span className="block truncate text-[16px] font-bold text-[var(--mc-ink)]">
             {resourceLabel(activeResource)}
           </span>
         </span>
       </div>
-      <div className="px-2 pb-1 pt-2 text-[8px] font-bold uppercase tracking-[0.14em] text-[var(--mc-ink-muted)]">
+      <div className="px-2.5 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--mc-ink-muted)]">
         Categories
       </div>
-      <div className="nowheel min-h-0 flex-1 overflow-y-auto p-1.5">
+      <div className="nowheel min-h-0 flex-1 overflow-y-auto p-2">
         {tabs.map((tab) => {
           const active = tab.id === activeRecipeMap;
           return (
@@ -1463,13 +1462,13 @@ function CategoryRail({
               onClick={() => onRecipeMapChange(tab.id)}
               onMouseEnter={() => onRecipeMapHover(tab.id)}
               className={[
-                "mb-[3px] grid w-full grid-cols-[32px_minmax(0,1fr)_auto] items-center gap-2 border-2 px-1 py-1 text-left",
+                "mb-1 grid w-full grid-cols-[42px_minmax(0,1fr)] items-center gap-2.5 border-2 px-1.5 py-1.5 text-left",
                 active
                   ? "border-[var(--mc-15)] bg-[var(--mc-85)] shadow-[inset_2px_2px_0_var(--mc-100),0_0_0_2px_#22d3ee_inset]"
                   : "border-[var(--mc-47)] bg-[var(--mc-78)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-47)] hover:bg-[var(--mc-85)]",
               ].join(" ")}
             >
-              <span className="flex h-8 w-8 items-center justify-center bg-[var(--mc-55)] shadow-[inset_2px_2px_0_var(--mc-25),inset_-2px_-2px_0_var(--mc-100)]">
+              <span className="flex h-[42px] w-[42px] items-center justify-center bg-[var(--mc-55)] shadow-[inset_2px_2px_0_var(--mc-25),inset_-2px_-2px_0_var(--mc-100)]">
                 {tab.icon ? (
                   <ResourceIcon
                     resource={{ ...tab.icon, amount: 1 }}
@@ -1478,22 +1477,12 @@ function CategoryRail({
                     showAmount={false}
                     tooltip={false}
                     className="!h-full !w-full"
-                    iconPixelSize={26}
+                    iconPixelSize={34}
                   />
                 ) : null}
               </span>
-              <span className="min-w-0 truncate text-[12px] font-bold leading-4 text-[var(--mc-ink)]">
+              <span className="min-w-0 truncate text-[15px] font-bold leading-5 text-[var(--mc-ink)]">
                 {tab.label}
-              </span>
-              <span
-                className={[
-                  "border px-1 text-[7px] font-bold leading-[12px] tracking-[0.08em]",
-                  active
-                    ? "border-cyan-700 text-cyan-800"
-                    : "border-[var(--mc-47)] text-[var(--mc-ink-muted)]",
-                ].join(" ")}
-              >
-                CAT
               </span>
             </button>
           );
@@ -1578,12 +1567,7 @@ function VirtualRecipeResultList({
   // `usesNativeNeiChrome` resolves a layout per call, and infinite scroll keeps
   // growing this array (120, 240, 360...), so it must not run on every scroll
   // frame.
-  const rowHeight = useMemo(() => {
-    const base = recipes.some(usesNativeNeiChrome) ? 322 : 246;
-    // Cards with a multi-machine RUNS IN strip are one strip-row taller.
-    const hasRunsInStrip = recipes.some((recipe) => (recipe.machineHandlers?.length ?? 0) > 1);
-    return base + (hasRunsInStrip ? 48 : 0);
-  }, [recipes]);
+  const rowHeight = useMemo(() => (recipes.some(usesNativeNeiChrome) ? 322 : 246), [recipes]);
   const columnCount = 2;
   const overscan = 1;
   const rowCount = Math.ceil(recipes.length / columnCount);
@@ -1696,16 +1680,10 @@ const RecipeResultCard = memo(function RecipeResultCard({
     () => contextualizePreviewRecipe(summaryToPreviewRecipe(recipe), contextResource),
     [contextResource, recipe],
   );
-  const machineIcons = useMachineHandlerIcons();
-  const handlers = useMemo(() => getRecipeMachineHandlers(previewRecipe), [previewRecipe]);
-  const [pickedMachineId, setPickedMachineId] = useState<string>();
-  const pickedMachine =
-    handlers.find((handler) => handler.id === pickedMachineId) ?? handlers[0];
-  const showRunsIn = handlers.length > 1;
   return (
     <article
       onClick={() => onSelectRecipe(recipe.id)}
-      onDoubleClick={() => void onAdd(recipe, pickedMachine?.id)}
+      onDoubleClick={() => void onAdd(recipe)}
       className={[
         "relative cursor-pointer transition",
         selected ? "ring-1 ring-cyan-400" : "",
@@ -1721,7 +1699,7 @@ const RecipeResultCard = memo(function RecipeResultCard({
             if (onAddConnected) {
               onAddConnected(recipe.id);
             } else {
-              onAdd(recipe, pickedMachine?.id);
+              onAdd(recipe);
             }
           }}
           className="absolute right-1 top-1 z-10 inline-flex h-7 w-7 shrink-0 items-center justify-center border border-neutral-600 bg-[#1b1d21] text-neutral-200 hover:border-cyan-400 hover:text-cyan-100"
@@ -1739,62 +1717,6 @@ const RecipeResultCard = memo(function RecipeResultCard({
           onSlotClick={onSlotBrowse ? (slot, mode) => onSlotBrowse(slot.resource, mode) : undefined}
         />
       </div>
-      {showRunsIn ? (
-        <div
-          className="mx-auto -mt-0.5 flex w-fit max-w-full items-center gap-1 border-2 border-[var(--mc-47)] bg-[var(--mc-71)] px-1.5 py-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <span className="pr-0.5 text-[8px] font-bold uppercase tracking-[0.1em] text-[var(--mc-ink-muted)]">
-            Runs in
-          </span>
-          {handlers.map((handler) => {
-            const icon = machineIcons.get(handler.id);
-            const active = handler.id === pickedMachine?.id;
-            return (
-              <MinecraftTooltip
-                key={handler.id}
-                content={<MachineStatsContent recipe={previewRecipe} handler={handler} />}
-              >
-                <button
-                  type="button"
-                  aria-label={`Spawn with ${handler.label}`}
-                  aria-pressed={active}
-                  onClick={() => setPickedMachineId(handler.id)}
-                  className={[
-                    "flex h-8 w-8 items-center justify-center border-2 hover:brightness-110",
-                    active
-                      ? "border-[var(--mc-15)] bg-[var(--mc-85)] shadow-[inset_1px_1px_0_var(--mc-100),0_0_0_2px_#22d3ee]"
-                      : "border-[var(--mc-33)] bg-[var(--mc-61)] opacity-85 shadow-[inset_1px_1px_0_var(--mc-85)] hover:opacity-100",
-                  ].join(" ")}
-                >
-                  {icon ? (
-                    <ResourceIcon
-                      resource={{ ...icon, amount: 1 }}
-                      size="sm"
-                      bare
-                      showAmount={false}
-                      tooltip={false}
-                      className="!h-full !w-full"
-                      iconPixelSize={24}
-                    />
-                  ) : (
-                    <span className="text-[10px] font-bold text-white">
-                      {handler.label.slice(0, 1)}
-                    </span>
-                  )}
-                </button>
-              </MinecraftTooltip>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => void onAdd(recipe, pickedMachine?.id)}
-            className="ml-1 h-8 shrink-0 whitespace-nowrap border-2 border-[#2f7a2f] bg-[#57c257] px-2 text-[11px] font-bold text-[#0c3a0c] shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.4)] hover:brightness-110"
-          >
-            Add · {pickedMachine?.label}
-          </button>
-        </div>
-      ) : null}
     </article>
   );
 });

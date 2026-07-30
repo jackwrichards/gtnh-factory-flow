@@ -13,14 +13,14 @@ import type { MachineHandlerIcon } from "./machine-icons";
  * GUIs): dark ink only ever sits on the light grays, white text only on the
  * dark header gray, always with a pixel shadow.
  *
- *  - MachineTabStrip: big icon tabs above the node; click switches, hover
- *    previews. The trailing "⋯" tab opens the compare table.
+ *  - MachineTabStrip: big machine icons above the node; click switches,
+ *    hover previews. The trailing "⋯" tab opens the compare table.
  *  - MachineGlanceBar: fixed-grid header row (icon | category eyebrow + name
  *    | TIME | POWER | PARALLEL). Nothing moves when the machine changes.
- *  - MachineInspectorPanel: floating full inspector fed by hover from any
- *    surface — stats, min tier, parallels math, control ranges, overclock
- *    notes, Use button.
- *  - MachineCompareTable: sortable per-recipe comparison of every machine.
+ *  - MachineStatsSidebox: machine facts (tier, parallels, controls, OC) shown
+ *    beside the card's Total/Usage/Time lines; hover previews swap it live.
+ *  - MachineCompareTable: compact sortable per-recipe comparison; click a
+ *    row to switch.
  */
 
 // Fixed classic-MC palette (deliberately NOT theme variables).
@@ -243,6 +243,7 @@ export function MachineTabStrip({
       {handlers.map((handler) => {
         const active = handler.id === selectedId;
         const peeked = handler.id === previewId && !active;
+        const icon = iconsById.get(handler.id);
         return (
           <button
             key={handler.id}
@@ -258,27 +259,40 @@ export function MachineTabStrip({
             title={handler.label}
             aria-label={`Use ${handler.label}`}
             aria-pressed={active}
+            // Just the machine art: no box behind unselected icons, only the
+            // selected machine stands on a raised tab.
             className={[
-              "flex w-[46px] items-center justify-center border-2 border-b-0 hover:brightness-110",
-              active ? "h-[44px]" : "h-[38px]",
+              "flex w-[44px] items-end justify-center pb-[2px] hover:brightness-110",
+              active ? "h-[46px] border-2 border-b-0" : "h-[44px]",
             ].join(" ")}
-            style={{
-              backgroundColor: active ? MC.m85 : MC.m61,
-              borderColor: peeked ? "#0e7490" : active ? MC.m15 : MC.m33,
-              boxShadow: active
-                ? `inset 2px 2px 0 ${MC.m100}`
-                : peeked
-                  ? `inset 2px 2px 0 ${MC.m85}, 0 0 0 2px #22d3ee`
-                  : `inset 2px 2px 0 ${MC.m85}`,
-              opacity: active || peeked ? 1 : 0.85,
-            }}
+            style={
+              active
+                ? {
+                    backgroundColor: MC.m85,
+                    borderColor: MC.m15,
+                    boxShadow: `inset 2px 2px 0 ${MC.m100}`,
+                  }
+                : {
+                    opacity: peeked ? 1 : 0.78,
+                    filter: peeked ? "drop-shadow(0 0 3px #22d3ee)" : undefined,
+                  }
+            }
           >
-            <MachineIconBox
-              icon={iconsById.get(handler.id)}
-              label={handler.label}
-              box={34}
-              iconPixels={30}
-            />
+            {icon ? (
+              <ResourceIcon
+                resource={{ ...icon, amount: 1 }}
+                size="sm"
+                bare
+                showAmount={false}
+                tooltip={false}
+                className="!h-[38px] !w-[38px]"
+                iconPixelSize={36}
+              />
+            ) : (
+              <span className="text-[14px] font-bold" style={{ color: MC.m100 }}>
+                {handler.label.slice(0, 1).toUpperCase()}
+              </span>
+            )}
           </button>
         );
       })}
@@ -341,7 +355,8 @@ export function MachineGlanceBar({
       }}
     >
       <MachineIconBox icon={icon} label={handler.label} box={26} iconPixels={22} />
-      <span className="min-w-0 leading-[1.05]">
+      {/* Hard cap so marathon names truncate instead of widening the node. */}
+      <span className="min-w-0 max-w-[150px] leading-[1.05]">
         <span
           className="block truncate text-[8px] font-bold uppercase tracking-[0.13em]"
           style={{ color: "#ececec", textShadow: "1px 1px 0 #4a4a4a" }}
@@ -351,6 +366,7 @@ export function MachineGlanceBar({
         <span
           className="minecraft-title block truncate text-[13px] font-bold leading-[14px]"
           style={{ color: MC.m100, textShadow: "1px 1px 0 #3d3d3d" }}
+          title={handler.label}
         >
           {handler.label}
           {isPreview ? " ?" : ""}
@@ -387,202 +403,41 @@ function GlanceCell({ label, value, dim }: { label: string; value: string; dim?:
 }
 
 /* ------------------------------------------------------------------ */
-/* Inspector panel                                                     */
+/* Stats side-box (lives beside Total/Usage/Time on the card)          */
 /* ------------------------------------------------------------------ */
 
-export function MachineInspectorPanel({
+export function MachineStatsSidebox({
   recipe,
   handler,
-  icon,
-  isPreview,
-  selectedId,
-  onUse,
-  floating = true,
 }: {
   recipe: Recipe;
   handler: MachineHandler;
-  icon?: MachineHandlerIcon;
-  isPreview: boolean;
-  selectedId: string;
-  onUse: (handlerId: string) => void;
-  /** Floating: anchored right of the node. Otherwise a static pane (compare view). */
-  floating?: boolean;
 }) {
   const stats = getHandlerRecipeStats(recipe, handler);
-  const group = getMachineGroup(handler);
-  const kind = handler.kind === "multiblock" ? "Multiblock" : "Single block";
-  const isActive = handler.id === selectedId;
+  const ocLabel = stats.exactOverclocks
+    ? "exact OC"
+    : stats.perfectOverclock
+      ? "perfect OC"
+      : "standard OC";
   return (
-    <div
-      className={
-        floating
-          ? "nodrag nowheel absolute left-full top-0 z-[150] ml-2 w-[300px] border-[3px] p-[10px]"
-          : "w-[300px] shrink-0 self-start p-[10px]"
-      }
-      style={
-        floating
-          ? {
-              backgroundColor: MC.m78,
-              borderColor: MC.m15,
-              boxShadow: `inset 2px 2px 0 ${MC.m100}, inset -2px -2px 0 ${MC.m33}, 5px 5px 0 rgba(0,0,0,0.3)`,
-            }
-          : { borderLeft: `3px solid ${MC.m47}` }
-      }
-      onClick={(event) => event.stopPropagation()}
-      role="region"
-      aria-label={`Machine inspector: ${handler.label}`}
-    >
-      <div
-        className="mb-2 flex items-center justify-between text-[8px] font-bold uppercase tracking-[0.12em]"
-        style={{ color: MC.inkSoft }}
-      >
-        <span>Inspector</span>
-        <span style={{ color: isPreview ? "#0e7490" : MC.inkSoft }}>
-          {isPreview ? "previewing — hover" : "selected machine"}
+    <div className="flex max-w-[200px] flex-col items-end gap-[2px] text-right text-[10px] leading-[12px] text-[var(--mc-ink)]">
+      <div className="flex items-center gap-1">
+        {stats.fixedParallels !== undefined ? (
+          <span className="font-bold">×{formatRate(stats.fixedParallels, 0)} parallel</span>
+        ) : null}
+        <TierChip tier={stats.minimumTier} />
+      </div>
+      {stats.scalingParallels.length > 0 ? (
+        <span className="text-[var(--mc-ink-muted)]">
+          up to ×{formatRate(stats.scalingParallels[0].max, 0)} · {stats.scalingParallels[0].label}
         </span>
-      </div>
-      <div className="flex items-center gap-2 border-b-[3px] pb-2" style={{ borderColor: MC.m61 }}>
-        <MachineIconBox icon={icon} label={handler.label} box={48} iconPixels={40} />
-        <span className="min-w-0">
-          <span
-            className="block text-[14px] font-bold leading-[1.15]"
-            style={{ color: MC.ink }}
-          >
-            {handler.label}
-          </span>
-          <span
-            className="block text-[9px] font-bold uppercase tracking-[0.1em]"
-            style={{ color: MC.inkSoft }}
-          >
-            {group === "Multiblock" ? kind : `${group} · ${kind}`}
-          </span>
-        </span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-[5px] py-2">
-        <InspectorStat label="Time" value={`${formatSeconds(stats.seconds)} s`} />
-        <InspectorStat label="Power" value={powerText(stats)} good={stats.eut <= 0} />
-        <InspectorStat
-          label="Per craft"
-          value={stats.totalEu > 0 ? `${formatRate(stats.totalEu, 0)} EU` : "—"}
-        />
-        <InspectorStat label="Min tier" value={<TierChip tier={stats.minimumTier} />} />
-        <InspectorStat
-          label="Parallels"
-          value={stats.fixedParallels !== undefined ? `×${formatRate(stats.fixedParallels, 0)}` : "1"}
-          good={stats.fixedParallels !== undefined}
-        />
-        <InspectorStat
-          label="Scaling"
-          value={
-            stats.scalingParallels.length > 0
-              ? `×${formatRate(stats.scalingParallels[0].max, 0)} · ${stats.scalingParallels[0].label}`
-              : "—"
-          }
-          small
-        />
-      </div>
-
-      {stats.controlSummaries.length > 0 ? (
-        <>
-          <div
-            className="mb-1 text-[8px] font-bold uppercase tracking-[0.12em]"
-            style={{ color: MC.inkSoft }}
-          >
-            Structure controls
-          </div>
-          {stats.controlSummaries.map((control) => (
-            <div
-              key={control.label}
-              className="mb-[5px] border-2 px-2 py-[5px]"
-              style={{
-                backgroundColor: MC.m85,
-                borderColor: MC.m47,
-                boxShadow: `inset 2px 2px 0 ${MC.m100}`,
-              }}
-            >
-              <div className="text-[11px] font-bold" style={{ color: MC.ink }}>
-                ⚙ {control.label}
-              </div>
-              {control.detail ? (
-                <div className="text-[10px] leading-[1.35]" style={{ color: "#3d3d3d" }}>
-                  {control.detail}
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </>
       ) : null}
-
-      <div
-        className="mb-1 mt-1 text-[8px] font-bold uppercase tracking-[0.12em]"
-        style={{ color: MC.inkSoft }}
-      >
-        Overclocking
-      </div>
-      <div className="text-[10.5px] leading-[1.4]" style={{ color: "#3d3d3d" }}>
-        {stats.exactOverclocks
-          ? "Exact — per-tier numbers came from GregTech's own calculator in game."
-          : stats.perfectOverclock
-            ? "Perfect — 4× speed for 4× power per tier; energy per craft never grows."
-            : "Standard — 2× speed for 4× power per tier above minimum."}
-      </div>
-
-      <button
-        type="button"
-        disabled={isActive}
-        onClick={() => onUse(handler.id)}
-        className="mt-2 h-[30px] w-full border-2 text-[12px] font-bold"
-        style={
-          isActive
-            ? { backgroundColor: MC.m71, borderColor: MC.m47, color: MC.inkSoft }
-            : {
-                backgroundColor: "#57c257",
-                borderColor: "#2f7a2f",
-                color: "#0c3a0c",
-                boxShadow:
-                  "inset 2px 2px 0 rgba(255,255,255,0.55), inset -2px -2px 0 rgba(0,0,0,0.4)",
-              }
-        }
-      >
-        {isActive ? "Currently in use" : `Use ${handler.label}`}
-      </button>
-    </div>
-  );
-}
-
-function InspectorStat({
-  label,
-  value,
-  good,
-  small,
-}: {
-  label: string;
-  value: ReactNode;
-  good?: boolean;
-  small?: boolean;
-}) {
-  return (
-    <div
-      className="border-2 px-2 py-[4px]"
-      style={{
-        backgroundColor: MC.m85,
-        borderColor: MC.m47,
-        boxShadow: `inset 2px 2px 0 ${MC.m100}`,
-      }}
-    >
-      <div
-        className="text-[8px] font-bold uppercase tracking-[0.08em]"
-        style={{ color: MC.inkSoft }}
-      >
-        {label}
-      </div>
-      <div
-        className={[small ? "text-[10px]" : "text-[12px]", "font-bold tabular-nums"].join(" ")}
-        style={{ color: good ? "#1d6b1d" : MC.ink }}
-      >
-        {value}
-      </div>
+      {stats.controlSummaries.length > 0 ? (
+        <span className="max-w-full truncate font-bold">
+          {stats.controlSummaries.map((control) => `⚙ ${control.label}`).join(" · ")}
+        </span>
+      ) : null}
+      <span className="text-[var(--mc-ink-muted)]">{ocLabel}</span>
     </div>
   );
 }
@@ -591,18 +446,22 @@ function InspectorStat({
 /* Compare table                                                       */
 /* ------------------------------------------------------------------ */
 
-type SortKey = "name" | "tier" | "time" | "eut" | "craft" | "parallels";
+type SortKey = "name" | "tier" | "time" | "eut" | "parallels";
 
 const COMPARE_COLUMNS: { key: SortKey | "controls"; label: string; numeric?: boolean }[] = [
   { key: "name", label: "Machine" },
-  { key: "tier", label: "Min tier" },
+  { key: "tier", label: "Tier" },
   { key: "time", label: "Time", numeric: true },
   { key: "eut", label: "EU/t", numeric: true },
-  { key: "craft", label: "EU/craft", numeric: true },
-  { key: "parallels", label: "Parallels", numeric: true },
+  { key: "parallels", label: "Parallel", numeric: true },
   { key: "controls", label: "Controls" },
 ];
 
+/**
+ * The "⋯" view: one compact themed table, machines grouped by power source.
+ * Click a row to switch to that machine; hover previews it in the glance bar
+ * and stats side-box.
+ */
 export function MachineCompareTable({
   recipe,
   handlers,
@@ -610,7 +469,6 @@ export function MachineCompareTable({
   iconsById,
   onHover,
   onUse,
-  inspector,
 }: {
   recipe: Recipe;
   handlers: MachineHandler[];
@@ -618,8 +476,6 @@ export function MachineCompareTable({
   iconsById: ReadonlyMap<string, MachineHandlerIcon>;
   onHover: (handlerId: string | undefined) => void;
   onUse: (handlerId: string) => void;
-  /** Docked inspector pane for the hovered/selected row. */
-  inspector?: ReactNode;
 }) {
   const [sortKey, setSortKey] = useState<SortKey | undefined>();
   const [sortDir, setSortDir] = useState<1 | -1>(1);
@@ -631,26 +487,24 @@ export function MachineCompareTable({
 
   const groups = useMemo(() => {
     if (sortKey) {
+      const value = (row: (typeof rows)[number]) => {
+        switch (sortKey) {
+          case "time":
+            return row.stats.seconds;
+          case "eut":
+            return row.stats.eut;
+          case "parallels":
+            return row.stats.fixedParallels ?? 1;
+          case "tier":
+            return row.stats.minimumTier;
+          default:
+            return row.handler.label;
+        }
+      };
       const sorted = [...rows].sort((left, right) => {
-        const value = (row: (typeof rows)[number]) => {
-          switch (sortKey) {
-            case "time":
-              return row.stats.seconds;
-            case "eut":
-              return row.stats.eut;
-            case "craft":
-              return row.stats.totalEu;
-            case "parallels":
-              return row.stats.fixedParallels ?? 1;
-            case "tier":
-              return row.stats.minimumTier;
-            default:
-              return row.handler.label;
-          }
-        };
-        const leftValue = value(left);
-        const rightValue = value(right);
-        return (leftValue < rightValue ? -1 : leftValue > rightValue ? 1 : 0) * sortDir;
+        const l = value(left);
+        const r = value(right);
+        return (l < r ? -1 : l > r ? 1 : 0) * sortDir;
       });
       return [{ group: undefined as MachineGroup | undefined, rows: sorted }];
     }
@@ -676,25 +530,13 @@ export function MachineCompareTable({
 
   return (
     <div
-      className="nodrag nowheel absolute left-0 top-full z-[140] mt-1 flex border-[3px]"
-      style={{
-        backgroundColor: MC.m78,
-        borderColor: MC.m15,
-        boxShadow: `inset 2px 2px 0 ${MC.m100}, inset -2px -2px 0 ${MC.m33}, 5px 5px 0 rgba(0,0,0,0.3)`,
-      }}
+      className="nodrag nowheel absolute left-0 top-full z-[140] mt-1 max-h-[360px] w-[460px] overflow-auto border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
       onClick={(event) => event.stopPropagation()}
       role="dialog"
       aria-label="Compare machines"
       onMouseLeave={() => onHover(undefined)}
     >
-      <div className="max-h-[440px] w-[620px] overflow-auto p-2">
-      <div className="px-1 pb-1 text-[13px] font-bold" style={{ color: MC.ink }}>
-        Compare machines
-        <span className="pl-2 text-[10px] font-normal" style={{ color: MC.inkSoft }}>
-          numbers are for this recipe · click headers to sort · hover to inspect
-        </span>
-      </div>
-      <table className="w-full border-collapse">
+      <table className="w-full border-collapse text-[var(--mc-ink)]">
         <thead>
           <tr>
             {COMPARE_COLUMNS.map((column) => (
@@ -704,24 +546,22 @@ export function MachineCompareTable({
                   column.key === "controls" ? undefined : () => toggleSort(column.key as SortKey)
                 }
                 className={[
-                  "select-none whitespace-nowrap px-2 py-1 text-[9px] font-bold uppercase tracking-[0.1em]",
+                  "select-none whitespace-nowrap border-b-2 border-[var(--mc-47)] px-1.5 py-1 text-[8px] font-bold uppercase tracking-[0.1em] text-[var(--mc-ink-muted)]",
                   column.numeric ? "text-right" : "text-left",
                   column.key === "controls" ? "" : "cursor-pointer",
                 ].join(" ")}
-                style={{ color: "#3d3d3d", borderBottom: `3px solid ${MC.m47}` }}
               >
                 {column.label}
                 {sortKey === column.key ? (
-                  <span style={{ color: "#0e7490" }}> {sortDir > 0 ? "▲" : "▼"}</span>
+                  <span className="text-cyan-700"> {sortDir > 0 ? "▲" : "▼"}</span>
                 ) : null}
               </th>
             ))}
-            <th style={{ borderBottom: `3px solid ${MC.m47}` }} />
           </tr>
         </thead>
         <tbody>
           {groups.map(({ group, rows: groupRows }) => (
-            <GroupRows
+            <CompareGroupRows
               key={group ?? "sorted"}
               group={group}
               rows={groupRows}
@@ -733,13 +573,11 @@ export function MachineCompareTable({
           ))}
         </tbody>
       </table>
-      </div>
-      {inspector}
     </div>
   );
 }
 
-function GroupRows({
+function CompareGroupRows({
   group,
   rows,
   selectedId,
@@ -759,9 +597,8 @@ function GroupRows({
       {group ? (
         <tr>
           <td
-            colSpan={8}
-            className="px-2 pb-[2px] pt-2 text-[8px] font-bold uppercase tracking-[0.14em]"
-            style={{ color: MC.inkSoft }}
+            colSpan={6}
+            className="px-1.5 pb-0.5 pt-1.5 text-[7px] font-bold uppercase tracking-[0.14em] text-[var(--mc-ink-muted)]"
           >
             {group}
           </td>
@@ -769,120 +606,56 @@ function GroupRows({
       ) : null}
       {rows.map(({ handler, stats }) => {
         const active = handler.id === selectedId;
+        const cell = [
+          "whitespace-nowrap border-b border-[var(--mc-71)] px-1.5 py-1 text-[11px] tabular-nums",
+          active ? "bg-[#8b70dd] text-white [text-shadow:1px_1px_0_#4a3a8a]" : "",
+        ].join(" ");
         return (
           <tr
             key={handler.id}
             onMouseEnter={() => onHover(handler.id)}
-            onDoubleClick={() => onUse(handler.id)}
-            className="cursor-pointer"
-            style={{ backgroundColor: active ? "#8b70dd" : undefined }}
+            onClick={() => onUse(handler.id)}
+            className="cursor-pointer hover:bg-[var(--mc-85)]"
+            title={active ? `${handler.label} (in use)` : `Switch to ${handler.label}`}
           >
-            <td className="px-2 py-[5px]" style={{ borderBottom: `2px solid ${MC.m71}` }}>
-              <span className="flex items-center gap-2">
+            <td className={cell}>
+              <span className="flex items-center gap-1.5">
                 <MachineIconBox
                   icon={iconsById.get(handler.id)}
                   label={handler.label}
-                  box={30}
-                  iconPixels={26}
+                  box={24}
+                  iconPixels={20}
                 />
-                <span
-                  className="whitespace-nowrap text-[12px] font-bold"
-                  style={{
-                    color: active ? "#ffffff" : MC.ink,
-                    textShadow: active ? "1px 1px 0 #4a3a8a" : undefined,
-                  }}
-                >
-                  {handler.label}
-                </span>
+                <span className="max-w-[150px] truncate font-bold">{handler.label}</span>
                 {active ? (
-                  <span
-                    className="border px-1 text-[8px] font-bold leading-[12px]"
-                    style={{ backgroundColor: "#57c257", borderColor: "#2f7a2f", color: "#0c3a0c" }}
-                  >
-                    ACTIVE
+                  <span className="shrink-0 border border-[#2f7a2f] bg-[#57c257] px-0.5 text-[7px] font-bold leading-[11px] text-[#0c3a0c] [text-shadow:none]">
+                    ✓
                   </span>
                 ) : null}
               </span>
             </td>
-            <CompareCell active={active}>
+            <td className={cell}>
               <TierChip tier={stats.minimumTier} />
-            </CompareCell>
-            <CompareCell active={active} numeric>
-              {formatSeconds(stats.seconds)} s
-            </CompareCell>
-            <CompareCell active={active} numeric>
+            </td>
+            <td className={`${cell} text-right`}>{formatSeconds(stats.seconds)}s</td>
+            <td className={`${cell} text-right`}>
               {stats.eut > 0 ? formatRate(stats.eut, 0) : "—"}
-            </CompareCell>
-            <CompareCell active={active} numeric>
-              {stats.totalEu > 0 ? formatRate(stats.totalEu, 0) : "—"}
-            </CompareCell>
-            <CompareCell active={active} numeric>
+            </td>
+            <td className={`${cell} text-right`}>
               {stats.fixedParallels !== undefined
                 ? `×${formatRate(stats.fixedParallels, 0)}`
                 : stats.scalingParallels.length > 0
-                  ? `×${formatRate(stats.scalingParallels[0].max, 0)} max`
+                  ? `×${formatRate(stats.scalingParallels[0].max, 0)}`
                   : "—"}
-            </CompareCell>
-            <CompareCell active={active}>
+            </td>
+            <td className={`${cell} max-w-[110px] truncate`}>
               {stats.controlSummaries.length > 0
-                ? stats.controlSummaries.map((control) => `⚙ ${control.label}`).join(" · ")
+                ? stats.controlSummaries.map((control) => control.label).join(" · ")
                 : "—"}
-            </CompareCell>
-            <td
-              className="px-2 py-[5px] text-right"
-              style={{ borderBottom: `2px solid ${MC.m71}` }}
-            >
-              <button
-                type="button"
-                disabled={active}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onUse(handler.id);
-                }}
-                className="border-2 px-2 py-[3px] text-[10px] font-bold"
-                style={
-                  active
-                    ? { backgroundColor: MC.m71, borderColor: MC.m47, color: MC.inkSoft }
-                    : {
-                        backgroundColor: "#57c257",
-                        borderColor: "#2f7a2f",
-                        color: "#0c3a0c",
-                        boxShadow: "inset 2px 2px 0 rgba(255,255,255,0.5)",
-                      }
-                }
-              >
-                {active ? "In use" : "Use"}
-              </button>
             </td>
           </tr>
         );
       })}
     </>
-  );
-}
-
-function CompareCell({
-  children,
-  active,
-  numeric,
-}: {
-  children: ReactNode;
-  active: boolean;
-  numeric?: boolean;
-}) {
-  return (
-    <td
-      className={[
-        "whitespace-nowrap px-2 py-[5px] text-[11.5px] tabular-nums",
-        numeric ? "text-right" : "text-left",
-      ].join(" ")}
-      style={{
-        color: active ? "#ffffff" : MC.ink,
-        textShadow: active ? "1px 1px 0 #4a3a8a" : undefined,
-        borderBottom: `2px solid ${MC.m71}`,
-      }}
-    >
-      {children}
-    </td>
   );
 }

@@ -50,7 +50,7 @@ import { CropPickerMenu } from "./CropPickerMenu";
 import {
   MachineCompareTable,
   MachineGlanceBar,
-  MachineInspectorPanel,
+  MachineStatsSidebox,
   MachineTabStrip,
 } from "./MachinePicker";
 import { useMachineHandlerIcons } from "./machine-icons";
@@ -322,6 +322,24 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     : selectedMachineHandler;
   const isPreviewing = hasMachinePicker && previewHandler.id !== selectedMachineHandler.id;
   const machineCategory = recipe.source?.recipeMap ?? recipe.machineType;
+  // While hovering a machine tab, the card's own Total/Usage/Time lines show
+  // that machine's base numbers instead of opening any popup.
+  const neiDisplayRecipe = isPreviewing
+    ? {
+        ...overclockedRecipe,
+        ...(() => {
+          const previewApplied = applyMachineHandlerToRecipe(recipe, {
+            machineHandlerId: previewHandler.id,
+          });
+          return {
+            machineType: previewApplied.machineType,
+            minimumTier: previewApplied.minimumTier,
+            durationTicks: previewApplied.durationTicks,
+            eut: previewApplied.eut,
+          };
+        })(),
+      }
+    : overclockedRecipe;
 
   return (
     <div
@@ -446,16 +464,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 onClose={() => setCropMenuOpen(false)}
               />
             ) : null}
-            {hasMachinePicker && previewHandlerId && !isCompareOpen ? (
-              <MachineInspectorPanel
-                recipe={recipe}
-                handler={previewHandler}
-                icon={machineIcons.get(previewHandler.id)}
-                isPreview={isPreviewing}
-                selectedId={selectedMachineHandler.id}
-                onUse={updateMachineHandler}
-              />
-            ) : null}
             {hasMachinePicker && isCompareOpen ? (
               <MachineCompareTable
                 recipe={recipe}
@@ -464,17 +472,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 iconsById={machineIcons}
                 onHover={setPreviewHandlerId}
                 onUse={updateMachineHandler}
-                inspector={
-                  <MachineInspectorPanel
-                    recipe={recipe}
-                    handler={previewHandler}
-                    icon={machineIcons.get(previewHandler.id)}
-                    isPreview={isPreviewing}
-                    selectedId={selectedMachineHandler.id}
-                    onUse={updateMachineHandler}
-                    floating={false}
-                  />
-                }
               />
             ) : null}
           </div>
@@ -529,7 +526,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             </button>
           ) : (
           <NeiRecipeWindow
-            recipe={overclockedRecipe}
+            recipe={neiDisplayRecipe}
             scale={2}
             compact
             className={["mx-auto", nodeColor ? "recipe-node-nei-tint" : undefined]
@@ -537,9 +534,14 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               .join(" ")}
             canvasClassName={nodeColor ? "recipe-node-canvas-tint" : undefined}
             statsAction={
-              machineParallelMultiplier > 1 ? (
-                <div className="flex gap-1">
-                  <MachineParallelIndicator multiplier={machineParallelMultiplier} />
+              hasMachinePicker || machineParallelMultiplier > 1 ? (
+                <div className="flex items-start gap-1">
+                  {machineParallelMultiplier > 1 ? (
+                    <MachineParallelIndicator multiplier={machineParallelMultiplier} />
+                  ) : null}
+                  {hasMachinePicker ? (
+                    <MachineStatsSidebox recipe={recipe} handler={previewHandler} />
+                  ) : null}
                 </div>
               ) : undefined
             }
