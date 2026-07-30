@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { MachineHandler, MachineTier, Recipe } from "@/lib/model/types";
 import { applyMachineHandlerToRecipe, formatRate } from "@/lib/model";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
@@ -261,9 +261,11 @@ export function MachineTabStrip({
           <button
             key={handler.id}
             type="button"
+            // Preview is pointer-only (focus used to flash it around clicks)
+            // and only the strip's own mouseleave clears it — clearing per
+            // tab made the preview blink back to the selected machine while
+            // sweeping across the tiny gaps between tabs.
             onMouseEnter={() => onHover(handler.id)}
-            onFocus={() => onHover(handler.id)}
-            onBlur={() => onHover(undefined)}
             onClick={(event) => {
               event.stopPropagation();
               onSelect(handler.id);
@@ -273,13 +275,14 @@ export function MachineTabStrip({
             aria-label={`Use ${handler.label}`}
             aria-pressed={active}
             // Just the machine art: no box behind unselected icons, only the
-            // selected machine sits on a raised tab.
+            // selected machine sits on a raised tab. The live glance-bar and
+            // card-stat preview is all the hover feedback needed.
             className={[
               "flex h-[38px] w-[38px] items-center justify-center hover:brightness-110",
               active
                 ? "border-2 border-[var(--mc-15)] bg-[var(--mc-85)] shadow-[inset_2px_2px_0_var(--mc-100)]"
                 : peeked
-                  ? "opacity-100 [filter:drop-shadow(0_0_3px_#22d3ee)]"
+                  ? "opacity-100"
                   : "opacity-75",
             ].join(" ")}
           >
@@ -308,6 +311,7 @@ export function MachineTabStrip({
           onToggleCompare();
         }}
         onPointerDown={(event) => event.stopPropagation()}
+        data-compare-toggle
         title="Compare all machines"
         aria-label="Compare all machines"
         className={[
@@ -344,10 +348,7 @@ export function MachineGlanceBar({
   const parallels = stats.fixedParallels;
   return (
     <div
-      className={[
-        "grid h-[42px] min-w-0 items-center gap-[6px] border-2 border-[var(--mc-15)] bg-[var(--mc-61)] pl-[3px] pr-[6px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-47)]",
-        isPreview ? "ring-2 ring-cyan-300" : "",
-      ].join(" ")}
+      className="grid h-[42px] min-w-0 items-center gap-[6px] border-2 border-[var(--mc-15)] bg-[var(--mc-61)] pl-[3px] pr-[6px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-47)]"
       style={{ gridTemplateColumns: "40px minmax(0,1fr) 44px 68px 48px" }}
     >
       <MachineIconBox icon={icon} label={handler.label} box={38} />
@@ -421,6 +422,7 @@ export function MachineCompareTable({
   iconsById,
   onHover,
   onUse,
+  onClose,
 }: {
   recipe: Recipe;
   handlers: MachineHandler[];
@@ -428,9 +430,38 @@ export function MachineCompareTable({
   iconsById: ReadonlyMap<string, MachineHandlerIcon>;
   onHover: (handlerId: string | undefined) => void;
   onUse: (handlerId: string) => void;
+  onClose: () => void;
 }) {
   const [sortKey, setSortKey] = useState<SortKey | undefined>();
   const [sortDir, setSortDir] = useState<1 | -1>(1);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Clicking anywhere outside (or Escape) closes the panel. Capture phase so
+  // canvas handlers that stop propagation cannot swallow the click.
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      // The "⋯" button manages its own toggle; closing here too would make
+      // its click immediately reopen the panel.
+      if (target?.closest?.("[data-compare-toggle]")) {
+        return;
+      }
+      if (!rootRef.current?.contains(event.target as Node)) {
+        onClose();
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
 
   const rows = useMemo(
     () => handlers.map((handler) => ({ handler, stats: getHandlerRecipeStats(recipe, handler) })),
@@ -482,6 +513,7 @@ export function MachineCompareTable({
 
   return (
     <div
+      ref={rootRef}
       className="nodrag nowheel absolute left-0 top-full z-[140] mt-1 max-h-[360px] w-[460px] overflow-auto border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
       onClick={(event) => event.stopPropagation()}
       role="dialog"
