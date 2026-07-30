@@ -106,7 +106,11 @@ interface FactoryStore {
   selectNode: (nodeId?: string) => void;
   selectRecipe: (recipeId?: string) => void;
   addNodeForRecipe: (recipeId: string) => void;
-  addNodeForRecipeObject: (recipe: Recipe, resource?: RecipeInputContextResource) => void;
+  addNodeForRecipeObject: (
+    recipe: Recipe,
+    resource?: RecipeInputContextResource,
+    options?: { machineHandlerId?: string },
+  ) => void;
   addConnectedNodeForRecipe: (
     recipeId: string,
     anchorNodeId: string,
@@ -595,8 +599,8 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       return addRecipeNodeToState(state, recipe);
     });
   },
-  addNodeForRecipeObject: (recipe, resource) => {
-    set((state) => addRecipeNodeToState(state, recipe, resource));
+  addNodeForRecipeObject: (recipe, resource, options) => {
+    set((state) => addRecipeNodeToState(state, recipe, resource, options));
   },
   addConnectedNodeForRecipe: (recipeId, anchorNodeId, resource) => {
     set((state) => {
@@ -1327,7 +1331,7 @@ function addRecipeNodeToState(
   state: FactoryStore,
   recipe: Recipe,
   resource?: RecipeInputContextResource,
-  options?: { colorTag?: FactoryNodeColorTag },
+  options?: { colorTag?: FactoryNodeColorTag; machineHandlerId?: string },
 ): Partial<FactoryStore> {
   const index = state.project.nodes.length;
   const viewportPosition = state.flowViewportCenter
@@ -1336,12 +1340,18 @@ function addRecipeNodeToState(
         y: state.flowViewportCenter.y - 160,
       }
     : undefined;
+  // A machine picked in the recipe finder spawns the node with that handler
+  // selected, at the handler's own minimum tier.
+  const spawnHandler = options?.machineHandlerId
+    ? recipe.machineHandlers?.find((handler) => handler.id === options.machineHandlerId)
+    : undefined;
   const node: FactoryNode = {
     id: createId("node"),
     recipeId: recipe.id,
     machineCount: 1,
     parallel: 1,
-    overclockTier: recipe.minimumTier,
+    machineHandlerId: spawnHandler?.id,
+    overclockTier: spawnHandler?.minimumTier ?? recipe.minimumTier,
     recipeInputOverrides: resource ? buildRecipeInputOverrides(recipe, resource) : undefined,
     colorTag: options?.colorTag,
     enabled: true,
