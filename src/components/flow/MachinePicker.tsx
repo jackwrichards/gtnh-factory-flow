@@ -8,10 +8,8 @@ import { GT_TIER_COLORS } from "./tier-colors";
 import type { MachineHandlerIcon } from "./machine-icons";
 
 /**
- * The machine switcher, playground-geometry edition. Three pieces share one
- * fixed Minecraft-gray palette (identical in both app themes, like real MC
- * GUIs): dark ink only ever sits on the light grays, white text only on the
- * dark header gray, always with a pixel shadow.
+ * The machine switcher. Everything follows the app theme variables; only the
+ * item icon boxes keep the fixed NEI slot chrome, matching real recipe slots.
  *
  *  - MachineTabStrip: big machine icons above the node; click switches,
  *    hover previews. The trailing "⋯" tab opens the compare table.
@@ -23,19 +21,11 @@ import type { MachineHandlerIcon } from "./machine-icons";
  *    row to switch.
  */
 
-// Fixed classic-MC palette (deliberately NOT theme variables).
-const MC = {
-  m100: "#ffffff",
-  m85: "#d8d8d8",
-  m78: "#c6c6c6",
-  m71: "#b5b5b5",
-  m61: "#9c9c9c",
-  m55: "#8b8b8b",
-  m47: "#787878",
-  m33: "#555555",
-  m15: "#262626",
-  ink: "#1a1a1a",
-  inkSoft: "#4c4c4c",
+// The NEI item-slot chrome (fixed, like the app's real recipe slots).
+const SLOT = {
+  background: "#8b8b8b",
+  insetDark: "#373737",
+  insetLight: "#ffffff",
 };
 
 export interface HandlerRecipeStats {
@@ -161,8 +151,11 @@ function TierChip({ tier, className }: { tier: string; className?: string }) {
   if (!color) {
     return (
       <span
-        className={[base, "min-w-[38px] px-1 text-[10px] leading-[14px]", className ?? ""].join(" ")}
-        style={{ backgroundColor: MC.m71, borderColor: MC.m47, color: MC.ink }}
+        className={[
+          base,
+          "min-w-[38px] border-[var(--mc-47)] bg-[var(--mc-71)] px-1 text-[10px] leading-[14px] text-[var(--mc-ink)]",
+          className ?? "",
+        ].join(" ")}
       >
         ANY
       </span>
@@ -200,8 +193,8 @@ function MachineIconBox({
       style={{
         width: box,
         height: box,
-        backgroundColor: MC.m55,
-        boxShadow: "inset 2px 2px 0 #373737, inset -2px -2px 0 #ffffff",
+        backgroundColor: SLOT.background,
+        boxShadow: `inset 2px 2px 0 ${SLOT.insetDark}, inset -2px -2px 0 ${SLOT.insetLight}`,
       }}
     >
       {icon ? (
@@ -215,7 +208,7 @@ function MachineIconBox({
           iconPixelSize={iconPixels}
         />
       ) : (
-        <span className="text-[12px] font-bold" style={{ color: MC.m100 }}>
+        <span className="text-[12px] font-bold text-white">
           {label.slice(0, 1).toUpperCase()}
         </span>
       )}
@@ -248,7 +241,7 @@ export function MachineTabStrip({
 }) {
   return (
     <div
-      className="nodrag -mb-[2px] flex items-end gap-[3px] px-1"
+      className="nodrag mb-1 flex flex-wrap items-center gap-[3px] px-1"
       onMouseLeave={() => onHover(undefined)}
     >
       {handlers.map((handler) => {
@@ -271,23 +264,15 @@ export function MachineTabStrip({
             aria-label={`Use ${handler.label}`}
             aria-pressed={active}
             // Just the machine art: no box behind unselected icons, only the
-            // selected machine stands on a raised tab.
+            // selected machine sits on a raised tab.
             className={[
-              "flex w-[44px] items-end justify-center pb-[2px] hover:brightness-110",
-              active ? "h-[46px] border-2 border-b-0" : "h-[44px]",
-            ].join(" ")}
-            style={
+              "flex h-[52px] w-[52px] items-center justify-center hover:brightness-110",
               active
-                ? {
-                    backgroundColor: MC.m85,
-                    borderColor: MC.m15,
-                    boxShadow: `inset 2px 2px 0 ${MC.m100}`,
-                  }
-                : {
-                    opacity: peeked ? 1 : 0.78,
-                    filter: peeked ? "drop-shadow(0 0 3px #22d3ee)" : undefined,
-                  }
-            }
+                ? "border-2 border-[var(--mc-15)] bg-[var(--mc-85)] shadow-[inset_2px_2px_0_var(--mc-100)]"
+                : peeked
+                  ? "opacity-100 [filter:drop-shadow(0_0_3px_#22d3ee)]"
+                  : "opacity-75",
+            ].join(" ")}
           >
             {icon ? (
               <ResourceIcon
@@ -296,11 +281,11 @@ export function MachineTabStrip({
                 bare
                 showAmount={false}
                 tooltip={false}
-                className="!h-[38px] !w-[38px]"
-                iconPixelSize={36}
+                className="!h-[48px] !w-[48px]"
+                iconPixelSize={46}
               />
             ) : (
-              <span className="text-[14px] font-bold" style={{ color: MC.m100 }}>
+              <span className="text-[18px] font-bold text-[var(--mc-ink)]">
                 {handler.label.slice(0, 1).toUpperCase()}
               </span>
             )}
@@ -317,16 +302,11 @@ export function MachineTabStrip({
         title="Compare all machines"
         aria-label="Compare all machines"
         className={[
-          "flex w-[30px] items-center justify-center border-2 border-b-0 text-[15px] font-bold leading-none hover:brightness-110",
-          isCompareOpen ? "h-[44px]" : "h-[38px]",
+          "flex h-[40px] w-[40px] items-center justify-center self-center border-2 text-[18px] font-bold leading-none hover:brightness-110",
+          isCompareOpen
+            ? "border-[var(--mc-15)] bg-[var(--mc-85)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100)]"
+            : "border-[var(--mc-33)] bg-[var(--mc-61)] text-white shadow-[inset_2px_2px_0_var(--mc-85)] [text-shadow:1px_1px_0_var(--mc-24)]",
         ].join(" ")}
-        style={{
-          backgroundColor: isCompareOpen ? MC.m85 : MC.m61,
-          borderColor: isCompareOpen ? MC.m15 : MC.m33,
-          boxShadow: isCompareOpen ? `inset 2px 2px 0 ${MC.m100}` : `inset 2px 2px 0 ${MC.m85}`,
-          color: isCompareOpen ? MC.ink : MC.m100,
-          textShadow: isCompareOpen ? undefined : "1px 1px 0 #3f3f3f",
-        }}
       >
         ⋯
       </button>
@@ -355,28 +335,21 @@ export function MachineGlanceBar({
   const parallels = stats.fixedParallels;
   return (
     <div
-      className="grid h-[34px] min-w-0 items-center gap-[6px] border-2 pl-[3px] pr-[6px]"
-      style={{
-        gridTemplateColumns: "28px minmax(0,1fr) 46px 70px 50px",
-        backgroundColor: MC.m61,
-        borderColor: MC.m15,
-        boxShadow: isPreview
-          ? `inset 2px 2px 0 ${MC.m85}, inset -2px -2px 0 #5d5d5d, 0 0 0 2px #22d3ee`
-          : `inset 2px 2px 0 ${MC.m85}, inset -2px -2px 0 #5d5d5d`,
-      }}
+      className={[
+        "grid h-[42px] min-w-0 items-center gap-[6px] border-2 border-[var(--mc-15)] bg-[var(--mc-61)] pl-[3px] pr-[6px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-47)]",
+        isPreview ? "ring-2 ring-cyan-300" : "",
+      ].join(" ")}
+      style={{ gridTemplateColumns: "40px minmax(0,1fr) 44px 68px 48px" }}
     >
-      <MachineIconBox icon={icon} label={handler.label} box={26} iconPixels={22} />
-      {/* Hard cap so marathon names truncate instead of widening the node. */}
-      <span className="min-w-0 max-w-[150px] leading-[1.05]">
-        <span
-          className="block truncate text-[8px] font-bold uppercase tracking-[0.13em]"
-          style={{ color: "#ececec", textShadow: "1px 1px 0 #4a4a4a" }}
-        >
+      <MachineIconBox icon={icon} label={handler.label} box={38} iconPixels={34} />
+      {/* Truncates freely — the w-0/min-w-full wrapper above keeps the node
+          width owned by the recipe card, never by this name. */}
+      <span className="min-w-0 leading-[1.05]">
+        <span className="block truncate text-[8px] font-bold uppercase tracking-[0.13em] text-white/85 [text-shadow:1px_1px_0_var(--mc-24)]">
           {category}
         </span>
         <span
-          className="minecraft-title block truncate text-[13px] font-bold leading-[14px]"
-          style={{ color: MC.m100, textShadow: "1px 1px 0 #3d3d3d" }}
+          className="minecraft-title block truncate text-[13px] font-bold leading-[15px] text-white [text-shadow:1px_1px_0_var(--mc-24)]"
           title={handler.label}
         >
           {handler.label}
@@ -396,16 +369,15 @@ export function MachineGlanceBar({
 
 function GlanceCell({ label, value, dim }: { label: string; value: string; dim?: boolean }) {
   return (
-    <span className="text-right leading-[1.1]">
-      <span
-        className="block text-[7px] font-bold tracking-[0.1em]"
-        style={{ color: "#ececec", textShadow: "1px 1px 0 #4a4a4a" }}
-      >
+    <span className="overflow-hidden text-right leading-[1.1]">
+      <span className="block text-[7px] font-bold tracking-[0.1em] text-white/85 [text-shadow:1px_1px_0_var(--mc-24)]">
         {label}
       </span>
       <span
-        className="block whitespace-nowrap text-[11px] font-bold tabular-nums"
-        style={{ color: dim ? "#d9d9d9" : MC.m100, textShadow: "1px 1px 0 #3d3d3d" }}
+        className={[
+          "block whitespace-nowrap text-[11px] font-bold tabular-nums [text-shadow:1px_1px_0_var(--mc-24)]",
+          dim ? "text-white/70" : "text-white",
+        ].join(" ")}
       >
         {value}
       </span>
@@ -431,7 +403,7 @@ const COMPARE_COLUMNS: { key: SortKey | "controls"; label: string; numeric?: boo
 /**
  * The "⋯" view: one compact themed table, machines grouped by power source.
  * Click a row to switch to that machine; hover previews it in the glance bar
- * and stats side-box.
+ * and the card's stat lines.
  */
 export function MachineCompareTable({
   recipe,

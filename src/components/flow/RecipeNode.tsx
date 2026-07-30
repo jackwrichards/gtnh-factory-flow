@@ -365,6 +365,10 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         </div>
       ) : null}
       <div className="px-2 pb-2 pt-1">
+        {/* width:0 + min-width:100% — the picker header adapts to whatever
+            width the recipe card sets and can never widen the node itself,
+            no matter how long a machine name or tab strip gets. */}
+        <div className="w-0 min-w-full">
         {hasMachinePicker ? (
           <MachineTabStrip
             handlers={machineHandlers}
@@ -495,6 +499,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               {tierControl.current}
             </button>
           ) : null}
+        </div>
         </div>
         <div
           className={nodeColor ? "recipe-node-tinted-area" : undefined}
