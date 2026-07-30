@@ -282,9 +282,10 @@ export function MachineTabStrip({
                 showAmount={false}
                 tooltip={false}
                 className="!h-[64px] !w-[64px]"
-                // The rendered machine art carries transparent margins, so the
-                // image is oversized a touch to make the block itself big.
-                iconPixelSize={72}
+                // The rendered machine art carries ~30% transparent margin;
+                // drawing the image at ~1.4x the box crops it away so the
+                // block itself fills the tab.
+                iconPixelSize={90}
               />
             ) : (
               <span className="text-[22px] font-bold text-[var(--mc-ink)]">
@@ -343,7 +344,7 @@ export function MachineGlanceBar({
       ].join(" ")}
       style={{ gridTemplateColumns: "40px minmax(0,1fr) 44px 68px 48px" }}
     >
-      <MachineIconBox icon={icon} label={handler.label} box={38} iconPixels={44} />
+      <MachineIconBox icon={icon} label={handler.label} box={38} iconPixels={53} />
       {/* Truncates freely — the w-0/min-w-full wrapper above keeps the node
           width owned by the recipe card, never by this name. */}
       <span className="min-w-0 leading-[1.05]">
@@ -569,7 +570,7 @@ function CompareGroupRows({
                   icon={iconsById.get(handler.id)}
                   label={handler.label}
                   box={32}
-                  iconPixels={38}
+                  iconPixels={45}
                 />
                 <span className="max-w-[150px] truncate font-bold">{handler.label}</span>
                 {active ? (
