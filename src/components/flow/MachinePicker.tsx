@@ -30,11 +30,13 @@ const SLOT = {
 
 // Rendered machine PNGs are 256px squares whose opaque block art spans
 // exactly 114x126px (identical bounds on every machine render). Drawing the
-// image at box * 256/126 makes the art flush with the box - zero margin.
+// image at art * 256/126 crops the transparent padding exactly; the art is
+// then sized a hair under its box for a small breathing margin.
 const MACHINE_ART_SCALE = 256 / 126;
 
 function machineArtPixels(box: number): number {
-  return Math.round(box * MACHINE_ART_SCALE);
+  const margin = Math.max(2, Math.round(box * 0.055));
+  return Math.round((box - margin * 2) * MACHINE_ART_SCALE);
 }
 
 export interface HandlerRecipeStats {
