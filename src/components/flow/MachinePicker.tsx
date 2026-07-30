@@ -28,6 +28,15 @@ const SLOT = {
   insetLight: "#ffffff",
 };
 
+// Rendered machine PNGs are 256px squares whose opaque block art spans
+// exactly 114x126px (identical bounds on every machine render). Drawing the
+// image at box * 256/126 makes the art flush with the box - zero margin.
+const MACHINE_ART_SCALE = 256 / 126;
+
+function machineArtPixels(box: number): number {
+  return Math.round(box * MACHINE_ART_SCALE);
+}
+
 export interface HandlerRecipeStats {
   seconds: number;
   eut: number;
@@ -180,12 +189,10 @@ function MachineIconBox({
   icon,
   label,
   box,
-  iconPixels,
 }: {
   icon?: MachineHandlerIcon;
   label: string;
   box: number;
-  iconPixels: number;
 }) {
   return (
     <span
@@ -205,7 +212,7 @@ function MachineIconBox({
           showAmount={false}
           tooltip={false}
           className="!h-full !w-full"
-          iconPixelSize={iconPixels}
+          iconPixelSize={machineArtPixels(box)}
         />
       ) : (
         <span className="text-[12px] font-bold text-white">
@@ -266,7 +273,7 @@ export function MachineTabStrip({
             // Just the machine art: no box behind unselected icons, only the
             // selected machine sits on a raised tab.
             className={[
-              "flex h-[68px] w-[68px] items-center justify-center hover:brightness-110",
+              "flex h-[60px] w-[60px] items-center justify-center hover:brightness-110",
               active
                 ? "border-2 border-[var(--mc-15)] bg-[var(--mc-85)] shadow-[inset_2px_2px_0_var(--mc-100)]"
                 : peeked
@@ -281,11 +288,8 @@ export function MachineTabStrip({
                 bare
                 showAmount={false}
                 tooltip={false}
-                className="!h-[64px] !w-[64px]"
-                // The rendered machine art carries ~30% transparent margin;
-                // drawing the image at ~1.4x the box crops it away so the
-                // block itself fills the tab.
-                iconPixelSize={90}
+                className="!h-[56px] !w-[56px]"
+                iconPixelSize={machineArtPixels(56)}
               />
             ) : (
               <span className="text-[22px] font-bold text-[var(--mc-ink)]">
@@ -344,7 +348,7 @@ export function MachineGlanceBar({
       ].join(" ")}
       style={{ gridTemplateColumns: "40px minmax(0,1fr) 44px 68px 48px" }}
     >
-      <MachineIconBox icon={icon} label={handler.label} box={38} iconPixels={53} />
+      <MachineIconBox icon={icon} label={handler.label} box={38} />
       {/* Truncates freely — the w-0/min-w-full wrapper above keeps the node
           width owned by the recipe card, never by this name. */}
       <span className="min-w-0 leading-[1.05]">
@@ -570,7 +574,6 @@ function CompareGroupRows({
                   icon={iconsById.get(handler.id)}
                   label={handler.label}
                   box={32}
-                  iconPixels={45}
                 />
                 <span className="max-w-[150px] truncate font-bold">{handler.label}</span>
                 {active ? (
