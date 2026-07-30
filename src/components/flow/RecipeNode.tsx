@@ -47,6 +47,8 @@ import {
 } from "@/lib/model";
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
 import { CropPickerMenu } from "./CropPickerMenu";
+import { MachineComparePanel, MachineGlanceContent, MachineTabStrip } from "./MachinePicker";
+import { useMachineIcons } from "./machine-icons";
 import { MinecraftSelect } from "./MinecraftSelect";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { MachineStatsContent } from "./MachineStatsContent";
@@ -62,6 +64,7 @@ import { getPaintBrushCursor } from "./paint-cursor";
 import { GT_TIER_COLORS } from "./tier-colors";
 
 const CROP_CONFIG_PANEL_WIDTH_CLASS = "w-[398px]";
+const EMPTY_ICON_LABELS: string[] = [];
 
 export interface RecipeNodeData extends Record<string, unknown> {
   projectNode: FactoryNode;
@@ -73,7 +76,8 @@ export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 
 function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const { projectNode, recipe, result } = data;
-  const [isMachineMenuOpen, setIsMachineMenuOpen] = useState(false);
+  const [isCompareOpen, setCompareOpen] = useState(false);
+  const [previewHandlerId, setPreviewHandlerId] = useState<string>();
   const [isCropMenuOpen, setCropMenuOpen] = useState(false);
   const [openMachineConfigMenuId, setOpenMachineConfigMenuId] = useState<string>();
   const browseResource = useFactoryStore((state) => state.browseResource);
@@ -303,8 +307,16 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       machineHandlerId: nextHandler.id,
       overclockTier: nextHandler.minimumTier,
     });
-    setIsMachineMenuOpen(false);
+    setCompareOpen(false);
   };
+
+  const hasMachinePicker = machineHandlers.length > 1 && !isCropFarmNode;
+  const machineIcons = useMachineIcons(
+    hasMachinePicker ? machineHandlers.map((handler) => handler.label) : EMPTY_ICON_LABELS,
+  );
+  const previewHandler = hasMachinePicker
+    ? (machineHandlers.find((handler) => handler.id === previewHandlerId) ?? selectedMachineHandler)
+    : selectedMachineHandler;
 
   return (
     <div
@@ -335,16 +347,23 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         </div>
       ) : null}
       <div className="px-2 pb-2 pt-1">
+        {hasMachinePicker ? (
+          <MachineTabStrip
+            handlers={machineHandlers}
+            selectedId={selectedMachineHandler.id}
+            iconsByLabel={machineIcons}
+            onHover={setPreviewHandlerId}
+            onSelect={updateMachineHandler}
+            onOpenCompare={() => setCompareOpen((open) => !open)}
+            isCompareOpen={isCompareOpen}
+          />
+        ) : null}
         <div
           className={[
             "mb-1 grid min-w-0 items-center",
-            machineHandlers.length > 1 && tierControl
-              ? "grid-cols-[24px_minmax(0,1fr)_50px_24px]"
-              : machineHandlers.length > 1
-                ? "grid-cols-[24px_minmax(0,1fr)_24px]"
-                : tierControl
-                  ? "grid-cols-[24px_minmax(0,1fr)_50px]"
-                  : "grid-cols-[24px_minmax(0,1fr)]",
+            tierControl
+              ? "grid-cols-[24px_minmax(0,1fr)_50px]"
+              : "grid-cols-[24px_minmax(0,1fr)]",
           ].join(" ")}
         >
           <button
@@ -388,16 +407,29 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   "minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]",
                   // Symmetric padding keeps the crop name in the true middle;
                   // the picker chevron floats on the right without shifting it.
-                  isCropFarmNode ? "nodrag relative cursor-pointer px-5 hover:brightness-110" : "px-2",
+                  isCropFarmNode
+                    ? "nodrag relative cursor-pointer px-5 hover:brightness-110"
+                    : hasMachinePicker
+                      ? "px-0"
+                      : "px-2",
                 ].join(" ")}
                 style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
                 title={isCropFarmNode ? "Pick a crop" : undefined}
               >
-                <span className="mx-auto min-w-0 truncate">
-                  {isCropFarmPlaceholder
-                    ? "Pick a crop..."
-                    : (cropTitle ?? selectedMachineHandler.label)}
-                </span>
+                {hasMachinePicker && !isCropFarmNode ? (
+                  <MachineGlanceContent
+                    recipe={recipe}
+                    handler={previewHandler}
+                    icon={machineIcons[previewHandler.label]}
+                    isPreview={previewHandler.id !== selectedMachineHandler.id}
+                  />
+                ) : (
+                  <span className="mx-auto min-w-0 truncate">
+                    {isCropFarmPlaceholder
+                      ? "Pick a crop..."
+                      : (cropTitle ?? selectedMachineHandler.label)}
+                  </span>
+                )}
                 {isCropFarmNode ? (
                   <ChevronDown className="absolute right-1 top-1/2 h-3 w-3 shrink-0 -translate-y-1/2" />
                 ) : null}
@@ -407,6 +439,16 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               <CropPickerMenu
                 nodeId={projectNode.id}
                 onClose={() => setCropMenuOpen(false)}
+              />
+            ) : null}
+            {isCompareOpen && hasMachinePicker ? (
+              <MachineComparePanel
+                recipe={recipe}
+                handlers={machineHandlers}
+                selectedId={selectedMachineHandler.id}
+                iconsByLabel={machineIcons}
+                onUse={updateMachineHandler}
+                onClose={() => setCompareOpen(false)}
               />
             ) : null}
           </div>
@@ -434,48 +476,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             >
               {tierControl.current}
             </button>
-          ) : null}
-          {machineHandlers.length > 1 ? (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setIsMachineMenuOpen((current) => !current);
-                }}
-                className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-55)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
-                title={`Machine: ${selectedMachineHandler.label}`}
-                aria-label={`Select machine handler. Current: ${selectedMachineHandler.label}`}
-              >
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-              {isMachineMenuOpen ? (
-                <div
-                  className="nodrag absolute right-0 top-7 z-50 min-w-[180px] border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 text-[11px] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  {machineHandlers.map((handler) => (
-                    <MinecraftTooltip
-                      key={handler.id}
-                      content={<MachineStatsContent recipe={recipe} handler={handler} />}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => updateMachineHandler(handler.id)}
-                        className={[
-                          "block w-full truncate border-2 px-2 py-1 text-left font-bold",
-                          handler.id === selectedMachineHandler.id
-                            ? "border-[#6b4fd1] bg-[#8b70dd] text-white"
-                            : "border-[var(--mc-47)] bg-[var(--mc-85)] text-[var(--mc-ink)] hover:bg-[var(--mc-100)]",
-                        ].join(" ")}
-                      >
-                        {handler.label}
-                      </button>
-                    </MinecraftTooltip>
-                  ))}
-                </div>
-              ) : null}
-            </div>
           ) : null}
         </div>
         <div
