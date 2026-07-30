@@ -435,6 +435,16 @@ export function MachineCompareTable({
   const [sortKey, setSortKey] = useState<SortKey | undefined>();
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const rootRef = useRef<HTMLDivElement>(null);
+  const [alignRight, setAlignRight] = useState(false);
+
+  // If the panel would run under the app's right sidebar, hang it off the
+  // node's right edge instead of its left.
+  useEffect(() => {
+    const rect = rootRef.current?.getBoundingClientRect();
+    if (rect && rect.right > window.innerWidth - 460) {
+      setAlignRight(true);
+    }
+  }, []);
 
   // Clicking anywhere outside (or Escape) closes the panel. Capture phase so
   // canvas handlers that stop propagation cannot swallow the click.
@@ -514,7 +524,10 @@ export function MachineCompareTable({
   return (
     <div
       ref={rootRef}
-      className="nodrag nowheel absolute left-0 top-full z-[140] mt-1 max-h-[360px] w-[460px] overflow-auto border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
+      className={[
+        "nodrag nowheel absolute top-full z-[140] mt-1 max-h-[360px] w-[660px] overflow-auto border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]",
+        alignRight ? "right-0" : "left-0",
+      ].join(" ")}
       onClick={(event) => event.stopPropagation()}
       role="dialog"
       aria-label="Compare machines"
@@ -609,12 +622,7 @@ function CompareGroupRows({
                   label={handler.label}
                   box={32}
                 />
-                <span className="max-w-[150px] truncate font-bold">{handler.label}</span>
-                {active ? (
-                  <span className="shrink-0 border border-[#2f7a2f] bg-[#57c257] px-0.5 text-[7px] font-bold leading-[11px] text-[#0c3a0c] [text-shadow:none]">
-                    ✓
-                  </span>
-                ) : null}
+                <span className="max-w-[170px] truncate font-bold">{handler.label}</span>
               </span>
             </td>
             <td className={cell}>
@@ -631,7 +639,14 @@ function CompareGroupRows({
                   ? `×${formatRate(stats.scalingParallels[0].max, 0)}`
                   : "—"}
             </td>
-            <td className={`${cell} max-w-[110px] truncate`}>
+            <td
+              className={`${cell} max-w-[200px] truncate`}
+              title={
+                stats.controlSummaries.length > 0
+                  ? stats.controlSummaries.map((control) => control.label).join(" · ")
+                  : undefined
+              }
+            >
               {stats.controlSummaries.length > 0
                 ? stats.controlSummaries.map((control) => control.label).join(" · ")
                 : "—"}

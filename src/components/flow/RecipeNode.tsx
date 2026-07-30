@@ -123,7 +123,13 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     const nodeRecipe = applyRecipeInputOverrides(recipe, projectNode);
     const effectiveRecipe = applyMachineHandlerToRecipe(nodeRecipe, projectNode);
     const recipePowerTier = getRecipePowerTier(effectiveRecipe);
-    const tierControl = getNodeTierControl(effectiveRecipe, projectNode);
+    // A vanilla furnace or steam machine draws no EU, so offering ULV/LV/...
+    // voltage tiers on it is meaningless - the chip disappears instead.
+    const machineDrawsEu =
+      effectiveRecipe.eut > 0 && !/\bsteam\b/i.test(selectedMachineHandler.label);
+    const tierControl = machineDrawsEu
+      ? getNodeTierControl(effectiveRecipe, projectNode)
+      : undefined;
     const coilControl = getRecipeCoilTierControl(effectiveRecipe, projectNode);
     const coilResource = coilControl
       ? resolveDatasetMachineConfigResource(coilControl.resource, dataset)
