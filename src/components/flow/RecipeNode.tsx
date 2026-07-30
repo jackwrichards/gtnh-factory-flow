@@ -92,7 +92,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       return;
     }
     const previousZIndex = wrapper.style.zIndex;
-    wrapper.style.zIndex = "1200";
+    // Above every edge tier: edges sit at 20, flow-highlighted ones at 1200,
+    // and dragging elevates them to 2000 (FactoryFlow edge zIndex).
+    wrapper.style.zIndex = "3000";
     return () => {
       wrapper.style.zIndex = previousZIndex;
     };
