@@ -275,7 +275,7 @@ export function MachineTabStrip({
             // Just the machine art: no box behind unselected icons, only the
             // selected machine sits on a raised tab.
             className={[
-              "flex h-[60px] w-[60px] items-center justify-center hover:brightness-110",
+              "flex h-[38px] w-[38px] items-center justify-center hover:brightness-110",
               active
                 ? "border-2 border-[var(--mc-15)] bg-[var(--mc-85)] shadow-[inset_2px_2px_0_var(--mc-100)]"
                 : peeked
@@ -290,11 +290,11 @@ export function MachineTabStrip({
                 bare
                 showAmount={false}
                 tooltip={false}
-                className="!h-[56px] !w-[56px]"
-                iconPixelSize={machineArtPixels(56)}
+                className="!h-[34px] !w-[34px]"
+                iconPixelSize={machineArtPixels(34)}
               />
             ) : (
-              <span className="text-[22px] font-bold text-[var(--mc-ink)]">
+              <span className="text-[16px] font-bold text-[var(--mc-ink)]">
                 {handler.label.slice(0, 1).toUpperCase()}
               </span>
             )}
@@ -311,7 +311,7 @@ export function MachineTabStrip({
         title="Compare all machines"
         aria-label="Compare all machines"
         className={[
-          "flex h-[44px] w-[44px] items-center justify-center self-center border-2 text-[20px] font-bold leading-none hover:brightness-110",
+          "flex h-[38px] w-[38px] items-center justify-center self-center border-2 text-[16px] font-bold leading-none hover:brightness-110",
           isCompareOpen
             ? "border-[var(--mc-15)] bg-[var(--mc-85)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100)]"
             : "border-[var(--mc-33)] bg-[var(--mc-61)] text-white shadow-[inset_2px_2px_0_var(--mc-85)] [text-shadow:1px_1px_0_var(--mc-24)]",
