@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { memo, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, ChevronDown, Minus, Plus, Sprout, WandSparkles } from "lucide-react";
 import type {
   FactoryNode,
@@ -78,27 +78,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const [isCompareOpen, setCompareOpen] = useState(false);
   const [previewHandlerId, setPreviewHandlerId] = useState<string>();
   const [isCropMenuOpen, setCropMenuOpen] = useState(false);
-  const nodeRootRef = useRef<HTMLDivElement>(null);
-
-  // While the compare panel is open, lift the whole React Flow node above
-  // its siblings and the edge layer - otherwise other nodes and arrows
-  // paint over the popup.
-  useEffect(() => {
-    if (!isCompareOpen) {
-      return;
-    }
-    const wrapper = nodeRootRef.current?.closest<HTMLElement>(".react-flow__node");
-    if (!wrapper) {
-      return;
-    }
-    const previousZIndex = wrapper.style.zIndex;
-    // Above every edge tier: edges sit at 20, flow-highlighted ones at 1200,
-    // and dragging elevates them to 2000 (FactoryFlow edge zIndex).
-    wrapper.style.zIndex = "3000";
-    return () => {
-      wrapper.style.zIndex = previousZIndex;
-    };
-  }, [isCompareOpen]);
   const [openMachineConfigMenuId, setOpenMachineConfigMenuId] = useState<string>();
   const browseResource = useFactoryStore((state) => state.browseResource);
   const recipeSearch = useFactoryStore((state) => state.highlightSearch);
@@ -359,9 +338,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
 
   return (
     <div
-      ref={nodeRootRef}
       className={[
         "group relative min-w-[368px] w-max border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
+        // Marker for the globals.css layer lift: with a picker popup open the
+        // node (and the whole nodes layer) must paint above edges.
+        isCompareOpen ? "recipe-node-popup-open" : "",
         selected ? "ring-2 ring-cyan-300" : "",
         isSearchHighlighted ? "ring-4 ring-sky-300" : "",
         isInspectorHighlighted

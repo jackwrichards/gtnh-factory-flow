@@ -272,6 +272,18 @@ textarea {
   z-index: 2010 !important;
 }
 
+/* A node with an open picker popup must beat everything: the edge layer sits
+   above the nodes layer by design (80 vs 20, 2000 while dragging), so the
+   whole nodes layer lifts while any popup is open, and the owning node rises
+   above its selected (20) and dragging (30) siblings. */
+.factory-flow-board .react-flow__nodes:has(.recipe-node-popup-open) {
+  z-index: 2200 !important;
+}
+
+.factory-flow-board .react-flow__node:has(.recipe-node-popup-open) {
+  z-index: 40 !important;
+}
+
 .factory-flow-board .react-flow__edgelabel-renderer {
   z-index: 90;
 }
