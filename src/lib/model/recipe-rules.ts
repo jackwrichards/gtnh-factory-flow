@@ -253,7 +253,11 @@ const MACHINE_HANDLER_FAMILY_ALIASES = new Map([
   ["chemical perforer", "Chemical Reactor"],
   ["chemical performer", "Chemical Reactor"],
   ["circuit assembling machine", "Circuit Assembler"],
-  ["electric oven", "Ore Washer"],
+  // "Just a Furnace with a different Design" per its own tooltip; the Ore
+  // Washer mapping was a slip that only surfaced once smelting recipes
+  // started carrying furnace machine handlers.
+  ["electric oven", "Electric Furnace"],
+  ["electron excitement processor", "Electric Furnace"],
   ["exact photon cannon", "Laser Engraver"],
   ["extractinator", "Extractor"],
   ["fermentation hastener", "Fermenter"],

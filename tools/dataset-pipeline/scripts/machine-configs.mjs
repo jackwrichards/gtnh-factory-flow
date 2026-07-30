@@ -1019,6 +1019,16 @@ export function instantiateRecipeMachineHandlers(templates, recipe) {
     if (Number.isFinite(template.eutMultiplier) && template.eutMultiplier !== 1) {
       handler.eut = Math.max(0, Math.round(recipe.eut * template.eutMultiplier * 100) / 100);
     }
+    // Absolute per-machine stats beat the multiplier-derived ones: vanilla
+    // smelting's electric furnaces run GT's fixed 128t/4EU furnace recipe
+    // regardless of the 200t/0EU vanilla base, which no multiplier on a
+    // zero-EU recipe could express.
+    if (Number.isFinite(template.durationTicks)) {
+      handler.durationTicks = Math.max(1, Math.round(template.durationTicks));
+    }
+    if (Number.isFinite(template.eut)) {
+      handler.eut = Math.max(0, template.eut);
+    }
     if (template.perfectOverclock) {
       handler.perfectOverclock = true;
     }

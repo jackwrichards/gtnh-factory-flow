@@ -52,6 +52,11 @@ const resources = new Map();
 const recipes = [];
 const recipeMaps = new Set();
 const recipeMapIcons = new Map();
+// GT's gt.recipe.furnace map mirrors vanilla FurnaceRecipes at runtime, so its
+// export has catalysts (steam/electric furnaces, Multi Smelter...) but zero
+// recipes; the recipes arrive through the "smelting" domain instead. Stash the
+// catalysts so normalizeSmelting can reattach the machines to those recipes.
+let furnaceCatalysts = [];
 const recipeSignatures = new Set();
 const oreDictionaryAlternativesByName = new Map();
 const oreDictionary = normalizeOreDictionary(findDomain("oreDictionary")?.entries ?? {});
@@ -63,6 +68,7 @@ normalizeThaumcraft(findDomain("thaumcraft"));
 normalizeForestryBees(findDomain("forestryBees"));
 normalizeIc2Crops(findDomain("ic2Crops"));
 normalizeCropsNhCrops(findDomain("cropsNhCrops"));
+overrideFurnaceRecipeMapIcon();
 
 const dataset = {
   schemaVersion: 1,
@@ -99,6 +105,9 @@ function normalizeGregtech(domain) {
     const machineType = text(recipeMap.name, recipeMap.id ?? "GregTech");
     recipeMaps.add(machineType);
     setRecipeMapIcon(machineType, recipeMap.icon);
+    if (recipeMap.id === "gt.recipe.furnace") {
+      furnaceCatalysts = recipeMap.catalysts ?? [];
+    }
     // Catalysts are the machines NEI lists for this recipe map. The primary
     // machine's tooltip drives the recipe-level config controls; the other
     // machines become selectable handlers with their own stats, so one
@@ -232,6 +241,7 @@ function normalizeCrafting(domain) {
 
 function normalizeSmelting(domain) {
   const machineType = "Furnace";
+  const handlerTemplates = furnaceHandlerTemplates();
   for (const rawRecipe of domain?.recipes ?? []) {
     const input = resourceAmount(rawRecipe.input);
     const output = resourceAmount(rawRecipe.output);
@@ -250,6 +260,11 @@ function normalizeSmelting(domain) {
       eut: 0,
       inputs: [input],
       outputs: [output],
+      machineHandlers: instantiateRecipeMachineHandlers(handlerTemplates, {
+        minimumTier: "NONE",
+        durationTicks: 200,
+        eut: 0,
+      }),
       notes: "Exported by the GTNH calculation oracle from FurnaceRecipes.",
       source: {
         datasetVersionId,
@@ -259,6 +274,74 @@ function normalizeSmelting(domain) {
       },
     });
   }
+}
+
+/**
+ * Machine choices for vanilla smelting recipes: the plain furnace as primary,
+ * plus the machines NEI lists for gt.recipe.furnace. Every electric
+ * single-block on that map is a tier of the same machine line (Electric
+ * Furnace, Electric Oven, and joke names like Atom Stimulator or Electron
+ * Excitement Processor), so they fold into one LV Electric Furnace family
+ * running GT's fixed furnace recipe stats (FurnaceBackend:
+ * duration(128).eut(4)). Steam machines and multiblocks keep the vanilla
+ * 200-tick base because the export carries no steam costs; the Multi
+ * Smelter's parallels arrive through its parsed tooltip controls.
+ */
+function furnaceHandlerTemplates() {
+  const templates = buildMachineHandlerTemplates("Furnace", furnaceCatalysts);
+  if (templates.length === 0) {
+    return [];
+  }
+  const isElectricSingle = (template) =>
+    template.kind === "single" && template.minimumTier !== undefined;
+  const electricTiers = templates
+    .filter(isElectricSingle)
+    .map((template) => GT_VOLTAGE_NAMES.indexOf(template.minimumTier))
+    .filter((index) => index >= 0)
+    .sort((left, right) => left - right);
+  const electricFamily =
+    electricTiers.length > 0
+      ? [
+          {
+            id: "electric-furnace",
+            label: "Electric Furnace",
+            kind: "single",
+            minimumTier: GT_VOLTAGE_NAMES[electricTiers[0]],
+            durationTicks: 128,
+            eut: 4,
+          },
+        ]
+      : [];
+  const rest = templates
+    .filter((template) => !isElectricSingle(template))
+    .map((template) => removeUndefined({ ...template, isPrimary: undefined }));
+  return [
+    { id: "furnace", label: "Furnace", kind: "single", isPrimary: true },
+    ...electricFamily,
+    ...rest,
+  ];
+}
+
+/**
+ * The "Furnace" map's recipes are vanilla smelting, so its icon must be the
+ * vanilla furnace — not the Multi Smelter that the empty gt.recipe.furnace
+ * shell (or the gt.recipe.microwave map, which shares the "Furnace" name)
+ * exported as its NEI icon.
+ */
+function overrideFurnaceRecipeMapIcon() {
+  const furnace = resources.get("item:minecraft:furnace");
+  if (!recipeMaps.has("Furnace") || !furnace?.iconPath) {
+    return;
+  }
+  recipeMapIcons.set("Furnace", {
+    kind: furnace.kind,
+    id: furnace.id,
+    amount: 1,
+    displayName: furnace.displayName,
+    iconPath: furnace.iconPath,
+    dominantColor: furnace.dominantColor,
+    modId: furnace.modId,
+  });
 }
 
 function normalizeThaumcraft(domain) {
