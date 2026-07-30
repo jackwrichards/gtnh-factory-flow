@@ -266,7 +266,7 @@ export function MachineTabStrip({
             // Just the machine art: no box behind unselected icons, only the
             // selected machine sits on a raised tab.
             className={[
-              "flex h-[52px] w-[52px] items-center justify-center hover:brightness-110",
+              "flex h-[68px] w-[68px] items-center justify-center hover:brightness-110",
               active
                 ? "border-2 border-[var(--mc-15)] bg-[var(--mc-85)] shadow-[inset_2px_2px_0_var(--mc-100)]"
                 : peeked
@@ -281,11 +281,13 @@ export function MachineTabStrip({
                 bare
                 showAmount={false}
                 tooltip={false}
-                className="!h-[48px] !w-[48px]"
-                iconPixelSize={46}
+                className="!h-[64px] !w-[64px]"
+                // The rendered machine art carries transparent margins, so the
+                // image is oversized a touch to make the block itself big.
+                iconPixelSize={72}
               />
             ) : (
-              <span className="text-[18px] font-bold text-[var(--mc-ink)]">
+              <span className="text-[22px] font-bold text-[var(--mc-ink)]">
                 {handler.label.slice(0, 1).toUpperCase()}
               </span>
             )}
@@ -302,7 +304,7 @@ export function MachineTabStrip({
         title="Compare all machines"
         aria-label="Compare all machines"
         className={[
-          "flex h-[40px] w-[40px] items-center justify-center self-center border-2 text-[18px] font-bold leading-none hover:brightness-110",
+          "flex h-[44px] w-[44px] items-center justify-center self-center border-2 text-[20px] font-bold leading-none hover:brightness-110",
           isCompareOpen
             ? "border-[var(--mc-15)] bg-[var(--mc-85)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100)]"
             : "border-[var(--mc-33)] bg-[var(--mc-61)] text-white shadow-[inset_2px_2px_0_var(--mc-85)] [text-shadow:1px_1px_0_var(--mc-24)]",
@@ -341,7 +343,7 @@ export function MachineGlanceBar({
       ].join(" ")}
       style={{ gridTemplateColumns: "40px minmax(0,1fr) 44px 68px 48px" }}
     >
-      <MachineIconBox icon={icon} label={handler.label} box={38} iconPixels={34} />
+      <MachineIconBox icon={icon} label={handler.label} box={38} iconPixels={44} />
       {/* Truncates freely — the w-0/min-w-full wrapper above keeps the node
           width owned by the recipe card, never by this name. */}
       <span className="min-w-0 leading-[1.05]">
@@ -566,8 +568,8 @@ function CompareGroupRows({
                 <MachineIconBox
                   icon={iconsById.get(handler.id)}
                   label={handler.label}
-                  box={24}
-                  iconPixels={20}
+                  box={32}
+                  iconPixels={38}
                 />
                 <span className="max-w-[150px] truncate font-bold">{handler.label}</span>
                 {active ? (
