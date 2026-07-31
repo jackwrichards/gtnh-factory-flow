@@ -8,6 +8,7 @@ import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { useFactoryStore } from "@/store/factory-store";
 import { makeResourceHandleId } from "./resource-handles";
 import { GT_NODE_COLORS } from "./node-colors";
+import { getPaintBrushCursor } from "./paint-cursor";
 
 export interface StorageNodeData extends Record<string, unknown> {
   storage: FactoryStorage;
@@ -18,7 +19,7 @@ export type StorageFlowNode = Node<StorageNodeData, "storageNode">;
 
 function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   const { storage, result } = data;
-  const recipeSearch = useFactoryStore((state) => state.recipeSearch);
+  const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
@@ -31,6 +32,13 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
     (hoveredFlowResourceKey ?? selectedFlowResourceKey) === resourceKey;
   const isSearchHighlighted = storageMatchesSearch(storage, recipeSearch);
   const storageColor = storage.colorTag ? GT_NODE_COLORS[storage.colorTag] : undefined;
+  const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
+  const paintCursor =
+    nodeColorPaintMode !== undefined
+      ? getPaintBrushCursor(
+          nodeColorPaintMode ? GT_NODE_COLORS[nodeColorPaintMode].swatch : undefined,
+        )
+      : undefined;
   const produced = result?.producedPerSecond ?? 0;
   const consumed = result?.consumedPerSecond ?? 0;
   const net = result?.netPerSecond ?? 0;
@@ -60,15 +68,16 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
           ? "outline outline-4 outline-offset-4 outline-yellow-300 ring-8 ring-cyan-300 [filter:drop-shadow(0_0_16px_rgba(34,211,238,0.95))]"
           : "",
       ].join(" ")}
-      style={
-        storageColor
+      style={{
+        ...(storageColor
           ? ({
               "--storage-node-tint": storageColor.panel,
               "--storage-node-tint-header": storageColor.header,
               "--storage-node-tint-border": storageColor.border,
             } as CSSProperties)
-          : undefined
-      }
+          : undefined),
+        ...(paintCursor ? { cursor: paintCursor } : undefined),
+      }}
       title={`${title}\nIn ${formatRate(produced, 3)}${unit}\nOut ${formatRate(consumed, 3)}${unit}\nNet ${net >= 0 ? "+" : ""}${formatRate(net, 3)}${unit}`}
     >
       {storage.kind === "fluid" ? (
@@ -100,7 +109,18 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
 
 export const StorageNode = memo(StorageNodeComponent);
 
-function StorageHeader({ title, variant }: { title: string; variant: "tank" | "drawer" }) {
+function StorageHeader({
+  storageId,
+  title,
+  variant,
+}: {
+  storageId: string;
+  title: string;
+  variant: "tank" | "drawer";
+}) {
+  const deleteStorage = useFactoryStore((state) => state.deleteStorage);
+  const label = variant === "tank" ? "Delete tank" : "Delete drawer";
+
   return (
     <div
       className={[
@@ -108,9 +128,25 @@ function StorageHeader({ title, variant }: { title: string; variant: "tank" | "d
         variant === "tank" ? "border-[#747c91] bg-[#b8c1d9]" : "border-[#4f3518] bg-[#8a6030]",
       ].join(" ")}
     >
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          deleteStorage(storageId);
+        }}
+        className="nodrag flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-red-700"
+        title={label}
+        aria-label={label}
+      >
+        {/* Drawn rather than a "-" glyph: at this size Monocraft's metrics
+            baseline-align the hyphen low instead of centring it. */}
+        <span aria-hidden className="block h-[2px] w-[8px] bg-white" />
+      </button>
       <div className="minecraft-title min-w-0 flex-1 truncate text-center text-[13px] leading-4">
         {title}
       </div>
+      {/* Balances the delete button so the title stays optically centred. */}
+      <span aria-hidden className="h-4 w-4 shrink-0" />
     </div>
   );
 }
@@ -141,7 +177,7 @@ function FluidStorageCard({
         isHighlighted ? "brightness-125 saturate-150" : "",
       ].join(" ")}
     >
-      <StorageHeader title="Super Tank" variant="tank" />
+      <StorageHeader storageId={storage.id} title="Super Tank" variant="tank" />
       <div className="storage-node-body mx-auto mt-3 grid h-[96px] w-[132px] place-items-center border-2 border-[#1f1f1f] bg-black shadow-[inset_7px_7px_0_#1f2933,inset_-7px_-7px_0_#050505]">
         <div className="relative grid h-[64px] w-[64px] place-items-center bg-[#111]">
           <StorageEdgeAnchors
@@ -189,7 +225,7 @@ function ItemStorageCard({
         isHighlighted ? "brightness-125 saturate-150" : "",
       ].join(" ")}
     >
-      <StorageHeader title="Drawer" variant="drawer" />
+      <StorageHeader storageId={storage.id} title="Drawer" variant="drawer" />
       <div className="storage-node-body mx-auto mt-3 grid h-[96px] w-[132px] place-items-center border-2 border-[#3a260f] bg-[#7a5427] shadow-[inset_7px_7px_0_#5a3b1b,inset_-7px_-7px_0_#4a3117]">
         <div className="relative grid h-[64px] w-[64px] place-items-center border-2 border-[#1f1f1f] bg-[#d8c4b4] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#7d6d61]">
           <StorageEdgeAnchors

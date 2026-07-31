@@ -742,13 +742,23 @@ function refreshEdgeResultsFromNodeUtilization(
           targetCount;
     const demandPerSecond = Number.isFinite(targetDemand) ? targetDemand : 0;
     const transferredPerSecond = Math.min(sourceCapacity, demandPerSecond);
+    const settledTransferred = Number.isFinite(transferredPerSecond)
+      ? transferredPerSecond
+      : demandPerSecond;
+    // Unscaled by utilisation, unlike demandPerSecond above. A tank accepts
+    // whatever it is given, so it is never short of its nameplate.
+    const nameplateDemandPerSecond =
+      targetStorage || !targetResult
+        ? settledTransferred
+        : (targetResult.inputs[targetDemandKey]?.amountPerSecond ?? 0) / targetCount;
 
-    edgeResults[edge.id] = buildEdgeResult(
-      edge,
-      key,
-      demandPerSecond,
-      Number.isFinite(transferredPerSecond) ? transferredPerSecond : demandPerSecond,
-    );
+    edgeResults[edge.id] = buildEdgeResult(edge, key, demandPerSecond, settledTransferred, {
+      nameplateDemandPerSecond,
+      // Total output rather than this edge's share of it. When a producer feeds
+      // several consumers that understates how maxed out it is, so the split
+      // case falls back to "demand" - under-flagging rather than crying wolf.
+      sourceCapacityPerSecond: sourceFullCapacity,
+    });
   }
 }
 
@@ -1247,7 +1257,13 @@ function buildEdgeResult(
   key: ResourceKey,
   demandPerSecond: number,
   transferredPerSecond: number,
+  capacities?: { nameplateDemandPerSecond: number; sourceCapacityPerSecond: number },
 ): EdgeThroughput {
+  // Falling back to the converged demand keeps callers that have no nameplate
+  // context reporting "full" rather than inventing a shortfall.
+  const nameplateDemandPerSecond = capacities?.nameplateDemandPerSecond ?? demandPerSecond;
+  const sourceCapacityPerSecond = capacities?.sourceCapacityPerSecond ?? transferredPerSecond;
+
   return {
     edgeId: edge.id,
     resource: {
@@ -1260,7 +1276,28 @@ function buildEdgeResult(
     demandPerSecond,
     transferredPerSecond,
     isLimited: transferredPerSecond + EPSILON < demandPerSecond,
+    nameplateDemandPerSecond,
+    sourceCapacityPerSecond,
+    constraint: classifyEdgeConstraint(
+      transferredPerSecond,
+      nameplateDemandPerSecond,
+      sourceCapacityPerSecond,
+    ),
   };
+}
+
+function classifyEdgeConstraint(
+  transferredPerSecond: number,
+  nameplateDemandPerSecond: number,
+  sourceCapacityPerSecond: number,
+): EdgeThroughput["constraint"] {
+  if (transferredPerSecond + EPSILON >= nameplateDemandPerSecond) {
+    return "full";
+  }
+
+  // The consumer is short. Blame the producer only when it has nothing left to
+  // give; otherwise both ends have slack and the plan simply wants less.
+  return transferredPerSecond + EPSILON >= sourceCapacityPerSecond ? "supply" : "demand";
 }
 
 function getDefaultStorageCapacity(storage: FactoryStorage): number {

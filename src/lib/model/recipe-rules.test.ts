@@ -14,6 +14,13 @@ describe("recipe machine handlers", () => {
       ...testRecipe("Fluid Extractor"),
       machineHandlers: [
         {
+          id: "fluid-extractor",
+          label: "Fluid Extractor",
+          machineType: "Fluid Extractor",
+          minimumTier: "LV",
+          kind: "single" as const,
+        },
+        {
           id: "nei-catalyst-multiblock-fluid-extractor",
           label: "Multiblock Fluid Extractor",
           machineType: "Multiblock Fluid Extractor",
@@ -26,6 +33,33 @@ describe("recipe machine handlers", () => {
     expect(getRecipeMachineHandlers(recipe).map((handler) => handler.label)).toEqual([
       "Fluid Extractor",
       "Multiblock Fluid Extractor",
+    ]);
+  });
+
+  it("does not invent a category entry next to dataset handlers", () => {
+    const recipe = {
+      ...testRecipe("Blast Furnace"),
+      machineHandlers: [
+        {
+          id: "electric-blast-furnace",
+          label: "Electric Blast Furnace",
+          machineType: "Electric Blast Furnace",
+          minimumTier: "MV",
+          kind: "multiblock" as const,
+        },
+        {
+          id: "volcanus",
+          label: "Volcanus",
+          machineType: "Volcanus",
+          minimumTier: "MV",
+          kind: "multiblock" as const,
+        },
+      ],
+    };
+
+    expect(getRecipeMachineHandlers(recipe).map((handler) => handler.label)).toEqual([
+      "Electric Blast Furnace",
+      "Volcanus",
     ]);
   });
 
@@ -352,6 +386,56 @@ describe("multiblock machine config controls", () => {
     expect(
       getRecipeCoilTierControl(testRecipe("Chemical Plant"), { coilTier: "kanthal" }),
     ).toBeUndefined();
+  });
+});
+
+describe("machine handlers and runtime calculations", () => {
+  const runtimeCalculation = {
+    sourceKind: "gregtech-processing-logic" as const,
+    status: "computed" as const,
+    oracleEligible: true,
+    variants: [{ id: "tier-lv", durationTicks: 20, eut: 8 }],
+  };
+
+  const recipe: Recipe = {
+    ...testRecipe("Distillation Tower"),
+    runtimeCalculation,
+    machineHandlers: [
+      {
+        id: "distillation-tower",
+        label: "Distillation Tower",
+        machineType: "Distillation Tower",
+        minimumTier: "MV",
+        kind: "multiblock",
+      },
+      {
+        id: "dangote-distillus",
+        label: "Dangote Distillus",
+        machineType: "Dangote Distillus",
+        minimumTier: "EV",
+        kind: "multiblock",
+        durationTicks: 8,
+        eut: 480,
+      },
+    ],
+  };
+
+  it("keeps runtime variants for the default machine", () => {
+    expect(applyMachineHandlerToRecipe(recipe, {}).runtimeCalculation).toEqual(runtimeCalculation);
+    expect(
+      applyMachineHandlerToRecipe(recipe, { machineHandlerId: "distillation-tower" })
+        .runtimeCalculation,
+    ).toEqual(runtimeCalculation);
+  });
+
+  it("drops runtime variants when a different machine is selected", () => {
+    const applied = applyMachineHandlerToRecipe(recipe, {
+      machineHandlerId: "dangote-distillus",
+    });
+    expect(applied.runtimeCalculation).toBeUndefined();
+    expect(applied.durationTicks).toBe(8);
+    expect(applied.eut).toBe(480);
+    expect(applied.machineType).toBe("Dangote Distillus");
   });
 });
 

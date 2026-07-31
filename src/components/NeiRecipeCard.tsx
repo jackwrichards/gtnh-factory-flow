@@ -16,11 +16,11 @@ export function NeiRecipeCard({ recipe, compact = false }: NeiRecipeCardProps) {
   const powerTier = getRecipePowerTier(recipe);
 
   return (
-    <article className="mx-auto w-full max-w-[390px] border-2 border-[#f4f4f4] bg-[#c6c6c6] font-mono text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
+    <article className="mx-auto w-full max-w-[390px] border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]">
       <div className="relative px-2 pb-2 pt-1">
         <div className="mt-1 grid grid-cols-[24px_minmax(0,1fr)_24px] items-center">
           <NeiButton label="<" />
-          <div className="h-7 border-2 border-[#555] bg-[#9b9b9b] px-2 text-center text-[18px] leading-[24px] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a] [text-shadow:2px_2px_0_#3f3f3f]">
+          <div className="h-7 border-2 border-[var(--mc-33)] bg-[var(--mc-61)] px-2 text-center text-[18px] leading-[24px] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)] [text-shadow:2px_2px_0_var(--mc-24)]">
             {recipe.machineType}
           </div>
           <NeiButton label=">" />
@@ -28,7 +28,7 @@ export function NeiRecipeCard({ recipe, compact = false }: NeiRecipeCardProps) {
 
         <div className="grid grid-cols-[24px_minmax(0,1fr)_24px] items-center">
           <NeiButton label="<" dark />
-          <div className="h-7 border-x-2 border-b-2 border-[#555] bg-[#a7a7a7] px-2 text-center text-[18px] leading-[24px] text-white shadow-[inset_2px_0_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a] [text-shadow:2px_2px_0_#3f3f3f]">
+          <div className="h-7 border-x-2 border-b-2 border-[var(--mc-33)] bg-[var(--mc-65)] px-2 text-center text-[18px] leading-[24px] text-white shadow-[inset_2px_0_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)] [text-shadow:2px_2px_0_var(--mc-24)]">
             Page 1/1
           </div>
           <NeiButton label=">" dark />
@@ -37,7 +37,7 @@ export function NeiRecipeCard({ recipe, compact = false }: NeiRecipeCardProps) {
         <NeiRecipeCanvas recipe={recipe} scale={2} className="mt-1" />
 
         {!compact ? (
-          <footer className="mt-2 px-1 text-[18px] leading-[22px] text-black">
+          <footer className="mt-2 px-1 text-[18px] leading-[22px] text-[var(--mc-ink)]">
             <div>Total: {formatRate(totalEu, 0)} EU</div>
             <div>
               Usage: {formatRate(recipe.eut, 0)} EU/t ({powerTier})
@@ -45,7 +45,7 @@ export function NeiRecipeCard({ recipe, compact = false }: NeiRecipeCardProps) {
             <div>Time: {formatRate(durationSeconds, 2)} seconds</div>
             {recipe.programmedCircuit ? <div>Circuit: {recipe.programmedCircuit}</div> : null}
             {recipe.source ? (
-              <div className="mt-1 truncate text-[11px] leading-4 text-[#343434]">
+              <div className="mt-1 truncate text-[11px] leading-4 text-[var(--mc-ink-muted)]">
                 {recipe.source.exporter ?? "unknown"} /{" "}
                 {recipe.source.datasetVersionId ?? "unknown dataset"}
               </div>
@@ -69,8 +69,8 @@ function NeiButton({ label, dark = false }: { label: string; dark?: boolean }) {
       type="button"
       tabIndex={-1}
       className={[
-        "h-7 w-6 border-2 border-[#252525] text-[18px] leading-5 text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000]",
-        dark ? "bg-[#5d5d5d]" : "bg-[#9b9b9b]",
+        "h-7 w-6 border-2 border-[var(--mc-15)] text-[18px] leading-5 text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] [text-shadow:1px_1px_0_#000]",
+        dark ? "bg-[var(--mc-36)]" : "bg-[var(--mc-61)]",
       ].join(" ")}
     >
       {label}

@@ -16,6 +16,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.8",
     "@xyflow/react": "^12.10.2",
     "html-to-image": "^1.11.13",
     "lucide-react": "^1.16.0",

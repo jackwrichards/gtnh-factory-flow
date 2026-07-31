@@ -7,6 +7,7 @@ import type {
   DatasetResource,
   DatasetResourceIndexEntry,
   DatasetVersion,
+  MachineHandlerIconEntry,
   RecipeMapIconEntry,
   RecipeSummary,
 } from "@/lib/datasets/types";
@@ -42,6 +43,7 @@ interface LoadedRecipeIndex {
   resourceIndex: DatasetResourceIndexEntry[];
   recipeMaps: string[];
   recipeMapIcons?: RecipeMapIconEntry[];
+  machineHandlerIcons?: MachineHandlerIconEntry[];
   recipeCount: number;
   recipes?: RecipeSummary[];
   recipeSearchText?: string[];
@@ -142,6 +144,11 @@ interface RecipeShardPayload {
   recipes: Recipe[];
 }
 
+// Source-style recipe maps live behind dedicated board tools (like drawers and
+// fluid tanks) instead of the recipe book: nothing is crafted, they only produce.
+const CROP_FARM_RECIPE_MAP = "Crop Farm";
+const HIDDEN_RECIPE_BOOK_MAPS = new Set([CROP_FARM_RECIPE_MAP]);
+
 const datasetRoot = path.join(process.cwd(), "public", "datasets", "gtnh");
 const loadedCatalogs = new Map<string, LoadedRecipeIndex>();
 const pendingCatalogLoads = new Map<string, Promise<LoadedRecipeIndex>>();
@@ -170,6 +177,7 @@ export async function getDatasetCatalog(versionId: string) {
     oreDictionary: {},
     recipeMaps: catalog.recipeMaps,
     recipeMapIcons: catalog.recipeMapIcons,
+    machineHandlerIcons: catalog.machineHandlerIcons,
     generatedAt: catalog.version.publishedAt,
   };
 }
@@ -239,12 +247,26 @@ export async function resolveDatasetRecipeRefs(
     .filter((match): match is { importedId: string; recipeId: string } => Boolean(match));
 }
 
+export type ResourceQuerySort = "relevance" | "name" | "mod" | "recipes";
+
+/** Mod is encoded in the id prefix ("gregtech:gt.metaitem..."); fluids are bare ids. */
+export function getResourceModId(resource: { id: string; kind: string }): string {
+  const colon = resource.id.indexOf(":");
+  if (colon > 0) {
+    return resource.id.slice(0, colon);
+  }
+  return resource.kind === "fluid" ? "fluids" : "other";
+}
+
 export async function queryDatasetResources(
   versionId: string,
   request: {
     query: string;
     offset: number;
     limit: number;
+    kind?: "item" | "fluid";
+    mod?: string;
+    sort?: ResourceQuerySort;
   },
 ) {
   const catalog = await loadCatalog(versionId);
@@ -252,6 +274,7 @@ export async function queryDatasetResources(
   const queryTokens = splitSearchTokens(request.query);
   const candidateIndexes = queryTextSearchIndex(indexes.searchIndex, queryTokens);
   const matches: number[] = [];
+  const modCounts = new Map<string, number>();
 
   for (const resourceIndex of candidateIndexes ?? indexes.sortedResourceIndexes) {
     const resource = catalog.resourceIndex[resourceIndex];
@@ -268,7 +291,42 @@ export async function queryDatasetResources(
     ) {
       continue;
     }
+    if (request.kind && resource.kind !== request.kind) {
+      continue;
+    }
+
+    // Mod counts reflect the search+kind scope, so the mod dropdown always
+    // shows what picking each mod would leave.
+    const modId = getResourceModId(resource);
+    modCounts.set(modId, (modCounts.get(modId) ?? 0) + 1);
+    if (request.mod && modId !== request.mod) {
+      continue;
+    }
     matches.push(resourceIndex);
+  }
+
+  const sort = request.sort ?? "relevance";
+  if (sort !== "relevance") {
+    const nameOf = (index: number) => {
+      const resource = catalog.resourceIndex[index];
+      return (resource?.displayName ?? resource?.id ?? "").toLowerCase();
+    };
+    if (sort === "name") {
+      matches.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+    } else if (sort === "mod") {
+      matches.sort((a, b) => {
+        const modCompare = getResourceModId(catalog.resourceIndex[a]).localeCompare(
+          getResourceModId(catalog.resourceIndex[b]),
+        );
+        return modCompare !== 0 ? modCompare : nameOf(a).localeCompare(nameOf(b));
+      });
+    } else if (sort === "recipes") {
+      matches.sort((a, b) => {
+        const countDelta =
+          (catalog.resourceIndex[b]?.recipeCount ?? 0) - (catalog.resourceIndex[a]?.recipeCount ?? 0);
+        return countDelta !== 0 ? countDelta : nameOf(a).localeCompare(nameOf(b));
+      });
+    }
   }
 
   return {
@@ -280,6 +338,9 @@ export async function queryDatasetResources(
     offset: request.offset,
     limit: request.limit,
     hasMore: request.offset + request.limit < matches.length,
+    mods: [...modCounts.entries()]
+      .map(([id, count]) => ({ id, count }))
+      .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id)),
   };
 }
 
@@ -315,6 +376,7 @@ export async function queryDatasetRecipes(
     ? getResourceRecipeMaps(indexes.recipeMapsByResource, resourceScope!, request.mode)
     : [...new Set(indexes.recipeMaps.filter(Boolean))];
   const sortedRecipeMaps = eligibleRecipeMaps
+    .filter((recipeMap) => !HIDDEN_RECIPE_BOOK_MAPS.has(recipeMap))
     .filter((recipeMap) =>
       recipeMapHasMatchingIndexedRecipe(
         indexes,
@@ -350,6 +412,9 @@ export async function queryDatasetRecipes(
   let total = 0;
 
   for (const recipeIndex of scopedCandidates) {
+    if (HIDDEN_RECIPE_BOOK_MAPS.has(indexes.recipeMaps[recipeIndex] ?? "")) {
+      continue;
+    }
     if (!recipeMatchesTierIndex(indexes, recipeIndex, request.maxTier)) {
       continue;
     }
@@ -399,6 +464,35 @@ export async function queryDatasetRecipes(
   };
 }
 
+/**
+ * All crop source "recipes" for the crop farm board tool. These are excluded
+ * from recipe book queries (see HIDDEN_RECIPE_BOOK_MAPS) and listed here for
+ * the dedicated crop picker instead.
+ */
+export async function listDatasetCropFarmRecipes(versionId: string) {
+  const catalog = await loadCatalog(versionId);
+  if (!catalog.version.recipeLookupIndexPath) {
+    return { crops: [] };
+  }
+
+  const lookup = await loadRecipeLookupIndex(catalog.version);
+  const mapId = lookup.recipeMapIds.get(CROP_FARM_RECIPE_MAP);
+  if (mapId === undefined) {
+    return { crops: [] };
+  }
+
+  const recipeIndexes: number[] = [];
+  for (let recipeIndex = 0; recipeIndex < lookup.recipeCount; recipeIndex += 1) {
+    if (lookup.recipeMapIdsByRecipeIndex[recipeIndex] === mapId) {
+      recipeIndexes.push(recipeIndex);
+    }
+  }
+
+  const crops = await getRecipeSummariesByIndex(catalog, recipeIndexes);
+  crops.sort((left, right) => left.name.localeCompare(right.name));
+  return { crops };
+}
+
 async function queryDatasetRecipesFromLookup(
   catalog: LoadedRecipeIndex,
   request: {
@@ -425,6 +519,15 @@ async function queryDatasetRecipesFromLookup(
   const recipesByMap = resourceScope
     ? getLookupRecipesByMap(lookup, resourceScope, request.mode)
     : getLookupRecipesByMapForSearch(lookup, queryTokens);
+
+  // Source-style maps (crop farms) are spawned from dedicated board tools,
+  // not the recipe book: they are not crafting recipes.
+  for (const [recipeMapId] of [...recipesByMap.entries()]) {
+    const recipeMapName = lookup.recipeMaps[recipeMapId];
+    if (recipeMapName && HIDDEN_RECIPE_BOOK_MAPS.has(recipeMapName)) {
+      recipesByMap.delete(recipeMapId);
+    }
+  }
 
   for (const [recipeMapId, recipeIndexes] of recipesByMap.entries()) {
     const candidates = recipeIndexes.filter((recipeIndex) =>
@@ -1422,19 +1525,18 @@ function isContextCompatibleItemInput(
   );
 }
 
-function getWildcardResource(
+export function getWildcardResource(
   resource: Pick<ResourceAmount, "kind" | "id">,
 ): Pick<ResourceAmount, "kind" | "id"> | undefined {
   if (resource.kind !== "item" || resource.id.endsWith("@32767")) {
     return undefined;
   }
 
+  // Bare ids are damage-0 items ("minecraft:log" is Oak Log); they match
+  // any-damage wildcard inputs just like their "@<damage>" siblings do.
   const separatorIndex = resource.id.lastIndexOf("@");
-  if (separatorIndex === -1) {
-    return undefined;
-  }
-
-  return { kind: "item", id: `${resource.id.slice(0, separatorIndex)}@32767` };
+  const baseId = separatorIndex === -1 ? resource.id : resource.id.slice(0, separatorIndex);
+  return { kind: "item", id: `${baseId}@32767` };
 }
 
 function resourceIdsAreCompatible(candidateId: string, selectedId: string): boolean {

@@ -1889,4 +1889,151 @@ describe("calculateThroughput", () => {
     expect(result.edges["silicone-cell-to-tank"].transferredPerSecond).toBeCloseTo(144);
     expect(result.storages["silicone-tank"].producedPerSecond).toBeCloseTo(144);
   });
+
+  it("reports a starved consumer as supply-capped against its nameplate demand", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "starved-project",
+      name: "Starved chain",
+      targetRate: { kind: "item", resourceId: "widget", amountPerSecond: 1 },
+      recipes: [
+        {
+          id: "slow-producer",
+          name: "Slow producer",
+          machineType: "Macerator",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [],
+          outputs: [{ kind: "item", id: "cog", amount: 1 }],
+        },
+        {
+          id: "hungry-consumer",
+          name: "Hungry consumer",
+          machineType: "Assembler",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [{ kind: "item", id: "cog", amount: 100 }],
+          outputs: [{ kind: "item", id: "widget", amount: 1 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "producer",
+          recipeId: "slow-producer",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "consumer",
+          recipeId: "hungry-consumer",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 300, y: 0 },
+        },
+      ],
+      storages: [],
+      edges: [
+        {
+          id: "producer-to-consumer",
+          source: "producer",
+          target: "consumer",
+          resourceKind: "item",
+          resourceId: "cog",
+        },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+    const edge = result.edges["producer-to-consumer"];
+
+    // The consumer wants 100/s but the producer only makes 1/s. Node
+    // utilisation converges downwards until demand matches supply, which is why
+    // demandPerSecond and isLimited cannot detect this on their own.
+    expect(edge.transferredPerSecond).toBeCloseTo(1);
+    expect(edge.demandPerSecond).toBeCloseTo(1);
+    expect(edge.isLimited).toBe(false);
+
+    // The nameplate comparison is what survives that convergence.
+    expect(edge.nameplateDemandPerSecond).toBeCloseTo(100);
+    expect(edge.sourceCapacityPerSecond).toBeCloseTo(1);
+    expect(edge.constraint).toBe("supply");
+  });
+
+  it("treats a consumer with spare supply on both ends as demand-capped", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "slack-project",
+      name: "Slack chain",
+      targetRate: { kind: "item", resourceId: "widget", amountPerSecond: 1 },
+      recipes: [
+        {
+          id: "fast-producer",
+          name: "Fast producer",
+          machineType: "Macerator",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [],
+          outputs: [{ kind: "item", id: "cog", amount: 1_000 }],
+        },
+        {
+          id: "small-consumer",
+          name: "Small consumer",
+          machineType: "Assembler",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [{ kind: "item", id: "cog", amount: 1 }],
+          outputs: [{ kind: "item", id: "widget", amount: 1 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "producer",
+          recipeId: "fast-producer",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "consumer",
+          recipeId: "small-consumer",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 300, y: 0 },
+        },
+      ],
+      storages: [],
+      edges: [
+        {
+          id: "producer-to-consumer",
+          source: "producer",
+          target: "consumer",
+          resourceKind: "item",
+          resourceId: "cog",
+        },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+    const edge = result.edges["producer-to-consumer"];
+
+    // Fed to its nameplate, so nothing is holding it back.
+    expect(edge.transferredPerSecond).toBeCloseTo(1);
+    expect(edge.nameplateDemandPerSecond).toBeCloseTo(1);
+    expect(edge.constraint).toBe("full");
+  });
 });

@@ -1,14 +1,161 @@
 @import "tailwindcss";
 @import "@xyflow/react/dist/style.css";
 
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/*
+ * Theme tokens.
+ *
+ * Light values are the original hard-coded hexes, so light mode renders exactly
+ * as it did before the theme system existed.
+ *
+ * The `--mc-*` scale is the Minecraft GUI bevel ramp, named by light-mode
+ * lightness. Panels build their raised/inset look by pairing a face colour with
+ * a lighter token (top-left highlight) and a darker token (bottom-right shadow),
+ * so the dark ramp only has to preserve the ordering to keep every bevel
+ * reading correctly. It is compressed into a narrower, blue-tinted range that
+ * matches the recipe browser's existing dark chrome.
+ *
+ * Text colours are deliberately not part of the ramp: inverting a surface and
+ * inverting ink are opposite operations.
+ */
 :root {
+  color-scheme: light;
+
   --background: #ffffff;
   --foreground: #171717;
+
+  --surface: #ffffff;
+  --surface-raised: #fafafa;
+  --surface-sunken: #f5f5f5;
+  --canvas: #f5f5f5;
+  --canvas-dot: #b8b8b8;
+  --fg: #0a0a0a;
+  --fg-subtle: #262626;
+  --fg-muted: #737373;
+  --line: #e5e5e5;
+  --line-strong: #d4d4d4;
+
+  /*
+   * Chart tokens.
+   *
+   * Voltage tier is an ordinal scale — ULV below LV below MV — so it takes one
+   * hue stepped by lightness rather than a set of unrelated colours: the reader
+   * sees the order in the ramp itself. Steps are validated against this panel's
+   * own surface (light #fafafa, dark #303238) for monotone lightness, a visible
+   * gap between neighbours, and a light end that still clears the surface. The
+   * dark column is the same hue re-stepped for the dark surface, not a flip.
+   */
+  --viz-ordinal-1: #86b6ef;
+  --viz-ordinal-2: #5598e7;
+  --viz-ordinal-3: #2a78d6;
+  --viz-ordinal-4: #1c5cab;
+  --viz-ordinal-5: #0d366b;
+  /* Nominal series: machine names carry no order, so every bar shares one hue. */
+  --viz-series-1: #2a78d6;
+
+  --mc-100: #ffffff;
+  --mc-98: #f7f7f7;
+  --mc-96: #f4f4f4;
+  --mc-93: #eeeeee;
+  --mc-85: #d8d8d8;
+  --mc-82: #d0d0d0;
+  --mc-81: #cfcfcf;
+  --mc-78: #c6c6c6;
+  --mc-71: #b6b6b6;
+  --mc-66: #a9a9a9;
+  --mc-65: #a7a7a7;
+  --mc-62: #9f9f9f;
+  --mc-61: #9b9b9b;
+  --mc-56: #8f8f8f;
+  --mc-55: #8d8d8d;
+  --mc-54: #8b8b8b;
+  --mc-49: #7d7d7d;
+  --mc-47: #777777;
+  --mc-44: #6f6f6f;
+  --mc-36: #5d5d5d;
+  --mc-33: #555555;
+  --mc-29: #4a4a4a;
+  --mc-26: #424242;
+  --mc-25: #404040;
+  --mc-24: #3f3f3f;
+  --mc-20: #343434;
+  --mc-15: #252525;
+  --mc-12: #1f1f1f;
+
+  --mc-ink: #202020;
+  --mc-ink-muted: #8a8a8a;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: #1b1d21;
+  --foreground: #f5f5f5;
+
+  --surface: #25272c;
+  --surface-raised: #303238;
+  --surface-sunken: #1b1d21;
+  --canvas: #1b1d21;
+  --canvas-dot: #4a4d55;
+  --fg: #f5f5f5;
+  --fg-subtle: #e5e5e5;
+  --fg-muted: #a3a3a3;
+  --line: #3a3b40;
+  --line-strong: #4a4b52;
+
+  --viz-ordinal-1: #256abf;
+  --viz-ordinal-2: #3987e5;
+  --viz-ordinal-3: #6da7ec;
+  --viz-ordinal-4: #9ec5f4;
+  --viz-ordinal-5: #cde2fb;
+  --viz-series-1: #3987e5;
+
+  --mc-100: #5a5c65;
+  --mc-98: #565861;
+  --mc-96: #52545c;
+  --mc-93: #4e5058;
+  --mc-85: #4a4c54;
+  --mc-82: #46484f;
+  --mc-81: #45474e;
+  --mc-78: #3c3e45;
+  --mc-71: #36383f;
+  --mc-66: #323439;
+  --mc-65: #313338;
+  --mc-62: #2f3136;
+  --mc-61: #2d2f35;
+  --mc-56: #2a2c31;
+  --mc-55: #292b30;
+  --mc-54: #282a2f;
+  --mc-49: #26282d;
+  --mc-47: #25272c;
+  --mc-44: #232529;
+  --mc-36: #1f2125;
+  --mc-33: #1d1f23;
+  --mc-29: #1a1c20;
+  --mc-26: #18191d;
+  --mc-25: #17191d;
+  --mc-24: #16181c;
+  --mc-20: #151619;
+  --mc-15: #111317;
+  --mc-12: #0e1013;
+
+  --mc-ink: #e8e9ee;
+  --mc-ink-muted: #9a9ca4;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-canvas: var(--canvas);
+  --color-fg: var(--fg);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-muted: var(--fg-muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --font-sans: var(--font-minecraft);
   --font-mono: var(--font-minecraft);
 }
@@ -32,7 +179,7 @@ textarea {
 }
 
 .react-flow__edge-textbg {
-  fill: #ffffff;
+  fill: var(--canvas);
 }
 
 .factory-flow-board .react-flow__edges {
@@ -57,15 +204,56 @@ textarea {
   image-rendering: pixelated;
 }
 
+/*
+ * Scrolls, but without a scrollbar taking a bite out of the row.
+ *
+ * For a short horizontal strip inside a fixed-height bar, a classic Windows
+ * scrollbar is a sizeable fraction of the bar's height. Scrolling stays
+ * available by wheel, trackpad, drag and keyboard; the arrows beside the strip
+ * are the visible affordance.
+ */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 .factory-flow-board--moving .react-flow__edges,
 .factory-flow-board--moving .react-flow__edgelabel-renderer,
 .factory-flow-board--moving .react-flow__nodes {
   pointer-events: none;
 }
 
-.factory-flow-board--moving .react-flow__edgelabel-renderer {
-  opacity: 0;
-  visibility: hidden;
+/* While paint mode is active the whole board keeps the brush cursor, so the
+   grab/grabbing pan cursors don't take over between nodes. */
+.factory-flow-board--painting .react-flow__pane,
+.factory-flow-board--painting .react-flow__pane.draggable,
+.factory-flow-board--painting .react-flow__pane.dragging {
+  cursor: var(--paint-cursor, crosshair) !important;
+}
+
+/* While the delete tool is armed, everything on the board shows the red X. */
+.factory-flow-board--deleting .react-flow__pane,
+.factory-flow-board--deleting .react-flow__node,
+.factory-flow-board--deleting .react-flow__edge,
+.factory-flow-board--deleting .react-flow__edgelabel-renderer * {
+  cursor: var(--delete-cursor, not-allowed) !important;
+}
+
+/* Resource edges normally opt out of pointer events (labels do selection);
+   the delete tool needs the lines themselves to take the click. */
+.factory-flow-board--deleting .react-flow__edge path {
+  pointer-events: stroke !important;
+}
+
+/* While an annotation tool is armed, everything on the board draws. */
+.factory-flow-board--annotating,
+.factory-flow-board--annotating .react-flow__pane,
+.factory-flow-board--annotating .react-flow__node {
+  cursor: crosshair !important;
 }
 
 .factory-flow-board .react-flow__node.selected {
@@ -82,6 +270,18 @@ textarea {
 
 .factory-flow-board--dragging .react-flow__edgelabel-renderer {
   z-index: 2010 !important;
+}
+
+/* A node with an open picker popup must beat everything: the edge layer sits
+   above the nodes layer by design (80 vs 20, 2000 while dragging), so the
+   whole nodes layer lifts while any popup is open, and the owning node rises
+   above its selected (20) and dragging (30) siblings. */
+.factory-flow-board .react-flow__nodes:has(.recipe-node-popup-open) {
+  z-index: 2200 !important;
+}
+
+.factory-flow-board .react-flow__node:has(.recipe-node-popup-open) {
+  z-index: 40 !important;
 }
 
 .factory-flow-board .react-flow__edgelabel-renderer {
@@ -126,7 +326,7 @@ textarea {
 }
 
 .nei-tab-scroll {
-  scrollbar-color: #8b8b8b #d0d0d0;
+  scrollbar-color: var(--mc-54) var(--mc-82);
   scrollbar-width: thin;
 }
 
@@ -135,12 +335,12 @@ textarea {
 }
 
 .nei-tab-scroll::-webkit-scrollbar-track {
-  background: #d0d0d0;
+  background: var(--mc-82);
 }
 
 .nei-tab-scroll::-webkit-scrollbar-thumb {
-  background: #8b8b8b;
-  border: 2px solid #d0d0d0;
+  background: var(--mc-54);
+  border: 2px solid var(--mc-82);
   border-radius: 8px;
 }
 
@@ -158,32 +358,32 @@ textarea {
   letter-spacing: 0;
   color: #ffffff;
   text-shadow:
-    1px 1px 0 #3f3f3f,
-    2px 2px 0 #3f3f3f;
+    1px 1px 0 var(--mc-24),
+    2px 2px 0 var(--mc-24);
 }
 
 .recipe-node-tinted-area {
-  background: color-mix(in srgb, var(--recipe-node-tint) 82%, #c6c6c6);
+  background: color-mix(in srgb, var(--recipe-node-tint) 82%, var(--mc-78));
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.45),
     inset -1px -1px 0 rgba(0, 0, 0, 0.25);
 }
 
 .recipe-node-tinted-area .recipe-node-nei-tint {
-  background: color-mix(in srgb, var(--recipe-node-tint) 88%, #c6c6c6);
+  background: color-mix(in srgb, var(--recipe-node-tint) 88%, var(--mc-78));
 }
 
 .recipe-node-tinted-area .recipe-node-nei-tint > div {
-  background: color-mix(in srgb, var(--recipe-node-tint) 72%, #c6c6c6);
+  background: color-mix(in srgb, var(--recipe-node-tint) 72%, var(--mc-78));
 }
 
 .recipe-node-tinted-area .recipe-node-nei-tint > div > div {
-  background: color-mix(in srgb, var(--recipe-node-tint) 58%, #c6c6c6);
+  background: color-mix(in srgb, var(--recipe-node-tint) 58%, var(--mc-78));
 }
 
 .recipe-node-tinted-area .recipe-node-nei-tint > div:last-child {
-  background: color-mix(in srgb, var(--recipe-node-tint) 86%, #c6c6c6);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--recipe-node-tint-border) 35%, #777);
+  background: color-mix(in srgb, var(--recipe-node-tint) 86%, var(--mc-78));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--recipe-node-tint-border) 35%, var(--mc-47));
 }
 
 .recipe-node-canvas-tint::before {
@@ -195,12 +395,13 @@ textarea {
 }
 
 .recipe-node-stat-grid > div {
-  background: color-mix(in srgb, var(--recipe-node-tint) 86%, #b6b6b6);
-  border-color: color-mix(in srgb, var(--recipe-node-tint-border) 62%, #777);
+  background: color-mix(in srgb, var(--recipe-node-tint) 86%, var(--mc-71));
+  border-color: color-mix(in srgb, var(--recipe-node-tint-border) 62%, var(--mc-47));
 }
 
 .recipe-node-stat-grid input {
-  background: color-mix(in srgb, var(--recipe-node-tint) 42%, #d8d8d8);
+  background: color-mix(in srgb, var(--recipe-node-tint) 42%, var(--mc-85));
+  color: var(--mc-ink);
 }
 
 .storage-node-tinted .storage-node-card {
@@ -214,11 +415,11 @@ textarea {
 }
 
 .storage-node-tinted .storage-node-card--tank {
-  border-color: #1f1f1f !important;
+  border-color: var(--mc-12) !important;
   background: color-mix(in srgb, var(--storage-node-tint) 66%, #b9c2d4);
 }
 
 .storage-node-tinted .storage-node-card--tank .storage-node-body {
-  border-color: #1f1f1f;
+  border-color: var(--mc-12);
   background: black;
 }

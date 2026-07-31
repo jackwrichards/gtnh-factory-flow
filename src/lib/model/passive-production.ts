@@ -13,6 +13,13 @@ export const CROP_SOIL_CONTROL_ID = "cropSoil";
 export const CROP_SOIL_DEPTH_CONTROL_ID = "cropSoilDepth";
 export const CROP_AIR_QUALITY_CONTROL_ID = "cropAirQuality";
 
+export const CROP_GROWTH_STAT_CONTROL_ID = "cropGrowthStat";
+export const CROP_GAIN_STAT_CONTROL_ID = "cropGainStat";
+export const CROP_WATER_CONTROL_ID = "cropWater";
+export const CROP_FERTILIZER_CONTROL_ID = "cropFertilizer";
+export const CROP_SKY_CONTROL_ID = "cropSky";
+export const CROP_BIOME_CONTROL_ID = "cropBiome";
+
 export const BEE_FRAME_SLOT_CONTROL_PREFIX = "beeFrameSlot";
 export const BEE_ENVIRONMENT_CONTROL_ID = "beeEnvironment";
 export const BEE_MAGIC_AURA_CONTROL_ID = "beeMagicAura";
@@ -39,6 +46,12 @@ const CROP_CONTROL_IDS = new Set([
   CROP_SOIL_CONTROL_ID,
   CROP_SOIL_DEPTH_CONTROL_ID,
   CROP_AIR_QUALITY_CONTROL_ID,
+  CROP_GROWTH_STAT_CONTROL_ID,
+  CROP_GAIN_STAT_CONTROL_ID,
+  CROP_WATER_CONTROL_ID,
+  CROP_FERTILIZER_CONTROL_ID,
+  CROP_SKY_CONTROL_ID,
+  CROP_BIOME_CONTROL_ID,
 ]);
 
 const BEE_CONTROL_IDS = new Set([
@@ -81,6 +94,142 @@ const CROPNH_GENERIC_PROFILE: Ic2CropSimulationProfile = {
   baselineStats: { growth: 31, gain: 31, resistance: 31 },
 };
 
+export interface CropsNhStats {
+  tier: number;
+  growthPoints: number;
+  dropChance: number;
+  growthCycleTicks: number;
+  growthMultiplier: number;
+  machineOnly?: boolean;
+  drops: Array<{ id: string; stackSize: number; weight: number }>;
+}
+
+export interface CropsNhEnvironment {
+  growth: number;
+  gain: number;
+  water: number;
+  fertilizer: number;
+  sky: boolean;
+  biomeBonus: number;
+}
+
+/**
+ * Reference point used by the dataset pipeline when baking baseline
+ * duration/output values: perfect 31/31/31 seeds on a fully supplied farm.
+ * Solver multipliers are computed relative to this environment.
+ */
+export const CROPSNH_REFERENCE_ENVIRONMENT: CropsNhEnvironment = {
+  growth: 31,
+  gain: 31,
+  water: 100,
+  fertilizer: 100,
+  sky: true,
+  biomeBonus: 28,
+};
+
+export function getCropsNhStats(
+  recipe: Pick<Recipe, "metadata">,
+): CropsNhStats | undefined {
+  const meta = (recipe.metadata as { cropsNh?: Record<string, unknown> } | undefined)?.cropsNh;
+  if (!meta || typeof meta !== "object") {
+    return undefined;
+  }
+  const tier = toPositiveNumber(meta.tier);
+  const growthPoints = toPositiveNumber(meta.growthPoints);
+  const dropChance = toPositiveNumber(meta.dropChance);
+  if (!tier || !growthPoints || !dropChance) {
+    return undefined;
+  }
+  const drops = Array.isArray(meta.drops)
+    ? (meta.drops as Array<Record<string, unknown>>)
+        .map((entry) => ({
+          id: String(entry.id ?? ""),
+          stackSize: toPositiveNumber(entry.stackSize) ?? 1,
+          weight: toPositiveNumber(entry.weight) ?? 0,
+        }))
+        .filter((entry) => entry.id && entry.weight > 0)
+    : [];
+  return {
+    tier,
+    growthPoints,
+    dropChance,
+    growthCycleTicks: toPositiveNumber(meta.growthCycleTicks) ?? 256,
+    growthMultiplier: toPositiveNumber(meta.growthMultiplier) ?? 1,
+    machineOnly: meta.machineOnly === true ? true : undefined,
+    drops,
+  };
+}
+
+// The following mirror TileEntityCropSticks (verified against 2.9 bytecode):
+// getNutrientsPerCycle, getGrowthRate, doGrowth and harvest.
+
+export function cropsNhNutrientScore(env: CropsNhEnvironment): number {
+  const waterBonus = Math.floor((Math.min(100, Math.max(0, env.water)) + 9) / 10);
+  const fertilizerBonus = Math.floor((Math.min(100, Math.max(0, env.fertilizer)) + 9) / 10);
+  return 5 + waterBonus + fertilizerBonus + (env.sky ? 2 : 0) + Math.max(0, env.biomeBonus);
+}
+
+export function cropsNhGrowthRate(stats: CropsNhStats, env: CropsNhEnvironment): number {
+  const supply = cropsNhNutrientScore(env) * 5;
+  const demand = stats.tier * 10;
+  const base = 6 + Math.max(1, Math.min(31, env.growth));
+  const rate =
+    supply >= demand
+      ? Math.trunc((base * (100 + supply - demand)) / 100)
+      : Math.max(0, Math.trunc((base * (100 - (demand - supply) * 4)) / 100));
+  return Math.trunc(rate * stats.growthMultiplier);
+}
+
+export function cropsNhHarvestTicks(stats: CropsNhStats, env: CropsNhEnvironment): number {
+  const perCycle = cropsNhGrowthRate(stats, env);
+  if (perCycle <= 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.ceil(stats.growthPoints / perCycle) * stats.growthCycleTicks;
+}
+
+export function cropsNhExpectedDrop(
+  stats: CropsNhStats,
+  gain: number,
+  drop: { stackSize: number; weight: number },
+): number {
+  const clampedGain = Math.max(1, Math.min(31, gain));
+  const rounds = stats.dropChance * 1.03 ** clampedGain;
+  return rounds * (drop.weight / 10000) * (drop.stackSize + (clampedGain + 1) / 100);
+}
+
+const CROP_BIOME_BONUS_BY_KEY: Record<string, number> = {
+  "two-tags": 28,
+  "one-tag": 14,
+  humid: 14,
+  none: 0,
+};
+
+export function cropsNhEnvironmentFromTiers(
+  tiers: Record<string, string | undefined> | undefined,
+): CropsNhEnvironment {
+  const reference = CROPSNH_REFERENCE_ENVIRONMENT;
+  const growth = Number.parseInt(tiers?.[CROP_GROWTH_STAT_CONTROL_ID] ?? "", 10);
+  const gain = Number.parseInt(tiers?.[CROP_GAIN_STAT_CONTROL_ID] ?? "", 10);
+  const water = Number.parseInt(tiers?.[CROP_WATER_CONTROL_ID] ?? "", 10);
+  const fertilizer = Number.parseInt(tiers?.[CROP_FERTILIZER_CONTROL_ID] ?? "", 10);
+  const sky = tiers?.[CROP_SKY_CONTROL_ID];
+  const biome = tiers?.[CROP_BIOME_CONTROL_ID];
+  return {
+    growth: Number.isFinite(growth) ? growth : reference.growth,
+    gain: Number.isFinite(gain) ? gain : reference.gain,
+    water: Number.isFinite(water) ? water : reference.water,
+    fertilizer: Number.isFinite(fertilizer) ? fertilizer : reference.fertilizer,
+    sky: sky === undefined ? reference.sky : sky === "yes",
+    biomeBonus: biome === undefined ? reference.biomeBonus : (CROP_BIOME_BONUS_BY_KEY[biome] ?? 0),
+  };
+}
+
+function toPositiveNumber(value: unknown): number | undefined {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : undefined;
+}
+
 const SQRT_2_PI = Math.sqrt(2 * Math.PI);
 const ic2DropMultiplierCache = new Map<string, number>();
 const ic2GrowthCycleCache = new Map<string, number>();
@@ -104,7 +253,10 @@ export function isCropProductionRecipe(recipe: PassiveProductionRecipeLabel) {
   }
 
   return (
-    /\bic2 crops?\b/.test(label) || /\bcropnh\b/.test(label) || /\bcrop production\b/.test(label)
+    /\bic2 crops?\b/.test(label) ||
+    /\bcrops?nh\b/.test(label) ||
+    /\bcrop production\b/.test(label) ||
+    /\bcrop farm\b/.test(label)
   );
 }
 
@@ -114,7 +266,37 @@ export function isIc2LegacyCropRecipe(recipe: PassiveProductionRecipeLabel) {
 }
 
 export function isCropNhRecipe(recipe: PassiveProductionRecipeLabel) {
-  return /\bcropnh\b/.test(passiveProductionLabel(recipe));
+  const label = passiveProductionLabel(recipe);
+  return /\bcrops?nh\b/.test(label) || /\bcrop farm\b/.test(label);
+}
+
+export const CROP_FARM_RECIPE_MAP = "Crop Farm";
+export const CROP_FARM_PLACEHOLDER_RECIPE_ID = "factoryflow:crop-farm:empty";
+
+/** Crop farm sources spawn from the board toolbar, not the recipe book. */
+export function isCropFarmRecipe(recipe: PassiveProductionRecipeLabel) {
+  return /\bcrop farm\b/.test(passiveProductionLabel(recipe));
+}
+
+/**
+ * The empty crop source dropped in by the board button: it has no crop yet,
+ * so it produces nothing until one is picked on the node.
+ */
+export function createCropFarmPlaceholderRecipe(): Recipe {
+  return {
+    id: CROP_FARM_PLACEHOLDER_RECIPE_ID,
+    name: "Crop Farm",
+    kind: "crop_produce",
+    category: "cropsnh-crop",
+    machineType: CROP_FARM_RECIPE_MAP,
+    minimumTier: "NONE",
+    durationTicks: 256,
+    eut: 0,
+    inputs: [],
+    outputs: [],
+    notes: "Pick a crop to start producing.",
+    source: { recipeMap: CROP_FARM_RECIPE_MAP },
+  };
 }
 
 export function isBeeProductionRecipe(recipe: PassiveProductionRecipeLabel) {
@@ -224,7 +406,19 @@ export function getCropStatsPreset(value: string | undefined): CropStatsPreset |
 }
 
 function enrichCropProductionRecipe(recipe: Recipe): Recipe {
-  const controls = cropProductionControls(recipe);
+  const analyticStats = getCropsNhStats(recipe);
+  if (!analyticStats && isCropFarmRecipe(recipe)) {
+    // The empty crop-farm placeholder: no crop picked yet, nothing to tune.
+    return {
+      ...recipe,
+      minimumTier: "NONE",
+      eut: 0,
+      machineHandlers: [],
+    };
+  }
+  const controls = analyticStats
+    ? cropsNhAnalyticControls()
+    : cropProductionControls(recipe);
   const machineConfigControls = mergeMachineConfigControls(recipe.machineConfigControls, controls);
   const baseMachine = "Crop Manager";
 
@@ -238,11 +432,83 @@ function enrichCropProductionRecipe(recipe: Recipe): Recipe {
     machineConfigControls,
     notes: withPassiveProductionNote(
       recipe.notes,
-      recipe.runtimeCalculation?.status === "computed"
-        ? "Crop production uses GTNH runtime baseline data when a matching oracle variant exists; unmatched controls fall back to passive averages."
-        : "Crop production controls are best-effort passive averages. Seed count multiplies output without adding power draw.",
+      analyticStats
+        ? "Rates use the exact CropsNH growth and gain formulas from the game (256-tick cycles, nutrient supply vs Tier x 10 demand, dropChance x 1.03^Gain drop rounds). Machine count = number of planted crops. Resistance does not affect steady-state rates."
+        : recipe.runtimeCalculation?.status === "computed"
+          ? "Crop production uses GTNH runtime baseline data when a matching oracle variant exists; unmatched controls fall back to passive averages."
+          : "Crop production controls are best-effort passive averages. Seed count multiplies output without adding power draw.",
     ),
   };
+}
+
+function cropsNhAnalyticControls(): MachineConfigControl[] {
+  const statTiers = (controlId: string, statLabel: string) =>
+    Array.from({ length: 31 }, (_unused, index) => {
+      const value = index + 1;
+      return option(
+        String(value),
+        String(value),
+        `${controlId}_${value}`,
+        `${statLabel} ${value}`,
+      );
+    });
+
+  return [
+    {
+      id: CROP_GROWTH_STAT_CONTROL_ID,
+      label: "Growth",
+      minimumKey: "1",
+      defaultKey: "31",
+      tiers: statTiers(CROP_GROWTH_STAT_CONTROL_ID, "Growth"),
+    },
+    {
+      id: CROP_GAIN_STAT_CONTROL_ID,
+      label: "Gain",
+      minimumKey: "1",
+      defaultKey: "31",
+      tiers: statTiers(CROP_GAIN_STAT_CONTROL_ID, "Gain"),
+    },
+    selectControl({
+      id: CROP_WATER_CONTROL_ID,
+      label: "Water",
+      defaultKey: "100",
+      tiers: [
+        option("0", "Dry", "crop_water_0", "No Water (+1)"),
+        option("50", "Partial", "crop_water_50", "Water 50 (+5)"),
+        option("100", "Full", "crop_water_100", "Water 100 (+10)"),
+      ],
+    }),
+    selectControl({
+      id: CROP_FERTILIZER_CONTROL_ID,
+      label: "Fertilizer",
+      defaultKey: "100",
+      tiers: [
+        option("0", "None", "crop_fertilizer_0", "No Fertilizer (+1)"),
+        option("50", "Partial", "crop_fertilizer_50", "Fertilizer 50 (+5)"),
+        option("100", "Full", "crop_fertilizer_100", "Fertilizer 100 (+10)"),
+      ],
+    }),
+    selectControl({
+      id: CROP_SKY_CONTROL_ID,
+      label: "Sky Access",
+      defaultKey: "yes",
+      tiers: [
+        option("no", "Covered", "crop_sky_no", "No Sky Access (+0)"),
+        option("yes", "Open Sky", "crop_sky_yes", "Sky Access (+2)"),
+      ],
+    }),
+    selectControl({
+      id: CROP_BIOME_CONTROL_ID,
+      label: "Biome",
+      defaultKey: "two-tags",
+      tiers: [
+        option("none", "No Bonus", "crop_biome_none", "No Biome Bonus (+0)"),
+        option("humid", "Humid", "crop_biome_humid", "80%+ Humidity Biome (+14)"),
+        option("one-tag", "1 Tag", "crop_biome_one_tag", "One Preferred Biome Tag (+14)"),
+        option("two-tags", "2 Tags", "crop_biome_two_tags", "Both Preferred Biome Tags (+28)"),
+      ],
+    }),
+  ];
 }
 
 function enrichBeeProductionRecipe(recipe: Recipe): Recipe {
@@ -1007,6 +1273,8 @@ function isPassiveBaseMachine(machineType: string) {
     label === "ic2 crop" ||
     label === "ic2 crops" ||
     label === "cropnh" ||
+    label === "cropsnh" ||
+    label === "cropsnh crop" ||
     label === "crop production" ||
     label === "bee produce" ||
     label === "bee production" ||

@@ -6,6 +6,7 @@ import type { DatasetManifest, RecipeDataset } from "@/lib/datasets";
 import { normalizeProjectFuelProfiles } from "@/lib/model/fuels";
 import { calculateThroughput } from "@/lib/solver";
 import { applyRecipeInputOverrides } from "@/lib/model/recipe-input-overrides";
+import { createCropFarmPlaceholderRecipe } from "@/lib/model/passive-production";
 import { optimizeMachineCountsForProject } from "@/lib/solver/machine-count-optimizer";
 import {
   getFilledCellFluidEquivalent,
@@ -16,6 +17,7 @@ import {
   resourceLabel,
 } from "@/lib/model/resources";
 import type {
+  FactoryAnnotation,
   FactoryEdge,
   FactoryNode,
   FactoryNodeColorTag,
@@ -31,7 +33,7 @@ import type {
 
 export const LOCAL_STORAGE_KEY = "gtnh-factory-flow.project.v2";
 export const RESOURCE_HISTORY_STORAGE_KEY = "gtnh-factory-flow.resource-history.v1";
-const RESOURCE_HISTORY_LIMIT = 8;
+const RESOURCE_HISTORY_LIMIT = 30;
 const PROJECT_HISTORY_LIMIT = 100;
 
 interface FactoryStore {
@@ -46,6 +48,15 @@ interface FactoryStore {
   isProjectImporting: boolean;
   datasetError?: string;
   recipeSearch: string;
+  /**
+   * Debounced mirror of `recipeSearch`, published by the recipe browser and read
+   * by the canvas.
+   *
+   * The raw query changes on every keystroke, and everything that highlights
+   * against it — every node, every storage, the whole edge array — is expensive
+   * to re-render. Splitting the two keeps typing local to the browser panel.
+   */
+  highlightSearch: string;
   maxTierFilter: TierFilter;
   recipeBrowserResource?: RecipeBrowserResource;
   recipeBrowserMode: RecipeBrowserMode;
@@ -57,6 +68,8 @@ interface FactoryStore {
   selectedFlowResourceKey?: string;
   hoveredNodeBottlenecks: boolean;
   selectedNodeBottlenecks: boolean;
+  /** Node hovered in the inspector's usage grid, highlighted on the canvas. */
+  hoveredUsageNodeId?: string;
   flowViewportCenter?: FactoryNode["position"];
   selectedNodeId?: string;
   selectedRecipeId?: string;
@@ -73,6 +86,7 @@ interface FactoryStore {
   setProjectImporting: (isImporting: boolean) => void;
   setDatasetError: (error?: string) => void;
   setRecipeSearch: (query: string) => void;
+  setHighlightSearch: (query: string) => void;
   setMaxTierFilter: (tier: TierFilter) => void;
   hydrateResourceHistory: (history: RecipeBrowserResource[]) => void;
   browseResource: (resource: RecipeBrowserResource, mode?: RecipeBrowserMode) => void;
@@ -86,12 +100,17 @@ interface FactoryStore {
   selectFlowResourceKey: (key?: string) => void;
   setHoveredNodeBottlenecks: (isHovered: boolean) => void;
   toggleNodeBottlenecks: () => void;
+  setHoveredUsageNodeId: (nodeId?: string) => void;
   setFlowViewportCenter: (position: FactoryNode["position"]) => void;
   recalculate: () => void;
   selectNode: (nodeId?: string) => void;
   selectRecipe: (recipeId?: string) => void;
   addNodeForRecipe: (recipeId: string) => void;
-  addNodeForRecipeObject: (recipe: Recipe, resource?: RecipeInputContextResource) => void;
+  addNodeForRecipeObject: (
+    recipe: Recipe,
+    resource?: RecipeInputContextResource,
+    options?: { machineHandlerId?: string },
+  ) => void;
   addConnectedNodeForRecipe: (
     recipeId: string,
     anchorNodeId: string,
@@ -103,6 +122,10 @@ interface FactoryStore {
     resource: RecipeInputContextResource,
   ) => void;
   updateNode: (nodeId: string, patch: Partial<FactoryNode>) => void;
+  /** Drops an empty crop source node; a crop is picked on the node itself. */
+  addCropFarmNode: () => void;
+  /** Swaps the node onto another recipe (crop pick), resetting per-recipe state. */
+  setNodeRecipe: (nodeId: string, recipe: Recipe) => void;
   deleteNode: (nodeId: string) => void;
   addResourceStorage: (
     resource: Pick<
@@ -126,6 +149,12 @@ interface FactoryStore {
   autoRouteStorage: (storageId: string) => void;
   updateStorage: (storageId: string, patch: Partial<FactoryStorage>) => void;
   setStoragePosition: (storageId: string, position: FactoryStorage["position"]) => void;
+  /** Records which community post the current design belongs to (no undo entry). */
+  setProjectCommunityLink: (communityPlanId: string) => void;
+  addAnnotation: (annotation: Omit<FactoryAnnotation, "id">) => void;
+  updateAnnotation: (annotationId: string, patch: Partial<FactoryAnnotation>) => void;
+  deleteAnnotation: (annotationId: string) => void;
+  setAnnotationPosition: (annotationId: string, position: FactoryAnnotation["position"]) => void;
   setNodePosition: (nodeId: string, position: FactoryNode["position"]) => void;
   connectNodes: (
     sourceNodeId: string,
@@ -154,6 +183,7 @@ interface FactoryStore {
   deleteEdge: (edgeId: string) => void;
   setTargetRate: (targetRate?: TargetRate) => void;
   selectFuelProfile: (fuelProfileId: string) => void;
+  renameProject: (name: string) => void;
 }
 
 const initialProject = createEmptyProject();
@@ -205,6 +235,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   isProjectImporting: false,
   datasetError: undefined,
   recipeSearch: "",
+  highlightSearch: "",
   maxTierFilter: "all",
   recipeBrowserResource: undefined,
   recipeBrowserMode: "recipes",
@@ -216,6 +247,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   selectedFlowResourceKey: undefined,
   hoveredNodeBottlenecks: false,
   selectedNodeBottlenecks: false,
+  hoveredUsageNodeId: undefined,
   selectedNodeId: undefined,
   selectedRecipeId: undefined,
   lastResult: calculateThroughput(initialProject),
@@ -351,6 +383,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     set({
       dataset: undefined,
       recipeSearch: "",
+      highlightSearch: "",
       selectedRecipeId: undefined,
       selectedDatasetVersionId: undefined,
     });
@@ -366,6 +399,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
   setRecipeSearch: (query) => {
     set({ recipeSearch: query });
+  },
+  setHighlightSearch: (query) => {
+    set({ highlightSearch: query });
   },
   setMaxTierFilter: (tier) => {
     set({ maxTierFilter: tier });
@@ -396,6 +432,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     set({
       recipeBrowserResource: undefined,
       recipeSearch: "",
+      highlightSearch: "",
     });
   },
   cleanBoard: () => {
@@ -532,6 +569,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   toggleNodeBottlenecks: () => {
     set((state) => ({ selectedNodeBottlenecks: !state.selectedNodeBottlenecks }));
   },
+  setHoveredUsageNodeId: (nodeId) => {
+    set({ hoveredUsageNodeId: nodeId });
+  },
   setFlowViewportCenter: (position) => {
     set({ flowViewportCenter: position });
   },
@@ -559,8 +599,8 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       return addRecipeNodeToState(state, recipe);
     });
   },
-  addNodeForRecipeObject: (recipe, resource) => {
-    set((state) => addRecipeNodeToState(state, recipe, resource));
+  addNodeForRecipeObject: (recipe, resource, options) => {
+    set((state) => addRecipeNodeToState(state, recipe, resource, options));
   },
   addConnectedNodeForRecipe: (recipeId, anchorNodeId, resource) => {
     set((state) => {
@@ -587,6 +627,59 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       );
       return withProjectHistory(state, {
         project,
+        lastResult: calculateThroughput(project),
+      });
+    });
+  },
+  addCropFarmNode: () => {
+    // Crop sources spawn green by default, like drawers/tanks spawn with the
+    // active paint color; the user can still repaint them.
+    set((state) =>
+      addRecipeNodeToState(state, createCropFarmPlaceholderRecipe(), undefined, {
+        colorTag: "green",
+      }),
+    );
+  },
+  setNodeRecipe: (nodeId, recipe) => {
+    set((state) => {
+      const node = state.project.nodes.find((entry) => entry.id === nodeId);
+      if (!node || node.recipeId === recipe.id) {
+        return state;
+      }
+
+      const recipeAlreadyInProject = state.project.recipes.some((entry) => entry.id === recipe.id);
+      const project = touchProject(
+        pruneOrphanStorages({
+          ...state.project,
+          recipes: recipeAlreadyInProject
+            ? state.project.recipes.map((entry) =>
+                entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
+              )
+            : [...state.project.recipes, recipe],
+          nodes: state.project.nodes.map((entry) =>
+            entry.id === nodeId
+              ? {
+                  ...entry,
+                  recipeId: recipe.id,
+                  overclockTier: recipe.minimumTier,
+                  machineConfigTiers: undefined,
+                  machineHandlerId: undefined,
+                  coilTier: undefined,
+                  recipeInputOverrides: undefined,
+                }
+              : entry,
+          ),
+          // The old recipe's resources no longer exist on this node.
+          edges: state.project.edges.filter(
+            (edge) => edge.source !== nodeId && edge.target !== nodeId,
+          ),
+        }),
+      );
+
+      return withProjectHistory(state, {
+        project,
+        selectedNodeId: nodeId,
+        selectedRecipeId: recipe.id,
         lastResult: calculateThroughput(project),
       });
     });
@@ -810,6 +903,63 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       return withProjectHistory(state, {
         project,
       });
+    });
+  },
+  setProjectCommunityLink: (communityPlanId) => {
+    set((state) => ({
+      project: {
+        ...state.project,
+        metadata: { ...state.project.metadata, communityPlanId },
+      },
+    }));
+  },
+  addAnnotation: (annotation) => {
+    set((state) => {
+      const project = touchProject({
+        ...state.project,
+        annotations: [
+          ...(state.project.annotations ?? []),
+          { ...annotation, id: createId("annotation") },
+        ],
+      });
+
+      return withProjectHistory(state, { project });
+    });
+  },
+  updateAnnotation: (annotationId, patch) => {
+    set((state) => {
+      const project = touchProject({
+        ...state.project,
+        annotations: (state.project.annotations ?? []).map((annotation) =>
+          annotation.id === annotationId ? { ...annotation, ...patch } : annotation,
+        ),
+      });
+
+      return withProjectHistory(state, { project });
+    });
+  },
+  deleteAnnotation: (annotationId) => {
+    set((state) => {
+      const project = touchProject({
+        ...state.project,
+        annotations: (state.project.annotations ?? []).filter(
+          (annotation) => annotation.id !== annotationId,
+        ),
+      });
+
+      return withProjectHistory(state, { project });
+    });
+  },
+  setAnnotationPosition: (annotationId, position) => {
+    set((state) => {
+      const project = touchProject({
+        ...state.project,
+        annotations: (state.project.annotations ?? []).map((annotation) =>
+          annotation.id === annotationId ? { ...annotation, position } : annotation,
+        ),
+      });
+
+      return withProjectHistory(state, { project });
     });
   },
   setNodePosition: (nodeId, position) => {
@@ -1088,6 +1238,19 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       });
     });
   },
+  renameProject: (name) => {
+    set((state) => {
+      if (name === state.project.name) {
+        return state;
+      }
+
+      // No throughput recalculation: a name cannot change a rate, and the solve
+      // is the expensive part of every other mutation here.
+      return withProjectHistory(state, {
+        project: touchProject({ ...state.project, name }),
+      });
+    });
+  },
 }));
 
 function withProjectHistory(
@@ -1168,6 +1331,7 @@ function addRecipeNodeToState(
   state: FactoryStore,
   recipe: Recipe,
   resource?: RecipeInputContextResource,
+  options?: { colorTag?: FactoryNodeColorTag; machineHandlerId?: string },
 ): Partial<FactoryStore> {
   const index = state.project.nodes.length;
   const viewportPosition = state.flowViewportCenter
@@ -1176,13 +1340,20 @@ function addRecipeNodeToState(
         y: state.flowViewportCenter.y - 160,
       }
     : undefined;
+  // A machine picked in the recipe finder spawns the node with that handler
+  // selected, at the handler's own minimum tier.
+  const spawnHandler = options?.machineHandlerId
+    ? recipe.machineHandlers?.find((handler) => handler.id === options.machineHandlerId)
+    : undefined;
   const node: FactoryNode = {
     id: createId("node"),
     recipeId: recipe.id,
     machineCount: 1,
     parallel: 1,
-    overclockTier: recipe.minimumTier,
+    machineHandlerId: spawnHandler?.id,
+    overclockTier: spawnHandler?.minimumTier ?? recipe.minimumTier,
     recipeInputOverrides: resource ? buildRecipeInputOverrides(recipe, resource) : undefined,
+    colorTag: options?.colorTag,
     enabled: true,
     position: viewportPosition ?? {
       x: 100 + index * 90,

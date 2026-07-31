@@ -5,6 +5,15 @@ import { existsSync } from "node:fs";
 import { PNG } from "pngjs";
 import { writeDatasetJson } from "./dataset-json-writer.mjs";
 import { getDominantOpaqueColor } from "./icon-utils.mjs";
+import {
+  buildMachineHandlerTemplates,
+  heatingCoilTiers,
+  instantiateRecipeMachineHandlers,
+  machineConfigControlsForOracleRecipe,
+  machineConfigResources,
+  machineHandlerConfigResources,
+  primaryMachineHandlerControls,
+} from "./machine-configs.mjs";
 
 const inputPath = process.argv[2];
 const outputPath = process.argv[3];
@@ -25,89 +34,6 @@ const GT_VOLTAGE_NAMES = [
   "OpV",
   "MAX",
 ];
-const heatingCoilTiers = [
-  { heat: 1801, key: "cupronickel", label: "Cupronickel", blockId: "gregtech:gt.blockcasings5" },
-  { heat: 2701, key: "kanthal", label: "Kanthal", blockId: "gregtech:gt.blockcasings5@1" },
-  { heat: 3601, key: "nichrome", label: "Nichrome", blockId: "gregtech:gt.blockcasings5@2" },
-  { heat: 4501, key: "tpv", label: "TPV-Alloy", blockId: "gregtech:gt.blockcasings5@3" },
-  { heat: 5401, key: "hss_g", label: "HSS-G", blockId: "gregtech:gt.blockcasings5@4" },
-  { heat: 6301, key: "hss_s", label: "HSS-S", blockId: "gregtech:gt.blockcasings5@9" },
-  { heat: 7201, key: "naquadah", label: "Naquadah", blockId: "gregtech:gt.blockcasings5@5" },
-  {
-    heat: 8101,
-    key: "naquadah_alloy",
-    label: "Naquadah Alloy",
-    blockId: "gregtech:gt.blockcasings5@6",
-  },
-  { heat: 9001, key: "trinium", label: "Trinium", blockId: "gregtech:gt.blockcasings5@10" },
-  {
-    heat: 9901,
-    key: "electrum_flux",
-    label: "Electrum Flux",
-    blockId: "gregtech:gt.blockcasings5@7",
-  },
-  {
-    heat: 10801,
-    key: "awakened_draconium",
-    label: "Awakened Draconium",
-    blockId: "gregtech:gt.blockcasings5@8",
-  },
-  { heat: 11701, key: "infinity", label: "Infinity", blockId: "gregtech:gt.blockcasings5@11" },
-  { heat: 12601, key: "hypogen", label: "Hypogen", blockId: "gregtech:gt.blockcasings5@12" },
-  { heat: 13501, key: "eternal", label: "Eternal", blockId: "gregtech:gt.blockcasings5@13" },
-];
-const pipeCasingTiers = [
-  { key: "bronze", label: "Bronze", blockId: "gregtech:gt.blockcasings2@12" },
-  { key: "steel", label: "Steel", blockId: "gregtech:gt.blockcasings2@13" },
-  { key: "titanium", label: "Titanium", blockId: "gregtech:gt.blockcasings2@14" },
-  { key: "tungstensteel", label: "Tungstensteel", blockId: "gregtech:gt.blockcasings2@15" },
-  { key: "ptfe", label: "PTFE", blockId: "gregtech:gt.blockcasings8@1" },
-  { key: "pbi", label: "PBI", blockId: "gregtech:gt.blockcasings9" },
-];
-const solenoidTiers = [
-  { key: "mv", label: "MV", blockId: "gregtech:gt.blockcasings.cyclotron_coils", voltageTier: 2 },
-  { key: "hv", label: "HV", blockId: "gregtech:gt.blockcasings.cyclotron_coils@1", voltageTier: 3 },
-  { key: "ev", label: "EV", blockId: "gregtech:gt.blockcasings.cyclotron_coils@2", voltageTier: 4 },
-  { key: "iv", label: "IV", blockId: "gregtech:gt.blockcasings.cyclotron_coils@3", voltageTier: 5 },
-  {
-    key: "luv",
-    label: "LuV",
-    blockId: "gregtech:gt.blockcasings.cyclotron_coils@4",
-    voltageTier: 6,
-  },
-  {
-    key: "zpm",
-    label: "ZPM",
-    blockId: "gregtech:gt.blockcasings.cyclotron_coils@5",
-    voltageTier: 7,
-  },
-  { key: "uv", label: "UV", blockId: "gregtech:gt.blockcasings.cyclotron_coils@6", voltageTier: 8 },
-  {
-    key: "uhv",
-    label: "UHV",
-    blockId: "gregtech:gt.blockcasings.cyclotron_coils@7",
-    voltageTier: 9,
-  },
-  {
-    key: "uev",
-    label: "UEV",
-    blockId: "gregtech:gt.blockcasings.cyclotron_coils@8",
-    voltageTier: 10,
-  },
-  {
-    key: "uiv",
-    label: "UIV",
-    blockId: "gregtech:gt.blockcasings.cyclotron_coils@9",
-    voltageTier: 11,
-  },
-  {
-    key: "umv",
-    label: "UMV",
-    blockId: "gregtech:gt.blockcasings.cyclotron_coils@10",
-    voltageTier: 12,
-  },
-];
-
 if (!inputPath || !outputPath) {
   throw new Error("Usage: normalize-oracle-export.mjs <oracle.json> <recipes.json>");
 }
@@ -126,6 +52,29 @@ const resources = new Map();
 const recipes = [];
 const recipeMaps = new Set();
 const recipeMapIcons = new Map();
+// GT's gt.recipe.furnace map mirrors vanilla FurnaceRecipes at runtime, so its
+// export has catalysts (steam/electric furnaces, Multi Smelter...) but zero
+// recipes; the recipes arrive through the "smelting" domain instead. Stash the
+// catalysts so normalizeSmelting can reattach the machines to those recipes.
+let furnaceCatalysts = [];
+// Machine handler families -> the item that represents them (the family's
+// lowest-tier catalyst). Shipped dataset-wide so the app can draw machine
+// tabs without guessing items from names. First registration wins.
+const machineHandlerIcons = new Map();
+
+function registerMachineHandlerIcons(templates) {
+  for (const template of templates ?? []) {
+    if (!template.catalystResource || machineHandlerIcons.has(template.id)) {
+      continue;
+    }
+    const resource = resourceAmount(template.catalystResource);
+    if (!resource?.iconPath) {
+      continue;
+    }
+    addResource(resource);
+    machineHandlerIcons.set(template.id, resource);
+  }
+}
 const recipeSignatures = new Set();
 const oreDictionaryAlternativesByName = new Map();
 const oreDictionary = normalizeOreDictionary(findDomain("oreDictionary")?.entries ?? {});
@@ -136,6 +85,8 @@ normalizeSmelting(findDomain("smelting"));
 normalizeThaumcraft(findDomain("thaumcraft"));
 normalizeForestryBees(findDomain("forestryBees"));
 normalizeIc2Crops(findDomain("ic2Crops"));
+normalizeCropsNhCrops(findDomain("cropsNhCrops"));
+overrideFurnaceRecipeMapIcon();
 
 const dataset = {
   schemaVersion: 1,
@@ -155,6 +106,9 @@ const dataset = {
   recipeMapIcons: [...recipeMapIcons.entries()]
     .map(([recipeMap, resource]) => ({ recipeMap, resource: compactRecipeResource(resource) }))
     .sort((left, right) => left.recipeMap.localeCompare(right.recipeMap)),
+  machineHandlerIcons: [...machineHandlerIcons.entries()]
+    .map(([familyId, resource]) => ({ familyId, resource: compactRecipeResource(resource) }))
+    .sort((left, right) => left.familyId.localeCompare(right.familyId)),
   generatedAt,
 };
 
@@ -172,7 +126,17 @@ function normalizeGregtech(domain) {
     const machineType = text(recipeMap.name, recipeMap.id ?? "GregTech");
     recipeMaps.add(machineType);
     setRecipeMapIcon(machineType, recipeMap.icon);
-    const catalystControls = machineConfigControlsFromCatalysts(recipeMap.catalysts);
+    if (recipeMap.id === "gt.recipe.furnace") {
+      furnaceCatalysts = recipeMap.catalysts ?? [];
+    }
+    // Catalysts are the machines NEI lists for this recipe map. The primary
+    // machine's tooltip drives the recipe-level config controls; the other
+    // machines become selectable handlers with their own stats, so one
+    // machine's bonuses no longer leak onto another (the Dangote Distillus
+    // used to force 12 parallels onto the plain Distillation Tower).
+    const handlerTemplates = buildMachineHandlerTemplates(machineType, recipeMap.catalysts);
+    registerMachineHandlerIcons(handlerTemplates);
+    const catalystControls = primaryMachineHandlerControls(handlerTemplates);
     for (const rawRecipe of recipeMap.recipes ?? []) {
       const inputs = [
         ...(rawRecipe.itemInputs ?? []).map((entry) =>
@@ -198,23 +162,36 @@ function normalizeGregtech(domain) {
         rawRecipe.specialValue,
         catalystControls,
       );
+      const minimumTier = voltageTierForEu(rawRecipe.eut ?? 0);
+      const durationTicks = positiveInt(rawRecipe.durationTicks, 1);
+      const eut = Math.max(0, Number(rawRecipe.eut) || 0);
+      const machineHandlers = instantiateRecipeMachineHandlers(handlerTemplates, {
+        minimumTier,
+        durationTicks,
+        eut,
+        machineConfigControls,
+      });
 
       addRecipe({
         id: recipeId("gregtech", recipeMap.id, rawRecipe.id),
         name: `${machineType}: ${resourceLabel(outputs[0])}`,
+        kind: "gregtech_machine",
+        category: "gregtech",
         machineType,
-        minimumTier: voltageTierForEu(rawRecipe.eut ?? 0),
-        durationTicks: positiveInt(rawRecipe.durationTicks, 1),
-        eut: Math.max(0, Number(rawRecipe.eut) || 0),
+        minimumTier,
+        durationTicks,
+        eut,
         inputs,
         outputs,
         machineConfigControls,
+        machineHandlers,
         runtimeCalculation: normalizeRuntimeCalculation(
           rawRecipe.runtimeCalculation,
           machineType,
           outputs,
         ),
         programmedCircuit: detectProgrammedCircuit(inputs),
+        specialValue: Number(rawRecipe.specialValue) || 0,
         notes: "Exported by the GTNH calculation oracle from gregtech.api.recipe.RecipeMap.",
         source: {
           datasetVersionId,
@@ -224,6 +201,10 @@ function normalizeGregtech(domain) {
         },
         nei: {
           additionalInfo: [`Special value: ${rawRecipe.specialValue ?? 0}`],
+        },
+        metadata: {
+          recipeMapId: recipeMap.id,
+          specialValue: Number(rawRecipe.specialValue) || 0,
         },
       });
     }
@@ -255,6 +236,8 @@ function normalizeCrafting(domain) {
     addRecipe({
       id: recipeId("crafting", rawRecipe.type, rawRecipe.id),
       name: `${machineType}: ${resourceLabel(output)}`,
+      kind: "gregtech_machine",
+      category: "crafting",
       machineType,
       minimumTier: "NONE",
       durationTicks: 1,
@@ -280,6 +263,7 @@ function normalizeCrafting(domain) {
 
 function normalizeSmelting(domain) {
   const machineType = "Furnace";
+  const handlerTemplates = furnaceHandlerTemplates();
   for (const rawRecipe of domain?.recipes ?? []) {
     const input = resourceAmount(rawRecipe.input);
     const output = resourceAmount(rawRecipe.output);
@@ -290,12 +274,19 @@ function normalizeSmelting(domain) {
     addRecipe({
       id: recipeId("smelting", rawRecipe.id),
       name: `${machineType}: ${resourceLabel(output)}`,
+      kind: "gregtech_machine",
+      category: "furnace",
       machineType,
       minimumTier: "NONE",
       durationTicks: 200,
       eut: 0,
       inputs: [input],
       outputs: [output],
+      machineHandlers: instantiateRecipeMachineHandlers(handlerTemplates, {
+        minimumTier: "NONE",
+        durationTicks: 200,
+        eut: 0,
+      }),
       notes: "Exported by the GTNH calculation oracle from FurnaceRecipes.",
       source: {
         datasetVersionId,
@@ -305,6 +296,78 @@ function normalizeSmelting(domain) {
       },
     });
   }
+}
+
+/**
+ * Machine choices for vanilla smelting recipes: the plain furnace as primary,
+ * plus the machines NEI lists for gt.recipe.furnace. Every electric
+ * single-block on that map is a tier of the same machine line (Electric
+ * Furnace, Electric Oven, and joke names like Atom Stimulator or Electron
+ * Excitement Processor), so they fold into one LV Electric Furnace family
+ * running GT's fixed furnace recipe stats (FurnaceBackend:
+ * duration(128).eut(4)). Steam machines and multiblocks keep the vanilla
+ * 200-tick base because the export carries no steam costs; the Multi
+ * Smelter's parallels arrive through its parsed tooltip controls.
+ */
+function furnaceHandlerTemplates() {
+  const templates = buildMachineHandlerTemplates("Furnace", furnaceCatalysts);
+  registerMachineHandlerIcons(templates);
+  if (templates.length === 0) {
+    return [];
+  }
+  const isElectricSingle = (template) =>
+    template.kind === "single" && template.minimumTier !== undefined;
+  const electricTiers = templates
+    .filter(isElectricSingle)
+    .map((template) => GT_VOLTAGE_NAMES.indexOf(template.minimumTier))
+    .filter((index) => index >= 0)
+    .sort((left, right) => left - right);
+  const electricFamily =
+    electricTiers.length > 0
+      ? [
+          {
+            id: "electric-furnace",
+            label: "Electric Furnace",
+            kind: "single",
+            minimumTier: GT_VOLTAGE_NAMES[electricTiers[0]],
+            durationTicks: 128,
+            eut: 4,
+          },
+        ]
+      : [];
+  const rest = templates
+    .filter((template) => !isElectricSingle(template))
+    .map((template) => removeUndefined({ ...template, isPrimary: undefined }));
+  return [
+    { id: "furnace", label: "Furnace", kind: "single", isPrimary: true },
+    ...electricFamily,
+    ...rest,
+  ];
+}
+
+/**
+ * The "Furnace" map's recipes are vanilla smelting, so its icon must be the
+ * vanilla furnace — not the Multi Smelter that the empty gt.recipe.furnace
+ * shell (or the gt.recipe.microwave map, which shares the "Furnace" name)
+ * exported as its NEI icon.
+ */
+function overrideFurnaceRecipeMapIcon() {
+  const furnace = resources.get("item:minecraft:furnace");
+  if (!recipeMaps.has("Furnace") || !furnace?.iconPath) {
+    return;
+  }
+  const furnaceIcon = {
+    kind: furnace.kind,
+    id: furnace.id,
+    amount: 1,
+    displayName: furnace.displayName,
+    iconPath: furnace.iconPath,
+    dominantColor: furnace.dominantColor,
+    modId: furnace.modId,
+  };
+  recipeMapIcons.set("Furnace", furnaceIcon);
+  // The synthetic vanilla-furnace handler has no catalyst to take a face from.
+  machineHandlerIcons.set("furnace", furnaceIcon);
 }
 
 function normalizeThaumcraft(domain) {
@@ -331,6 +394,8 @@ function normalizeThaumcraft(domain) {
     addRecipe({
       id: recipeId("thaumcraft", rawRecipe.type, rawRecipe.id),
       name: `${machineType}: ${resourceLabel(output)}`,
+      kind: rawRecipe.type === "essentiaSmelting" ? "essentia_smelting" : "gregtech_machine",
+      category: "thaumcraft",
       machineType,
       minimumTier: "NONE",
       durationTicks,
@@ -384,6 +449,11 @@ function normalizeThaumcraft(domain) {
         rawRecipeId: rawRecipe.id,
       },
       nei: normalizedRecipe.nei,
+      metadata: {
+        thaumcraftType: rawRecipe.type,
+        research: rawRecipe.research,
+        instability: rawRecipe.instability,
+      },
     });
   }
 }
@@ -643,6 +713,8 @@ function normalizeForestryBees(domain) {
     addRecipe({
       id: recipeId("forestry-bee", species.uid ?? species.name ?? hashRecipe(species)),
       name: `${text(species.name, species.uid ?? "Bee")} Produce`,
+      kind: "bee_produce",
+      category: "forestry-bee",
       machineType,
       minimumTier: "NONE",
       durationTicks,
@@ -683,6 +755,11 @@ function normalizeForestryBees(domain) {
         exporter: "gtnh-oracle",
         rawRecipeId: species.uid ?? species.name,
       },
+      metadata: {
+        speciesUid: species.uid,
+        speciesName: species.name,
+        condition: species.humidity || species.temperature ? "Preferred environment" : undefined,
+      },
     });
   }
 }
@@ -710,6 +787,8 @@ function normalizeIc2Crops(domain) {
     addRecipe({
       id: recipeId("ic2-crop", crop.owner, crop.id ?? crop.name ?? hashRecipe(crop)),
       name: `${machineType}: ${text(crop.name, crop.id ?? "Crop")}`,
+      kind: "crop_produce",
+      category: "ic2-crop",
       machineType,
       minimumTier: "NONE",
       durationTicks,
@@ -742,6 +821,11 @@ function normalizeIc2Crops(domain) {
         exporter: "gtnh-oracle",
         rawRecipeId: `${crop.owner ?? "unknown"}:${crop.id ?? crop.name ?? hashRecipe(crop)}`,
       },
+      metadata: {
+        cropOwner: crop.owner,
+        cropId: crop.id,
+        cropTier: crop.tier,
+      },
       nei: {
         slots: [
           { side: "input", kind: "item", slotIndex: 0, x: 34, y: 35 },
@@ -759,6 +843,175 @@ function normalizeIc2Crops(domain) {
       },
     });
   }
+}
+
+// CropsNH steady-state reference point: perfect 31/31/31 seeds on a fully
+// supplied farm (water 100, fertilizer 100, sky access, both biome tags).
+// The app recomputes duration/output continuously from the same formulas
+// (verified against TileEntityCropSticks bytecode) when controls change.
+// Hoisted function: normalizeCropsNhCrops runs during module evaluation.
+function cropsNhReference() {
+  return { growth: 31, gain: 31, water: 100, fertilizer: 100, sky: true, biomeBonus: 28 };
+}
+
+function normalizeCropsNhCrops(domain) {
+  const CROPSNH_REFERENCE = cropsNhReference();
+  const machineType = "Crop Farm";
+  const crops = domain?.crops ?? [];
+  if (crops.length === 0) {
+    return;
+  }
+  const growthCycleTicks = positiveInt(domain?.config?.growthCycleTicks, 256);
+  const growthMultiplier = positiveNumber(domain?.config?.growthMultiplier, 1);
+
+  for (const crop of crops) {
+    const tier = positiveInt(crop.tier, 1);
+    const growthPoints = positiveInt(crop.growthDuration, 0);
+    const dropChance = positiveNumber(crop.dropChance, 0);
+    const dropTable = (crop.dropTable ?? [])
+      .map((entry) => ({
+        resource: resourceAmount(entry.resource),
+        stackSize: positiveNumber(entry.resource?.amount, 1),
+        weight: positiveInt(entry.weight, 0),
+      }))
+      .filter((entry) => entry.resource && entry.weight > 0);
+    if (growthPoints <= 0 || dropChance <= 0 || dropTable.length === 0) {
+      continue;
+    }
+
+    const durationTicks = cropsNhDurationTicks(
+      { tier, growthPoints, growthCycleTicks, growthMultiplier },
+      CROPSNH_REFERENCE,
+    );
+    if (!Number.isFinite(durationTicks) || durationTicks <= 0) {
+      continue;
+    }
+
+    const dropRounds = dropChance * 1.03 ** CROPSNH_REFERENCE.gain;
+    const outputSlot = (index) => ({
+      x: 124 + (index % 4) * 18,
+      y: dropTable.length > 4 ? 26 + Math.floor(index / 4) * 18 : 35,
+    });
+    const outputs = dropTable.map((entry, index) => ({
+      ...entry.resource,
+      amount: roundAmount(
+        dropRounds * (entry.weight / 10000) * (entry.stackSize + (CROPSNH_REFERENCE.gain + 1) / 100),
+      ),
+      chance: entry.weight < 10000 ? entry.weight / 10000 : undefined,
+      neiSlot: outputSlot(index),
+    }));
+
+    const input = cropsNhSeedInput(crop);
+    recipeMaps.add(machineType);
+    setRecipeMapIcon(machineType, crop.seed ?? crop.dropTable?.[0]?.resource);
+    addRecipe({
+      id: recipeId("cropsnh-crop", "cropsnh", crop.id ?? crop.name ?? hashRecipe(crop)),
+      name: `${machineType}: ${text(crop.name, crop.id ?? "Crop")}`,
+      kind: "crop_produce",
+      category: "cropsnh-crop",
+      machineType,
+      minimumTier: "NONE",
+      durationTicks,
+      eut: 0,
+      inputs: input ? [input] : [],
+      outputs,
+      metadata: {
+        cropsNh: removeUndefined({
+          cropId: text(crop.id, undefined),
+          tier,
+          growthPoints,
+          dropChance,
+          growthCycleTicks,
+          growthMultiplier,
+          minSeedBedTier: Number.isFinite(Number(crop.minSeedBedTier))
+            ? Number(crop.minSeedBedTier)
+            : undefined,
+          machineOnly: crop.machineOnly === true ? true : undefined,
+          biomeTags: normalizeStringArray(crop.likedBiomeTags),
+          requirements: normalizeStringArray(crop.growthRequirements),
+          soils: normalizeStringArray(
+            (crop.soils ?? []).map((entry) => entry?.displayName).filter(Boolean),
+          ),
+          drops: dropTable.map((entry) => ({
+            id: entry.resource.id,
+            stackSize: entry.stackSize,
+            weight: entry.weight,
+          })),
+        }),
+      },
+      notes: [
+        "Exported by the GTNH calculation oracle from the live CropsNH crop registry.",
+        `Tier ${tier}, ${growthPoints} growth points, base drop chance x${dropChance}.`,
+        crop.machineOnly === true ? "Grows only inside an Industrial Farm." : undefined,
+        ...(normalizeStringArray(crop.growthRequirements) ?? []),
+      ]
+        .filter(Boolean)
+        .join(" "),
+      source: {
+        datasetVersionId,
+        recipeMap: machineType,
+        exporter: "gtnh-oracle",
+        rawRecipeId: `cropsnh:${crop.id ?? crop.name ?? hashRecipe(crop)}`,
+      },
+      nei: {
+        slots: [
+          { side: "input", kind: "item", slotIndex: 0, x: 34, y: 35 },
+          ...outputs.map((output, index) => ({
+            side: "output",
+            kind: "item",
+            slotIndex: index,
+            ...outputSlot(index),
+          })),
+        ],
+        progressBars: [
+          { x: 78, y: 35, width: 24, height: 17, direction: "right", texture: "arrow" },
+        ],
+      },
+    });
+  }
+}
+
+// Mirrors TileEntityCropSticks.getNutrientsPerCycle + getGrowthRate + doGrowth.
+function cropsNhDurationTicks(crop, env) {
+  const waterBonus = Math.floor((Math.min(100, env.water) + 9) / 10);
+  const fertilizerBonus = Math.floor((Math.min(100, env.fertilizer) + 9) / 10);
+  const score = 5 + waterBonus + fertilizerBonus + (env.sky ? 2 : 0) + env.biomeBonus;
+  const supply = score * 5;
+  const demand = crop.tier * 10;
+  const base = 6 + env.growth;
+  const rate =
+    supply >= demand
+      ? Math.trunc((base * (100 + supply - demand)) / 100)
+      : Math.max(0, Math.trunc((base * (100 - (demand - supply) * 4)) / 100));
+  const perCycle = Math.trunc(rate * crop.growthMultiplier);
+  if (perCycle <= 0) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return Math.ceil(crop.growthPoints / perCycle) * crop.growthCycleTicks;
+}
+
+function cropsNhSeedInput(crop) {
+  const icon = resourceAmount(crop.seed ?? crop.dropTable?.[0]?.resource, {
+    consumed: false,
+    defaultAmount: 1,
+  });
+  const name = text(crop.name, crop.id ?? hashRecipe(crop));
+  return removeUndefined({
+    kind: "item",
+    id: `factoryflow:cropsnh_seed:${slug(crop.id ?? name)}`,
+    amount: 1,
+    displayName: `${name} Seeds`,
+    iconPath: icon?.iconPath,
+    dominantColor: icon?.dominantColor,
+    modId: icon?.modId ?? "cropsnh",
+    tooltip: ["CropsNH crop seed", `Crop: ${name}`, crop.className].filter(Boolean),
+    consumed: false,
+    neiSlot: { x: 34, y: 35 },
+  });
+}
+
+function roundAmount(value) {
+  return Math.round(value * 1e6) / 1e6;
 }
 
 function beeSpeciesInput(species) {
@@ -931,215 +1184,6 @@ function compactCraftingInputPositions(count) {
         y: 17 + Math.floor(index / 3) * 18,
       }));
   }
-}
-
-function machineConfigControlsForOracleRecipe(machineType, specialValue, extraControls = []) {
-  const controls = [...(extraControls ?? [])];
-  const normalized = normalizeLabel(machineType);
-
-  if (isBlastFurnaceRecipeMap(normalized)) {
-    const minimum =
-      Number.isFinite(Number(specialValue)) && Number(specialValue) > 0
-        ? coilTierForHeat(Number(specialValue))
-        : heatingCoilTiers[0];
-    controls.push(
-      heatingCoilControl({
-        minimumKey: minimum.key,
-        defaultKey: minimum.key,
-        tooltip: (tier) => [`Heat capacity: ${tier.heat} K`],
-      }),
-    );
-  }
-
-  if (normalized === "pyrolyse oven") {
-    controls.push(
-      heatingCoilControl({
-        tooltip: (tier, index) => [
-          `Duration multiplier: ${formatTooltipMultiplier(2 / (1 + index))}x`,
-          "EU/t is not affected by coil tier",
-        ],
-        effect: (_tier, index) => ({ durationMultiplier: 2 / (1 + index) }),
-      }),
-    );
-  }
-
-  if (normalized === "oil cracker") {
-    controls.push(
-      heatingCoilControl({
-        tooltip: (_tier, index) => [
-          `EU usage: ${formatTooltipPercent(1 - Math.min(0.1 * (index + 1), 0.5))}`,
-        ],
-        effect: (_tier, index) => ({ eutMultiplier: 1 - Math.min(0.1 * (index + 1), 0.5) }),
-      }),
-    );
-  }
-
-  if (normalized === "large chemical reactor") {
-    controls.push(
-      heatingCoilControl({
-        tooltip: () => ["Required structure coil", "No runtime speed or EU/t effect"],
-      }),
-    );
-  }
-
-  if (normalized === "coke oven" || normalized === "industrial coke oven") {
-    controls.push(
-      heatingCoilControl({
-        tooltip: (_tier, index) => [`EU usage: ${formatTooltipPercent(Math.pow(0.98, index + 1))}`],
-        effect: (_tier, index) => ({ eutMultiplier: Math.pow(0.98, index + 1) }),
-      }),
-    );
-    controls.push({
-      id: "cokeOvenCasing",
-      label: "Coke Oven Casing",
-      minimumKey: "heat_resistant",
-      defaultKey: "heat_resistant",
-      tiers: [
-        {
-          key: "heat_resistant",
-          label: "Heat Resistant",
-          parallelMultiplier: 16,
-          resource: machineConfigResource(
-            "factoryflow:machine_config/heat_resistant_coke_oven_casing",
-            "Heat Resistant Coke Oven Casing",
-            ["Coke Oven casing tier", "Parallels: 16"],
-          ),
-        },
-        {
-          key: "heat_proof",
-          label: "Heat Proof",
-          parallelMultiplier: 32,
-          resource: machineConfigResource(
-            "factoryflow:machine_config/heat_proof_coke_oven_casing",
-            "Heat Proof Coke Oven Casing",
-            ["Coke Oven casing tier", "Parallels: 32"],
-          ),
-        },
-      ],
-    });
-  }
-
-  return mergeMachineConfigControls(controls);
-}
-
-function machineConfigControlsFromCatalysts(catalysts) {
-  const lines = (catalysts ?? [])
-    .flatMap((catalyst) => catalyst?.resource?.tooltip ?? [])
-    .map((line) => text(line, "").replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-  if (lines.length === 0) {
-    return [];
-  }
-
-  const controls = [];
-  for (const line of lines) {
-    const multiplicativePerTier =
-      /(?:^|\b)(\d+(?:[.,]\d+)?)x\s+Parallels?\s+per\s+(.+?)\s+Tier\b/i.exec(line);
-    if (multiplicativePerTier) {
-      const factor = parseTooltipNumber(multiplicativePerTier[1]);
-      const tierControl = tieredEffectControlFromSubject(multiplicativePerTier[2], line, {
-        effectLabel: "Parallels",
-        effect: (tier, index) => ({
-          parallelMultiplier: Math.pow(factor, tierOrdinal(tier, index)),
-        }),
-        keep: (effect) => effect.parallelMultiplier > 1,
-      });
-      if (tierControl) controls.push(tierControl);
-      continue;
-    }
-
-    const perTier = /(?:^|\b)(\d+)\s+Parallels?\s+per\s+(.+?)\s+Tier\b/i.exec(line);
-    if (perTier) {
-      const factor = Number.parseInt(perTier[1], 10);
-      const tierControl = tieredEffectControlFromSubject(perTier[2], line, {
-        effectLabel: "Parallels",
-        effect: (tier, index) => ({ parallelMultiplier: factor * tierOrdinal(tier, index) }),
-        keep: (effect) => effect.parallelMultiplier > 1,
-      });
-      if (tierControl) controls.push(tierControl);
-      continue;
-    }
-
-    const speedPerTier = /(?:^|\b)\+?(\d+(?:[.,]\d+)?%)\s+Speed\s+per\s+(.+?)\s+Tier\b/i.exec(line);
-    if (speedPerTier) {
-      const factor = parseTooltipFactor(speedPerTier[1]);
-      const tierControl = tieredEffectControlFromSubject(speedPerTier[2], line, {
-        effectLabel: "Speed",
-        effect: (tier, index) => ({
-          durationMultiplier: reciprocal(1 + factor * tierOrdinal(tier, index)),
-        }),
-        keep: (effect) => effect.durationMultiplier > 0 && effect.durationMultiplier < 1,
-      });
-      if (tierControl) controls.push(tierControl);
-      continue;
-    }
-
-    const euUsagePerTier =
-      /(?:^|\b)([+-]?\d+(?:[.,]\d+)?%)\s+EU\s+Usage\s+per\s+(.+?)\s+Tier\b/i.exec(line);
-    if (euUsagePerTier) {
-      const factor = parseTooltipFactor(euUsagePerTier[1]);
-      const tierControl = tieredEffectControlFromSubject(euUsagePerTier[2], line, {
-        effectLabel: "EU usage",
-        effect: (tier, index) => ({
-          eutMultiplier: Math.max(0.01, 1 + factor * tierOrdinal(tier, index)),
-        }),
-        keep: (effect) => effect.eutMultiplier > 0 && effect.eutMultiplier !== 1,
-      });
-      if (tierControl) controls.push(tierControl);
-      continue;
-    }
-
-    const staticParallel = /(?:^|\b)(\d+)\s+Parallels?\s*$/i.exec(line);
-    if (staticParallel) {
-      const parallels = Number.parseInt(staticParallel[1], 10);
-      if (parallels > 1) {
-        controls.push({
-          id: "machineParallel",
-          label: "Parallel",
-          minimumKey: `fixed-${parallels}`,
-          defaultKey: `fixed-${parallels}`,
-          tiers: [
-            {
-              key: `fixed-${parallels}`,
-              label: `${parallels} Parallels`,
-              parallelMultiplier: parallels,
-              resource: machineConfigResource(
-                `factoryflow:machine_config/fixed-${parallels}`,
-                `${parallels} Parallels`,
-                ["Imported from machine catalyst tooltip", line],
-              ),
-            },
-          ],
-        });
-      }
-    }
-  }
-
-  return mergeMachineConfigControls(controls) ?? [];
-}
-
-function heatingCoilControl({
-  minimumKey = "cupronickel",
-  defaultKey = minimumKey,
-  tooltip = () => [],
-  effect = () => ({}),
-} = {}) {
-  return {
-    id: "heatingCoil",
-    label: "Heating Coil",
-    minimumKey,
-    defaultKey,
-    tiers: heatingCoilTiers.map((tier, index) => ({
-      key: tier.key,
-      label: tier.label,
-      heat: tier.heat,
-      ...effect(tier, index),
-      resource: machineConfigResource(tier.blockId, `${tier.label} Coil Block`, [
-        "Heating coil tier",
-        ...tooltip(tier, index),
-      ]),
-    })),
-  };
 }
 
 function addRecipe(recipe) {
@@ -1318,237 +1362,6 @@ function resourceAlternative(resource) {
     tooltip: resource.tooltip,
     amount: resource.amount,
   });
-}
-
-function machineConfigResources(controls) {
-  return (controls ?? []).flatMap((control) =>
-    (control.tiers ?? []).map((tier) => tier.resource).filter(Boolean),
-  );
-}
-
-function machineHandlerConfigResources(handlers) {
-  return (handlers ?? []).flatMap((handler) =>
-    machineConfigResources(handler.machineConfigControls),
-  );
-}
-
-function mergeMachineConfigControls(controls) {
-  const byId = new Map();
-  for (const control of (controls ?? []).filter(Boolean)) {
-    const existing = byId.get(control.id);
-    if (!existing) {
-      byId.set(control.id, control);
-      continue;
-    }
-    const tiersByKey = new Map((existing.tiers ?? []).map((tier) => [tier.key, tier]));
-    for (const tier of control.tiers ?? []) {
-      const current = tiersByKey.get(tier.key);
-      tiersByKey.set(tier.key, current ? mergeMachineConfigTierOption(current, tier) : tier);
-    }
-    byId.set(control.id, {
-      ...existing,
-      minimumKey: existing.minimumKey ?? control.minimumKey,
-      defaultKey: existing.defaultKey ?? control.defaultKey,
-      tiers: [...tiersByKey.values()],
-    });
-  }
-  const merged = [...byId.values()];
-  return merged.length > 0 ? merged : undefined;
-}
-
-function mergeMachineConfigTierOption(existing, incoming) {
-  return {
-    ...existing,
-    ...incoming,
-    label: existing.label ?? incoming.label,
-    resource: mergeMachineConfigTierResource(existing.resource, incoming.resource),
-  };
-}
-
-function mergeMachineConfigTierResource(existing, incoming) {
-  if (!existing) return incoming;
-  if (!incoming) return existing;
-  return {
-    ...existing,
-    ...incoming,
-    id: existing.id ?? incoming.id,
-    displayName: existing.displayName ?? incoming.displayName,
-    tooltip: uniqueStrings([...(existing.tooltip ?? []), ...(incoming.tooltip ?? [])]),
-  };
-}
-
-function tieredEffectControlFromSubject(subject, line, { effectLabel, effect, keep }) {
-  const definition = machineConfigTierDefinitionForSubject(subject);
-  if (!definition) {
-    return undefined;
-  }
-
-  const options = definition.tiers
-    .map((tier, index) => {
-      const effectFields = effect(tier, index);
-      if (!isValidMachineConfigEffect(effectFields) || (keep && !keep(effectFields))) {
-        return undefined;
-      }
-      return {
-        key: tier.key,
-        label: tier.label,
-        ...effectFields,
-        resource: {
-          ...tier.resource,
-          tooltip: uniqueStrings([
-            definition.tooltipPrefix,
-            line,
-            ...effectTooltipLines(effectLabel, effectFields),
-            ...(tier.resource.tooltip ?? []),
-          ]),
-        },
-      };
-    })
-    .filter(Boolean);
-
-  if (options.length === 0) {
-    return undefined;
-  }
-
-  return {
-    id: definition.id,
-    label: definition.label,
-    minimumKey: options[0].key,
-    defaultKey: options[0].key,
-    tiers: options,
-  };
-}
-
-function machineConfigTierDefinitionForSubject(subject) {
-  const normalized = normalizeLabel(subject);
-  if (normalized.includes("coil")) {
-    return {
-      id: "heatingCoil",
-      label: "Heating Coil",
-      tiers: heatingCoilTiers.map((tier) => ({
-        key: tier.key,
-        label: tier.label,
-        resource: machineConfigResource(tier.blockId, `${tier.label} Coil Block`, [
-          "Heating coil tier",
-          `Heat capacity: ${tier.heat} K`,
-        ]),
-      })),
-      tooltipPrefix: "Heating coil tier",
-    };
-  }
-  if (normalized.includes("pipe casing")) {
-    return {
-      id: "pipeCasing",
-      label: "Pipe Casing",
-      tiers: pipeCasingTiers.map((tier) => ({
-        key: tier.key,
-        label: tier.label,
-        resource: machineConfigResource(tier.blockId, `${tier.label} Pipe Casing`, [
-          "Pipe casing tier",
-        ]),
-      })),
-      tooltipPrefix: "Pipe casing tier",
-    };
-  }
-  if (normalized.includes("solenoid")) {
-    return {
-      id: "solenoidCoil",
-      label: "Solenoid",
-      tiers: solenoidTiers.map((tier) => ({
-        key: tier.key,
-        label: tier.label,
-        voltageTier: tier.voltageTier,
-        resource: machineConfigResource(
-          tier.blockId,
-          `${tier.label} Solenoid Superconductor Coil`,
-          ["Solenoid tier"],
-        ),
-      })),
-      tooltipPrefix: "Solenoid tier",
-    };
-  }
-  return undefined;
-}
-
-function isValidMachineConfigEffect(effect) {
-  return (
-    Number.isFinite(effect?.parallelMultiplier) ||
-    Number.isFinite(effect?.durationMultiplier) ||
-    Number.isFinite(effect?.eutMultiplier) ||
-    Number.isFinite(effect?.outputMultiplier) ||
-    Number.isFinite(effect?.heat)
-  );
-}
-
-function effectTooltipLines(effectLabel, effect) {
-  const lines = [];
-  if (Number.isFinite(effect.parallelMultiplier)) {
-    lines.push(`${effectLabel}: ${formatTooltipMultiplier(effect.parallelMultiplier)}x`);
-  }
-  if (Number.isFinite(effect.durationMultiplier)) {
-    lines.push(
-      `${effectLabel}: ${formatTooltipMultiplier(reciprocal(effect.durationMultiplier))}x`,
-    );
-  }
-  if (Number.isFinite(effect.eutMultiplier)) {
-    lines.push(`${effectLabel}: ${formatTooltipPercent(effect.eutMultiplier)}`);
-  }
-  if (Number.isFinite(effect.outputMultiplier)) {
-    lines.push(`${effectLabel}: ${formatTooltipMultiplier(effect.outputMultiplier)}x`);
-  }
-  return lines;
-}
-
-function machineConfigResource(id, displayName, tooltip = []) {
-  return {
-    kind: "item",
-    id,
-    amount: 1,
-    displayName,
-    tooltip,
-    consumed: false,
-  };
-}
-
-function coilTierForHeat(heat) {
-  return heatingCoilTiers.find((tier) => tier.heat >= heat) ?? heatingCoilTiers.at(-1);
-}
-
-function isBlastFurnaceRecipeMap(normalizedMachineType) {
-  return (
-    normalizedMachineType === "blast furnace" || normalizedMachineType === "electric blast furnace"
-  );
-}
-
-function parseTooltipFactor(value) {
-  const number = parseTooltipNumber(value);
-  return String(value).trim().endsWith("%") ? number / 100 : number;
-}
-
-function parseTooltipNumber(value) {
-  return Number.parseFloat(String(value).replace(",", ".").replace("%", ""));
-}
-
-function reciprocal(value) {
-  return Number.isFinite(value) && value !== 0 ? 1 / value : Number.NaN;
-}
-
-function tierOrdinal(tier, index) {
-  return Number.isFinite(tier.voltageTier) ? tier.voltageTier : index + 1;
-}
-
-function formatTooltipMultiplier(value) {
-  return Number.isInteger(value)
-    ? String(value)
-    : value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "");
-}
-
-function formatTooltipPercent(value) {
-  return `${formatTooltipMultiplier(value * 100)}%`;
-}
-
-function uniqueStrings(values) {
-  return [...new Set(values.filter(Boolean))];
 }
 
 function normalizeRuntimeCalculation(rawRuntime, recipeMap, fallbackOutputs) {
@@ -1951,15 +1764,6 @@ function canonicalResourceId(kind, id) {
   return `${baseId.slice(0, namespaceSeparator).toLowerCase()}:${baseId
     .slice(namespaceSeparator + 1)
     .toLowerCase()}${suffix}`;
-}
-
-function normalizeLabel(value) {
-  return String(value ?? "")
-    .toLowerCase()
-    .replace(/\b(recipes?|recipe map|map)\b/g, " ")
-    .replace(/[^a-z0-9]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function requiredEnv(name) {

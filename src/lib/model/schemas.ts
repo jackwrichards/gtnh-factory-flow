@@ -131,6 +131,7 @@ export const machineProfileSchema = z.object({
   eut: z.number().min(0, "EU/t must be zero or positive").optional(),
   maxParallel: z.number().positive().optional(),
   eutLimit: z.number().positive().optional(),
+  perfectOverclock: z.boolean().optional(),
   notes: z.string().optional(),
 });
 
@@ -149,6 +150,8 @@ export const machineConfigControlSchema = z.object({
         eutMultiplier: z.number().positive().optional(),
         outputMultiplier: z.number().nonnegative().optional(),
         parallelMultiplier: z.number().positive().optional(),
+        parallelPerVoltageTier: z.number().positive().optional(),
+        parallelVoltageBase: z.number().nonnegative().optional(),
         resource: resourceAmountSchema,
       }),
     )
@@ -165,6 +168,17 @@ export const machineHandlerSchema = machineProfileSchema.extend({
 export const recipeSchema = z.object({
   id: z.string().min(1, "Recipe id is required"),
   name: z.string().min(1, "Recipe name is required"),
+  kind: z
+    .enum([
+      "gregtech_machine",
+      "bee_produce",
+      "crop_produce",
+      "essentia_smelting",
+      "custom",
+      "unknown",
+    ])
+    .optional(),
+  category: z.string().min(1).optional(),
   machineType: z.string().min(1, "Machine type is required"),
   minimumTier: z.string().min(1, "Minimum tier is required"),
   durationTicks: z.number().int().positive("Duration must be at least 1 tick"),
@@ -172,6 +186,7 @@ export const recipeSchema = z.object({
   inputs: z.array(recipeInputSchema),
   outputs: z.array(recipeOutputSchema).min(1, "At least one output is required"),
   programmedCircuit: z.string().optional(),
+  specialValue: z.number().optional(),
   notes: z.string().optional(),
   machineProfile: machineProfileSchema.optional(),
   machineHandlers: z.array(machineHandlerSchema).optional(),
@@ -182,10 +197,13 @@ export const recipeSchema = z.object({
     .object({
       datasetVersionId: z.string().optional(),
       recipeMap: z.string().optional(),
+      sourceMod: z.string().optional(),
       exporter: z.enum(["nesql", "recex", "nerd", "gtnh-oracle", "unknown"]).optional(),
       rawRecipeId: z.string().optional(),
+      sourceIdentifier: z.string().optional(),
     })
     .optional(),
+  metadata: z.record(z.string().min(1), z.unknown()).optional(),
   nei: z
     .object({
       iconPath: z.string().optional(),
@@ -280,6 +298,22 @@ export const factoryStorageSchema = z.object({
   }),
 });
 
+export const factoryAnnotationSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(["box", "arrow", "text"]),
+  colorTag: factoryNodeColorTagSchema.optional(),
+  text: z.string().optional(),
+  position: z.object({
+    x: z.number(),
+    y: z.number(),
+  }),
+  size: z.object({
+    width: z.number(),
+    height: z.number(),
+  }),
+  arrowDirection: z.enum(["down-right", "down-left", "up-right", "up-left"]).optional(),
+});
+
 export const factoryEdgeSchema = z.object({
   id: z.string().min(1),
   source: z.string().min(1),
@@ -316,6 +350,7 @@ export const factoryProjectSchema = z.object({
   recipes: z.array(recipeSchema),
   nodes: z.array(factoryNodeSchema),
   storages: z.array(factoryStorageSchema).optional().default([]),
+  annotations: z.array(factoryAnnotationSchema).optional().default([]),
   edges: z.array(factoryEdgeSchema),
   fuelProfiles: z.array(fuelProfileSchema),
   selectedFuelProfileId: z.string().optional(),
@@ -326,6 +361,7 @@ export const factoryProjectSchema = z.object({
       source: z.string().optional(),
       createdAt: z.string().optional(),
       updatedAt: z.string().optional(),
+      communityPlanId: z.string().optional(),
     })
     .optional(),
 });

@@ -28,7 +28,13 @@ async function readDataset(filePath) {
 
 async function readLineDelimitedDataset(filePath) {
   const dataset = {};
-  const wantedArrays = new Set(["resources", "recipes", "recipeMaps", "recipeMapIcons"]);
+  const wantedArrays = new Set([
+    "resources",
+    "recipes",
+    "recipeMaps",
+    "recipeMapIcons",
+    "machineHandlerIcons",
+  ]);
   let currentArrayKey;
   let skippingArray = false;
   let skippingObject = false;

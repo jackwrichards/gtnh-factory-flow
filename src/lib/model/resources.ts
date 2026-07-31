@@ -33,7 +33,13 @@ function isWildcardChoiceResource(resource: Pick<ResourceAmount, "id" | "display
   const id = resource.id.trim();
   const displayName = resource.displayName?.trim() ?? "";
 
-  return /^any(?:$|[:@._-])/i.test(id) || /^any(?:$|\s|[:@._-])/i.test(displayName);
+  return (
+    // "@32767" is the any-damage wildcard pseudo-item, not a real item; it
+    // shares its display name with the damage-0 item and would list twice.
+    id.endsWith("@32767") ||
+    /^any(?:$|[:@._-])/i.test(id) ||
+    /^any(?:$|\s|[:@._-])/i.test(displayName)
+  );
 }
 
 export function parseResourceKey(key: ResourceKey): {

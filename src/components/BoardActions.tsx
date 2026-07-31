@@ -1,12 +1,16 @@
-"use client";
+﻿"use client";
 
 import {
+  Check,
   ChevronDown,
   Download,
   FileImage,
   ImageDown,
+  Link2,
   LoaderCircle,
+  Pencil,
   Redo2,
+  Share2,
   Trash2,
   Undo2,
   Upload,
@@ -19,6 +23,7 @@ import {
   serializeFactoryProject,
 } from "@/lib/import-export";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
+import { randomUUID } from "@/lib/random-id";
 import {
   getRecipeDatasetRecipe,
   getRecipeDatasetRecipeIds,
@@ -41,21 +46,28 @@ import {
   extractProjectJsonFromSvg,
 } from "@/lib/import-export/plan-image";
 import { useFactoryStore } from "@/store/factory-store";
+import { SharePlanDialog } from "./community/SharePlanDialog";
 
-interface TopBarProps {
-  onLoadDatasetVersion: (versionId: string) => void;
-}
-export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
+/**
+ * Board actions â€” undo/redo, optimise, clean, import/export, theme.
+ *
+ * Lives on the right of the design tab strip: everything here acts on the plan
+ * that strip is switching between, so the two belong on the same bar.
+ */
+export function BoardActions() {
   const projectInputRef = useRef<HTMLInputElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
   const [isExportMenuOpen, setExportMenuOpen] = useState(false);
   const [pendingExport, setPendingExport] = useState<
     { format: "json" | "svg" | "png"; requestId: string } | undefined
   >();
+  const [isShareOpen, setShareOpen] = useState(false);
+  const linkMenuRef = useRef<HTMLDivElement>(null);
+  const [isLinkMenuOpen, setLinkMenuOpen] = useState(false);
+  const [copiedLink, setCopiedLink] = useState<string>();
   const project = useFactoryStore((state) => state.project);
   const manifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
-  const isDatasetLoading = useFactoryStore((state) => state.isDatasetLoading);
   const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
   const canUndo = useFactoryStore((state) => state.undoHistory.length > 0);
   const canRedo = useFactoryStore((state) => state.redoHistory.length > 0);
@@ -67,7 +79,7 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   const redo = useFactoryStore((state) => state.redo);
 
   const exportJson = async () => {
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     setExportMenuOpen(false);
     setPendingExport({ format: "json", requestId });
     await nextAnimationFrame();
@@ -86,7 +98,7 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   };
 
   const exportImage = async (format: "svg" | "png") => {
-    const requestId = crypto.randomUUID();
+    const requestId = randomUUID();
     setExportMenuOpen(false);
     setPendingExport({ format, requestId });
     await nextPaint();
@@ -147,15 +159,45 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   };
 
   useEffect(() => {
-    const closeExportMenu = (event: MouseEvent) => {
+    const closeMenus = (event: MouseEvent) => {
       if (!exportMenuRef.current?.contains(event.target as Node)) {
         setExportMenuOpen(false);
       }
+      if (!linkMenuRef.current?.contains(event.target as Node)) {
+        setLinkMenuOpen(false);
+      }
     };
 
-    window.addEventListener("mousedown", closeExportMenu);
-    return () => window.removeEventListener("mousedown", closeExportMenu);
+    window.addEventListener("mousedown", closeMenus);
+    return () => window.removeEventListener("mousedown", closeMenus);
   }, []);
+
+  // The design remembers which community post it belongs to (set by Share and
+  // by opening a post from the hub); the link button targets exactly that.
+  const linkedPlanId = project.metadata?.communityPlanId;
+
+  const copyPostLink = async (kind: "view" | "edit") => {
+    if (!linkedPlanId) {
+      return;
+    }
+
+    const url =
+      kind === "edit"
+        ? `${window.location.origin}/?plan=${linkedPlanId}`
+        : `${window.location.origin}/community?plan=${linkedPlanId}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      window.prompt("Copy this link:", url);
+      return;
+    }
+
+    setCopiedLink(kind);
+    window.setTimeout(
+      () => setCopiedLink((current) => (current === kind ? undefined : current)),
+      1500,
+    );
+  };
 
   useEffect(() => {
     const handleImageExportComplete = (event: Event) => {
@@ -198,33 +240,8 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   }, [redo, undo]);
 
   return (
-    <header className="flex min-h-16 flex-wrap items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
-      <div className="flex min-w-[260px] flex-1 items-start gap-2">
-        <div className="grid min-w-0 gap-1">
-          <h1 className="truncate text-lg font-semibold text-neutral-950">GTNH Planner</h1>
-          <label className="grid max-w-52 gap-0.5">
-            <span className="sr-only">GTNH version</span>
-            <select
-              value={selectedDatasetVersionId ?? ""}
-              disabled={isDatasetLoading || !manifest?.versions.length}
-              onChange={(event) => onLoadDatasetVersion(event.target.value)}
-              className="h-8 rounded border border-neutral-300 bg-white px-2 text-sm normal-case tracking-normal text-neutral-900 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400"
-            >
-              {manifest?.versions.length ? (
-                manifest.versions.map((version) => (
-                  <option key={version.id} value={version.id}>
-                    {version.gtnhVersion} ({version.channel})
-                  </option>
-                ))
-              ) : (
-                <option value="">No versions</option>
-              )}
-            </select>
-          </label>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
+    <div className="flex shrink-0 items-center gap-1">
+      <div className="flex items-center gap-1">
         <ToolbarButton icon={Undo2} label="Undo" disabled={!canUndo} onClick={undo} />
         <ToolbarButton icon={Redo2} label="Redo" disabled={!canRedo} onClick={redo} />
         <button
@@ -233,9 +250,9 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
           disabled={project.nodes.length === 0}
           title="Set every machine count to its suggested best ratio"
           aria-label="Set every machine count to its suggested best ratio"
-          className="inline-flex h-9 w-9 items-center justify-center rounded border border-cyan-700 bg-cyan-600 text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:border-neutral-300 disabled:bg-neutral-100 disabled:text-neutral-400"
+          className="inline-flex h-7 w-7 items-center justify-center rounded border border-cyan-700 bg-cyan-600 text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:border-line-strong disabled:bg-surface-sunken disabled:text-fg-muted"
         >
-          <WandSparkles className="h-4 w-4" />
+          <WandSparkles className="h-3.5 w-3.5" />
         </button>
         <ToolbarButton
           icon={Trash2}
@@ -267,17 +284,17 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
             aria-expanded={isExportMenuOpen}
             aria-busy={pendingExport ? true : undefined}
             disabled={Boolean(pendingExport)}
-            className="inline-flex h-9 items-center justify-center gap-1 rounded border border-neutral-300 bg-white px-2 text-neutral-800 hover:bg-neutral-50 disabled:cursor-wait disabled:bg-neutral-100 disabled:text-neutral-500"
+            className="inline-flex h-7 items-center justify-center gap-0.5 rounded border border-line-strong bg-surface px-1.5 text-fg-subtle hover:bg-surface-raised disabled:cursor-wait disabled:bg-surface-sunken disabled:text-fg-muted"
           >
             {pendingExport ? (
-              <LoaderCircle className="h-4 w-4 animate-spin" />
+              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
             ) : (
-              <Download className="h-4 w-4" />
+              <Download className="h-3.5 w-3.5" />
             )}
-            <ChevronDown className="h-3.5 w-3.5" />
+            <ChevronDown className="h-3 w-3" />
           </button>
           {isExportMenuOpen ? (
-            <div className="absolute right-0 top-10 z-50 min-w-44 border border-neutral-300 bg-white py-1 text-sm shadow-lg">
+            <div className="absolute right-0 top-8 z-50 min-w-44 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
               <ExportMenuItem
                 icon={Download}
                 label="Export plan JSON"
@@ -302,7 +319,60 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
             </div>
           ) : null}
         </div>
+        <ToolbarButton
+          icon={Share2}
+          label="Share to community"
+          disabled={project.nodes.length === 0}
+          onClick={() => setShareOpen(true)}
+        />
+        <div ref={linkMenuRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setLinkMenuOpen((isOpen) => !isOpen)}
+            disabled={!linkedPlanId}
+            title={
+              linkedPlanId
+                ? "Copy a link to this plan's community post"
+                : "Share this plan first to get a link"
+            }
+            aria-label="Copy a link to this plan's community post"
+            aria-expanded={isLinkMenuOpen}
+            className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-muted"
+          >
+            <Link2 className="h-3.5 w-3.5" />
+          </button>
+          {isLinkMenuOpen && linkedPlanId ? (
+            <div className="absolute right-0 top-8 z-50 min-w-44 rounded border border-line-strong bg-surface py-1 text-sm shadow-lg">
+              <button
+                type="button"
+                onClick={() => void copyPostLink("view")}
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-raised"
+              >
+                {copiedLink === "view" ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                ) : (
+                  <Link2 className="h-3.5 w-3.5 text-fg-muted" />
+                )}
+                Copy link
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyPostLink("edit")}
+                title="Opens this post directly in a friend's editor"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-surface-raised"
+              >
+                {copiedLink === "edit" ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                ) : (
+                  <Pencil className="h-3.5 w-3.5 text-fg-muted" />
+                )}
+                Copy edit link
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
+      {isShareOpen ? <SharePlanDialog onClose={() => setShareOpen(false)} /> : null}
 
       <input
         ref={projectInputRef}
@@ -316,7 +386,7 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
           }
         }}
       />
-    </header>
+    </div>
   );
 }
 
@@ -688,7 +758,7 @@ function ExportMenuItem({
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-800 hover:bg-neutral-100"
+      className="flex w-full items-center gap-2 px-3 py-2 text-left text-fg-subtle hover:bg-surface-sunken"
     >
       <Icon className="h-4 w-4" />
       <span>{label}</span>
@@ -714,9 +784,9 @@ function ToolbarButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="inline-flex h-9 w-9 items-center justify-center rounded border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400"
+      className="inline-flex h-7 w-7 items-center justify-center rounded border border-line-strong bg-surface text-fg-subtle hover:bg-surface-raised disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:text-fg-muted"
     >
-      <Icon className="h-4 w-4" />
+      <Icon className="h-3.5 w-3.5" />
     </button>
   );
 }

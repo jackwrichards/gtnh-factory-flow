@@ -68,12 +68,14 @@ jobs:
             -e GITHUB_TOKEN \
             -e CHANNEL \
             -e FORCE_REBUILD \
+            -e GITHUB_OUTPUT=/workspace/.pipeline/detect-output.txt \
             -e GTNH_DATASETS_ROOT=/datasets \
             -v "$HOME/data/gtnh-factory-flow/datasets/gtnh:/datasets:ro" \
             -v "$PWD:/workspace" \
             -w /workspace \
             gtnh-factory-flow-dataset:ci \
             node tools/dataset-pipeline/scripts/detect-gtnh-versions.mjs
+          cat .pipeline/detect-output.txt >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v7
         with:

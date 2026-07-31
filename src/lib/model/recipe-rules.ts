@@ -22,15 +22,12 @@ export function expandMachineRecipeVariants(recipes: Recipe[]): Recipe[] {
 export function getRecipeMachineHandlers(
   recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers">,
 ): MachineHandler[] {
-  const baseMachineType = machineHandlerFamilyLabel(recipe.machineType);
-  const baseHandler: MachineHandler = {
-    id: slug(baseMachineType),
-    label: baseMachineType,
-    machineType: baseMachineType,
-    minimumTier: recipe.minimumTier,
-    kind: "single",
-  };
-  const handlersByFamily = new Map<string, MachineHandler>([[slug(baseMachineType), baseHandler]]);
+  // Dataset handler lists are authoritative and always start with the map's
+  // primary machine. Synthesizing an extra entry from the recipe map name
+  // would duplicate it under the category name ("Blast Furnace" next to the
+  // real Electric Blast Furnace), so the fallback only exists for recipes
+  // without exported handlers.
+  const handlersByFamily = new Map<string, MachineHandler>();
   for (const handler of recipe.machineHandlers ?? []) {
     const normalized = normalizeMachineHandler(handler);
     const familyId = slug(normalized.label);
@@ -38,8 +35,31 @@ export function getRecipeMachineHandlers(
       handlersByFamily.set(familyId, normalized);
     }
   }
+  if (handlersByFamily.size > 0) {
+    return [...handlersByFamily.values()];
+  }
 
-  return [...handlersByFamily.values()];
+  const baseMachineType = machineHandlerFamilyLabel(recipe.machineType);
+  return [
+    {
+      id: slug(baseMachineType),
+      label: baseMachineType,
+      machineType: baseMachineType,
+      minimumTier: recipe.minimumTier,
+      kind: "single",
+    },
+  ];
+}
+
+/**
+ * Steam-line machines: they consume steam, never EU. Audited against all 836
+ * exported catalysts: every machine named "Steam ..." or "High Pressure ..."
+ * is a steam MTE without a Voltage IN tooltip line, and no EU machine
+ * matches either pattern ("High Pressure Alloy Smelter" is the one steam
+ * machine that omits the word steam).
+ */
+export function isSteamMachineHandler(handler: Pick<MachineHandler, "label">): boolean {
+  return /\bsteam\b/i.test(handler.label) || /\bhigh pressure\b/i.test(handler.label);
 }
 
 export function getSelectedMachineHandler(
@@ -68,14 +88,24 @@ export function applyMachineHandlerToRecipe(
   recipe: Recipe,
   node: Pick<FactoryNode, "machineHandlerId">,
 ): Recipe {
-  const handler = getSelectedMachineHandler(recipe, node);
+  const handlers = getRecipeMachineHandlers(recipe);
+  const handler = handlers.find((entry) => entry.id === node.machineHandlerId) ?? handlers[0];
   const machineConfigControls = handler.machineConfigControls ?? recipe.machineConfigControls;
+  // Oracle runtime variants are computed in-game for the recipe map's
+  // default machine; a different selected machine must fall back to the
+  // static overclock math seeded with the handler's own duration/EU.
+  const runtimeCalculation = handler.id === handlers[0].id ? recipe.runtimeCalculation : undefined;
+  // Steam machines burn steam, not EU. Their handlers carry no EU override,
+  // so without this they would inherit the electric recipe's EU draw and the
+  // planner would bill phantom power for them.
+  const eut = isSteamMachineHandler(handler) ? 0 : (handler.eut ?? recipe.eut);
   return {
     ...recipe,
+    runtimeCalculation,
     machineType: handler.machineType,
     minimumTier: handler.minimumTier,
     durationTicks: handler.durationTicks ?? recipe.durationTicks,
-    eut: handler.eut ?? recipe.eut,
+    eut,
     machineConfigControls,
     machineProfile: {
       ...recipe.machineProfile,
@@ -85,6 +115,7 @@ export function applyMachineHandlerToRecipe(
       eut: handler.eut ?? recipe.machineProfile?.eut,
       maxParallel: handler.maxParallel ?? recipe.machineProfile?.maxParallel,
       eutLimit: handler.eutLimit ?? recipe.machineProfile?.eutLimit,
+      perfectOverclock: handler.perfectOverclock ?? recipe.machineProfile?.perfectOverclock,
       notes: handler.notes ?? recipe.machineProfile?.notes,
     },
   };
@@ -237,7 +268,11 @@ const MACHINE_HANDLER_FAMILY_ALIASES = new Map([
   ["chemical perforer", "Chemical Reactor"],
   ["chemical performer", "Chemical Reactor"],
   ["circuit assembling machine", "Circuit Assembler"],
-  ["electric oven", "Ore Washer"],
+  // "Just a Furnace with a different Design" per its own tooltip; the Ore
+  // Washer mapping was a slip that only surfaced once smelting recipes
+  // started carrying furnace machine handlers.
+  ["electric oven", "Electric Furnace"],
+  ["electron excitement processor", "Electric Furnace"],
   ["exact photon cannon", "Laser Engraver"],
   ["extractinator", "Extractor"],
   ["fermentation hastener", "Fermenter"],

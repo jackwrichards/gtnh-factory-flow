@@ -20,6 +20,13 @@ describe("resource helpers", () => {
       }),
     ).toBe(true);
     expect(isVirtualChoiceResource({ id: "any:item", displayName: "Any Item" })).toBe(true);
+    expect(isVirtualChoiceResource({ id: "minecraft:log@32767", displayName: "Oak Log" })).toBe(
+      true,
+    );
+    expect(isVirtualChoiceResource({ id: "minecraft:log", displayName: "Oak Log" })).toBe(false);
+    expect(isVirtualChoiceResource({ id: "minecraft:log@1", displayName: "Spruce Log" })).toBe(
+      false,
+    );
     expect(isVirtualChoiceResource({ id: "gregtech:gt.metaitem.01:32700", displayName: "Tin Plate" })).toBe(
       false,
     );

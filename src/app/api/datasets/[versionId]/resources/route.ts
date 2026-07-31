@@ -11,10 +11,18 @@ export async function GET(
   try {
     const { versionId } = await params;
     const url = new URL(request.url);
+    const kindParam = url.searchParams.get("kind");
+    const sortParam = url.searchParams.get("sort");
     const result = await queryDatasetResources(versionId, {
       query: url.searchParams.get("query") ?? "",
       offset: parseOffset(url.searchParams.get("offset")),
       limit: parseLimit(url.searchParams.get("limit")),
+      kind: kindParam === "item" || kindParam === "fluid" ? kindParam : undefined,
+      mod: url.searchParams.get("mod") ?? undefined,
+      sort:
+        sortParam === "name" || sortParam === "mod" || sortParam === "recipes"
+          ? sortParam
+          : undefined,
     });
     return NextResponse.json(result, {
       headers: datasetCacheHeaders(),

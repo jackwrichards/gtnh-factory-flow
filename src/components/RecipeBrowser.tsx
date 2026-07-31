@@ -1,6 +1,15 @@
 "use client";
 
-import { GitBranchPlus, Plus, Search, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  GitBranchPlus,
+  LayoutGrid,
+  List,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { PointerEvent, RefObject } from "react";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
@@ -14,6 +23,7 @@ import {
 import type { DatasetResourceIndexEntry, RecipeSummary } from "@/lib/datasets/types";
 import {
   GT_VOLTAGE_TIERS,
+  getRecipeMachineHandlers,
   isVirtualChoiceResource,
   resourceLabel,
   resourceMatchesInput,
@@ -22,22 +32,46 @@ import { useFactoryStore } from "@/store/factory-store";
 import type { TierFilter } from "@/store/factory-store";
 import type { Recipe, ResourceAmount } from "@/lib/model/types";
 import { usesNativeNeiChrome } from "@/lib/nei/layout";
+import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
+import { AppIdentity } from "./AppIdentity";
+import { machineArtPixels } from "./flow/MachinePicker";
+import { useMachineHandlerIcons } from "./flow/machine-icons";
 import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
 const RECIPE_QUERY_LIMIT = 120;
 const RESOURCE_DEFAULT_PAGE_SIZE = 6;
-const RESOURCE_ROW_HEIGHT = 62;
-const RESOURCE_ROW_GAP = 8;
+const RESOURCE_ROW_HEIGHT = 40;
+const RESOURCE_ROW_GAP = 2;
+const RESOURCE_GRID_CELL = 56;
+const RESOURCE_GRID_GAP = 4;
 const RESOURCE_PAGER_HEIGHT = 40;
-const RESOURCE_HISTORY_VISIBLE_FALLBACK = 8;
+const RESOURCE_VIEW_STORAGE_KEY = "gtnh-factory-flow.resource-view.v1";
+
+type ResourceKindFilter = "all" | "item" | "fluid";
+type ResourceSortMode = "relevance" | "name" | "mod" | "recipes";
+type ResourceViewMode = "list" | "grid";
+
+/** Mod is the id prefix ("gregtech:..."); bare fluid ids group as "fluids". */
+function getResourceModLabel(resource: { id: string; kind: string }): string {
+  const colon = resource.id.indexOf(":");
+  if (colon > 0) {
+    return resource.id.slice(0, colon);
+  }
+  return resource.kind === "fluid" ? "fluids" : "other";
+}
+const RESOURCE_HISTORY_VISIBLE_FALLBACK = 18;
 const RECIPE_QUERY_CACHE_TTL_MS = 90_000;
 const RESOURCE_QUERY_CACHE_TTL_MS = 90_000;
 const RESOURCE_SEARCH_DEBOUNCE_MS = 125;
 const RECIPE_SEARCH_DEBOUNCE_MS = 200;
 
-export function RecipeBrowser() {
+interface RecipeBrowserProps {
+  onLoadDatasetVersion: (versionId: string) => void;
+}
+
+export function RecipeBrowser({ onLoadDatasetVersion }: RecipeBrowserProps) {
   const dataset = useFactoryStore((state) => state.dataset);
   const datasetManifest = useFactoryStore((state) => state.datasetManifest);
   const datasetManifestUrl = useFactoryStore((state) => state.datasetManifestUrl);
@@ -51,6 +85,7 @@ export function RecipeBrowser() {
   const resourceHistory = useFactoryStore((state) => state.recipeResourceHistory);
   const selectedRecipeId = useFactoryStore((state) => state.selectedRecipeId);
   const setRecipeSearch = useFactoryStore((state) => state.setRecipeSearch);
+  const setHighlightSearch = useFactoryStore((state) => state.setHighlightSearch);
   const setMaxTier = useFactoryStore((state) => state.setMaxTierFilter);
   const browseResource = useFactoryStore((state) => state.browseResource);
   const clearResourceBrowser = useFactoryStore((state) => state.clearResourceBrowser);
@@ -67,6 +102,11 @@ export function RecipeBrowser() {
   const [resourcePageSize, setResourcePageSize] = useState(RESOURCE_DEFAULT_PAGE_SIZE);
   const [resourceResults, setResourceResults] = useState<IndexedResource[]>([]);
   const [resourceTotal, setResourceTotal] = useState(0);
+  const [resourceKind, setResourceKind] = useState<ResourceKindFilter>("all");
+  const [resourceMod, setResourceMod] = useState("");
+  const [resourceSort, setResourceSort] = useState<ResourceSortMode>("relevance");
+  const [resourceView, setResourceView] = useState<ResourceViewMode>("list");
+  const [resourceMods, setResourceMods] = useState<Array<{ id: string; count: number }>>([]);
   const [resourceQueryLoading, setResourceQueryLoading] = useState(false);
   const [resourceQueryError, setResourceQueryError] = useState<string | undefined>();
   const [recipeMapIcons, setRecipeMapIcons] = useState<Record<string, DatasetResourceIndexEntry>>(
@@ -79,6 +119,13 @@ export function RecipeBrowser() {
   const pendingRecipePrefetchesRef = useRef<Set<string>>(new Set());
   const debouncedRecipeSearch = useDebouncedValue(recipeSearch, RESOURCE_SEARCH_DEBOUNCE_MS);
   const debouncedRecipeBookSearch = useDebouncedValue(recipeBookSearch, RECIPE_SEARCH_DEBOUNCE_MS);
+
+  // Publish the settled query to the canvas. Highlighting every node, storage and
+  // edge against a half-typed word is wasted work the user never sees, so the
+  // board only reacts once typing pauses.
+  useEffect(() => {
+    setHighlightSearch(debouncedRecipeSearch);
+  }, [debouncedRecipeSearch, setHighlightSearch]);
 
   const activeResource = useMemo(() => {
     if (!browserResource) {
@@ -139,10 +186,35 @@ export function RecipeBrowser() {
             query: debouncedRecipeSearch.trim(),
             offset: page * resourcePageSize,
             limit: resourcePageSize,
+            kind: resourceKind,
+            mod: resourceMod,
+            sort: resourceSort,
           })
         : "",
-    [debouncedRecipeSearch, resourcePageSize, selectedDatasetVersion],
+    [
+      debouncedRecipeSearch,
+      resourceKind,
+      resourceMod,
+      resourcePageSize,
+      resourceSort,
+      selectedDatasetVersion,
+    ],
   );
+
+  // The saved view preference is applied after mount (deferred) so the SSR
+  // markup and first client render agree.
+  useEffect(() => {
+    const stored = window.localStorage.getItem(RESOURCE_VIEW_STORAGE_KEY);
+    if (stored === "grid") {
+      return deferStateUpdate(() => setResourceView("grid"));
+    }
+    return undefined;
+  }, []);
+
+  const changeResourceView = useCallback((view: ResourceViewMode) => {
+    setResourceView(view);
+    window.localStorage.setItem(RESOURCE_VIEW_STORAGE_KEY, view);
+  }, []);
 
   const prefetchRecipeMap = useCallback(
     (recipeMap: string) => {
@@ -225,7 +297,7 @@ export function RecipeBrowser() {
   );
 
   const handleAddRecipe = useCallback(
-    async (recipeSummary: RecipeSummary) => {
+    async (recipeSummary: RecipeSummary, machineHandlerId?: string) => {
       const currentState = useFactoryStore.getState();
       const currentResource = currentState.recipeBrowserResource
         ? {
@@ -243,7 +315,7 @@ export function RecipeBrowser() {
         recipeSummary,
       );
       const recipe = await getFullRecipe(recipeSummary.id, Boolean(currentResource));
-      addNodeForRecipe(recipe, contextResource);
+      addNodeForRecipe(recipe, contextResource, { machineHandlerId });
       clearResourceBrowser();
     },
     [activeResource, addNodeForRecipe, browserMode, clearResourceBrowser, getFullRecipe],
@@ -251,7 +323,15 @@ export function RecipeBrowser() {
 
   useEffect(() => {
     return deferStateUpdate(() => setResourcePage(0));
-  }, [debouncedRecipeSearch, selectedDatasetVersion?.id]);
+  }, [debouncedRecipeSearch, resourceKind, resourceMod, resourceSort, selectedDatasetVersion?.id]);
+
+  // Kind/search changes can empty the selected mod's scope; drop a stale pick.
+  useEffect(() => {
+    if (resourceMod && resourceMods.length > 0 && !resourceMods.some((m) => m.id === resourceMod)) {
+      return deferStateUpdate(() => setResourceMod(""));
+    }
+    return undefined;
+  }, [resourceMod, resourceMods]);
 
   useEffect(() => {
     const maxPage = Math.max(0, Math.ceil(resourceTotal / resourcePageSize) - 1);
@@ -278,6 +358,7 @@ export function RecipeBrowser() {
       return deferStateUpdate(() => {
         setResourceResults(cached.resources);
         setResourceTotal(cached.total);
+        setResourceMods(cached.mods ?? []);
         setResourceQueryLoading(false);
         setResourceQueryError(undefined);
       });
@@ -299,6 +380,9 @@ export function RecipeBrowser() {
         query,
         offset: resourcePage * resourcePageSize,
         limit: resourcePageSize,
+        kind: resourceKind === "all" ? undefined : resourceKind,
+        mod: resourceMod || undefined,
+        sort: resourceSort,
       },
       { signal: controller.signal },
     )
@@ -310,6 +394,7 @@ export function RecipeBrowser() {
         trimResourceQueryCache(resourceQueryCacheRef.current);
         setResourceResults(result.resources);
         setResourceTotal(result.total);
+        setResourceMods(result.mods ?? []);
         setResourceQueryLoading(false);
       })
       .catch((error) => {
@@ -330,8 +415,11 @@ export function RecipeBrowser() {
     datasetManifestUrl,
     getResourceQueryKey,
     debouncedRecipeSearch,
+    resourceKind,
+    resourceMod,
     resourcePage,
     resourcePageSize,
+    resourceSort,
     selectedDatasetVersion,
   ]);
 
@@ -476,6 +564,7 @@ export function RecipeBrowser() {
   return (
     <>
       <aside className="relative z-40 flex h-full min-h-[360px] flex-col border-r border-neutral-800 bg-[#25272c] text-neutral-100">
+        <AppIdentity onLoadDatasetVersion={onLoadDatasetVersion} />
         <div className="border-b border-neutral-800 px-3 py-3">
           <label className="flex h-9 items-center gap-2 rounded-[4px] border border-neutral-700 bg-[#17191d] px-2 text-sm text-neutral-200 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]">
             <Search className="h-4 w-4 text-neutral-500" />
@@ -501,21 +590,71 @@ export function RecipeBrowser() {
             ) : null}
           </label>
 
-          <label className="mt-2 grid gap-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
-            Tier
-            <select
-              value={maxTier}
-              onChange={(event) => setMaxTier(event.target.value as TierFilter)}
-              className="h-8 rounded-[4px] border border-neutral-700 bg-[#17191d] px-2 text-sm normal-case tracking-normal text-neutral-100 outline-none"
+          <div className="mt-2 flex items-center gap-1">
+            {(
+              [
+                ["all", "All"],
+                ["item", "Items"],
+                ["fluid", "Fluids"],
+              ] as Array<[ResourceKindFilter, string]>
+            ).map(([kind, label]) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => setResourceKind(kind)}
+                className={[
+                  "h-7 flex-1 rounded-[4px] border text-xs font-medium",
+                  resourceKind === kind
+                    ? "border-cyan-500 bg-cyan-500/15 text-cyan-300"
+                    : "border-neutral-700 bg-[#17191d] text-neutral-400 hover:text-neutral-200",
+                ].join(" ")}
+              >
+                {label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => changeResourceView(resourceView === "list" ? "grid" : "list")}
+              title={resourceView === "list" ? "Switch to grid view" : "Switch to list view"}
+              aria-label={resourceView === "list" ? "Switch to grid view" : "Switch to list view"}
+              className="flex h-7 w-8 shrink-0 items-center justify-center rounded-[4px] border border-neutral-700 bg-[#17191d] text-neutral-400 hover:text-neutral-200"
             >
-              <option value="all">All tiers</option>
-              {GT_VOLTAGE_TIERS.map((entry) => (
-                <option key={entry.tier} value={entry.tier}>
-                  {entry.tier}
+              {resourceView === "list" ? (
+                <LayoutGrid className="h-3.5 w-3.5" />
+              ) : (
+                <List className="h-3.5 w-3.5" />
+              )}
+            </button>
+          </div>
+
+          <div className="mt-2 grid grid-cols-2 gap-1.5">
+            <select
+              value={resourceMod}
+              onChange={(event) => setResourceMod(event.target.value)}
+              title="Filter by mod"
+              aria-label="Filter by mod"
+              className="h-7 min-w-0 rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-xs text-neutral-100 outline-none"
+            >
+              <option value="">All mods</option>
+              {resourceMods.map((mod) => (
+                <option key={mod.id} value={mod.id}>
+                  {mod.id} ({mod.count})
                 </option>
               ))}
             </select>
-          </label>
+            <select
+              value={resourceSort}
+              onChange={(event) => setResourceSort(event.target.value as ResourceSortMode)}
+              title="Sort results"
+              aria-label="Sort results"
+              className="h-7 min-w-0 rounded-[4px] border border-neutral-700 bg-[#17191d] px-1.5 text-xs text-neutral-100 outline-none"
+            >
+              <option value="relevance">Best match</option>
+              <option value="name">Name A–Z</option>
+              <option value="mod">By mod</option>
+              <option value="recipes">Most recipes</option>
+            </select>
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden p-3">
@@ -535,6 +674,7 @@ export function RecipeBrowser() {
               isLoading={resourceQueryLoading}
               error={resourceQueryError}
               activeResource={activeResource}
+              view={resourceView}
               onPageChange={setResourcePage}
               onPageSizeChange={setResourcePageSize}
               onBrowse={browseResource}
@@ -548,6 +688,7 @@ export function RecipeBrowser() {
         <RecipeBookOverlay
           activeRecipeMap={activeRecipeMap}
           activeResource={activeResource}
+          mode={browserMode}
           filteredRecipes={filteredRecipes}
           isLoading={recipeQueryLoading}
           query={recipeBookSearch}
@@ -556,6 +697,8 @@ export function RecipeBrowser() {
           recipeMapTabs={recipeMapTabs}
           hasMore={recipeHasMore}
           selectedRecipeId={selectedRecipeId}
+          maxTier={maxTier}
+          onMaxTierChange={setMaxTier}
           onAdd={handleAddRecipe}
           onAddConnected={undefined}
           onBrowseResource={(resource, mode) =>
@@ -617,8 +760,17 @@ function ResourceHistoryPanel({
   }
 
   return (
-    <div className="pointer-events-auto z-20 h-[58px] shrink-0 overflow-hidden border-t border-neutral-700 bg-[#111317] p-2 shadow-[0_-8px_18px_rgba(0,0,0,0.22)]">
-      <div ref={containerRef} className="flex w-full min-w-0 gap-2 overflow-hidden">
+    <div className="pointer-events-auto z-20 shrink-0 border-t border-neutral-700 bg-[#2a2d33] px-2 pb-2 pt-1.5">
+      <p className="mb-1 px-0.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500">
+        Recent
+      </p>
+      <div
+        ref={containerRef}
+        className="minecraft-pixel-art grid w-full min-w-0 gap-1 overflow-hidden"
+        style={{
+          gridTemplateColumns: `repeat(auto-fill, minmax(${HISTORY_CELL_SIZE}px, 1fr))`,
+        }}
+      >
         {visibleResources.map((resource) => (
           <button
             key={`${resource.kind}:${resource.id}`}
@@ -629,15 +781,25 @@ function ResourceHistoryPanel({
               onBrowse(resource, "uses");
             }}
             aria-label={resourceLabel(resource)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center border border-transparent bg-transparent p-0 hover:border-cyan-400"
+            title={resourceLabel(resource)}
+            className="flex aspect-square items-center justify-center rounded-[4px] border border-transparent p-0 hover:border-neutral-500 hover:bg-white/5"
           >
-            <ResourceIcon resource={{ ...resource, amount: 1 }} size="sm" showAmount={false} />
+            <ResourceIcon
+              resource={{ ...resource, amount: 1 }}
+              size="lg"
+              bare
+              showAmount={false}
+              tooltip={false}
+            />
           </button>
         ))}
       </div>
     </div>
   );
 }
+
+const HISTORY_CELL_SIZE = 62;
+const HISTORY_ROWS = 3;
 
 function useVisibleResourceHistorySlots(resourceCount: number) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -654,10 +816,10 @@ function useVisibleResourceHistorySlots(resourceCount: number) {
     }
 
     const updateVisibleSlotCount = () => {
-      const slotSize = 40;
-      const gap = 8;
+      const gap = 4;
       const width = Math.max(0, container.clientWidth - 1);
-      setVisibleSlotCount(Math.max(0, Math.floor((width + gap) / (slotSize + gap))));
+      const columns = Math.max(1, Math.floor((width + gap) / (HISTORY_CELL_SIZE + gap)));
+      setVisibleSlotCount(columns * HISTORY_ROWS);
     };
 
     const animationFrame = window.requestAnimationFrame(updateVisibleSlotCount);
@@ -674,9 +836,11 @@ function useVisibleResourceHistorySlots(resourceCount: number) {
 
 function useResourcePageSize(
   containerRef: RefObject<HTMLDivElement | null>,
+  view: ResourceViewMode,
   onPageSizeChange: (pageSize: number) => void,
 ) {
   const [pageSize, setPageSize] = useState(RESOURCE_DEFAULT_PAGE_SIZE);
+  const [gridColumns, setGridColumns] = useState(6);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -687,12 +851,28 @@ function useResourcePageSize(
     const updatePageSize = () => {
       const availableHeight = Math.max(RESOURCE_ROW_HEIGHT, container.clientHeight);
       const listHeight = Math.max(RESOURCE_ROW_HEIGHT, availableHeight - RESOURCE_PAGER_HEIGHT);
-      const nextPageSize = Math.max(
-        1,
-        Math.floor((listHeight + RESOURCE_ROW_GAP) / RESOURCE_ROW_HEIGHT),
-      );
+      let nextPageSize: number;
+      let nextColumns = 6;
+      if (view === "grid") {
+        const width = Math.max(RESOURCE_GRID_CELL, container.clientWidth);
+        nextColumns = Math.max(
+          1,
+          Math.floor((width + RESOURCE_GRID_GAP) / (RESOURCE_GRID_CELL + RESOURCE_GRID_GAP)),
+        );
+        const rows = Math.max(
+          1,
+          Math.floor((listHeight + RESOURCE_GRID_GAP) / (RESOURCE_GRID_CELL + RESOURCE_GRID_GAP)),
+        );
+        nextPageSize = nextColumns * rows;
+      } else {
+        nextPageSize = Math.max(
+          1,
+          Math.floor((listHeight + RESOURCE_ROW_GAP) / (RESOURCE_ROW_HEIGHT + RESOURCE_ROW_GAP)),
+        );
+      }
 
       setPageSize((current) => (current === nextPageSize ? current : nextPageSize));
+      setGridColumns((current) => (current === nextColumns ? current : nextColumns));
       onPageSizeChange(nextPageSize);
     };
 
@@ -700,9 +880,9 @@ function useResourcePageSize(
     const observer = new ResizeObserver(updatePageSize);
     observer.observe(container);
     return () => observer.disconnect();
-  }, [containerRef, onPageSizeChange]);
+  }, [containerRef, onPageSizeChange, view]);
 
-  return pageSize;
+  return { pageSize, gridColumns };
 }
 
 interface IndexedResource extends Pick<
@@ -743,6 +923,7 @@ function VirtualResourceResultList({
   isLoading,
   error,
   activeResource,
+  view,
   onPageChange,
   onPageSizeChange,
   onBrowse,
@@ -753,12 +934,13 @@ function VirtualResourceResultList({
   isLoading: boolean;
   error?: string;
   activeResource?: IndexedResource;
+  view: ResourceViewMode;
   onPageChange: (page: number) => void;
   onPageSizeChange: (pageSize: number) => void;
   onBrowse: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const pageSize = useResourcePageSize(containerRef, onPageSizeChange);
+  const { pageSize, gridColumns } = useResourcePageSize(containerRef, view, onPageSizeChange);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const handlePreviousPage = useCallback(() => {
     onPageChange(Math.max(0, currentPage - 1));
@@ -774,9 +956,7 @@ function VirtualResourceResultList({
           {error}
         </div>
       ) : isLoading && resources.length === 0 ? (
-        <div className="rounded border border-dashed border-neutral-600 p-4 text-sm text-neutral-300">
-          Loading resources...
-        </div>
+        <ResourceResultSkeleton view={view} pageSize={pageSize} gridColumns={gridColumns} />
       ) : resources.length === 0 ? (
         <div className="rounded border border-dashed border-neutral-600 p-4 text-sm text-neutral-300">
           No matching resource.
@@ -785,6 +965,9 @@ function VirtualResourceResultList({
         <ResourceResultPage
           resources={resources}
           activeResource={activeResource}
+          view={view}
+          gridColumns={gridColumns}
+          isRefreshing={isLoading}
           onBrowseResource={onBrowse}
         />
       )}
@@ -794,6 +977,49 @@ function VirtualResourceResultList({
         onPreviousPage={handlePreviousPage}
         onNextPage={handleNextPage}
       />
+    </div>
+  );
+}
+
+/** Pulsing placeholders shaped like the results, instead of a text box. */
+function ResourceResultSkeleton({
+  view,
+  pageSize,
+  gridColumns,
+}: {
+  view: ResourceViewMode;
+  pageSize: number;
+  gridColumns: number;
+}) {
+  const count = Math.max(3, Math.min(pageSize, 60));
+  if (view === "grid") {
+    return (
+      <div
+        className="grid min-h-0 flex-1 content-start gap-1 overflow-hidden"
+        style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}
+        aria-label="Loading resources"
+      >
+        {Array.from({ length: count }, (_, index) => (
+          <div
+            key={index}
+            className="aspect-square animate-pulse rounded-[4px] bg-neutral-800/70"
+          />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-hidden" aria-label="Loading resources">
+      {Array.from({ length: count }, (_, index) => (
+        <div key={index} className="flex h-10 shrink-0 items-center gap-2.5 px-1.5">
+          <div className="h-8 w-8 animate-pulse rounded-[4px] bg-neutral-800/70" />
+          <div
+            className="h-3 animate-pulse rounded bg-neutral-800/70"
+            style={{ width: `${45 + ((index * 17) % 40)}%` }}
+          />
+        </div>
+      ))}
     </div>
   );
 }
@@ -810,29 +1036,29 @@ function ResourcePager({
   onNextPage: () => void;
 }) {
   return (
-    <div className="mt-2 grid h-8 w-full min-w-0 max-w-full shrink-0 grid-cols-[32px_minmax(0,1fr)_32px] items-center overflow-hidden border border-neutral-700 bg-[#111317] text-center font-mono text-sm text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.08),inset_-1px_-1px_0_rgba(0,0,0,0.45)]">
+    <div className="mt-1.5 flex h-8 w-full min-w-0 shrink-0 items-center gap-1">
       <button
         type="button"
         onClick={onPreviousPage}
         disabled={currentPage === 0}
-        className="h-full border-r border-neutral-700 bg-[#1b1d21] text-red-400 disabled:opacity-35"
+        className="flex h-7 w-8 items-center justify-center rounded-[4px] border border-neutral-700 bg-[#17191d] text-neutral-300 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
         aria-label="Previous resource page"
         title="Previous page"
       >
-        {"<"}
+        <ChevronLeft className="h-3.5 w-3.5" />
       </button>
-      <div className="truncate px-2 [text-shadow:1px_1px_0_#000]">
-        {currentPage + 1}/{pageCount}
+      <div className="min-w-0 flex-1 truncate text-center text-xs text-neutral-400">
+        Page {Math.min(currentPage + 1, pageCount)} of {pageCount}
       </div>
       <button
         type="button"
         onClick={onNextPage}
         disabled={currentPage >= pageCount - 1}
-        className="h-full border-l border-neutral-700 bg-[#1b1d21] text-red-400 disabled:opacity-35"
+        className="flex h-7 w-8 items-center justify-center rounded-[4px] border border-neutral-700 bg-[#17191d] text-neutral-300 hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
         aria-label="Next resource page"
         title="Next page"
       >
-        {">"}
+        <ChevronRight className="h-3.5 w-3.5" />
       </button>
     </div>
   );
@@ -841,10 +1067,16 @@ function ResourcePager({
 function ResourceResultPage({
   resources,
   activeResource,
+  view,
+  gridColumns,
+  isRefreshing,
   onBrowseResource,
 }: {
   resources: IndexedResource[];
   activeResource?: IndexedResource;
+  view: ResourceViewMode;
+  gridColumns: number;
+  isRefreshing: boolean;
   onBrowseResource: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
   const [, startBrowseTransition] = useTransition();
@@ -856,9 +1088,57 @@ function ResourceResultPage({
     [onBrowseResource, startBrowseTransition],
   );
 
+  if (view === "grid") {
+    return (
+      <div
+        className={[
+          "grid min-h-0 flex-1 content-start gap-1 overflow-hidden",
+          isRefreshing ? "opacity-60" : "",
+        ].join(" ")}
+        style={{ gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` }}
+        aria-label="Resource results"
+        role="listbox"
+      >
+        {resources.map((resource) => {
+          const active =
+            activeResource?.kind === resource.kind && activeResource.id === resource.id;
+          return (
+            <button
+              key={`${resource.kind}:${resource.id}`}
+              type="button"
+              onClick={() => browse(resource, "recipes")}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                browse(resource, "uses");
+              }}
+              className={[
+                "minecraft-pixel-art flex aspect-square items-center justify-center rounded-[4px] border",
+                active
+                  ? "border-cyan-400 bg-cyan-500/10"
+                  : "border-transparent hover:border-neutral-500 hover:bg-white/5",
+              ].join(" ")}
+              role="option"
+              aria-selected={active}
+            >
+              <ResourceIcon
+                resource={{ ...resource, amount: 1 }}
+                size="md"
+                bare
+                showAmount={false}
+              />
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col justify-start gap-2 overflow-hidden"
+      className={[
+        "flex min-h-0 flex-1 flex-col justify-start gap-0.5 overflow-hidden",
+        isRefreshing ? "opacity-60" : "",
+      ].join(" ")}
       aria-label="Resource results"
       role="listbox"
     >
@@ -874,113 +1154,39 @@ function ResourceResultPage({
               event.preventDefault();
               browse(resource, "uses");
             }}
+            title={resourceLabel(resource)}
             className={[
-              "flex h-[54px] w-full items-center gap-3 overflow-hidden rounded-[4px] border bg-[#303238] px-2 text-left text-sm text-neutral-50 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]",
-              active ? "border-cyan-400" : "border-neutral-700 hover:border-neutral-500",
+              "flex h-10 w-full shrink-0 items-center gap-2.5 overflow-hidden rounded-[4px] border px-1.5 text-left text-sm text-neutral-50",
+              active
+                ? "border-cyan-400 bg-cyan-500/10"
+                : "border-transparent hover:bg-white/5",
             ].join(" ")}
             role="option"
             aria-selected={active}
           >
-            <ResourceIcon
-              resource={{ ...resource, amount: 1 }}
-              size="sm"
-              showAmount={false}
-              tooltip={false}
-            />
-            <span className="min-w-0 flex-1 truncate [text-shadow:1px_1px_0_#000]">
-              {resourceLabel(resource)}
+            <span className="minecraft-pixel-art flex h-8 w-8 shrink-0 items-center justify-center">
+              <ResourceIcon
+                resource={{ ...resource, amount: 1 }}
+                size="sm"
+                bare
+                showAmount={false}
+                tooltip={false}
+                className="!h-8 !w-8"
+              />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate leading-tight [text-shadow:1px_1px_0_#000]">
+                {resourceLabel(resource)}
+              </span>
+              <span className="block truncate text-[10px] leading-tight text-neutral-500">
+                {getResourceModLabel(resource)}
+                {resource.recipeCount > 0 ? ` · ${resource.recipeCount} recipes` : ""}
+              </span>
             </span>
           </button>
         );
       })}
     </div>
-  );
-}
-
-function RecipeMapTabBar({
-  activeRecipeMap,
-  tabs,
-  onRecipeMapChange,
-  onRecipeMapHover,
-}: {
-  activeRecipeMap: string;
-  tabs: RecipeMapTab[];
-  onRecipeMapChange: (recipeMap: string) => void;
-  onRecipeMapHover: (recipeMap: string) => void;
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [hasOverflow, setHasOverflow] = useState(false);
-  const [, startTabTransition] = useTransition();
-
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (!element) {
-      return;
-    }
-
-    const updateOverflow = () => {
-      setHasOverflow(element.scrollWidth > element.clientWidth + 2);
-    };
-
-    updateOverflow();
-    const resizeObserver = new ResizeObserver(updateOverflow);
-    resizeObserver.observe(element);
-    return () => resizeObserver.disconnect();
-  }, [tabs]);
-
-  const scrollTabs = (direction: -1 | 1) => {
-    scrollRef.current?.scrollBy({ left: direction * 320, behavior: "smooth" });
-  };
-
-  return (
-    <div
-      className={[
-        "grid h-[102px] shrink-0 items-start border-b-2 border-[#777] bg-[#c6c6c6] p-1 shadow-[inset_2px_2px_0_#ffffff,inset_-2px_0_0_#555]",
-        hasOverflow ? "grid-cols-[42px_minmax(0,1fr)_42px]" : "grid-cols-[minmax(0,1fr)]",
-      ].join(" ")}
-    >
-      {hasOverflow ? <NeiTabArrow direction="left" onClick={() => scrollTabs(-1)} /> : null}
-      <div
-        ref={scrollRef}
-        className="nei-tab-strip flex h-[88px] gap-2 overflow-x-auto overflow-y-hidden px-1"
-      >
-        {tabs.map((tab) => (
-          <MinecraftTooltip key={tab.id} label={tab.label}>
-            <button
-              type="button"
-              onMouseEnter={() => onRecipeMapHover(tab.id)}
-              onFocus={() => onRecipeMapHover(tab.id)}
-              onClick={() => startTabTransition(() => onRecipeMapChange(tab.id))}
-              aria-label={tab.label}
-              className={neiTabClass(activeRecipeMap === tab.id)}
-            >
-              {tab.icon ? (
-                <ResourceIcon resource={tab.icon} size="xl" showAmount={false} tooltip={false} />
-              ) : (
-                <span className="text-[12px] font-bold leading-none text-white [text-shadow:1px_1px_0_#000]">
-                  ?
-                </span>
-              )}
-            </button>
-          </MinecraftTooltip>
-        ))}
-      </div>
-      {hasOverflow ? <NeiTabArrow direction="right" onClick={() => scrollTabs(1)} /> : null}
-    </div>
-  );
-}
-
-function NeiTabArrow({ direction, onClick }: { direction: "left" | "right"; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={direction === "left" ? "Previous recipe maps" : "Next recipe maps"}
-      aria-label={direction === "left" ? "Previous recipe maps" : "Next recipe maps"}
-      className="mt-1 h-20 w-10 border-2 border-[#252525] bg-[#7d7d7d] text-[24px] leading-5 text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000] hover:bg-[#9b9b9b]"
-    >
-      {direction === "left" ? "<" : ">"}
-    </button>
   );
 }
 
@@ -995,6 +1201,8 @@ function RecipeBookOverlay({
   queryTotal,
   recipeMapTabs,
   selectedRecipeId,
+  maxTier,
+  onMaxTierChange,
   onAdd,
   onAddConnected,
   onBrowseResource,
@@ -1004,9 +1212,11 @@ function RecipeBookOverlay({
   onLoadMore,
   onSelectRecipe,
   onClose,
+  mode,
 }: {
   activeRecipeMap: string;
   activeResource: IndexedResource & { anchorNodeId?: string };
+  mode: "recipes" | "uses";
   filteredRecipes: RecipeSummary[];
   hasMore: boolean;
   isLoading: boolean;
@@ -1015,7 +1225,9 @@ function RecipeBookOverlay({
   queryTotal: number;
   recipeMapTabs: RecipeMapTab[];
   selectedRecipeId?: string;
-  onAdd: (recipe: RecipeSummary) => void | Promise<void>;
+  maxTier: TierFilter;
+  onMaxTierChange: (tier: TierFilter) => void;
+  onAdd: (recipe: RecipeSummary, machineHandlerId?: string) => void | Promise<void>;
   onAddConnected?: (recipeId: string) => void | Promise<void>;
   onBrowseResource: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
   onRecipeMapChange: (recipeMap: string) => void;
@@ -1092,30 +1304,40 @@ function RecipeBookOverlay({
           height: `min(${panelSize.height}px, calc(100vh - 32px))`,
         }}
       >
-        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-2 border-[#f4f4f4] bg-[#c6c6c6] text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
-          <RecipeMapTabBar
-            activeRecipeMap={activeRecipeMap}
+        <div className="relative flex min-h-0 flex-1 overflow-hidden border-2 border-[var(--mc-96)] bg-[var(--mc-78)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]">
+          <CategoryRail
+            activeResource={activeResource}
+            mode={mode}
             tabs={recipeMapTabs}
+            activeRecipeMap={activeRecipeMap}
             onRecipeMapChange={onRecipeMapChange}
             onRecipeMapHover={onRecipeMapHover}
           />
-
-          <div className="grid grid-cols-[24px_minmax(0,1fr)_24px] items-center px-2 pt-2">
-            <div />
+          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="px-2 pt-2">
             <div
               onPointerDown={handlePointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
-              className="h-8 cursor-move select-none truncate border-2 border-[#555] bg-[#9b9b9b] px-2 text-center text-[18px] leading-[26px] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a] [text-shadow:2px_2px_0_#3f3f3f]"
+              className="flex h-11 cursor-move select-none items-center gap-3 border-2 border-[var(--mc-33)] bg-[var(--mc-61)] px-2 shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]"
             >
-              {activeRecipeMap || filteredRecipes[0]?.machineType || resourceLabel(activeResource)}
+              <span className="min-w-0 leading-[1.1]">
+                <span className="block text-[8px] font-bold uppercase tracking-[0.14em] text-[#ececec] [text-shadow:1px_1px_0_#4a4a4a]">
+                  Category · recipe map
+                </span>
+                <span className="minecraft-title block truncate text-[17px] leading-[20px] text-white [text-shadow:2px_2px_0_var(--mc-24)]">
+                  {activeRecipeMap ||
+                    filteredRecipes[0]?.machineType ||
+                    resourceLabel(activeResource)}
+                </span>
+              </span>
+              <CategoryMachineStrip recipe={filteredRecipes[0]} />
             </div>
-            <div />
           </div>
 
-          <div className="px-3 pt-2">
-            <label className="flex h-9 items-center gap-2 border-2 border-[#555] bg-[#17191d] px-2 text-sm text-neutral-100 shadow-[inset_2px_2px_0_#30343b,inset_-2px_-2px_0_#050607]">
+          <div className="flex gap-2 px-3 pt-2">
+            <label className="flex h-9 min-w-0 flex-1 items-center gap-2 border-2 border-[var(--mc-33)] bg-[#17191d] px-2 text-sm text-neutral-100 shadow-[inset_2px_2px_0_#30343b,inset_-2px_-2px_0_#050607]">
               <Search className="h-4 w-4 text-neutral-500" />
               <input
                 value={query}
@@ -1135,19 +1357,33 @@ function RecipeBookOverlay({
                 </button>
               ) : null}
             </label>
+            <select
+              value={maxTier}
+              onChange={(event) => onMaxTierChange(event.target.value as TierFilter)}
+              title="Hide recipes above this voltage tier (also flags too-high nodes on the board)"
+              aria-label="Maximum machine tier"
+              className="h-9 w-28 shrink-0 border-2 border-[var(--mc-33)] bg-[#17191d] px-1.5 text-sm text-neutral-100 outline-none shadow-[inset_2px_2px_0_#30343b,inset_-2px_-2px_0_#050607]"
+            >
+              <option value="all">All tiers</option>
+              {GT_VOLTAGE_TIERS.map((entry) => (
+                <option key={entry.tier} value={entry.tier}>
+                  ≤ {entry.tier}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-3" id="recipe-book-scroll">
             {queryError ? (
-              <div className="border-2 border-[#777] bg-[#b6b6b6] p-3 text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+              <div className="border-2 border-[var(--mc-47)] bg-[var(--mc-71)] p-3 text-sm shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
                 {queryError}
               </div>
             ) : isLoading && filteredRecipes.length === 0 ? (
-              <div className="border-2 border-[#777] bg-[#b6b6b6] p-3 text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+              <div className="border-2 border-[var(--mc-47)] bg-[var(--mc-71)] p-3 text-sm shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
                 Loading recipes...
               </div>
             ) : displayedRecipes.length === 0 ? (
-              <div className="grid min-h-[260px] place-items-center border-2 border-[#777] bg-[#b6b6b6] p-3 text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+              <div className="grid min-h-[260px] place-items-center border-2 border-[var(--mc-47)] bg-[var(--mc-71)] p-3 text-sm shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
                 No matching recipes.
               </div>
             ) : (
@@ -1168,9 +1404,133 @@ function RecipeBookOverlay({
               />
             )}
           </div>
+          </div>
         </div>
       </section>
     </div>
+  );
+}
+
+/** Vertical category (recipe map) rail: the master picker's first level. */
+function CategoryRail({
+  activeResource,
+  mode,
+  tabs,
+  activeRecipeMap,
+  onRecipeMapChange,
+  onRecipeMapHover,
+}: {
+  activeResource: IndexedResource;
+  mode: "recipes" | "uses";
+  tabs: RecipeMapTab[];
+  activeRecipeMap: string;
+  onRecipeMapChange: (recipeMap: string) => void;
+  onRecipeMapHover: (recipeMap: string) => void;
+}) {
+  return (
+    <div className="flex w-[290px] shrink-0 flex-col border-r-2 border-[var(--mc-47)] bg-[var(--mc-71)]">
+      <div className="flex items-center gap-2.5 border-b-2 border-[var(--mc-55)] p-2.5">
+        <span className="flex h-12 w-12 shrink-0 items-center justify-center bg-[var(--mc-55)] shadow-[inset_2px_2px_0_var(--mc-25),inset_-2px_-2px_0_var(--mc-100)]">
+          <ResourceIcon
+            resource={{ ...activeResource, amount: 1 }}
+            size="sm"
+            bare
+            showAmount={false}
+            tooltip={false}
+            className="!h-full !w-full"
+            iconPixelSize={machineArtPixels(48)}
+          />
+        </span>
+        <span className="min-w-0 leading-[1.15]">
+          <span className="block text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--mc-ink-muted)]">
+            {mode === "uses" ? "Uses of" : "Recipes for"}
+          </span>
+          <span className="block truncate text-[16px] font-bold text-[var(--mc-ink)]">
+            {resourceLabel(activeResource)}
+          </span>
+        </span>
+      </div>
+      <div className="px-2.5 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--mc-ink-muted)]">
+        Categories
+      </div>
+      <div className="nowheel min-h-0 flex-1 overflow-y-auto p-2">
+        {tabs.map((tab) => {
+          const active = tab.id === activeRecipeMap;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => onRecipeMapChange(tab.id)}
+              onMouseEnter={() => onRecipeMapHover(tab.id)}
+              className={[
+                "mb-1 grid w-full grid-cols-[42px_minmax(0,1fr)] items-center gap-2.5 border-2 px-1.5 py-1.5 text-left",
+                active
+                  ? "border-[var(--mc-15)] bg-[var(--mc-85)] shadow-[inset_2px_2px_0_var(--mc-100),0_0_0_2px_#22d3ee_inset]"
+                  : "border-[var(--mc-47)] bg-[var(--mc-78)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-47)] hover:bg-[var(--mc-85)]",
+              ].join(" ")}
+            >
+              <span className="flex h-[42px] w-[42px] items-center justify-center bg-[var(--mc-55)] shadow-[inset_2px_2px_0_var(--mc-25),inset_-2px_-2px_0_var(--mc-100)]">
+                {tab.icon ? (
+                  <ResourceIcon
+                    resource={{ ...tab.icon, amount: 1 }}
+                    size="sm"
+                    bare
+                    showAmount={false}
+                    tooltip={false}
+                    className="!h-full !w-full"
+                    iconPixelSize={machineArtPixels(42)}
+                  />
+                ) : null}
+              </span>
+              <span className="min-w-0 truncate text-[15px] font-bold leading-5 text-[var(--mc-ink)]">
+                {tab.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Mini strip of the machines that can run the open category. */
+function CategoryMachineStrip({ recipe }: { recipe?: RecipeSummary }) {
+  const machineIcons = useMachineHandlerIcons();
+  const handlers = useMemo(
+    () => (recipe ? getRecipeMachineHandlers(summaryToPreviewRecipe(recipe)) : []),
+    [recipe],
+  );
+  if (handlers.length <= 1) {
+    return null;
+  }
+  return (
+    <span className="ml-auto flex shrink-0 items-center gap-1">
+      <span className="pr-1 text-[8px] font-bold uppercase tracking-[0.1em] text-[#ececec] [text-shadow:1px_1px_0_#4a4a4a]">
+        {handlers.length} machines
+      </span>
+      {handlers.slice(0, 8).map((handler) => {
+        const icon = machineIcons.get(handler.id);
+        return (
+          <span
+            key={handler.id}
+            title={handler.label}
+            className="flex h-7 w-7 items-center justify-center bg-[var(--mc-55)] shadow-[inset_2px_2px_0_#373737,inset_-2px_-2px_0_#ffffff]"
+          >
+            {icon ? (
+              <ResourceIcon
+                resource={{ ...icon, amount: 1 }}
+                size="sm"
+                bare
+                showAmount={false}
+                tooltip={false}
+                className="!h-full !w-full"
+                iconPixelSize={machineArtPixels(28)}
+              />
+            ) : null}
+          </span>
+        );
+      })}
+    </span>
   );
 }
 
@@ -1195,7 +1555,7 @@ function VirtualRecipeResultList({
   pageSize: number;
   selectedRecipeId?: string;
   onSelectRecipe: (recipeId: string) => void;
-  onAdd: (recipe: RecipeSummary) => void | Promise<void>;
+  onAdd: (recipe: RecipeSummary, machineHandlerId?: string) => void | Promise<void>;
   onAddConnected?: (recipeId: string) => void | Promise<void>;
   onSlotBrowse: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
   contextResource?: PreviewContextResource;
@@ -1205,7 +1565,10 @@ function VirtualRecipeResultList({
 }) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 360 });
-  const rowHeight = recipes.some(usesNativeNeiChrome) ? 322 : 246;
+  // `usesNativeNeiChrome` resolves a layout per call, and infinite scroll keeps
+  // growing this array (120, 240, 360...), so it must not run on every scroll
+  // frame.
+  const rowHeight = useMemo(() => (recipes.some(usesNativeNeiChrome) ? 322 : 246), [recipes]);
   const columnCount = 2;
   const overscan = 1;
   const rowCount = Math.ceil(recipes.length / columnCount);
@@ -1288,7 +1651,7 @@ function VirtualRecipeResultList({
         ))}
       </div>
       {isLoadingMore ? (
-        <div className="mt-3 border-2 border-[#777] bg-[#b6b6b6] p-3 text-center text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+        <div className="mt-3 border-2 border-[var(--mc-47)] bg-[var(--mc-71)] p-3 text-center text-sm shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
           Loading recipes...
         </div>
       ) : null}
@@ -1309,7 +1672,7 @@ const RecipeResultCard = memo(function RecipeResultCard({
   recipe: RecipeSummary;
   selected: boolean;
   onSelectRecipe: (recipeId: string) => void;
-  onAdd: (recipe: RecipeSummary) => void | Promise<void>;
+  onAdd: (recipe: RecipeSummary, machineHandlerId?: string) => void | Promise<void>;
   onAddConnected?: (recipeId: string) => void | Promise<void>;
   onSlotBrowse?: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
   contextResource?: PreviewContextResource;
@@ -1363,6 +1726,8 @@ function summaryToPreviewRecipe(summary: RecipeSummary): Recipe {
   return {
     id: summary.id,
     name: summary.name,
+    kind: summary.kind,
+    category: summary.category,
     machineType: summary.machineType,
     minimumTier: summary.minimumTier,
     durationTicks: summary.durationTicks,
@@ -1370,9 +1735,11 @@ function summaryToPreviewRecipe(summary: RecipeSummary): Recipe {
     inputs: summary.inputs,
     outputs: summary.outputs,
     programmedCircuit: summary.programmedCircuit,
+    specialValue: summary.specialValue,
     machineHandlers: summary.machineHandlers,
     machineConfigControls: summary.machineConfigControls,
     source: summary.source ?? (summary.recipeMap ? { recipeMap: summary.recipeMap } : undefined),
+    metadata: summary.metadata,
     nei: summary.nei,
   };
 }
@@ -1569,7 +1936,9 @@ function getInitialRecipeBookSize() {
   }
 
   return {
-    width: Math.min(920, Math.max(420, window.innerWidth - 360 - 440 - 48)),
+    // The category rail (228px) lives inside the panel now, so the book is
+    // wider than the old tab-bar layout.
+    width: Math.min(1150, Math.max(560, window.innerWidth - 360 - 440 - 48)),
     height: Math.min(760, Math.max(360, window.innerHeight - 32)),
   };
 }
@@ -1631,29 +2000,21 @@ function getResourceQueryCacheKey({
   query,
   offset,
   limit,
+  kind,
+  mod,
+  sort,
 }: {
   versionId: string;
   query: string;
   offset: number;
   limit: number;
+  kind: ResourceKindFilter;
+  mod: string;
+  sort: ResourceSortMode;
 }) {
-  return [versionId, query.trim().toLowerCase(), offset, limit].join("|");
+  return [versionId, query.trim().toLowerCase(), offset, limit, kind, mod, sort].join("|");
 }
 
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-
-  useEffect(() => {
-    const timeoutMs = typeof value === "string" && value.length === 0 ? 0 : delayMs;
-    const timer = window.setTimeout(() => {
-      setDebouncedValue(value);
-    }, timeoutMs);
-
-    return () => window.clearTimeout(timer);
-  }, [delayMs, value]);
-
-  return debouncedValue;
-}
 
 function getCachedRecipeQuery(cache: Map<string, RecipeQueryCacheEntry>, key: string) {
   const entry = cache.get(key);
@@ -1749,9 +2110,4 @@ function buildRecipeMapTabs(
   });
 }
 
-function neiTabClass(active: boolean): string {
-  return [
-    "flex h-20 w-20 shrink-0 items-center justify-center bg-transparent p-0",
-    active ? "ring-2 ring-white" : "hover:ring-2 hover:ring-cyan-300",
-  ].join(" ");
-}
+

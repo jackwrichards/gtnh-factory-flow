@@ -58,7 +58,7 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
     return (
       <div
         className={[
-          "relative inline-block bg-[#c6c6c6] font-mono text-[#111]",
+          "relative inline-block bg-[var(--mc-78)] font-mono text-[var(--mc-ink)]",
           compact ? "text-[10px]" : "text-[14px]",
           className,
         ].join(" ")}
@@ -88,12 +88,12 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
   return (
     <div
       className={[
-        "relative inline-block bg-[#c6c6c6] p-1 font-mono text-[#111] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#555]",
+        "relative inline-block bg-[var(--mc-78)] p-1 font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
         compact ? "text-[10px]" : "text-[14px]",
         className,
       ].join(" ")}
     >
-      <div className="border-2 border-[#f7f7f7] bg-[#c6c6c6] shadow-[inset_-2px_-2px_0_#6f6f6f]">
+      <div className="border-2 border-[var(--mc-98)] bg-[var(--mc-78)] shadow-[inset_-2px_-2px_0_var(--mc-44)]">
         {!compact ? (
           <>
             <NeiTitleBar label={recipeMap} compact={compact} />
@@ -121,7 +121,7 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
         </div>
       </div>
 
-      <div className="relative mt-1 text-black">
+      <div className="relative mt-1 text-[var(--mc-ink)]">
         <div
           className={["min-w-0 pr-11 leading-tight", compact ? "text-[10px]" : "text-[16px]"].join(
             " ",
@@ -143,12 +143,12 @@ function NeiTitleBar({ label, compact }: { label: string; compact: boolean }) {
   return (
     <div
       className={[
-        "grid grid-cols-[22px_minmax(0,1fr)_22px] items-center bg-[#8f8f8f] text-center text-white [text-shadow:2px_2px_0_#3f3f3f]",
+        "grid grid-cols-[22px_minmax(0,1fr)_22px] items-center bg-[var(--mc-56)] text-center text-white [text-shadow:2px_2px_0_var(--mc-24)]",
         compact ? "h-6 text-[12px]" : "h-8 text-[18px]",
       ].join(" ")}
     >
       <NeiArrowButton label="<" />
-      <div className="truncate border-y-2 border-[#555] bg-[#9f9f9f] px-2 leading-[1.3] shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a]">
+      <div className="truncate border-y-2 border-[var(--mc-33)] bg-[var(--mc-62)] px-2 leading-[1.3] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]">
         {label}
       </div>
       <NeiArrowButton label=">" />
@@ -160,12 +160,12 @@ function NeiPageBar({ compact, label = "Page 1/1" }: { compact: boolean; label?:
   return (
     <div
       className={[
-        "grid grid-cols-[22px_minmax(0,1fr)_22px] items-center bg-[#8f8f8f] text-center text-white [text-shadow:2px_2px_0_#3f3f3f]",
+        "grid grid-cols-[22px_minmax(0,1fr)_22px] items-center bg-[var(--mc-56)] text-center text-white [text-shadow:2px_2px_0_var(--mc-24)]",
         compact ? "h-6 text-[12px]" : "h-8 text-[18px]",
       ].join(" ")}
     >
       <NeiArrowButton label="<" />
-      <div className="truncate border-b-2 border-[#555] bg-[#a9a9a9] px-2 leading-[1.3] shadow-[inset_2px_0_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a]">
+      <div className="truncate border-b-2 border-[var(--mc-33)] bg-[var(--mc-66)] px-2 leading-[1.3] shadow-[inset_2px_0_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]">
         {label}
       </div>
       <NeiArrowButton label=">" />
@@ -175,7 +175,7 @@ function NeiPageBar({ compact, label = "Page 1/1" }: { compact: boolean; label?:
 
 function NeiArrowButton({ label }: { label: string }) {
   return (
-    <div className="flex h-full items-center justify-center border-2 border-[#252525] bg-[#8f8f8f] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000]">
+    <div className="flex h-full items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-56)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] [text-shadow:1px_1px_0_#000]">
       {label}
     </div>
   );

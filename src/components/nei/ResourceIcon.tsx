@@ -1,7 +1,8 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { memo, type CSSProperties } from "react";
 import type { ResourceAmount, ResourceIconAtlasRef, ResourceKind } from "@/lib/model/types";
+import { NEI_TEXTURES } from "@/lib/nei-renderer/theme/textures";
 import {
   formatNumberWithThousands,
   resourceLabel,
@@ -45,7 +46,7 @@ const sizeClasses = {
   xl: "h-20 w-20",
 };
 
-export function ResourceIcon({
+function ResourceIconComponent({
   resource,
   size = "md",
   showAmount = true,
@@ -56,7 +57,6 @@ export function ResourceIcon({
   iconPixelSize,
   showConsumedState = true,
 }: ResourceIconProps) {
-  const title = buildTooltipLabel(resource);
   const icon = (
     <div
       className={[
@@ -103,8 +103,18 @@ export function ResourceIcon({
     return icon;
   }
 
-  return <MinecraftTooltip label={title}>{icon}</MinecraftTooltip>;
+  // Built only on the tooltip path. It used to run for every icon regardless,
+  // including the hundreds rendered with `tooltip={false}`, which threw away a
+  // multi-pass string build per icon per render.
+  return <MinecraftTooltip label={buildTooltipLabel(resource)}>{icon}</MinecraftTooltip>;
 }
+
+/**
+ * Memoised because the canvas and recipe book mount these by the hundred, and a
+ * single parent re-render otherwise re-runs every icon's label regexes, class
+ * joins and inline style objects.
+ */
+export const ResourceIcon = memo(ResourceIconComponent);
 
 function shouldShowAlternativeMarker(resource: DisplayResourceAmount): boolean {
   return Boolean(
@@ -210,6 +220,13 @@ function IconImage({
 
   const iconPath = resource.iconPath ?? getFallbackIconPath(resource);
   if (!iconPath) {
+    // The dataset ships no art for fluids at all — not one of the thousands of
+    // fluid references carries an iconPath or an atlas entry — so without this
+    // every fluid rendered as an empty slot.
+    if (resource.kind === "fluid") {
+      return <FluidIconImage resource={resource} iconPixelSize={iconPixelSize} />;
+    }
+
     return null;
   }
 
@@ -283,6 +300,97 @@ function AspectIconImage({
   );
 }
 
+/**
+ * Fraction of the cell the fluid swatch occupies.
+ *
+ * Item sprites carry their own transparent margin, so a full-bleed colour block
+ * would read as much heavier than the items beside it. Insetting the swatch puts
+ * it on the same visual footing.
+ */
+const FLUID_ICON_SCALE = 0.56;
+
+/**
+ * Stand-in art for a fluid: a filled cell in the fluid's own colour, bevelled
+ * like a Minecraft tank so it reads as liquid rather than as a colour swatch.
+ */
+function FluidIconImage({
+  resource,
+  iconPixelSize,
+}: {
+  resource: Pick<ResourceAmount, "id" | "displayName" | "dominantColor">;
+  iconPixelSize?: number;
+}) {
+  const color = resource.dominantColor ?? getFallbackFluidColor(resource.id);
+
+  return (
+    <span
+      role="img"
+      aria-label={resourceLabel(resource)}
+      className="minecraft-pixel-art relative block overflow-hidden"
+      style={
+        iconPixelSize
+          ? { width: iconPixelSize * FLUID_ICON_SCALE, height: iconPixelSize * FLUID_ICON_SCALE }
+          : { width: `${FLUID_ICON_SCALE * 100}%`, height: `${FLUID_ICON_SCALE * 100}%` }
+      }
+    >
+      <span className="absolute inset-0" style={{ backgroundColor: color }} />
+      {/* Surface highlight and floor shadow, so the cell has depth at any size. */}
+      <span
+        className="absolute inset-x-0 top-0 h-1/4"
+        style={{ backgroundColor: "rgba(255,255,255,0.28)" }}
+      />
+      <span
+        className="absolute inset-x-0 bottom-0 h-1/5"
+        style={{ backgroundColor: "rgba(0,0,0,0.28)" }}
+      />
+    </span>
+  );
+}
+
+/**
+ * Deterministic colour for a fluid with no dataset art.
+ *
+ * Well-known fluids are named so they look right; everything else is hashed from
+ * its id, which keeps a given fluid the same colour everywhere in the app and
+ * across reloads.
+ */
+function getFallbackFluidColor(id: string): string {
+  const normalized = id.toLowerCase();
+  for (const [needle, color] of FLUID_COLOR_HINTS) {
+    if (normalized.includes(needle)) {
+      return color;
+    }
+  }
+
+  let hash = 0;
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash = (hash * 31 + normalized.charCodeAt(index)) | 0;
+  }
+
+  // Mid lightness and moderate saturation keep white amount labels legible.
+  return `hsl(${Math.abs(hash) % 360}, 55%, 45%)`;
+}
+
+const FLUID_COLOR_HINTS: Array<[string, string]> = [
+  ["distilledwater", "#5fb7e8"],
+  ["water", "#3f76e4"],
+  ["lava", "#ef7c17"],
+  ["steam", "#d8d8d8"],
+  ["oxygen", "#7fd8ff"],
+  ["hydrogen", "#c85a5a"],
+  ["nitrogen", "#4f6fb5"],
+  ["oil", "#20201c"],
+  ["fuel", "#c8a02c"],
+  ["lubricant", "#c8b45a"],
+  ["molten", "#e08a2c"],
+  ["plasma", "#f0d0ff"],
+  ["acid", "#9fd12c"],
+  ["milk", "#f0f0f0"],
+  ["honey", "#e0a83c"],
+  ["glue", "#c8b48c"],
+  ["concrete", "#8c8c8c"],
+];
+
 function getFallbackAspectColor(id: string): string {
   const tag = id.startsWith("thaumcraft:aspect:")
     ? id.slice("thaumcraft:aspect:".length).toLowerCase()
@@ -346,15 +454,7 @@ function getFallbackIconPath(resource: Pick<ResourceAmount, "kind" | "id">): str
     return undefined;
   }
 
-  const prefix = "thaumcraft:aspect:";
-  if (!resource.id.startsWith(prefix)) {
-    return "/nei/thaumcraft/aspects/_unknown.png";
-  }
-
-  const tag = resource.id.slice(prefix.length).toLowerCase();
-  return ASPECT_COLORS[tag]
-    ? `/nei/thaumcraft/aspects/${tag}.png`
-    : "/nei/thaumcraft/aspects/_unknown.png";
+  return NEI_TEXTURES.resolveThaumcraftAspectIconPath(resource.id);
 }
 
 function AtlasIconImage({

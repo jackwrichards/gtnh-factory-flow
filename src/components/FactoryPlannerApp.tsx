@@ -10,25 +10,40 @@ import {
   getRecipeDatasetRecipe,
   initRecipeDatasetVersion,
 } from "@/lib/datasets/browser-loader";
+import { loadResourceHistory, useFactoryStore } from "@/store/factory-store";
+import { useDesignStore } from "@/store/design-store";
+import {
+  downloadCommunityPlan,
+  tagPlanWithCommunityId,
+  takePendingEditorImport,
+} from "@/lib/community/client";
 import { parseFactoryProjectJson } from "@/lib/import-export";
-import { LOCAL_STORAGE_KEY, loadResourceHistory, useFactoryStore } from "@/store/factory-store";
+import { useThemeStore } from "@/store/theme-store";
+import { AppHeader } from "./AppHeader";
+import { DesignTabs } from "./DesignTabs";
 import { FactoryFlow } from "./flow/FactoryFlow";
 import { InspectorPanel } from "./InspectorPanel";
 import { RecipeBrowser } from "./RecipeBrowser";
-import { TopBar } from "./TopBar";
 
 export function FactoryPlannerApp() {
   const project = useFactoryStore((state) => state.project);
-  const markHydratedProject = useFactoryStore((state) => state.markHydratedProject);
   const hydrateResourceHistory = useFactoryStore((state) => state.hydrateResourceHistory);
+  const hydrateDesigns = useDesignStore((state) => state.hydrate);
+  const saveActiveProject = useDesignStore((state) => state.saveActiveProject);
+  const activeDesignId = useDesignStore((state) => state.activeDesignId);
   const setDatasetManifest = useFactoryStore((state) => state.setDatasetManifest);
   const setDataset = useFactoryStore((state) => state.setDataset);
   const refreshProjectRecipes = useFactoryStore((state) => state.refreshProjectRecipes);
   const setDatasetLoading = useFactoryStore((state) => state.setDatasetLoading);
   const setDatasetError = useFactoryStore((state) => state.setDatasetError);
+  const syncThemeFromDocument = useThemeStore((state) => state.syncThemeFromDocument);
   const hydratedRef = useRef(false);
   const skipInitialSaveRef = useRef(true);
   const saveTimeoutRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    syncThemeFromDocument();
+  }, [syncThemeFromDocument]);
 
   const loadDatasetVersion = useCallback(
     async (versionId: string) => {
@@ -73,21 +88,57 @@ export function FactoryPlannerApp() {
     const cancelHydration = scheduleIdleWork(() => {
       hydrateResourceHistory(loadResourceHistory());
 
-      const storedProject = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (storedProject) {
-        try {
-          markHydratedProject(parseFactoryProjectJson(storedProject));
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Stored plan could not be loaded.";
-          console.error(message);
-        }
-      }
-      hydratedRef.current = true;
+      void hydrateDesigns()
+        .then(async () => {
+          // A plan handed off from the community hub becomes its own design
+          // tab, so it never overwrites whatever the user was working on.
+          const importAsDesign = async (raw: unknown) => {
+            const project = parseFactoryProjectJson(JSON.stringify(raw));
+            await useDesignStore
+              .getState()
+              .importProjectAsDesign(project, project.name || "Community plan");
+          };
+
+          try {
+            const pending = takePendingEditorImport();
+            if (pending) {
+              await importAsDesign(pending);
+              return;
+            }
+
+            // Shared "open to edit" links: /?plan=<community id>.
+            const params = new URLSearchParams(window.location.search);
+            const sharedPlanId = params.get("plan");
+            if (sharedPlanId) {
+              try {
+                const { plan } = await downloadCommunityPlan(sharedPlanId);
+                await importAsDesign(tagPlanWithCommunityId(plan, sharedPlanId));
+              } finally {
+                params.delete("plan");
+                const query = params.toString();
+                window.history.replaceState(
+                  null,
+                  "",
+                  `${window.location.pathname}${query ? `?${query}` : ""}`,
+                );
+              }
+            }
+          } catch (error) {
+            console.error(
+              error instanceof Error ? error.message : "Importing the community plan failed.",
+            );
+          }
+        })
+        .finally(() => {
+          // Autosave stays parked until the stored design is on the canvas.
+          // Releasing it earlier would let the empty starting plan be written
+          // over the design that is still loading.
+          hydratedRef.current = true;
+        });
     }, 800);
 
     return cancelHydration;
-  }, [hydrateResourceHistory, markHydratedProject]);
+  }, [hydrateDesigns, hydrateResourceHistory]);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,15 +189,13 @@ export function FactoryPlannerApp() {
       window.clearTimeout(saveTimeoutRef.current);
     }
 
+    // The design id is captured here, alongside the plan it belongs to. The
+    // save can land up to ~1.5s later, by which point the active design may
+    // have changed; the store drops the write rather than misfiling it.
+    const savingDesignId = activeDesignId;
     saveTimeoutRef.current = window.setTimeout(() => {
       scheduleIdleWork(() => {
-        try {
-          localStorage.setItem(LOCAL_STORAGE_KEY, `${JSON.stringify(project)}\n`);
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Plan could not be saved locally.";
-          console.error(message);
-        }
+        void saveActiveProject(savingDesignId, project);
       }, 1200);
     }, 350);
 
@@ -155,14 +204,26 @@ export function FactoryPlannerApp() {
         window.clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [project]);
+  }, [activeDesignId, project, saveActiveProject]);
 
   return (
-    <div className="flex h-screen min-h-[720px] flex-col bg-neutral-100 text-neutral-950">
-      <TopBar onLoadDatasetVersion={loadDatasetVersion} />
-      <main className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)_360px]">
-        <RecipeBrowser />
-        <FactoryFlow />
+    <div className="flex h-screen min-h-[720px] flex-col bg-canvas text-fg">
+      <AppHeader page="editor" />
+      <main className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)_440px]">
+        {/* Each column carries its own header row, all the same height, so the
+            three line up where the full-width bar used to be. */}
+        {/* The browser owns its own header row, so no wrapper here — it stays a
+            direct grid item at exactly the column width, as it was before. */}
+        <RecipeBrowser onLoadDatasetVersion={loadDatasetVersion} />
+        {/*
+          The tab strip belongs to the canvas, not the window: designs switch
+          what is on the board, while the browser and inspector are fixed
+          furniture. Rows rather than flex so the board keeps its `h-full`.
+        */}
+        <div className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
+          <DesignTabs />
+          <FactoryFlow />
+        </div>
         <InspectorPanel />
       </main>
     </div>

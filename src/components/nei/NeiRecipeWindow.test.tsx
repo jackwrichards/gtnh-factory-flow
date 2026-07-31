@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import type { Recipe } from "@/lib/model/types";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { NeiRecipeWindow } from "./NeiRecipeWindow";
 
 describe("NeiRecipeWindow", () => {
@@ -51,5 +50,42 @@ describe("NeiRecipeWindow", () => {
     expect(colorLayer.style.maskImage).toContain("/nei/thaumcraft/aspects/ordo.png");
     expect(colorLayer.style.backgroundColor).toBe("rgb(213, 212, 236)");
     expect(screen.getByText("8")).toBeTruthy();
+  });
+
+  it("keeps resource slot recipe/use clicks wired through renderer commands", () => {
+    const onSlotClick = vi.fn();
+    const { container } = render(
+      <NeiRecipeWindow
+        recipe={{
+          id: "assembler",
+          name: "Assembler",
+          machineType: "Assembler",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 8,
+          inputs: [{ kind: "item", id: "input", amount: 1 }],
+          outputs: [{ kind: "item", id: "output", amount: 1 }],
+        }}
+        compact
+        onSlotClick={onSlotClick}
+      />,
+    );
+
+    const stackButtons = container.querySelectorAll("button.nodrag");
+    expect(stackButtons).toHaveLength(2);
+
+    fireEvent.click(stackButtons[0]);
+    fireEvent.contextMenu(stackButtons[1]);
+
+    expect(onSlotClick).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ side: "input", kind: "item", slotIndex: 0 }),
+      "recipes",
+    );
+    expect(onSlotClick).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ side: "output", kind: "item", slotIndex: 0 }),
+      "uses",
+    );
   });
 });

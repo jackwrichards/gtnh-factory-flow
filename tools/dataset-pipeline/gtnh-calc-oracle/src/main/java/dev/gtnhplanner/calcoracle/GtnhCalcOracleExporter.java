@@ -89,6 +89,7 @@ public final class GtnhCalcOracleExporter {
         domains.add(exportThaumcraft(adapters));
         domains.add(exportForestryBees(adapters));
         domains.add(exportIc2Crops(adapters));
+        domains.add(exportCropsNhCrops(adapters));
 
         Map<String, Object> root = map();
         root.put("schemaVersion", Integer.valueOf(1));
@@ -1315,6 +1316,283 @@ public final class GtnhCalcOracleExporter {
             return id == null ? 0 : id.intValue();
         } catch (Throwable ignored) {
             return 0;
+        }
+    }
+
+    private Map<String, Object> exportCropsNhCrops(List<Map<String, Object>> adapters) {
+        long started = System.currentTimeMillis();
+        Map<String, Object> domain = domain("cropsNhCrops");
+        List<Map<String, Object>> crops = new ArrayList<Map<String, Object>>();
+        boolean present = isClassPresent("com.gtnewhorizon.cropsnh.api.ICropCard")
+            || GtnhCalcOracleMod.isModLoaded("cropsnh");
+        if (!present) {
+            adapters.add(adapter("cropsnh-crop-cards", "not_present", false, 0, 0, started, null));
+            domain.put("crops", crops);
+            return domain;
+        }
+
+        try {
+            Map<String, Object> config = map();
+            config.put("growthCycleTicks", Integer.valueOf(readStaticInt(
+                "com.gtnewhorizon.cropsnh.reference.Constants", "GROWTH_CYCLE_TICKS", 256)));
+            putIfPresent(config, "growthMultiplier", cropsNhStaticNumber(
+                "com.gtnewhorizon.cropsnh.handler.ConfigurationHandler", "growthMultiplier"));
+            domain.put("config", config);
+
+            Object registry = cropsNhRegistry();
+            if (registry == null) {
+                adapters.add(adapter(
+                    "cropsnh-crop-cards",
+                    "partial",
+                    true,
+                    0,
+                    0,
+                    started,
+                    "CropsNH is loaded, but no crop registry with an iterable crop collection was found."));
+                domain.put("crops", crops);
+                return domain;
+            }
+
+            int seen = 0;
+            for (Object card : cropsNhAllCards(registry)) {
+                if (card == null) {
+                    continue;
+                }
+                seen++;
+                Map<String, Object> exported = cropsNhCropCard(card);
+                if (exported != null) {
+                    crops.add(exported);
+                }
+            }
+            domain.put("crops", crops);
+            String status = crops.isEmpty() ? "partial" : "computed";
+            String warning = crops.isEmpty()
+                ? "CropsNH crop registry was present, but no crop cards were exported."
+                : null;
+            adapters.add(adapter("cropsnh-crop-cards", status, true, seen, crops.size(), started, warning));
+        } catch (Throwable t) {
+            adapters.add(adapter("cropsnh-crop-cards", "partial", true, 0, crops.size(), started, t.toString()));
+            domain.put("crops", crops);
+        }
+        return domain;
+    }
+
+    private Object cropsNhRegistry() {
+        String[] registryClasses = new String[] {
+            "com.gtnewhorizon.cropsnh.farming.registries.CropRegistry",
+            "com.gtnewhorizon.cropsnh.farming.CropRegistry",
+            "com.gtnewhorizon.cropsnh.api.CropsNHApi"
+        };
+        for (String className : registryClasses) {
+            try {
+                Class<?> type = Class.forName(className);
+                for (String fieldName : new String[] { "instance", "INSTANCE" }) {
+                    try {
+                        Object registry = readStaticField(type, fieldName);
+                        if (registry != null) {
+                            return registry;
+                        }
+                    } catch (Throwable ignored) {
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
+    }
+
+    private List<?> cropsNhAllCards(Object registry) {
+        for (String methodName : new String[] { "getAllInRegistrationOrder", "getAll", "getCrops", "values" }) {
+            Object value = invokeBest(registry, methodName, new Object[0]);
+            List<?> cards = listFrom(value);
+            if (!cards.isEmpty() && looksLikeCropsNhCard(cards.get(0))) {
+                return cards;
+            }
+        }
+        // Last resort: scan zero-argument methods for a collection of crop cards so a
+        // renamed accessor in a future CropsNH version still exports.
+        for (Method method : registry.getClass().getMethods()) {
+            if (method.getParameterTypes().length != 0 || method.getDeclaringClass() == Object.class) {
+                continue;
+            }
+            Object value = invokeBest(registry, method.getName(), new Object[0]);
+            List<?> cards = listFrom(value);
+            if (!cards.isEmpty() && looksLikeCropsNhCard(cards.get(0))) {
+                return cards;
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    private boolean looksLikeCropsNhCard(Object value) {
+        return value != null
+            && hasMethod(value, "getDropTable")
+            && hasMethod(value, "getGrowthDuration")
+            && hasMethod(value, "getTier");
+    }
+
+    private Map<String, Object> cropsNhCropCard(Object crop) {
+        if (Boolean.TRUE.equals(invokeBest(crop, "hideFromNEI", new Object[0]))) {
+            return null;
+        }
+
+        List<Map<String, Object>> dropTable = new ArrayList<Map<String, Object>>();
+        Object rawTable = invokeBest(crop, "getDropTable", new Object[0]);
+        if (rawTable instanceof Map) {
+            for (Object rawEntry : ((Map<?, ?>) rawTable).entrySet()) {
+                Map.Entry<?, ?> entry = (Map.Entry<?, ?>) rawEntry;
+                if (!(entry.getKey() instanceof ItemStack)) {
+                    continue;
+                }
+                Map<String, Object> resource = itemStack((ItemStack) entry.getKey());
+                if (resource == null) {
+                    continue;
+                }
+                Number weight = asNumber(entry.getValue());
+                Map<String, Object> drop = map();
+                drop.put("resource", resource);
+                drop.put("weight", Integer.valueOf(weight == null ? 0 : weight.intValue()));
+                dropTable.add(drop);
+            }
+        }
+        if (dropTable.isEmpty()) {
+            // Weeds, the migrator, and other utility cards produce nothing harvestable.
+            return null;
+        }
+
+        Map<String, Object> exported = map();
+        exported.put("className", crop.getClass().getName());
+        putIfPresent(exported, "id", firstString(crop, "getId"));
+        putIfPresent(exported, "numericId", firstNumber(crop, "getNumericId"));
+        putIfPresent(exported, "name", cropsNhCropName(crop));
+        putIfPresent(exported, "unlocalizedName", firstString(crop, "getUnlocalizedName"));
+        putIfPresent(exported, "creator", firstString(crop, "getCreator"));
+        putIfPresent(exported, "tier", firstNumber(crop, "getTier"));
+        putIfPresent(exported, "growthDuration", firstNumber(crop, "getGrowthDuration"));
+        putIfPresent(exported, "minSeedBedTier", firstNumber(crop, "getMinSeedBedTier"));
+        putIfPresent(exported, "machineBreedingRecipeTier", firstNumber(crop, "getMachineBreedingRecipeTier"));
+        putIfPresent(exported, "dropChance", firstNumber(crop, "getDropChance"));
+        exported.put("dropTable", dropTable);
+
+        List<String> biomeTags = new ArrayList<String>();
+        for (Object tag : iterable(invokeBest(crop, "getLikedBiomeTags", new Object[0]))) {
+            if (tag != null) {
+                biomeTags.add(String.valueOf(tag));
+            }
+        }
+        putIfPresent(exported, "likedBiomeTags", biomeTags);
+
+        List<String> requirements = new ArrayList<String>();
+        boolean machineOnly = false;
+        for (Object requirement : iterable(invokeBest(crop, "getGrowthRequirements", new Object[0]))) {
+            if (requirement == null) {
+                continue;
+            }
+            if (requirement.getClass().getName().toLowerCase(Locale.ROOT).contains("machineonly")) {
+                machineOnly = true;
+            }
+            String description = firstString(requirement, "getDescriptionForNEI", "getDescription");
+            if (description != null && description.length() > 0) {
+                requirements.add(description);
+            }
+        }
+        putIfPresent(exported, "growthRequirements", requirements);
+        if (machineOnly) {
+            exported.put("machineOnly", Boolean.TRUE);
+        }
+
+        putIfPresent(exported, "soils", cropsNhStackList(invokeBest(crop, "getSoilsForNEI", new Object[] { Boolean.TRUE }), 8));
+        putIfPresent(exported, "blocksUnder", cropsNhStackList(invokeBest(crop, "getBlocksUnderForNEI", new Object[] { Boolean.TRUE }), 16));
+        putIfPresent(exported, "alternateSeeds", cropsNhStackList(invokeBest(crop, "getAlternateSeeds", new Object[0]), 8));
+
+        Object seedStack = invokeBest(crop, "getSeedItem", new Object[] { cropsNhSeedStatsProxy(1, 1, 1) });
+        if (seedStack instanceof ItemStack) {
+            putIfPresent(exported, "seed", itemStack((ItemStack) seedStack));
+        }
+
+        exported.put(
+            "notes",
+            "CropsNH crop card exported from the live crop registry. Drop table weights are rolled per drop"
+                + " round against 10000; drop rounds average dropChance * 1.03^gain; each successful roll also"
+                + " gains +1 item with probability (gain + 1) / 100.");
+        return exported;
+    }
+
+    private String cropsNhCropName(Object crop) {
+        String unlocalized = firstString(crop, "getUnlocalizedName");
+        if (unlocalized != null && unlocalized.length() > 0) {
+            String direct = StatCollector.translateToLocal(unlocalized);
+            if (direct != null && direct.length() > 0 && !direct.equals(unlocalized)) {
+                return direct;
+            }
+            String suffixed = StatCollector.translateToLocal(unlocalized + ".name");
+            if (suffixed != null && suffixed.length() > 0 && !suffixed.equals(unlocalized + ".name")) {
+                return suffixed;
+            }
+        }
+        return firstString(crop, "getId");
+    }
+
+    private List<Map<String, Object>> cropsNhStackList(Object value, int limit) {
+        List<Map<String, Object>> stacks = new ArrayList<Map<String, Object>>();
+        for (Object entry : iterable(value)) {
+            if (!(entry instanceof ItemStack)) {
+                continue;
+            }
+            Map<String, Object> stack = itemStack((ItemStack) entry);
+            if (stack != null) {
+                stacks.add(stack);
+                if (stacks.size() >= limit) {
+                    break;
+                }
+            }
+        }
+        return stacks;
+    }
+
+    private Number cropsNhStaticNumber(String className, String fieldName) {
+        try {
+            Object value = readStaticField(Class.forName(className), fieldName);
+            return value instanceof Number ? (Number) value : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private Object cropsNhSeedStatsProxy(final int growth, final int gain, final int resistance) {
+        try {
+            Class<?> statsClass = Class.forName("com.gtnewhorizon.cropsnh.api.ISeedStats");
+            InvocationHandler handler = new InvocationHandler() {
+                public Object invoke(Object proxy, Method method, Object[] args) {
+                    String name = method.getName();
+                    if ("getGrowth".equals(name)) return Byte.valueOf((byte) growth);
+                    if ("getGain".equals(name)) return Byte.valueOf((byte) gain);
+                    if ("getResistance".equals(name)) return Byte.valueOf((byte) resistance);
+                    if ("isAnalyzed".equals(name)) return Boolean.TRUE;
+                    if ("copy".equals(name)) return proxy;
+                    if ("writeToNBT".equals(name) && args != null && args.length == 1) {
+                        // Write real stat NBT so seed items render as this crop's
+                        // analyzed seeds instead of the generic "Unknown Seeds".
+                        if (args[0] instanceof NBTTagCompound) {
+                            NBTTagCompound tag = (NBTTagCompound) args[0];
+                            tag.setByte("gr", (byte) growth);
+                            tag.setByte("ga", (byte) gain);
+                            tag.setByte("re", (byte) resistance);
+                            tag.setByte("scan", (byte) 1);
+                        }
+                        return args[0];
+                    }
+                    if ("equals".equals(name) && args != null && args.length == 1) {
+                        return Boolean.valueOf(args[0] == proxy);
+                    }
+                    if ("hashCode".equals(name)) return Integer.valueOf(System.identityHashCode(proxy));
+                    if ("toString".equals(name)) return "OracleSeedStats(" + growth + "/" + gain + "/" + resistance + ")";
+                    return defaultReturnValue(method.getReturnType());
+                }
+            };
+            return Proxy.newProxyInstance(statsClass.getClassLoader(), new Class<?>[] { statsClass }, handler);
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 

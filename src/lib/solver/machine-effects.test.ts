@@ -7,7 +7,141 @@ import {
   getMachineDurationMultiplier,
   getMachineEutMultiplier,
   getMachineOutputMultiplier,
+  getMachineParallelMultiplier,
 } from "./machine-effects";
+
+describe("voltage-scaled parallels", () => {
+  const recipeWithControl = (tier: Record<string, number>): Recipe => ({
+    id: "test",
+    name: "test",
+    machineType: "Zhuhai - Fishing Port",
+    minimumTier: "LV",
+    durationTicks: 20,
+    eut: 8,
+    inputs: [],
+    outputs: [{ kind: "item", id: "fish", amount: 1 }],
+    machineConfigControls: [
+      {
+        id: "voltageParallel",
+        label: "Parallels per Tier",
+        minimumKey: "only",
+        defaultKey: "only",
+        tiers: [
+          {
+            key: "only",
+            label: "only",
+            ...tier,
+            resource: { kind: "item", id: "x", amount: 1 },
+          },
+        ],
+      },
+    ],
+  });
+
+  it("scales linearly with the run tier", () => {
+    const recipe = recipeWithControl({ parallelPerVoltageTier: 2 });
+    expect(getMachineParallelMultiplier(recipe, { overclockTier: "LV" })).toBe(2);
+    expect(getMachineParallelMultiplier(recipe, { overclockTier: "EV" })).toBe(8);
+  });
+
+  it("supports affine base with floor (Zhuhai and Density^2 forms)", () => {
+    const zhuhai = recipeWithControl({ parallelPerVoltageTier: 2, parallelVoltageBase: 2 });
+    expect(getMachineParallelMultiplier(zhuhai, { overclockTier: "LV" })).toBe(4);
+    expect(getMachineParallelMultiplier(zhuhai, { overclockTier: "UV" })).toBe(18);
+
+    const density = recipeWithControl({ parallelPerVoltageTier: 0.5, parallelVoltageBase: 1 });
+    expect(getMachineParallelMultiplier(density, { overclockTier: "LV" })).toBe(1);
+    expect(getMachineParallelMultiplier(density, { overclockTier: "MV" })).toBe(2);
+    expect(getMachineParallelMultiplier(density, { overclockTier: "HV" })).toBe(2);
+    expect(getMachineParallelMultiplier(density, { overclockTier: "EV" })).toBe(3);
+  });
+});
+
+describe("CropsNH analytic crop math", () => {
+  // Argentia in 2.9.0-beta-2: tier 7, 1400 growth points, dropChance 0.6983373.
+  const argentia = (): Recipe =>
+    enrichPassiveProductionRecipe({
+      id: "cropsnh-crop-argentia",
+      name: "Crop Farm: Argentia",
+      machineType: "Crop Farm",
+      minimumTier: "NONE",
+      durationTicks: 3328,
+      eut: 0,
+      inputs: [],
+      outputs: [
+        { kind: "item", id: "cropsnh:materialleaf@26", amount: 2.29, displayName: "Argentia Leaf" },
+      ],
+      metadata: {
+        cropsNh: {
+          tier: 7,
+          growthPoints: 1400,
+          dropChance: 0.6983373,
+          growthCycleTicks: 256,
+          growthMultiplier: 1,
+          drops: [{ id: "cropsnh:materialleaf@26", stackSize: 1, weight: 10000 }],
+        },
+      },
+      source: { recipeMap: "Crop Farm" },
+    });
+
+  it("adds stat and environment controls with ideal defaults", () => {
+    const recipe = argentia();
+    expect(recipe.machineConfigControls?.map((control) => control.id)).toEqual([
+      "cropGrowthStat",
+      "cropGainStat",
+      "cropWater",
+      "cropFertilizer",
+      "cropSky",
+      "cropBiome",
+    ]);
+    expect(
+      recipe.machineConfigControls?.every((control) => control.tiers.length > 0),
+    ).toBe(true);
+  });
+
+  it("matches the in-game growth formula at the reference environment", () => {
+    const recipe = argentia();
+    // score 55 -> supply 275 vs demand 70; rate = trunc(37 * 305 / 100) = 112;
+    // ceil(1400 / 112) = 13 cycles of 256 ticks -> multiplier 1 at defaults.
+    expect(getMachineDurationMultiplier(recipe, { machineConfigTiers: {} })).toBe(1);
+    expect(
+      getMachineOutputMultiplier(recipe, { machineConfigTiers: {} }, recipe.outputs[0]!, "LV"),
+    ).toBe(1);
+  });
+
+  it("slows down at low growth stats using integer cycle math", () => {
+    const recipe = argentia();
+    const node = { machineConfigTiers: { cropGrowthStat: "1" } };
+    // Growth 1: rate = trunc(7 * 305 / 100) = 21; ceil(1400 / 21) = 67 cycles.
+    expect(getMachineDurationMultiplier(recipe, node)).toBeCloseTo(67 / 13, 10);
+  });
+
+  it("scales yield by 1.03^gain drop rounds plus the bonus roll", () => {
+    const recipe = argentia();
+    const node = { machineConfigTiers: { cropGainStat: "1" } };
+    const expected = (1.03 ** (1 - 31) * (1 + 0.02)) / (1 + 0.32);
+    expect(
+      getMachineOutputMultiplier(recipe, node, recipe.outputs[0]!, "LV"),
+    ).toBeCloseTo(expected, 10);
+  });
+
+  it("produces nothing when nutrient supply is 25+ under demand", () => {
+    const recipe = argentia();
+    const node = {
+      machineConfigTiers: {
+        cropWater: "0",
+        cropFertilizer: "0",
+        cropSky: "no",
+        cropBiome: "none",
+      },
+    };
+    // score 7 -> supply 35 vs demand 70: penalty 140% kills growth entirely.
+    expect(
+      getMachineOutputMultiplier(recipe, node, recipe.outputs[0]!, "LV"),
+    ).toBe(0);
+    expect(getMachineDurationMultiplier(recipe, node)).toBe(1);
+  });
+});
 
 describe("passive production machine effects", () => {
   it("applies IC2 crop stat presets as generic config multipliers", () => {

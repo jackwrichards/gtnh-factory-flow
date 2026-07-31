@@ -1,8 +1,8 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { memo, useState, type CSSProperties } from "react";
-import { AlertTriangle, ChevronDown, WandSparkles } from "lucide-react";
+import { memo, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { AlertTriangle, ChevronDown, Minus, Plus, Sprout, WandSparkles } from "lucide-react";
 import type {
   FactoryNode,
   MachineTier,
@@ -27,13 +27,16 @@ import {
   restoreCrossKindInputOverrideVisuals,
   getRecipePowerTier,
   getSelectedMachineHandler,
+  getCropsNhStats,
   getVoltageTierIndex,
   BEE_INDUSTRIAL_PRODUCTION_CONTROL_ID,
   BEE_INDUSTRIAL_SPEED_CONTROL_ID,
   isRecipeInputConsumed,
+  isSteamMachineHandler,
   isBeeFrameSlotControlId,
   isBeeProductionConfigControl,
   isBeeProductionRecipe,
+  isCropFarmRecipe,
   isCropProductionConfigControl,
   isCropProductionRecipe,
   isIndustrialApiaryMachineType,
@@ -44,13 +47,21 @@ import {
   type MachineConfigTierControl,
 } from "@/lib/model";
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
+import { CropPickerMenu } from "./CropPickerMenu";
+import { MachineCompareTable, MachineGlanceBar, MachineTabStrip } from "./MachinePicker";
+import { useMachineHandlerIcons } from "./machine-icons";
+import { MinecraftSelect } from "./MinecraftSelect";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
+import { MachineStatsContent } from "./MachineStatsContent";
+import { UsageLimitContent } from "@/components/inspector/UsageLimitContent";
+import { buildUsageLimitChain } from "@/components/inspector/usage-limits";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { usesNativeNeiChrome } from "@/lib/nei/layout";
 import type { NeiPositionedSlot } from "@/lib/nei/layout";
 import { makeResourceHandleId } from "./resource-handles";
 import { useFactoryStore } from "@/store/factory-store";
 import { GT_NODE_COLORS } from "./node-colors";
+import { getPaintBrushCursor } from "./paint-cursor";
 import { GT_TIER_COLORS } from "./tier-colors";
 
 const CROP_CONFIG_PANEL_WIDTH_CLASS = "w-[398px]";
@@ -65,10 +76,12 @@ export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 
 function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const { projectNode, recipe, result } = data;
-  const [isMachineMenuOpen, setIsMachineMenuOpen] = useState(false);
+  const [isCompareOpen, setCompareOpen] = useState(false);
+  const [previewHandlerId, setPreviewHandlerId] = useState<string>();
+  const [isCropMenuOpen, setCropMenuOpen] = useState(false);
   const [openMachineConfigMenuId, setOpenMachineConfigMenuId] = useState<string>();
   const browseResource = useFactoryStore((state) => state.browseResource);
-  const recipeSearch = useFactoryStore((state) => state.recipeSearch);
+  const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
   const hoveredNodeBottlenecks = useFactoryStore((state) => state.hoveredNodeBottlenecks);
@@ -89,68 +102,145 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   );
   const isNodeBottleneckHighlighted =
     (hoveredNodeBottlenecks || selectedNodeBottlenecks) && result?.status === "bottleneck";
-  const isInspectorHighlighted = isFlowResourceHighlighted || isNodeBottleneckHighlighted;
+  const isUsageHighlighted = useFactoryStore(
+    (state) => state.hoveredUsageNodeId === projectNode.id,
+  );
+  const isInspectorHighlighted =
+    isFlowResourceHighlighted || isNodeBottleneckHighlighted || isUsageHighlighted;
   const nodeColor = projectNode.colorTag ? GT_NODE_COLORS[projectNode.colorTag] : undefined;
-  const machineHandlers = getRecipeMachineHandlers(recipe);
-  const selectedMachineHandler = getSelectedMachineHandler(recipe, projectNode);
-  const nodeRecipe = applyRecipeInputOverrides(recipe, projectNode);
-  const effectiveRecipe = applyMachineHandlerToRecipe(nodeRecipe, projectNode);
-  const recipePowerTier = getRecipePowerTier(effectiveRecipe);
-  const tierControl = getNodeTierControl(effectiveRecipe, projectNode);
-  const coilControl = getRecipeCoilTierControl(effectiveRecipe, projectNode);
-  const coilResource = coilControl
-    ? resolveDatasetMachineConfigResource(coilControl.resource, dataset)
-    : undefined;
-  const machineConfigControls = getRecipeMachineConfigTierControls(
+  const paintCursor =
+    nodeColorPaintMode !== undefined
+      ? getPaintBrushCursor(
+          nodeColorPaintMode ? GT_NODE_COLORS[nodeColorPaintMode].swatch : undefined,
+        )
+      : undefined;
+  // Recipe derivation is pure in (recipe, projectNode, dataset) but ran on every
+  // render, including renders caused by unrelated store writes such as hover or
+  // search. It also rebuilt `overclockedRecipe` each time, whose fresh identity
+  // defeated NeiRecipeWindow's memo and re-ran the whole NEI pipeline downstream.
+  const derived = useMemo(() => {
+    const machineHandlers = getRecipeMachineHandlers(recipe);
+    const selectedMachineHandler = getSelectedMachineHandler(recipe, projectNode);
+    const nodeRecipe = applyRecipeInputOverrides(recipe, projectNode);
+    const effectiveRecipe = applyMachineHandlerToRecipe(nodeRecipe, projectNode);
+    const recipePowerTier = getRecipePowerTier(effectiveRecipe);
+    // A vanilla furnace or steam machine draws no EU, so offering ULV/LV/...
+    // voltage tiers on it is meaningless - the chip disappears instead.
+    const machineDrawsEu =
+      effectiveRecipe.eut > 0 && !isSteamMachineHandler(selectedMachineHandler);
+    const tierControl = machineDrawsEu
+      ? getNodeTierControl(effectiveRecipe, projectNode)
+      : undefined;
+    const coilControl = getRecipeCoilTierControl(effectiveRecipe, projectNode);
+    const coilResource = coilControl
+      ? resolveDatasetMachineConfigResource(coilControl.resource, dataset)
+      : undefined;
+    const machineConfigControls = getRecipeMachineConfigTierControls(
+      effectiveRecipe,
+      projectNode,
+    ).map((control) => ({
+      ...control,
+      resource: resolveDatasetMachineConfigResource(control.resource, dataset),
+    }));
+    const cropProductionControls = isCropProductionRecipe(effectiveRecipe)
+      ? machineConfigControls.filter((control) => isCropProductionConfigControl(control.id))
+      : [];
+    const beeProductionControls = isBeeProductionRecipe(effectiveRecipe)
+      ? machineConfigControls.filter((control) => isBeeProductionConfigControl(control.id))
+      : [];
+    const isBeeProductionNode = beeProductionControls.length > 0;
+    const beeFrameControls = beeProductionControls.filter((control) =>
+      isBeeFrameSlotControlId(control.id),
+    );
+    const tgsToolControls = machineConfigControls.filter(isTreeGrowthSimulatorToolControl);
+    const overclockedStats = getOverclockedRecipeStats(nodeRecipe, projectNode);
+    const toolAdjustedRecipe = applyTreeGrowthSimulatorToolInputs(effectiveRecipe, tgsToolControls);
+    const visualToolAdjustedRecipe = restoreCrossKindInputOverrideVisuals(
+      toolAdjustedRecipe,
+      recipe,
+      projectNode,
+    );
+    const displayRecipe = isBeeProductionNode
+      ? stripBeeFrameSlotInputs(visualToolAdjustedRecipe)
+      : visualToolAdjustedRecipe;
+    const adjustedRecipe = applyMachineOutputMultipliers(
+      displayRecipe,
+      projectNode,
+      overclockedStats.tier,
+    );
+    const overclockedRecipe = {
+      ...displayRecipe,
+      ...adjustedRecipe,
+      ...overclockedStats,
+    };
+
+    const cropSeedResource =
+      cropProductionControls.length > 0
+        ? effectiveRecipe.inputs.find(
+            (input) =>
+              input.id.startsWith("factoryflow:cropsnh_seed:") ||
+              input.id.startsWith("factoryflow:ic2_crop_seed:"),
+          )
+        : undefined;
+    const cropTitle =
+      cropSeedResource && recipe.name.includes(": ")
+        ? recipe.name.slice(recipe.name.indexOf(": ") + 2)
+        : undefined;
+    const isCropFarmNode = isCropFarmRecipe(effectiveRecipe);
+    const isCropFarmPlaceholder = isCropFarmNode && effectiveRecipe.outputs.length === 0;
+
+    return {
+      machineHandlers,
+      selectedMachineHandler,
+      effectiveRecipe,
+      recipePowerTier,
+      tierControl,
+      coilControl,
+      coilResource,
+      cropProductionControls,
+      cropTitle,
+      isCropFarmNode,
+      isCropFarmPlaceholder,
+      isCropProductionNode: cropProductionControls.length > 0,
+      beeFrameControls,
+      beePanelControls: getBeePanelControls(beeProductionControls),
+      tgsToolControls,
+      statsMachineConfigControls: machineConfigControls.filter(
+        (control) =>
+          !isTreeGrowthSimulatorToolControl(control) &&
+          !isDisplayOnlyParallelControl(control) &&
+          !isCropProductionConfigControl(control.id) &&
+          !isBeeProductionConfigControl(control.id),
+      ),
+      machineParallelMultiplier: getMachineParallelMultiplier(effectiveRecipe, projectNode),
+      overclockedRecipe,
+      tierColor: tierControl ? GT_TIER_COLORS[tierControl.current] : undefined,
+      usesNativeNeiRecipe: usesNativeNeiChrome(overclockedRecipe),
+    };
+  }, [dataset, projectNode, recipe]);
+
+  const {
+    machineHandlers,
+    selectedMachineHandler,
     effectiveRecipe,
-    projectNode,
-  ).map((control) => ({
-    ...control,
-    resource: resolveDatasetMachineConfigResource(control.resource, dataset),
-  }));
-  const cropProductionControls = isCropProductionRecipe(effectiveRecipe)
-    ? machineConfigControls.filter((control) => isCropProductionConfigControl(control.id))
-    : [];
-  const isCropProductionNode = cropProductionControls.length > 0;
-  const beeProductionControls = isBeeProductionRecipe(effectiveRecipe)
-    ? machineConfigControls.filter((control) => isBeeProductionConfigControl(control.id))
-    : [];
-  const isBeeProductionNode = beeProductionControls.length > 0;
-  const beeFrameControls = beeProductionControls.filter((control) =>
-    isBeeFrameSlotControlId(control.id),
-  );
-  const beePanelControls = getBeePanelControls(beeProductionControls);
-  const tgsToolControls = machineConfigControls.filter(isTreeGrowthSimulatorToolControl);
-  const statsMachineConfigControls = machineConfigControls.filter(
-    (control) =>
-      !isTreeGrowthSimulatorToolControl(control) &&
-      !isDisplayOnlyParallelControl(control) &&
-      !isCropProductionConfigControl(control.id) &&
-      !isBeeProductionConfigControl(control.id),
-  );
-  const machineParallelMultiplier = getMachineParallelMultiplier(effectiveRecipe, projectNode);
-  const overclockedStats = getOverclockedRecipeStats(nodeRecipe, projectNode);
-  const toolAdjustedRecipe = applyTreeGrowthSimulatorToolInputs(effectiveRecipe, tgsToolControls);
-  const visualToolAdjustedRecipe = restoreCrossKindInputOverrideVisuals(
-    toolAdjustedRecipe,
-    recipe,
-    projectNode,
-  );
-  const displayRecipe = isBeeProductionNode
-    ? stripBeeFrameSlotInputs(visualToolAdjustedRecipe)
-    : visualToolAdjustedRecipe;
-  const adjustedRecipe = applyMachineOutputMultipliers(
-    displayRecipe,
-    projectNode,
-    overclockedStats.tier,
-  );
-  const overclockedRecipe = {
-    ...displayRecipe,
-    ...adjustedRecipe,
-    ...overclockedStats,
-  };
-  const tierColor = tierControl ? GT_TIER_COLORS[tierControl.current] : undefined;
-  const usesNativeNeiRecipe = usesNativeNeiChrome(overclockedRecipe);
+    recipePowerTier,
+    tierControl,
+    coilControl,
+    coilResource,
+    cropProductionControls,
+    cropTitle,
+    isCropFarmNode,
+    isCropFarmPlaceholder,
+    isCropProductionNode,
+    beeFrameControls,
+    beePanelControls,
+    tgsToolControls,
+    statsMachineConfigControls,
+    machineParallelMultiplier,
+    overclockedRecipe,
+    tierColor,
+    usesNativeNeiRecipe,
+  } = derived;
   const exceedsMaxTier =
     tierControl !== undefined &&
     maxTierFilter !== "all" &&
@@ -204,6 +294,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         className={CROP_CONFIG_PANEL_WIDTH_CLASS}
         controls={cropProductionControls}
         onSelect={updateMachineConfigTier}
+        getControlHelp={(controlId) => cropControlHelp(effectiveRecipe, controlId)}
       />
     ) : beePanelControls.length > 0 ? (
       <PassiveProductionConfigPanel
@@ -222,14 +313,43 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       machineHandlerId: nextHandler.id,
       overclockTier: nextHandler.minimumTier,
     });
-    setIsMachineMenuOpen(false);
+    setCompareOpen(false);
+    setPreviewHandlerId(undefined);
   };
+
+  const hasMachinePicker = machineHandlers.length > 1 && !isCropFarmNode;
+  const machineIcons = useMachineHandlerIcons();
+  const previewHandler = hasMachinePicker
+    ? (machineHandlers.find((handler) => handler.id === previewHandlerId) ?? selectedMachineHandler)
+    : selectedMachineHandler;
+  const isPreviewing = hasMachinePicker && previewHandler.id !== selectedMachineHandler.id;
+  const machineCategory = recipe.source?.recipeMap ?? recipe.machineType;
+  // While hovering a machine tab, the card's own Total/Usage/Time lines show
+  // that machine's base numbers instead of opening any popup.
+  const neiDisplayRecipe = isPreviewing
+    ? {
+        ...overclockedRecipe,
+        ...(() => {
+          const previewApplied = applyMachineHandlerToRecipe(recipe, {
+            machineHandlerId: previewHandler.id,
+          });
+          return {
+            machineType: previewApplied.machineType,
+            minimumTier: previewApplied.minimumTier,
+            durationTicks: previewApplied.durationTicks,
+            eut: previewApplied.eut,
+          };
+        })(),
+      }
+    : overclockedRecipe;
 
   return (
     <div
       className={[
-        "group relative min-w-[368px] w-max border-2 border-[#f4f4f4] bg-[#c6c6c6] font-mono text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]",
-        nodeColorPaintMode !== undefined ? "cursor-crosshair" : "",
+        "group relative min-w-[368px] w-max border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
+        // Marker for the globals.css layer lift: with a picker popup open the
+        // node (and the whole nodes layer) must paint above edges.
+        isCompareOpen ? "recipe-node-popup-open" : "",
         selected ? "ring-2 ring-cyan-300" : "",
         isSearchHighlighted ? "ring-4 ring-sky-300" : "",
         isInspectorHighlighted
@@ -237,15 +357,16 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           : "",
         exceedsMaxTier ? "ring-4 ring-red-500" : "",
       ].join(" ")}
-      style={
-        nodeColor
+      style={{
+        ...(nodeColor
           ? {
               backgroundColor: nodeColor.panel,
               borderColor: nodeColor.border,
-              boxShadow: `inset 2px 2px 0 #ffffff, inset -2px -2px 0 #555, 0 0 0 2px ${nodeColor.shadow}`,
+              boxShadow: `inset 2px 2px 0 var(--mc-100), inset -2px -2px 0 var(--mc-33), 0 0 0 2px ${nodeColor.shadow}`,
             }
-          : undefined
-      }
+          : undefined),
+        ...(paintCursor ? { cursor: paintCursor } : undefined),
+      }}
     >
       {exceedsMaxTier ? (
         <div className="pointer-events-none absolute -right-3 -top-3 z-40 flex max-w-[210px] items-center gap-2 border-4 border-red-700 bg-[#facc15] px-2 py-1 font-mono text-[13px] font-black uppercase leading-tight text-red-950 shadow-[4px_4px_0_rgba(0,0,0,0.45)] [text-shadow:1px_1px_0_rgba(255,255,255,0.45)]">
@@ -254,16 +375,28 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         </div>
       ) : null}
       <div className="px-2 pb-2 pt-1">
+        {/* width:0 + min-width:100% — the picker header adapts to whatever
+            width the recipe card sets and can never widen the node itself,
+            no matter how long a machine name or tab strip gets. */}
+        <div className="w-0 min-w-full">
+        {hasMachinePicker ? (
+          <MachineTabStrip
+            handlers={machineHandlers}
+            selectedId={selectedMachineHandler.id}
+            previewId={previewHandlerId}
+            iconsById={machineIcons}
+            onHover={setPreviewHandlerId}
+            onSelect={updateMachineHandler}
+            onToggleCompare={() => setCompareOpen((open) => !open)}
+            isCompareOpen={isCompareOpen}
+          />
+        ) : null}
         <div
           className={[
-            "mb-1 grid min-w-0 items-center",
-            machineHandlers.length > 1 && tierControl
-              ? "grid-cols-[24px_minmax(0,1fr)_50px_24px]"
-              : machineHandlers.length > 1
-                ? "grid-cols-[24px_minmax(0,1fr)_24px]"
-                : tierControl
-                  ? "grid-cols-[24px_minmax(0,1fr)_50px]"
-                  : "grid-cols-[24px_minmax(0,1fr)]",
+            "mb-1 grid min-w-0 items-center gap-1",
+            tierControl
+              ? "grid-cols-[24px_minmax(0,1fr)_50px]"
+              : "grid-cols-[24px_minmax(0,1fr)]",
           ].join(" ")}
         >
           <button
@@ -272,17 +405,85 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               event.stopPropagation();
               deleteNode(projectNode.id);
             }}
-            className="nodrag h-6 w-6 border-2 border-[#252525] bg-[#7d7d7d] text-base leading-[16px] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:bg-red-700"
+            className="nodrag h-6 w-6 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-base leading-[16px] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-red-700"
             title="Delete node"
             aria-label="Delete node"
           >
             -
           </button>
-          <div
-            className="minecraft-title h-6 truncate border-2 border-[#555] bg-[#9b9b9b] px-2 text-center text-[17px] leading-[20px] shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a]"
-            style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
-          >
-            {selectedMachineHandler.label}
+          <div className="relative min-w-0">
+            <MinecraftTooltip
+              content={
+                isCropFarmPlaceholder ? (
+                  "Click to pick a crop"
+                ) : (
+                  <MachineStatsContent
+                    recipe={recipe}
+                    handler={selectedMachineHandler}
+                    node={projectNode}
+                  />
+                )
+              }
+            >
+              {hasMachinePicker ? (
+                <MachineGlanceBar
+                  recipe={recipe}
+                  category={machineCategory}
+                  handler={previewHandler}
+                  icon={machineIcons.get(previewHandler.id)}
+                  isPreview={isPreviewing}
+                />
+              ) : (
+                <div
+                  role={isCropFarmNode ? "button" : undefined}
+                  tabIndex={isCropFarmNode ? 0 : undefined}
+                  onClick={
+                    isCropFarmNode
+                      ? (event) => {
+                          event.stopPropagation();
+                          setCropMenuOpen((open) => !open);
+                        }
+                      : undefined
+                  }
+                  className={[
+                    "minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]",
+                    // Symmetric padding keeps the crop name in the true middle;
+                    // the picker chevron floats on the right without shifting it.
+                    isCropFarmNode
+                      ? "nodrag relative cursor-pointer px-5 hover:brightness-110"
+                      : "px-2",
+                  ].join(" ")}
+                  style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
+                  title={isCropFarmNode ? "Pick a crop" : undefined}
+                >
+                  <span className="mx-auto min-w-0 truncate">
+                    {isCropFarmPlaceholder
+                      ? "Pick a crop..."
+                      : (cropTitle ?? selectedMachineHandler.label)}
+                  </span>
+                  {isCropFarmNode ? (
+                    <ChevronDown className="absolute right-1 top-1/2 h-3 w-3 shrink-0 -translate-y-1/2" />
+                  ) : null}
+                </div>
+              )}
+            </MinecraftTooltip>
+            {isCropMenuOpen ? (
+              <CropPickerMenu
+                nodeId={projectNode.id}
+                onClose={() => setCropMenuOpen(false)}
+              />
+            ) : null}
+            {hasMachinePicker && isCompareOpen ? (
+              <MachineCompareTable
+                recipe={recipe}
+                handlers={machineHandlers}
+                selectedId={selectedMachineHandler.id}
+                iconsById={machineIcons}
+                onHover={setPreviewHandlerId}
+                onUse={updateMachineHandler}
+                onClose={() => setCompareOpen(false)}
+              />
+            ) : null}
           </div>
           {tierControl && tierColor ? (
             <button
@@ -309,45 +510,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               {tierControl.current}
             </button>
           ) : null}
-          {machineHandlers.length > 1 ? (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setIsMachineMenuOpen((current) => !current);
-                }}
-                className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[#252525] bg-[#8d8d8d] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:brightness-110"
-                title={`Machine: ${selectedMachineHandler.label}`}
-                aria-label={`Select machine handler. Current: ${selectedMachineHandler.label}`}
-              >
-                <ChevronDown className="h-3.5 w-3.5" />
-              </button>
-              {isMachineMenuOpen ? (
-                <div
-                  className="nodrag absolute right-0 top-7 z-50 min-w-[180px] border-2 border-[#252525] bg-[#c6c6c6] p-1 text-[11px] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555,4px_4px_0_rgba(0,0,0,0.35)]"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  {machineHandlers.map((handler) => (
-                    <button
-                      key={handler.id}
-                      type="button"
-                      onClick={() => updateMachineHandler(handler.id)}
-                      className={[
-                        "block w-full truncate border-2 px-2 py-1 text-left font-bold",
-                        handler.id === selectedMachineHandler.id
-                          ? "border-[#6b4fd1] bg-[#8b70dd] text-white"
-                          : "border-[#777] bg-[#d8d8d8] text-black hover:bg-white",
-                      ].join(" ")}
-                      title={handler.label}
-                    >
-                      {handler.label}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+        </div>
         </div>
         <div
           className={nodeColor ? "recipe-node-tinted-area" : undefined}
@@ -361,8 +524,20 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               : undefined
           }
         >
+          {isCropFarmPlaceholder ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setCropMenuOpen(true);
+              }}
+              className="nodrag mx-auto my-2 flex h-[72px] w-[240px] items-center justify-center gap-2 border-2 border-dashed border-[var(--mc-33)] bg-[var(--mc-71)] text-[14px] font-bold text-[var(--mc-ink)] hover:bg-[var(--mc-85)]"
+            >
+              <Sprout className="h-5 w-5" /> Pick a crop
+            </button>
+          ) : (
           <NeiRecipeWindow
-            recipe={overclockedRecipe}
+            recipe={neiDisplayRecipe}
             scale={2}
             compact
             className={["mx-auto", nodeColor ? "recipe-node-nei-tint" : undefined]
@@ -485,6 +660,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   ) : null}
                   <MinecraftTooltip
                     label={slot.resource.tooltip ?? slot.resource.displayName ?? slot.resource.id}
+                    content={renderSlotRateContent(slot, result)}
                   >
                     <Handle
                       id={handleId}
@@ -507,14 +683,15 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               );
             }}
           />
+          )}
           {!usesNativeNeiRecipe ? machineConfigPanel : null}
           {!usesNativeNeiRecipe ? passiveProductionPanel : null}
         </div>
 
-        {!usesNativeNeiRecipe ? (
+        {!usesNativeNeiRecipe && !isCropFarmPlaceholder ? (
           <div
             className={[
-              "mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-black",
+              "mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-[var(--mc-ink)]",
               isCropProductionNode ? CROP_CONFIG_PANEL_WIDTH_CLASS : "",
               nodeColor ? "recipe-node-stat-grid" : "",
             ].join(" ")}
@@ -527,7 +704,12 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               onChange={(machineCount) => updateNode(projectNode.id, { machineCount })}
               onOptimize={() => optimizeMachineCount(projectNode.id)}
             />
-            <Stat label="Usage" value={`${formatRate(utilizationPercent, 1)}%`} />
+            <UsageStat
+              nodeId={projectNode.id}
+              title={recipe.machineType || recipe.name}
+              utilizationPercent={utilizationPercent}
+              result={result}
+            />
             <Stat
               label={isCropProductionNode ? "Power" : "EU/t"}
               value={isCropProductionNode ? "Passive" : formatRate(result?.euT ?? 0, 0)}
@@ -540,6 +722,126 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
 }
 
 export const RecipeNode = memo(RecipeNodeComponent);
+
+function formatSlotRate(value: number, kind: string): string {
+  const unit = kind === "fluid" ? " L/s" : "/s";
+  return `${formatRate(value, value >= 100 ? 0 : value >= 10 ? 1 : 2)}${unit}`;
+}
+
+/**
+ * The slot hover panel: what this item flows at right now, and what it would
+ * flow at with the machine running 100%. Falls back to the plain name label
+ * when the solver has no flow for the slot (unconnected boards, NC slots).
+ */
+function renderSlotRateContent(
+  slot: NeiPositionedSlot,
+  result: NodeThroughputResult | undefined,
+) {
+  if (!result) {
+    return undefined;
+  }
+
+  const isInput = slot.side === "input";
+  const flows = isInput ? result.inputs : result.outputs;
+  const key = makeResourceKey(slot.resource.kind, slot.resource.id);
+  const flow =
+    flows[key] ??
+    Object.values(flows).find(
+      (candidate) => candidate.resourceId === slot.resource.id,
+    );
+  if (!flow || flow.amountPerSecond <= 1e-9) {
+    return undefined;
+  }
+
+  const maxRate = flow.amountPerSecond;
+  const speed = Number.isFinite(result.utilization)
+    ? Math.min(Math.max(result.utilization, 0), 1)
+    : 0;
+  const nowRate = maxRate * speed;
+
+  return (
+    <div className="w-48">
+      <div className="flex items-baseline gap-2">
+        <span className="truncate text-[13px] font-semibold text-white">
+          {slot.resource.displayName ?? slot.resource.id}
+        </span>
+        <span className="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+          {isInput ? "Input" : "Output"}
+        </span>
+      </div>
+      <div className="mt-1.5 flex items-baseline justify-between gap-3 text-[12px]">
+        <span className="text-slate-400">Now</span>
+        <span className="font-bold tabular-nums text-cyan-300">
+          {formatSlotRate(nowRate, flow.kind)}
+        </span>
+      </div>
+      <div className="mt-0.5 flex items-baseline justify-between gap-3 text-[12px]">
+        <span className="text-slate-400">At 100%</span>
+        <span className="font-semibold tabular-nums text-slate-300">
+          {formatSlotRate(maxRate, flow.kind)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The Usage stat, coloured by the solver's status bands, with the "what limits
+ * this machine" chain on hover. The chain is only computed while hovered so a
+ * board full of nodes pays nothing for it.
+ */
+function UsageStat({
+  nodeId,
+  title,
+  utilizationPercent,
+  result,
+}: {
+  nodeId: string;
+  title: string;
+  utilizationPercent: number;
+  result?: NodeThroughputResult;
+}) {
+  const [isHovered, setHovered] = useState(false);
+  const project = useFactoryStore((state) => state.project);
+  const lastResult = useFactoryStore((state) => state.lastResult);
+  const chain = useMemo(
+    () => (isHovered ? buildUsageLimitChain(project, lastResult, nodeId) : []),
+    [isHovered, lastResult, nodeId, project],
+  );
+  const valueClassName =
+    result?.status === "bottleneck"
+      ? "text-red-700"
+      : result?.status === "balanced"
+        ? "text-emerald-700"
+        : undefined;
+
+  return (
+    <span
+      className="contents"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <MinecraftTooltip
+        content={
+          chain.length > 0 ? (
+            <UsageLimitContent
+              title={title}
+              utilization={result?.utilization ?? 0}
+              status={result?.status}
+              entries={chain}
+            />
+          ) : undefined
+        }
+      >
+        <Stat
+          label="Usage"
+          value={`${formatRate(utilizationPercent, 1)}%`}
+          valueClassName={valueClassName}
+        />
+      </MinecraftTooltip>
+    </span>
+  );
+}
 
 function recipeContainsSearchResource(recipe: Recipe, query: string) {
   const normalizedQuery = normalizeSearch(query);
@@ -897,7 +1199,7 @@ function TreeGrowthSimulatorToolSlotMenu({
       </span>
       {isOpen ? (
         <span
-          className="absolute left-0 top-[calc(100%+6px)] z-[120] grid w-[208px] grid-cols-[repeat(3,52px)] gap-3 border-2 border-[#252525] bg-[#c6c6c6] p-3 shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555,4px_4px_0_rgba(0,0,0,0.35)]"
+          className="absolute left-0 top-[calc(100%+6px)] z-[120] grid w-[208px] grid-cols-[repeat(3,52px)] gap-3 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-3 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => {
             event.preventDefault();
@@ -916,7 +1218,7 @@ function TreeGrowthSimulatorToolSlotMenu({
                   "grid h-[52px] w-[52px] place-items-center overflow-hidden border-2 text-[18px] font-bold leading-none",
                   !selectedEmpty && tier.key === control.current.key
                     ? "border-[#6b4fd1] bg-[#8b70dd] text-white"
-                    : "border-[#777] bg-[#d8d8d8] text-black hover:bg-white",
+                    : "border-[var(--mc-47)] bg-[var(--mc-85)] text-[var(--mc-ink)] hover:bg-[var(--mc-100)]",
                 ].join(" ")}
                 title={isEmpty ? "-" : (resource.displayName ?? tier.label)}
                 onClick={(event) => {
@@ -994,15 +1296,15 @@ function MachineConfigControlPanel({
   }
 
   return (
-    <div className="nodrag mt-1 border-2 border-[#777] bg-[#b6b6b6] p-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+    <div className="nodrag mt-1 border-2 border-[var(--mc-47)] bg-[var(--mc-71)] p-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
       <div className="grid grid-cols-[repeat(auto-fit,minmax(128px,1fr))] gap-1">
         {controls.map((control) => (
           <label key={control.id} className="min-w-0">
-            <span className="mb-0.5 block truncate text-[8px] font-bold uppercase leading-3 text-[#4a4a4a]">
+            <span className="mb-0.5 block truncate text-[10px] font-bold uppercase leading-4 text-[var(--mc-ink-muted)]">
               {control.label}
             </span>
             <span className="flex min-w-0 items-center gap-1">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center border border-[#555] bg-[#8d8d8d] shadow-[inset_1px_1px_0_#d8d8d8,inset_-1px_-1px_0_#404040]">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center border border-[var(--mc-33)] bg-[var(--mc-55)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]">
                 {control.resource.iconPath ? (
                   <ResourceIcon
                     resource={control.resource}
@@ -1019,22 +1321,15 @@ function MachineConfigControlPanel({
                   </span>
                 )}
               </span>
-              <select
+              <MinecraftSelect
                 value={control.current.key}
-                onChange={(event) => onSelect(control.id, event.target.value)}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => event.stopPropagation()}
+                options={control.tiers}
+                onSelect={(key) => onSelect(control.id, key)}
                 disabled={control.tiers.length <= 1}
-                className="h-6 min-w-0 flex-1 border border-[#555] bg-[#d8d8d8] px-1 text-[10px] font-bold leading-4 text-black shadow-[inset_1px_1px_0_#ffffff,inset_-1px_-1px_0_#8a8a8a] outline-none focus:border-cyan-700 focus:bg-white disabled:cursor-not-allowed disabled:text-[#555]"
                 title={`${control.label}: ${control.current.label}`}
-                aria-label={control.label}
-              >
-                {control.tiers.map((tier) => (
-                  <option key={tier.key} value={tier.key}>
-                    {tier.label}
-                  </option>
-                ))}
-              </select>
+                ariaLabel={control.label}
+                className="flex-1"
+              />
             </span>
           </label>
         ))}
@@ -1047,10 +1342,13 @@ function PassiveProductionConfigPanel({
   className = "",
   controls,
   onSelect,
+  getControlHelp,
 }: {
   className?: string;
   controls: MachineConfigTierControl[];
   onSelect: (controlId: string, nextTier: string) => void;
+  /** Hover explanation per control (what the knob does and why it matters). */
+  getControlHelp?: (controlId: string) => ReactNode;
 }) {
   if (controls.length === 0) {
     return null;
@@ -1059,37 +1357,209 @@ function PassiveProductionConfigPanel({
   return (
     <div
       className={[
-        "nodrag mt-1 border-2 border-[#777] bg-[#b6b6b6] p-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]",
+        "nodrag mt-1 border-2 border-[var(--mc-47)] bg-[var(--mc-71)] p-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]",
         className,
       ].join(" ")}
     >
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
         {controls.map((control) => (
-          <label key={control.id} className="min-w-0">
-            <span className="mb-0.5 block truncate text-[8px] font-bold uppercase leading-3 text-[#4a4a4a]">
+          <MinecraftTooltip key={control.id} content={getControlHelp?.(control.id)}>
+          <label className="min-w-0">
+            <span className="mb-0.5 block truncate text-[10px] font-bold uppercase leading-4 text-[var(--mc-ink-muted)]">
               {control.label}
             </span>
-            <select
+            <MinecraftSelect
               value={control.current.key}
-              onChange={(event) => onSelect(control.id, event.target.value)}
-              onPointerDown={(event) => event.stopPropagation()}
-              onClick={(event) => event.stopPropagation()}
+              options={control.tiers}
+              onSelect={(key) => onSelect(control.id, key)}
               disabled={control.tiers.length <= 1}
-              className="h-6 w-full min-w-0 border border-[#555] bg-[#d8d8d8] px-1 text-[10px] font-bold leading-4 text-black shadow-[inset_1px_1px_0_#ffffff,inset_-1px_-1px_0_#8a8a8a] outline-none focus:border-cyan-700 focus:bg-white disabled:cursor-not-allowed disabled:text-[#555]"
               title={`${control.label}: ${control.current.label}`}
-              aria-label={control.label}
-            >
-              {control.tiers.map((tier) => (
-                <option key={tier.key} value={tier.key}>
-                  {tier.label}
-                </option>
-              ))}
-            </select>
+              ariaLabel={control.label}
+            />
           </label>
+          </MinecraftTooltip>
         ))}
       </div>
     </div>
   );
+}
+
+const CROP_HELP_GOOD = "#4ade80";
+const CROP_HELP_BAD = "#f87171";
+
+function CropHelpPanel({
+  title,
+  children,
+  finePrint,
+  feeding,
+}: {
+  title: string;
+  children: ReactNode;
+  /** The exact formula, tucked away for the curious. */
+  finePrint?: ReactNode;
+  /** Shared "how feeding works" footer for the environment knobs. */
+  feeding?: { tier: number };
+}) {
+  return (
+    <div className="w-[400px]">
+      <p className="text-[18px] font-semibold leading-snug text-amber-300">{title}</p>
+      <div className="mt-1.5 space-y-2 text-[16px] leading-relaxed text-slate-100">{children}</div>
+      {feeding ? (
+        <p className="mt-2.5 border-t border-white/10 pt-2 text-[16px] leading-relaxed text-slate-100">
+          Feeding basics: this crop is Tier {feeding.tier}, so it wants{" "}
+          <span className="text-white">{feeding.tier * 10}</span> food out of a possible 275. Every
+          point of extra food makes it grow{" "}
+          <span style={{ color: CROP_HELP_GOOD }}>a little faster</span>; every missing point slows
+          it <span style={{ color: CROP_HELP_BAD }}>four times as hard</span> — and if it&apos;s 25
+          or more short, it <span style={{ color: CROP_HELP_BAD }}>stops growing completely</span>.
+        </p>
+      ) : null}
+      {finePrint ? (
+        <p className="mt-2 border-t border-white/10 pt-1.5 text-[13px] leading-relaxed text-slate-400">
+          For the curious: {finePrint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Friendly hover explainers for the crop source dropdowns, with this crop's
+ * own numbers. Plain words first, the exact formula as fine print.
+ */
+function cropControlHelp(recipe: Recipe, controlId: string): ReactNode {
+  const stats = getCropsNhStats(recipe);
+  if (!stats) {
+    return undefined;
+  }
+  const meta = (recipe.metadata as { cropsNh?: { biomeTags?: string[] } } | undefined)?.cropsNh;
+  const biomeTags = Array.isArray(meta?.biomeTags) ? meta.biomeTags : [];
+  const good = (text: string) => <span style={{ color: CROP_HELP_GOOD }}>{text}</span>;
+  const bad = (text: string) => <span style={{ color: CROP_HELP_BAD }}>{text}</span>;
+
+  switch (controlId) {
+    case "cropGrowthStat":
+      return (
+        <CropHelpPanel
+          title="Growth — how fast it regrows"
+          finePrint={
+            <>
+              every 12.8 s the plant gains (6 + Growth) points, scaled by feeding. This crop is
+              ripe at {stats.growthPoints.toLocaleString()} points and restarts from 0 after each
+              harvest.
+            </>
+          }
+        >
+          <p>
+            The higher the Growth stat, the sooner each harvest comes around. A 31-Growth plant
+            regrows {good("about five times faster")} than a 1-Growth one.
+          </p>
+          <p className="text-slate-300">
+            In the game you raise Growth by cross-breeding crops between double crop sticks.
+          </p>
+        </CropHelpPanel>
+      );
+    case "cropGainStat":
+      return (
+        <CropHelpPanel
+          title="Gain — how much loot per harvest"
+          finePrint={
+            <>
+              drop rounds = {stats.dropChance.toFixed(3)} × 1.03^Gain, and every successful drop
+              has a (Gain + 1)% chance of one bonus item.
+            </>
+          }
+        >
+          <p>
+            The higher the Gain stat, the more items each harvest gives. At 31 you collect{" "}
+            {good("roughly 2.5× as much")} as at 1.
+          </p>
+          <p className="text-slate-300">
+            Like Growth, it&apos;s raised by cross-breeding. It never changes how fast the plant
+            grows — only how much falls out.
+          </p>
+        </CropHelpPanel>
+      );
+    case "cropWater":
+      return (
+        <CropHelpPanel
+          title="Water — keep it topped up"
+          feeding={{ tier: stats.tier }}
+          finePrint={<>water bonus = floor((water + 9) ÷ 10): 0 → +1, 50 → +5, 100 → +10.</>}
+        >
+          <p>
+            A well-watered crop is a well-fed crop: full water is {good("+10 food")}, one of the
+            two biggest boosts you control.
+          </p>
+          <p className="text-slate-300">
+            A Crop Manager keeps water at full automatically, so &quot;Full&quot; matches an
+            automated farm.
+          </p>
+        </CropHelpPanel>
+      );
+    case "cropFertilizer":
+      return (
+        <CropHelpPanel
+          title="Fertilizer — food from a bag"
+          feeding={{ tier: stats.tier }}
+          finePrint={<>fertilizer bonus = floor((fertilizer + 9) ÷ 10): 0 → +1, 50 → +5, 100 → +10.</>}
+        >
+          <p>
+            Fertilizer works exactly like water: keeping it full is {good("+10 food")}. Skip it and
+            a hungry high-tier crop will {bad("crawl or stall")}.
+          </p>
+          <p className="text-slate-300">
+            Crop Managers and Industrial Farms can supply it for you (Fertilia crops literally grow
+            the stuff).
+          </p>
+        </CropHelpPanel>
+      );
+    case "cropSky":
+      return (
+        <CropHelpPanel
+          title="Sky — a little sunshine"
+          feeding={{ tier: stats.tier }}
+          finePrint={<>sky bonus = +2 when the block above the crop can see the sky.</>}
+        >
+          <p>
+            Plants under open sky get a small {good("+2 food")} bonus. Roofed or underground farms
+            lose it — usually fine, unless the crop is right on the edge of being underfed.
+          </p>
+        </CropHelpPanel>
+      );
+    case "cropBiome":
+      return (
+        <CropHelpPanel
+          title="Biome — plant it where it's happy"
+          feeding={{ tier: stats.tier }}
+          finePrint={
+            <>
+              biome bonus = max(humidity, likes): each matching tag +14, capped at 2 tags; humidity
+              scales 0–14 between 50% and 80% biome humidity.
+            </>
+          }
+        >
+          <p>
+            {biomeTags.length > 0 ? (
+              <>
+                This crop likes{" "}
+                <span className="text-white">{biomeTags.join(" and ").toLowerCase()}</span> places.
+              </>
+            ) : (
+              <>This crop has no favourite biome.</>
+            )}{" "}
+            Each matching like is {good("+14 food")}, so hitting both is {good("+28")} — the
+            biggest feeding boost there is.
+          </p>
+          <p className="text-slate-300">
+            No matching biome nearby? A wet one (80%+ humidity, like a swamp or jungle) still gives
+            up to +14.
+          </p>
+        </CropHelpPanel>
+      );
+    default:
+      return undefined;
+  }
 }
 
 function shortConfigLabel(resource: ResourceAmount) {
@@ -1113,7 +1583,7 @@ function MachineParallelIndicator({ multiplier }: { multiplier: number }) {
 
   return (
     <div
-      className="flex h-10 w-10 shrink-0 items-center justify-center border-2 border-[#252525] bg-[#b6b6b6] text-[13px] font-black leading-none text-[#202020] shadow-[inset_2px_2px_0_#eeeeee,inset_-2px_-2px_0_#777]"
+      className="flex h-10 w-10 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-71)] text-[13px] font-black leading-none text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-93),inset_-2px_-2px_0_var(--mc-47)]"
       title={`${formatMachineParallelMultiplier(multiplier)} parallels`}
       aria-label={`${formatMachineParallelMultiplier(multiplier)} parallels`}
     >
@@ -1174,11 +1644,19 @@ function getConnectionSlotState(
   return "idle";
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
   return (
-    <div className="min-w-0 border border-[#777] bg-[#b6b6b6] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
-      <div className="truncate text-[9px] uppercase text-[#424242]">{label}</div>
-      <div className="truncate font-medium">{value}</div>
+    <div className="min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
+      <div className="truncate text-[9px] uppercase text-[var(--mc-ink-muted)]">{label}</div>
+      <div className={["truncate font-medium", valueClassName ?? ""].join(" ")}>{value}</div>
     </div>
   );
 }
@@ -1216,10 +1694,36 @@ function MachineCountStat({
     }
   };
 
+  const stepBy = (direction: 1 | -1, event: React.MouseEvent) => {
+    // Shift-click steps by 100, Ctrl-click (or Cmd on mac) by 10.
+    const step = event.shiftKey ? 100 : event.ctrlKey || event.metaKey ? 10 : 1;
+    const next = Math.max(1, machineCount + direction * step);
+    if (next !== machineCount) {
+      setDraftState({ machineCount: next, draft: String(next) });
+      onChange(next);
+    }
+  };
+
+  const stepButtonClassName =
+    "nodrag flex h-4 w-4 shrink-0 items-center justify-center border border-[var(--mc-33)] bg-[var(--mc-82)] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-47)] hover:bg-[var(--mc-100)] active:shadow-[inset_1px_1px_0_var(--mc-47),inset_-1px_-1px_0_var(--mc-100)]";
+
   return (
-    <div className="min-w-0 border border-[#777] bg-[#b6b6b6] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
-      <div className="truncate text-[9px] uppercase text-[#424242]">{label}</div>
-      <div className="flex min-w-0 items-center gap-1">
+    <div className="min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
+      <div className="truncate text-[9px] uppercase text-[var(--mc-ink-muted)]">{label}</div>
+      <div className="flex min-w-0 items-center gap-0.5">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            stepBy(-1, event);
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          className={stepButtonClassName}
+          title="Remove 1 (Shift: 100, Ctrl: 10)"
+          aria-label={`Decrease ${label.toLowerCase()} count`}
+        >
+          <Minus className="h-3 w-3" />
+        </button>
         <input
           value={draft}
           onChange={(event) => {
@@ -1237,8 +1741,21 @@ function MachineCountStat({
           inputMode="numeric"
           aria-label={`${label} count`}
           title={`Edit ${label.toLowerCase()} count`}
-          className="nodrag h-[18px] w-0 min-w-0 flex-1 border border-[#777] bg-[#d8d8d8] px-1 text-[12px] font-medium leading-4 text-black shadow-[inset_1px_1px_0_#ffffff,inset_-1px_-1px_0_#8a8a8a] outline-none focus:border-cyan-700 focus:bg-white focus:ring-1 focus:ring-cyan-400"
+          className="nodrag h-[18px] w-0 min-w-0 flex-1 border border-[var(--mc-47)] bg-[var(--mc-85)] px-1 text-center text-[12px] font-medium leading-4 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-54)] outline-none focus:border-cyan-700 focus:bg-[var(--mc-100)] focus:ring-1 focus:ring-cyan-400"
         />
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            stepBy(1, event);
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          className={stepButtonClassName}
+          title="Add 1 (Shift: 100, Ctrl: 10)"
+          aria-label={`Increase ${label.toLowerCase()} count`}
+        >
+          <Plus className="h-3 w-3" />
+        </button>
         <button
           type="button"
           onClick={(event) => {
@@ -1246,7 +1763,7 @@ function MachineCountStat({
             onOptimize();
           }}
           onPointerDown={(event) => event.stopPropagation()}
-          className="nodrag flex h-4 w-4 shrink-0 items-center justify-center border border-[#555] bg-[#d0d0d0] text-[#202020] shadow-[inset_1px_1px_0_#fff,inset_-1px_-1px_0_#777] hover:bg-white"
+          className="nodrag flex h-4 w-4 shrink-0 items-center justify-center border border-[var(--mc-33)] bg-[var(--mc-82)] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-47)] hover:bg-[var(--mc-100)]"
           title={`Set ${label.toLowerCase()} to ${suggestedMachineCount}x`}
           aria-label={`Set ${label.toLowerCase()} to ${suggestedMachineCount}`}
         >

@@ -137,6 +137,8 @@ export interface MachineProfile {
   eut?: number;
   maxParallel?: number;
   eutLimit?: number;
+  /** True when the machine performs 4x speed / 4x power overclocks. */
+  perfectOverclock?: boolean;
   notes?: string;
 }
 
@@ -155,6 +157,10 @@ export interface MachineConfigTierOption {
   eutMultiplier?: number;
   outputMultiplier?: number;
   parallelMultiplier?: number;
+  /** Parallels that scale with the machine's voltage tier (GT++ "Voltage Tier * n Parallels"). */
+  parallelPerVoltageTier?: number;
+  /** Additive base for voltage-scaled parallels: floor(base + n * tier), e.g. Zhuhai 2 * (tier + 1). */
+  parallelVoltageBase?: number;
   resource: ResourceAmount;
 }
 
@@ -169,6 +175,14 @@ export interface MachineConfigControl {
 export interface Recipe {
   id: string;
   name: string;
+  kind?:
+    | "gregtech_machine"
+    | "bee_produce"
+    | "crop_produce"
+    | "essentia_smelting"
+    | "custom"
+    | "unknown";
+  category?: string;
   machineType: string;
   minimumTier: MachineTier | string;
   durationTicks: number;
@@ -176,6 +190,7 @@ export interface Recipe {
   inputs: RecipeInput[];
   outputs: RecipeOutput[];
   programmedCircuit?: string;
+  specialValue?: number;
   notes?: string;
   machineProfile?: MachineProfile;
   machineHandlers?: MachineHandler[];
@@ -185,9 +200,12 @@ export interface Recipe {
   source?: {
     datasetVersionId?: string;
     recipeMap?: string;
+    sourceMod?: string;
     exporter?: "nesql" | "recex" | "nerd" | "gtnh-oracle" | "unknown";
     rawRecipeId?: string;
+    sourceIdentifier?: string;
   };
+  metadata?: Record<string, unknown>;
   nei?: {
     iconPath?: string;
     source?: string;
@@ -267,6 +285,27 @@ export interface FactoryStorage {
   };
 }
 
+export type FactoryAnnotationKind = "box" | "arrow" | "text";
+
+export type FactoryAnnotationArrowDirection = "down-right" | "down-left" | "up-right" | "up-left";
+
+export interface FactoryAnnotation {
+  id: string;
+  kind: FactoryAnnotationKind;
+  colorTag?: FactoryNodeColorTag;
+  text?: string;
+  position: {
+    x: number;
+    y: number;
+  };
+  size: {
+    width: number;
+    height: number;
+  };
+  /** Arrow only: which corners of the bounding box the arrow connects (tail → head). */
+  arrowDirection?: FactoryAnnotationArrowDirection;
+}
+
 export interface FactoryEdge {
   id: string;
   source: string;
@@ -301,6 +340,7 @@ export interface FactoryProject {
   recipes: Recipe[];
   nodes: FactoryNode[];
   storages?: FactoryStorage[];
+  annotations?: FactoryAnnotation[];
   edges: FactoryEdge[];
   fuelProfiles: FuelProfile[];
   selectedFuelProfileId?: string;
@@ -310,6 +350,8 @@ export interface FactoryProject {
     source?: string;
     createdAt?: string;
     updatedAt?: string;
+    /** The community post this design was shared as / imported from. */
+    communityPlanId?: string;
   };
 }
 
@@ -328,6 +370,22 @@ export interface EdgeThroughput {
   demandPerSecond: number;
   transferredPerSecond: number;
   isLimited: boolean;
+  /**
+   * What the consumer would draw at 100% utilisation, before the solver scales
+   * it down to match available supply. `demandPerSecond` converges to
+   * `transferredPerSecond`, so this is the only value that still shows how much
+   * the machine actually wants.
+   */
+  nameplateDemandPerSecond: number;
+  /** What the producer could emit at 100% utilisation. */
+  sourceCapacityPerSecond: number;
+  /**
+   * Which end is holding the flow back:
+   * - `supply`  producer is maxed out and the consumer is starved
+   * - `demand`  both ends have slack; the plan just doesn't need more
+   * - `full`    consumer is getting everything it asked for
+   */
+  constraint: "supply" | "demand" | "full";
 }
 
 export interface NodeThroughputResult {

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   Background,
@@ -23,15 +23,30 @@ import {
   type OnSelectionChangeParams,
   type ReactFlowInstance,
   useStore,
+  useStoreApi,
+  ViewportPortal,
 } from "@xyflow/react";
 import { toBlob, toSvg } from "html-to-image";
-import { LoaderCircle, Paintbrush, X } from "lucide-react";
 import {
+  LoaderCircle,
+  MoveUpRight,
+  Paintbrush,
+  Sprout,
+  Square,
+  Trash2,
+  Type,
+  X,
+} from "lucide-react";
+import {
+  memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
@@ -41,6 +56,8 @@ import {
   embedProjectJsonInPng,
   embedProjectJsonInSvg,
 } from "@/lib/import-export/plan-image";
+import type { Theme } from "@/lib/theme";
+import { useThemeStore } from "@/store/theme-store";
 import {
   applyRecipeInputOverrides,
   restoreCrossKindInputOverrideVisuals,
@@ -54,6 +71,8 @@ import {
 import { applyMachineOutputMultipliers } from "@/lib/solver/machine-effects";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
 import type {
+  EdgeThroughput,
+  FactoryAnnotationKind,
   FactoryEdge,
   FactoryNodeColorTag,
   FactoryProject,
@@ -65,17 +84,54 @@ import { useFactoryStore } from "@/store/factory-store";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { RecipeNode, type RecipeFlowNode } from "./RecipeNode";
 import { GT_NODE_COLORS, GT_NODE_COLOR_PALETTE } from "./node-colors";
+import { getDeleteCursor, getPaintBrushCursor } from "./paint-cursor";
 import { makeResourceHandleId, parseResourceHandleId } from "./resource-handles";
+import {
+  describeEdgeRate,
+  formatEdgeRateLabel,
+  formatEdgeValue,
+  getEdgeSupplyRatio,
+  isEdgeStarved,
+  isEdgeSurplus,
+} from "./edge-labels";
+import { getSupplyCeiling } from "@/components/inspector/usage-limits";
+import {
+  EDGE_DETAIL_ARROWS,
+  EDGE_DETAIL_GLOBAL,
+  EDGE_DETAIL_LABELS,
+  getEdgeDetailLevel,
+  hasEdgeDetail,
+  reuseObjectIdentity,
+} from "./edge-detail";
 import { StorageNode, type StorageFlowNode } from "./StorageNode";
+import {
+  ANNOTATION_DRAG_HANDLE_CLASS,
+  AnnotationNode,
+  type AnnotationFlowNode,
+} from "./AnnotationNode";
 
 const nodeTypes = {
   recipeNode: RecipeNode,
   storageNode: StorageNode,
+  annotationNode: AnnotationNode,
 } satisfies NodeTypes;
+
+type BoardFlowNode = RecipeFlowNode | StorageFlowNode | AnnotationFlowNode;
+
+interface AnnotationDraft {
+  start: { x: number; y: number };
+  end: { x: number; y: number };
+}
+
+const ResourceEdge = memo(ResourceEdgeComponent);
 
 const edgeTypes = {
   resourceEdge: ResourceEdge,
 } satisfies EdgeTypes;
+
+function selectEdgeDetailLevel(store: { transform: [number, number, number] }) {
+  return getEdgeDetailLevel(store.transform[2]);
+}
 
 const connectionLineStyle = {
   stroke: "#00d9ff",
@@ -86,6 +142,18 @@ const connectionLineStyle = {
 
 const DEFAULT_ITEM_EDGE_COLOR = "#8b8f98";
 const DEFAULT_FLUID_EDGE_COLOR = "#2f89c5";
+
+// React Flow's Background and the html-to-image exporter both need a concrete
+// colour rather than a CSS variable, so these mirror --canvas / --canvas-dot.
+const CANVAS_COLOR: Record<Theme, string> = {
+  light: "#f5f5f5",
+  dark: "#1b1d21",
+};
+const CANVAS_DOT_COLOR: Record<Theme, string> = {
+  light: "#b8b8b8",
+  dark: "#4a4d55",
+};
+
 const RECIPE_SLOT_EDGE_OFFSET = 20;
 const STORAGE_SLOT_EDGE_OFFSET = 55;
 const EDGE_BUNDLE_CLEARANCE = 30;
@@ -94,8 +162,6 @@ const EDGE_LANE_SPACING = 8;
 const EDGE_LANE_BUCKETS = 4;
 const EDGE_LINK_CLEARANCE = 8;
 const EDGE_ENDPOINT_SPACING = 5;
-const EDGE_LABEL_ZOOM = 0.78;
-const EDGE_ARROW_ZOOM = 0.72;
 const EDGE_ROUTE_RELAXATION_PASSES = 2;
 const EDGE_ROUTE_SNAP_GRID = 4;
 const EXPORT_IMAGE_PADDING = 80;
@@ -110,8 +176,16 @@ type ResourceEdgeData = {
   color: string;
   demand: number;
   transferred?: number;
+  /** What the consumer wants at 100%, so a shortfall can be shown as a ratio. */
+  nameplateDemand?: number;
+  /** Producer's full output rate; set only when this edge is its sole outlet. */
+  sourceCapacity?: number;
   unit: string;
   isLimited: boolean;
+  /** Producer is maxed out and the consumer is going hungry. */
+  isSupplyCapped: boolean;
+  /** The line ends in a barrel or tank rather than a machine. */
+  isStorageTarget?: boolean;
   isStorageEdge: boolean;
   showLabel: boolean;
   labelOffset?: { x: number; y: number };
@@ -133,7 +207,10 @@ type ResourceEdgeData = {
     edgeIds: string[];
     demand?: number;
     transferred?: number;
+    nameplateDemand?: number;
+    sourceCapacity?: number;
     isLimited: boolean;
+    isSupplyCapped: boolean;
   };
   isFlowHighlighted?: boolean;
 };
@@ -157,9 +234,109 @@ const directRouteCache = new Map<
     segments: ReturnType<typeof getPolylineSegments>;
   }
 >();
+// Measured geometry is stored in FLOW coordinates, which are invariant under pan
+// and zoom: translating the viewport cannot move a node relative to the graph
+// origin. Keying these caches on the viewport transform (as they once were) threw
+// every entry away on every pan frame and forced a full re-measure of the whole
+// board, which is what made panning and zooming crawl.
+//
+// Instead they are keyed on a layout epoch that the board bumps when node
+// positions or sizes actually change. Only `viewportTransformCache` is
+// frame-scoped, because the screen->flow conversion genuinely does depend on the
+// live transform.
+type MeasuredBounds = { left: number; right: number; top: number; bottom: number };
+
+const missingRecipePlaceholders = new Map<string, RecipeFlowNode["data"]["recipe"]>();
+
+/**
+ * Stable stand-in for a recipe the dataset no longer contains. Built once per id
+ * so the node's `data` keeps a constant identity across rebuilds.
+ */
+function getMissingRecipePlaceholder(recipeId: string) {
+  const existing = missingRecipePlaceholders.get(recipeId);
+  if (existing) {
+    return existing;
+  }
+
+  const placeholder = {
+    id: recipeId,
+    name: "Missing recipe",
+    machineType: "Unknown",
+    minimumTier: "DEMO",
+    durationTicks: 20,
+    eut: 0,
+    inputs: [],
+    outputs: [],
+  } satisfies RecipeFlowNode["data"]["recipe"];
+  missingRecipePlaceholders.set(recipeId, placeholder);
+  return placeholder;
+}
+
+// Identity caches for node `data`. These are memoisation caches in the same
+// spirit as useMemo â€” the value returned is always derived purely from the
+// inputs, so a render that is discarded or replayed cannot produce a wrong
+// result, only a different (equivalent) object identity. They live at module
+// scope rather than in a ref because reading a ref during render is not allowed.
+const recipeNodeDataCache = new Map<string, RecipeFlowNode["data"]>();
+const storageNodeDataCache = new Map<string, StorageFlowNode["data"]>();
+const annotationNodeDataCache = new Map<string, AnnotationFlowNode["data"]>();
+
+function pruneNodeDataCaches(
+  recipeNodeIds: Set<string>,
+  storageIds: Set<string>,
+  annotationIds: Set<string>,
+) {
+  for (const id of annotationNodeDataCache.keys()) {
+    if (!annotationIds.has(id)) {
+      annotationNodeDataCache.delete(id);
+    }
+  }
+
+  for (const id of recipeNodeDataCache.keys()) {
+    if (!recipeNodeIds.has(id)) {
+      recipeNodeDataCache.delete(id);
+    }
+  }
+
+  for (const id of storageNodeDataCache.keys()) {
+    if (!storageIds.has(id)) {
+      storageNodeDataCache.delete(id);
+    }
+  }
+}
+
 const measuredSlotEndpointCache = new Map<string, { x: number; y: number } | undefined>();
 const measuredSlotCenterCache = new Map<string, { x: number; y: number } | undefined>();
-let measuredSlotCacheClearScheduled = false;
+const measuredNodeBoundsCache = new Map<string, MeasuredBounds | undefined>();
+let measuredAvoidanceSweep:
+  | { epoch: number; bounds: Array<{ id: string; bounds: MeasuredBounds }>; hash: string }
+  | undefined;
+let measuredLayoutEpoch = 0;
+
+let viewportTransformCache:
+  | {
+      rendererLeft: number;
+      rendererTop: number;
+      translateX: number;
+      translateY: number;
+      scaleX: number;
+      scaleY: number;
+    }
+  | undefined;
+let viewportTransformClearScheduled = false;
+
+/**
+ * Drops every flow-space measurement. Call this when node positions or node
+ * inner layout change â€” never on pan or zoom, which cannot affect flow-space
+ * geometry.
+ */
+function invalidateMeasuredLayout() {
+  measuredLayoutEpoch += 1;
+  measuredSlotEndpointCache.clear();
+  measuredSlotCenterCache.clear();
+  measuredNodeBoundsCache.clear();
+  measuredAvoidanceSweep = undefined;
+}
 
 type DraggedResourceConnection = Pick<
   ResourceAmount,
@@ -186,6 +363,7 @@ interface ResolvedResourceHandle {
 }
 
 export function FactoryFlow() {
+  const theme = useThemeStore((state) => state.theme);
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
   const selectNode = useFactoryStore((state) => state.selectNode);
@@ -199,6 +377,10 @@ export function FactoryFlow() {
   const deleteNode = useFactoryStore((state) => state.deleteNode);
   const deleteStorage = useFactoryStore((state) => state.deleteStorage);
   const deleteEdge = useFactoryStore((state) => state.deleteEdge);
+  const addAnnotation = useFactoryStore((state) => state.addAnnotation);
+  const updateAnnotation = useFactoryStore((state) => state.updateAnnotation);
+  const deleteAnnotation = useFactoryStore((state) => state.deleteAnnotation);
+  const setAnnotationPosition = useFactoryStore((state) => state.setAnnotationPosition);
   const cancelResourceConnection = useFactoryStore((state) => state.cancelResourceConnection);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const setNodeColorPaintMode = useFactoryStore((state) => state.setNodeColorPaintMode);
@@ -208,7 +390,8 @@ export function FactoryFlow() {
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
   const hoveredNodeBottlenecks = useFactoryStore((state) => state.hoveredNodeBottlenecks);
   const selectedNodeBottlenecks = useFactoryStore((state) => state.selectedNodeBottlenecks);
-  const recipeSearch = useFactoryStore((state) => state.recipeSearch);
+  const hoveredUsageNodeId = useFactoryStore((state) => state.hoveredUsageNodeId);
+  const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
   const activeFlowResourceKey = hoveredFlowResourceKey ?? selectedFlowResourceKey;
   const activeNodeBottlenecks = hoveredNodeBottlenecks || selectedNodeBottlenecks;
@@ -221,36 +404,31 @@ export function FactoryFlow() {
     [project.storages],
   );
 
-  const nodesFromProject = useMemo<Array<RecipeFlowNode | StorageFlowNode>>(
+  const nodesFromProject = useMemo<BoardFlowNode[]>(
     () => [
       ...project.nodes.map((node) => {
-        const recipe = recipesById.get(node.recipeId);
+        const recipe = recipesById.get(node.recipeId) ?? getMissingRecipePlaceholder(node.recipeId);
         return {
           id: node.id,
           type: "recipeNode",
           position: node.position,
           zIndex:
-            activeNodeBottlenecks && result.nodes[node.id]?.status === "bottleneck"
+            hoveredUsageNodeId === node.id
               ? 1500
-              : activeFlowResourceKey && recipeContainsResourceKey(recipe, activeFlowResourceKey)
+              : activeNodeBottlenecks && result.nodes[node.id]?.status === "bottleneck"
                 ? 1500
-                : undefined,
-          data: {
+                : activeFlowResourceKey && recipeContainsResourceKey(recipe, activeFlowResourceKey)
+                  ? 1500
+                  : undefined,
+          // Reusing the previous `data` object when nothing in it moved is what
+          // lets RecipeNode's memo actually hold. Rebuilding it â€” which this memo
+          // does whenever a resource is hovered or the solver re-runs â€” otherwise
+          // re-renders every node on the board for a change affecting one.
+          data: reuseObjectIdentity(recipeNodeDataCache, node.id, {
             projectNode: node,
-            recipe:
-              recipe ??
-              ({
-                id: node.recipeId,
-                name: "Missing recipe",
-                machineType: "Unknown",
-                minimumTier: "DEMO",
-                durationTicks: 20,
-                eut: 0,
-                inputs: [],
-                outputs: [],
-              } satisfies RecipeFlowNode["data"]["recipe"]),
+            recipe,
             result: result.nodes[node.id],
-          },
+          }),
         } satisfies RecipeFlowNode;
       }),
       ...(project.storages ?? []).map(
@@ -263,16 +441,36 @@ export function FactoryFlow() {
               activeFlowResourceKey === makeResourceKey(storage.kind, storage.resourceId)
                 ? 1500
                 : undefined,
-            data: {
+            data: reuseObjectIdentity(storageNodeDataCache, storage.id, {
               storage,
               result: result.storages[storage.id],
-            },
+            }),
           }) satisfies StorageFlowNode,
+      ),
+      ...(project.annotations ?? []).map(
+        (annotation) =>
+          ({
+            id: annotation.id,
+            type: "annotationNode",
+            position: annotation.position,
+            width: annotation.size.width,
+            height: annotation.size.height,
+            // Boxes sit under everything so they read as grouping frames;
+            // arrows and text notes float above the nodes they point at.
+            zIndex: annotation.kind === "box" ? -5 : 1000,
+            // Box/arrow interiors must stay click-through; only their
+            // drag-handle elements take pointer events (see AnnotationNode).
+            dragHandle: annotation.kind === "text" ? undefined : `.${ANNOTATION_DRAG_HANDLE_CLASS}`,
+            style: annotation.kind === "text" ? undefined : { pointerEvents: "none" as const },
+            data: reuseObjectIdentity(annotationNodeDataCache, annotation.id, { annotation }),
+          }) satisfies AnnotationFlowNode,
       ),
     ],
     [
       activeFlowResourceKey,
       activeNodeBottlenecks,
+      hoveredUsageNodeId,
+      project.annotations,
       project.nodes,
       project.storages,
       recipesById,
@@ -280,22 +478,27 @@ export function FactoryFlow() {
       result.storages,
     ],
   );
-  const [flowNodes, setFlowNodes] = useState<Array<RecipeFlowNode | StorageFlowNode>>(
-    () => nodesFromProject,
-  );
+  const [flowNodes, setFlowNodes] = useState<BoardFlowNode[]>(() => nodesFromProject);
   const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const [isNodeDragging, setNodeDragging] = useState(false);
+  const [annotationTool, setAnnotationTool] = useState<FactoryAnnotationKind | undefined>(
+    undefined,
+  );
+  // Shared by the brush and the annotation tools: the last colour picked in
+  // the palette is what a new box/arrow/note is created with.
+  const [activeColorTag, setActiveColorTag] = useState<FactoryNodeColorTag>("yellow");
+  const [isDeleteMode, setDeleteMode] = useState(false);
+  const [annotationDraft, setAnnotationDraft] = useState<AnnotationDraft | undefined>(undefined);
+  const annotationDraftRef = useRef<AnnotationDraft | undefined>(undefined);
+  const [layoutVersion, setLayoutVersion] = useState(0);
   const draggingNodeRef = useRef(false);
   const draggedResourceRef = useRef<DraggedResourceConnection | undefined>(undefined);
   const lastConnectionPointerRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const connectCompletedRef = useRef(false);
   const exportInProgressRef = useRef(false);
   const boardRef = useRef<HTMLDivElement>(null);
-  const flowInstanceRef = useRef<ReactFlowInstance<
-    RecipeFlowNode | StorageFlowNode,
-    ResourceFlowEdge
-  > | null>(null);
+  const flowInstanceRef = useRef<ReactFlowInstance<BoardFlowNode, ResourceFlowEdge> | null>(null);
 
   useEffect(() => {
     if (draggingNodeRef.current) {
@@ -305,27 +508,127 @@ export function FactoryFlow() {
     setFlowNodes(nodesFromProject);
   }, [nodesFromProject]);
 
+  useEffect(() => {
+    pruneNodeDataCaches(
+      new Set(project.nodes.map((node) => node.id)),
+      new Set((project.storages ?? []).map((storage) => storage.id)),
+      new Set((project.annotations ?? []).map((annotation) => annotation.id)),
+    );
+  }, [project.nodes, project.storages, project.annotations]);
+
+  // Flow-space measurements are cached across frames, so anything that can move a
+  // node or change its size has to drop them explicitly. Positions are covered by
+  // `flowNodes` (drags included, since React Flow rewrites it per frame); sizes
+  // are not, because a node can grow on its own when icons or NEI layout resolve.
+  useLayoutEffect(() => {
+    invalidateMeasuredLayout();
+
+    const board = boardRef.current;
+    if (!board || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    let pending = false;
+    const observer = new ResizeObserver(() => {
+      if (pending) {
+        return;
+      }
+
+      pending = true;
+      // Coalesce the burst ResizeObserver emits when it first observes each node,
+      // and re-route only once the browser has settled on the new sizes.
+      window.requestAnimationFrame(() => {
+        pending = false;
+        invalidateMeasuredLayout();
+        setLayoutVersion((version) => version + 1);
+      });
+    });
+
+    for (const nodeElement of board.querySelectorAll<HTMLElement>(".react-flow__node")) {
+      observer.observe(nodeElement);
+    }
+
+    return () => observer.disconnect();
+  }, [flowNodes]);
+
   const handleNodesChange = useCallback(
-    (changes: NodeChange<Array<RecipeFlowNode | StorageFlowNode>[number]>[]) => {
-      setFlowNodes(
-        (currentNodes) =>
-          applyNodeChanges(changes, currentNodes) as Array<RecipeFlowNode | StorageFlowNode>,
-      );
+    (changes: NodeChange<BoardFlowNode>[]) => {
+      setFlowNodes((currentNodes) => applyNodeChanges(changes, currentNodes) as BoardFlowNode[]);
     },
     [],
   );
 
   const edges = useMemo<ResourceFlowEdge[]>(() => {
-    const edgeBundles = getEdgeBundles(project, project.edges, result.edges);
+    // A producer starved of its own inputs cannot offer its nameplate, so
+    // every capacity the labels see is scaled by the producer's real ceiling.
+    // A machine merely idle for lack of demand keeps a ceiling of 1 - hooking
+    // up a new consumer genuinely would speed it up.
+    const supplyCeilings = new Map<string, number>();
+    const ceilingFor = (sourceId: string) => {
+      let ceiling = supplyCeilings.get(sourceId);
+      if (ceiling === undefined) {
+        ceiling = getSupplyCeiling(project, result, sourceId);
+        supplyCeilings.set(sourceId, ceiling);
+      }
+      return ceiling;
+    };
+    const edgeBundles = getEdgeBundles(project, project.edges, result.edges, ceilingFor);
     const endpointOffsets = getEdgeEndpointOffsets(project);
+    // The solver reports storage-bound edges at the producer's full-speed
+    // rate on purpose - that is the mechanism that lets drawers absorb
+    // surplus. For display we want what actually flows in: the producer's
+    // real output minus what its machine consumers take, split across sinks.
+    const directTakenBySourceResource = new Map<string, number>();
+    const storageSinkCounts = new Map<string, number>();
+    for (const edge of project.edges) {
+      const key = `${edge.source}|${makeResourceKey(edge.resourceKind, edge.resourceId)}`;
+      if (storagesById.has(edge.target)) {
+        storageSinkCounts.set(key, (storageSinkCounts.get(key) ?? 0) + 1);
+      } else {
+        directTakenBySourceResource.set(
+          key,
+          (directTakenBySourceResource.get(key) ?? 0) +
+            (result.edges[edge.id]?.transferredPerSecond ?? 0),
+        );
+      }
+    }
+    // How many lines each producer splits a resource across. The solver's
+    // sourceCapacityPerSecond is the producer's total, so the surplus ratio is
+    // only honest when a single edge (or single-target bundle) carries it all.
+    const outletCounts = new Map<string, number>();
+    for (const edge of project.edges) {
+      const key = [edge.source, edge.resourceKind, edge.resourceId].join("|");
+      outletCounts.set(key, (outletCounts.get(key) ?? 0) + 1);
+    }
 
     return project.edges.map((edge, edgeIndex) => {
       const edgeResult = result.edges[edge.id];
       const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
       const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
-      const transferred = edgeResult?.transferredPerSecond ?? demand;
       const sourceStorage = storagesById.get(edge.source);
       const targetStorage = storagesById.get(edge.target);
+      const sourceResult = result.nodes[edge.source];
+      // For machine-to-storage lines, derive the real inflow from the maker's
+      // actual output; the solver's transferred is the full-speed surplus.
+      const resourceKey = makeResourceKey(edge.resourceKind, edge.resourceId);
+      let transferred = edgeResult?.transferredPerSecond ?? demand;
+      if (targetStorage && !sourceStorage && sourceResult) {
+        const speed = Number.isFinite(sourceResult.utilization)
+          ? Math.min(Math.max(sourceResult.utilization, 0), 1)
+          : 0;
+        const effectiveOutput =
+          (sourceResult.outputs[resourceKey]?.amountPerSecond ?? 0) * speed;
+        const taken = directTakenBySourceResource.get(`${edge.source}|${resourceKey}`) ?? 0;
+        const sinks = storageSinkCounts.get(`${edge.source}|${resourceKey}`) ?? 1;
+        transferred = Math.min(transferred, Math.max(0, effectiveOutput - taken) / sinks);
+      }
+      // isLimited almost never survives the solver's utilisation convergence,
+      // since demand gets scaled down to whatever supply exists. The nameplate
+      // comparison is what actually catches a starved machine. Storage soaks
+      // up whatever arrives, so a line into a barrel is never starved.
+      const isSupplyCapped = edgeResult?.constraint === "supply" && !targetStorage;
+      const isStarvedEdge =
+        isSupplyCapped || (edgeResult?.isLimited === true && !targetStorage);
       const isStorageEdge = Boolean(sourceStorage || targetStorage);
       const storageResourceKey = sourceStorage
         ? `${sourceStorage.kind}:${sourceStorage.resourceId}`
@@ -357,9 +660,20 @@ export function FactoryFlow() {
           resource,
           color: edgeColor,
           demand,
-          transferred: edgeResult?.isLimited === true ? transferred : undefined,
+          // Always the real flow. demand can sit at the full-speed rate on
+          // lines the solver never converges (storage sinks), and a label
+          // must never show more than actually moves.
+          transferred,
+          nameplateDemand: targetStorage ? undefined : edgeResult?.nameplateDemandPerSecond,
+          sourceCapacity:
+            outletCounts.get([edge.source, edge.resourceKind, edge.resourceId].join("|")) === 1 &&
+            edgeResult?.sourceCapacityPerSecond !== undefined
+              ? edgeResult.sourceCapacityPerSecond * ceilingFor(edge.source)
+              : undefined,
           unit,
-          isLimited: edgeResult?.isLimited === true,
+          isLimited: edgeResult?.isLimited === true && !targetStorage,
+          isSupplyCapped,
+          isStorageTarget: Boolean(targetStorage),
           isStorageEdge,
           showLabel: true,
           labelOffset: edge.labelOffset,
@@ -377,32 +691,37 @@ export function FactoryFlow() {
         },
         style: {
           stroke: edgeColor,
-          strokeDasharray: edgeResult?.isLimited ? "4 6" : undefined,
+          strokeDasharray: isStarvedEdge ? "4 6" : undefined,
           strokeOpacity: isFlowHighlighted
             ? 1
-            : edgeResult?.isLimited
+            : isStarvedEdge
               ? 0.58
               : isStorageEdge
                 ? 0.86
                 : 0.92,
           strokeWidth: isFlowHighlighted
-            ? 5
+            ? 5.5
             : isStorageEdge
               ? isStorageEdgeEmphasized
-                ? 3.5
-                : 2.6
-              : edgeResult?.isLimited
-                ? 2.2
+                ? 4
+                : 3.1
+              : isStarvedEdge
+                ? 2.7
                 : edge.resourceKind === "fluid"
-                  ? 2.8
-                  : 2.35,
+                  ? 3.4
+                  : 2.9,
         },
       };
     });
+    // `layoutVersion` is a deliberate cache-bust token rather than a value this
+    // memo reads: when a node changes size the routes it produces are stale, and
+    // re-issuing the edge objects is what forces them to re-measure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeFlowResourceKey,
     hoveredStorageResourceKey,
     isNodeDragging,
+    layoutVersion,
     project,
     recipeSearch,
     result.edges,
@@ -691,7 +1010,7 @@ export function FactoryFlow() {
   }, [updateFlowViewportCenter]);
 
   const handleInit = useCallback(
-    (instance: ReactFlowInstance<RecipeFlowNode | StorageFlowNode, ResourceFlowEdge>) => {
+    (instance: ReactFlowInstance<BoardFlowNode, ResourceFlowEdge>) => {
       flowInstanceRef.current = instance;
       window.requestAnimationFrame(updateFlowViewportCenter);
       window.setTimeout(updateFlowViewportCenter, 120);
@@ -700,7 +1019,13 @@ export function FactoryFlow() {
   );
 
   const exportFlowImage = useCallback(
-    async (format: "svg" | "png", requestId: string, fileName: string, projectJson: string) => {
+    async (
+      format: "svg" | "png",
+      requestId: string,
+      fileName: string,
+      projectJson: string,
+      capture = false,
+    ) => {
       if (exportInProgressRef.current) {
         dispatchImageExportComplete(requestId);
         return;
@@ -728,7 +1053,8 @@ export function FactoryFlow() {
         EXPORT_IMAGE_PADDING / Math.max(imageWidth, imageHeight),
       );
       const options = {
-        backgroundColor: "#f5f5f5",
+        // Read lazily so switching theme does not rebuild this callback.
+        backgroundColor: CANVAS_COLOR[useThemeStore.getState().theme],
         width: imageWidth,
         height: imageHeight,
         style: {
@@ -738,6 +1064,7 @@ export function FactoryFlow() {
         },
       };
 
+      let capturedDataUrl: string | undefined;
       try {
         if (format === "svg") {
           const svgText = embedProjectJsonInSvg(
@@ -757,10 +1084,17 @@ export function FactoryFlow() {
         const imageBlob = await toBlob(viewportElement, {
           ...options,
           filter: exportNodeFilter,
-          pixelRatio: getExportPngPixelRatio(imageWidth, imageHeight),
+          pixelRatio: capture ? 1 : getExportPngPixelRatio(imageWidth, imageHeight),
           skipFonts: true,
         });
         if (!imageBlob) {
+          return;
+        }
+
+        if (capture) {
+          // Capture mode hands a thumbnail back to the caller (community
+          // share dialog) instead of saving a file.
+          capturedDataUrl = await makeThumbnailDataUrl(imageBlob);
           return;
         }
 
@@ -770,7 +1104,7 @@ export function FactoryFlow() {
         console.error(error instanceof Error ? error.message : "Plan image export failed.");
       } finally {
         exportInProgressRef.current = false;
-        dispatchImageExportComplete(requestId);
+        dispatchImageExportComplete(requestId, capturedDataUrl);
       }
     },
     [flowNodes],
@@ -779,7 +1113,13 @@ export function FactoryFlow() {
   useEffect(() => {
     const handleExportImage = (event: Event) => {
       const detail = (event as CustomEvent).detail as
-        | { format?: unknown; requestId?: unknown; fileName?: unknown; projectJson?: unknown }
+        | {
+            format?: unknown;
+            requestId?: unknown;
+            fileName?: unknown;
+            projectJson?: unknown;
+            capture?: unknown;
+          }
         | undefined;
 
       if (
@@ -791,7 +1131,13 @@ export function FactoryFlow() {
         return;
       }
 
-      void exportFlowImage(detail.format, detail.requestId, detail.fileName, detail.projectJson);
+      void exportFlowImage(
+        detail.format,
+        detail.requestId,
+        detail.fileName,
+        detail.projectJson,
+        detail.capture === true,
+      );
     };
 
     window.addEventListener(FLOW_IMAGE_EXPORT_EVENT, handleExportImage);
@@ -834,6 +1180,11 @@ export function FactoryFlow() {
 
             if ((project.storages ?? []).some((storage) => storage.id === nodeId)) {
               deleteStorage(nodeId);
+              return;
+            }
+
+            if ((project.annotations ?? []).some((annotation) => annotation.id === nodeId)) {
+              deleteAnnotation(nodeId);
             }
           });
           setSelectedEdgeIds([]);
@@ -853,10 +1204,18 @@ export function FactoryFlow() {
             selectNode(undefined);
             return;
           }
+
+          if ((project.annotations ?? []).some((annotation) => annotation.id === selectedNodeId)) {
+            deleteAnnotation(selectedNodeId);
+            selectNode(undefined);
+            return;
+          }
         }
 
         cancelResourceConnection();
         setNodeColorPaintMode(undefined);
+        setAnnotationTool(undefined);
+        setDeleteMode(false);
         return;
       }
 
@@ -867,6 +1226,8 @@ export function FactoryFlow() {
 
         cancelResourceConnection();
         setNodeColorPaintMode(undefined);
+        setAnnotationTool(undefined);
+        setDeleteMode(false);
       }
     };
 
@@ -874,9 +1235,11 @@ export function FactoryFlow() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     cancelResourceConnection,
+    deleteAnnotation,
     deleteEdge,
     deleteNode,
     deleteStorage,
+    project.annotations,
     project.nodes,
     project.storages,
     selectNode,
@@ -901,6 +1264,17 @@ export function FactoryFlow() {
 
   const handleNodeClick = useCallback(
     (_: unknown, node: Node) => {
+      if (isDeleteMode) {
+        if (node.type === "recipeNode") {
+          deleteNode(node.id);
+        } else if (node.type === "storageNode") {
+          deleteStorage(node.id);
+        } else if (node.type === "annotationNode") {
+          deleteAnnotation(node.id);
+        }
+        return;
+      }
+
       if (nodeColorPaintMode !== undefined) {
         if (node.type === "recipeNode") {
           updateNode(node.id, { colorTag: nodeColorPaintMode ?? undefined });
@@ -912,12 +1286,39 @@ export function FactoryFlow() {
           return;
         }
 
+        if (node.type === "annotationNode") {
+          updateAnnotation(node.id, { colorTag: nodeColorPaintMode ?? undefined });
+          return;
+        }
+
         return;
       }
 
       selectNode(node.id);
     },
-    [nodeColorPaintMode, selectNode, updateNode, updateStorage],
+    [
+      deleteAnnotation,
+      deleteNode,
+      deleteStorage,
+      isDeleteMode,
+      nodeColorPaintMode,
+      selectNode,
+      updateAnnotation,
+      updateNode,
+      updateStorage,
+    ],
+  );
+
+  const handleEdgeClick = useCallback(
+    (event: ReactMouseEvent, edge: Edge) => {
+      if (!isDeleteMode) {
+        return;
+      }
+
+      event.stopPropagation();
+      deleteEdge(edge.id);
+    },
+    [deleteEdge, isDeleteMode],
   );
 
   const handlePaneClick = useCallback(() => {
@@ -934,6 +1335,8 @@ export function FactoryFlow() {
     (_: unknown, node: Node) => {
       if (node.type === "storageNode") {
         setStoragePosition(node.id, node.position);
+      } else if (node.type === "annotationNode") {
+        setAnnotationPosition(node.id, node.position);
       } else {
         setNodePosition(node.id, node.position);
       }
@@ -946,7 +1349,7 @@ export function FactoryFlow() {
         ),
       );
     },
-    [setNodePosition, setStoragePosition],
+    [setAnnotationPosition, setNodePosition, setStoragePosition],
   );
 
   const handleEdgesDelete = useCallback(
@@ -956,15 +1359,140 @@ export function FactoryFlow() {
     [deleteEdge],
   );
 
+  const commitAnnotationDraft = useCallback(
+    (tool: FactoryAnnotationKind, draft: AnnotationDraft) => {
+      const width = Math.abs(draft.end.x - draft.start.x);
+      const height = Math.abs(draft.end.y - draft.start.y);
+      const corner = {
+        x: Math.min(draft.start.x, draft.end.x),
+        y: Math.min(draft.start.y, draft.end.y),
+      };
+
+      if (tool === "box") {
+        // A bare click (no meaningful drag) drops a default-sized shape.
+        const isClick = width < 12 && height < 12;
+        addAnnotation({
+          kind: "box",
+          colorTag: activeColorTag,
+          position: isClick ? draft.start : corner,
+          size: isClick
+            ? { width: 280, height: 180 }
+            : { width: Math.max(width, 48), height: Math.max(height, 48) },
+        });
+        return;
+      }
+
+      if (tool === "arrow") {
+        const isClick = width < 16 && height < 16;
+        addAnnotation({
+          kind: "arrow",
+          colorTag: activeColorTag,
+          position: isClick ? draft.start : corner,
+          size: isClick
+            ? { width: 200, height: 8 }
+            : { width: Math.max(width, 8), height: Math.max(height, 8) },
+          arrowDirection: `${draft.end.y >= draft.start.y ? "down" : "up"}-${
+            draft.end.x >= draft.start.x ? "right" : "left"
+          }` as const,
+        });
+        return;
+      }
+
+      const isClick = width < 12 && height < 12;
+      addAnnotation({
+        kind: "text",
+        colorTag: activeColorTag,
+        text: "",
+        position: isClick ? draft.start : corner,
+        size: isClick
+          ? { width: 240, height: 80 }
+          : { width: Math.max(width, 96), height: Math.max(height, 40) },
+      });
+    },
+    [activeColorTag, addAnnotation],
+  );
+
+  const handleAnnotationPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const tool = annotationTool;
+      if (!tool || event.button !== 0) {
+        return;
+      }
+
+      // The tool buttons live inside the board wrapper; they must keep working.
+      if ((event.target as HTMLElement).closest("[data-board-toolbar]")) {
+        return;
+      }
+
+      const instance = flowInstanceRef.current;
+      if (!instance) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      const start = instance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const draft = { start, end: start };
+      annotationDraftRef.current = draft;
+      setAnnotationDraft(draft);
+
+      const handleMove = (moveEvent: PointerEvent) => {
+        const current = annotationDraftRef.current;
+        if (!current) {
+          return;
+        }
+
+        const end = instance.screenToFlowPosition({
+          x: moveEvent.clientX,
+          y: moveEvent.clientY,
+        });
+        const next = { start: current.start, end };
+        annotationDraftRef.current = next;
+        setAnnotationDraft(next);
+      };
+      const handleUp = () => {
+        window.removeEventListener("pointermove", handleMove);
+        window.removeEventListener("pointerup", handleUp);
+        const current = annotationDraftRef.current;
+        annotationDraftRef.current = undefined;
+        setAnnotationDraft(undefined);
+        setAnnotationTool(undefined);
+        if (current) {
+          commitAnnotationDraft(tool, current);
+        }
+      };
+      window.addEventListener("pointermove", handleMove);
+      window.addEventListener("pointerup", handleUp);
+    },
+    [annotationTool, commitAnnotationDraft],
+  );
+
   const fitViewOptions = useMemo(() => ({ padding: 0.18 }), []);
+
+  const paintCursor =
+    nodeColorPaintMode !== undefined
+      ? getPaintBrushCursor(
+          nodeColorPaintMode ? GT_NODE_COLORS[nodeColorPaintMode].swatch : undefined,
+        )
+      : undefined;
 
   return (
     <div
       ref={boardRef}
       className={[
-        "factory-flow-board relative h-full min-h-[520px] overflow-hidden border-x border-neutral-200 bg-neutral-100",
+        "factory-flow-board relative h-full min-h-[520px] overflow-hidden border-x border-line bg-canvas",
         isNodeDragging ? "factory-flow-board--dragging" : "",
+        paintCursor ? "factory-flow-board--painting" : "",
+        annotationTool ? "factory-flow-board--annotating" : "",
+        isDeleteMode ? "factory-flow-board--deleting" : "",
       ].join(" ")}
+      style={
+        {
+          ...(paintCursor ? { "--paint-cursor": paintCursor } : undefined),
+          ...(isDeleteMode ? { "--delete-cursor": getDeleteCursor() } : undefined),
+        } as CSSProperties
+      }
+      onPointerDownCapture={handleAnnotationPointerDown}
     >
       <ReactFlow
         nodes={flowNodes}
@@ -985,6 +1513,7 @@ export function FactoryFlow() {
         elevateNodesOnSelect={false}
         edgesReconnectable={false}
         onNodeClick={handleNodeClick}
+        onEdgeClick={handleEdgeClick}
         onNodesChange={handleNodesChange}
         onSelectionChange={handleSelectionChange}
         onPaneClick={handlePaneClick}
@@ -996,12 +1525,73 @@ export function FactoryFlow() {
         onlyRenderVisibleElements
         minZoom={0.15}
         maxZoom={1.8}
+        colorMode={theme}
       >
-        <Background gap={24} color="#d4d4d4" />
+        <Background gap={24} size={2} color={CANVAS_DOT_COLOR[theme]} />
         <Controls position="bottom-left" />
+        {annotationDraft && annotationTool ? (
+          <AnnotationDraftPreview
+            tool={annotationTool}
+            draft={annotationDraft}
+            swatch={GT_NODE_COLORS[activeColorTag].swatch}
+          />
+        ) : null}
       </ReactFlow>
-      <PaintToolbar paintMode={nodeColorPaintMode} onPaintModeChange={setNodeColorPaintMode} />
+      <PaintToolbar
+        paintMode={nodeColorPaintMode}
+        onPaintModeChange={(tag) => {
+          setAnnotationTool(undefined);
+          setDeleteMode(false);
+          setNodeColorPaintMode(tag);
+        }}
+        activeColorTag={activeColorTag}
+        onColorSelect={(tag) => {
+          setActiveColorTag(tag);
+          // Changing colour mid-paint keeps painting with the new colour.
+          if (nodeColorPaintMode !== undefined) {
+            setNodeColorPaintMode(tag);
+          }
+        }}
+        annotationTool={annotationTool}
+        onAnnotationToolChange={(tool) => {
+          setNodeColorPaintMode(undefined);
+          setDeleteMode(false);
+          setAnnotationTool(tool);
+        }}
+        isDeleteMode={isDeleteMode}
+        onDeleteModeChange={(enabled) => {
+          setNodeColorPaintMode(undefined);
+          setAnnotationTool(undefined);
+          setDeleteMode(enabled);
+        }}
+      />
+      <SourceToolbar />
       {isProjectImporting ? <FlowLoadingOverlay /> : null}
+    </div>
+  );
+}
+
+/**
+ * Board tools that drop in source-style nodes (things that produce without
+ * crafting, like crop farms). Lives top-left, mirroring the paint toolbar.
+ */
+function SourceToolbar() {
+  const addCropFarmNode = useFactoryStore((state) => state.addCropFarmNode);
+
+  return (
+    <div
+      data-board-toolbar
+      className="nodrag pointer-events-none absolute left-3 top-3 z-20 flex items-start"
+    >
+      <button
+        type="button"
+        onClick={addCropFarmNode}
+        className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
+        title="Add crop farm: pick a crop and stats, it produces at the computed rate"
+        aria-label="Add crop farm"
+      >
+        <Sprout className="h-4 w-4" />
+      </button>
     </div>
   );
 }
@@ -1013,7 +1603,7 @@ function FlowLoadingOverlay() {
       aria-live="polite"
       className="pointer-events-auto absolute inset-0 z-50 grid place-items-center bg-neutral-950/18 backdrop-blur-[1px]"
     >
-      <div className="flex items-center gap-3 border-2 border-[#252525] bg-[#c6c6c6] px-4 py-3 text-sm font-semibold text-[#1f1f1f] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555,4px_4px_0_rgba(0,0,0,0.18)]">
+      <div className="flex items-center gap-3 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] px-4 py-3 text-sm font-semibold text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.18)]">
         <LoaderCircle className="h-5 w-5 animate-spin" />
         <span>Loading flowchart...</span>
       </div>
@@ -1021,25 +1611,115 @@ function FlowLoadingOverlay() {
   );
 }
 
+function AnnotationDraftPreview({
+  tool,
+  draft,
+  swatch,
+}: {
+  tool: FactoryAnnotationKind;
+  draft: AnnotationDraft;
+  swatch: string;
+}) {
+  const x = Math.min(draft.start.x, draft.end.x);
+  const y = Math.min(draft.start.y, draft.end.y);
+  const width = Math.max(Math.abs(draft.end.x - draft.start.x), 2);
+  const height = Math.max(Math.abs(draft.end.y - draft.start.y), 2);
+
+  return (
+    <ViewportPortal>
+      <div
+        className="pointer-events-none absolute"
+        style={{ transform: `translate(${x}px, ${y}px)`, width, height }}
+      >
+        {tool === "arrow" ? (
+          <svg
+            className="h-full w-full overflow-visible"
+            viewBox={`0 0 ${width} ${height}`}
+            preserveAspectRatio="none"
+          >
+            <line
+              x1={draft.start.x - x}
+              y1={draft.start.y - y}
+              x2={draft.end.x - x}
+              y2={draft.end.y - y}
+              stroke={swatch}
+              strokeWidth={5}
+              strokeDasharray="8 6"
+              strokeLinecap="round"
+            />
+          </svg>
+        ) : tool === "box" ? (
+          <div
+            className="h-full w-full border-4 border-dashed"
+            style={{ borderColor: swatch, backgroundColor: `${swatch}14` }}
+          />
+        ) : (
+          <div
+            className="h-full w-full border-2 border-dashed"
+            style={{ borderColor: swatch, backgroundColor: "var(--mc-78)", opacity: 0.85 }}
+          />
+        )}
+      </div>
+    </ViewportPortal>
+  );
+}
+
+const ANNOTATION_TOOLS: Array<{
+  kind: FactoryAnnotationKind;
+  label: string;
+  Icon: typeof Square;
+}> = [
+  { kind: "box", label: "Draw box", Icon: Square },
+  { kind: "arrow", label: "Draw arrow", Icon: MoveUpRight },
+  { kind: "text", label: "Add text note", Icon: Type },
+];
+
 function PaintToolbar({
   paintMode,
   onPaintModeChange,
+  activeColorTag,
+  onColorSelect,
+  annotationTool,
+  onAnnotationToolChange,
+  isDeleteMode,
+  onDeleteModeChange,
 }: {
   paintMode?: FactoryNodeColorTag | null;
   onPaintModeChange: (tag: FactoryNodeColorTag | null | undefined) => void;
+  activeColorTag: FactoryNodeColorTag;
+  onColorSelect: (tag: FactoryNodeColorTag) => void;
+  annotationTool?: FactoryAnnotationKind;
+  onAnnotationToolChange: (tool: FactoryAnnotationKind | undefined) => void;
+  isDeleteMode: boolean;
+  onDeleteModeChange: (enabled: boolean) => void;
 }) {
-  const activeColor = paintMode ? GT_NODE_COLORS[paintMode] : undefined;
+  const activeColor = GT_NODE_COLORS[activeColorTag];
   const [isPaletteOpen, setPaletteOpen] = useState(false);
+  // A short grace period on close lets the pointer cross the tiny dead gaps
+  // between the palette and the brush without the palette snapping shut.
+  const paletteCloseTimerRef = useRef<number | undefined>(undefined);
+  const openPalette = () => {
+    window.clearTimeout(paletteCloseTimerRef.current);
+    setPaletteOpen(true);
+  };
+  const scheduleClosePalette = () => {
+    window.clearTimeout(paletteCloseTimerRef.current);
+    paletteCloseTimerRef.current = window.setTimeout(() => setPaletteOpen(false), 250);
+  };
 
   return (
     <div
-      className="nodrag pointer-events-none absolute bottom-12 right-3 z-20 flex items-end"
-      onMouseEnter={() => setPaletteOpen(true)}
-      onMouseLeave={() => setPaletteOpen(false)}
+      data-board-toolbar
+      className="nodrag pointer-events-none absolute right-3 top-3 z-20 flex items-start"
     >
       <div
+        className="flex items-start"
+        onMouseEnter={openPalette}
+        onMouseLeave={scheduleClosePalette}
+      >
+      <div
         className={[
-          "mr-0 grid w-[156px] grid-cols-5 gap-1 border-2 border-[#252525] bg-[#c6c6c6] p-1 shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555] transition-[opacity,transform] duration-100",
+          "mr-0 grid w-[156px] grid-cols-5 gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)] transition-[opacity,transform] duration-100",
           isPaletteOpen
             ? "pointer-events-auto translate-x-0 opacity-100"
             : "pointer-events-none translate-x-2 opacity-0",
@@ -1049,8 +1729,8 @@ function PaintToolbar({
           type="button"
           onClick={() => onPaintModeChange(paintMode === null ? undefined : null)}
           className={[
-            "flex h-7 w-7 items-center justify-center border-2 bg-[#7d7d7d] text-white shadow-[inset_1px_1px_0_#d8d8d8,inset_-1px_-1px_0_#404040]",
-            paintMode === null ? "border-white ring-2 ring-cyan-300" : "border-[#252525]",
+            "flex h-7 w-7 items-center justify-center border-2 bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]",
+            paintMode === null ? "border-white ring-2 ring-cyan-300" : "border-[var(--mc-15)]",
           ].join(" ")}
           title="Erase colors"
           aria-label="Erase colors"
@@ -1061,47 +1741,105 @@ function PaintToolbar({
           <button
             key={entry.tag}
             type="button"
-            onClick={() => onPaintModeChange(paintMode === entry.tag ? undefined : entry.tag)}
+            onClick={() => onColorSelect(entry.tag)}
             className={[
               "h-7 w-7 border-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]",
-              paintMode === entry.tag ? "border-white ring-2 ring-cyan-300" : "border-[#252525]",
+              activeColorTag === entry.tag
+                ? "border-white ring-2 ring-cyan-300"
+                : "border-[var(--mc-15)]",
             ].join(" ")}
             style={{ backgroundColor: entry.color.swatch }}
             title={entry.tag}
-            aria-label={`Paint ${entry.tag}`}
+            aria-label={`Use ${entry.tag}`}
           />
         ))}
       </div>
       <button
         type="button"
-        onClick={() => {
-          if (paintMode !== undefined) {
-            onPaintModeChange(undefined);
-          }
-        }}
+        onClick={() => setPaletteOpen((open) => !open)}
+        className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]"
+        title={`Color: ${activeColorTag}`}
+        aria-label="Pick color"
+      >
+        <span
+          className="h-5 w-5 border-2 border-[var(--mc-15)] shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]"
+          style={{ backgroundColor: activeColor.swatch }}
+        />
+      </button>
+      </div>
+      <button
+        type="button"
+        onClick={() =>
+          onPaintModeChange(paintMode !== undefined ? undefined : activeColorTag)
+        }
         className={[
-          "pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[#252525] bg-[#7d7d7d] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040]",
+          "pointer-events-auto relative z-10 ml-1 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
           paintMode !== undefined ? "ring-2 ring-cyan-300" : "",
         ].join(" ")}
-        title={paintMode !== undefined ? "Stop painting" : "Paint nodes"}
+        title={
+          paintMode !== undefined
+            ? "Stop painting"
+            : `Paint nodes ${activeColorTag}`
+        }
         aria-label={paintMode !== undefined ? "Stop painting" : "Paint nodes"}
       >
-        {paintMode === undefined ? (
-          <Paintbrush className="h-4 w-4" />
-        ) : paintMode === null ? (
-          <X className="h-4 w-4" />
-        ) : (
-          <span
-            className="h-5 w-5 border-2 border-[#252525] shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]"
-            style={{ backgroundColor: activeColor?.swatch }}
-          />
-        )}
+        {paintMode === null ? <X className="h-4 w-4" /> : <Paintbrush className="h-4 w-4" />}
+      </button>
+      {ANNOTATION_TOOLS.map(({ kind, label, Icon }) => (
+        <button
+          key={kind}
+          type="button"
+          onClick={() => onAnnotationToolChange(annotationTool === kind ? undefined : kind)}
+          className={[
+            "pointer-events-auto relative z-10 ml-1 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
+            annotationTool === kind ? "ring-2 ring-cyan-300" : "",
+          ].join(" ")}
+          title={annotationTool === kind ? "Cancel" : label}
+          aria-label={annotationTool === kind ? "Cancel" : label}
+        >
+          <Icon className="h-4 w-4" />
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={() => onDeleteModeChange(!isDeleteMode)}
+        className={[
+          "pointer-events-auto relative z-10 ml-1 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
+          isDeleteMode ? "ring-2 ring-red-400" : "",
+        ].join(" ")}
+        title={isDeleteMode ? "Stop deleting" : "Delete tool: click anything to remove it"}
+        aria-label={isDeleteMode ? "Stop deleting" : "Delete tool"}
+      >
+        <Trash2 className={isDeleteMode ? "h-4 w-4 text-red-300" : "h-4 w-4"} />
       </button>
     </div>
   );
 }
 
-function ResourceEdge({
+/** Matches the figures in a sentence: rates ("10/s", "12 L/s"), percents ("20%") and multipliers ("5×"). */
+const RATE_TOKEN_PATTERN = /(\d[\d,]*(?:\.\d+)?(?:(?:\s?L)?\/[a-z]+|%|×))/g;
+
+/**
+ * Lifts the rates out of a plain-English sentence so they read as figures:
+ * slightly brighter, semibold, tabular, tinted with the edge's status colour.
+ */
+function renderRateSentence(sentence: string, accentColor: string) {
+  return sentence.split(RATE_TOKEN_PATTERN).map((part, index) =>
+    index % 2 === 1 ? (
+      <span
+        key={index}
+        className="font-semibold tabular-nums"
+        style={{ color: accentColor }}
+      >
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}
+
+function ResourceEdgeComponent({
   id,
   sourceX,
   sourceY,
@@ -1118,12 +1856,17 @@ function ResourceEdge({
   data,
 }: EdgeProps<ResourceFlowEdge>) {
   const updateEdge = useFactoryStore((state) => state.updateEdge);
-  const zoom = useStore((store) => store.transform[2]);
+  const detailLevel = useStore(selectEdgeDetailLevel);
+  // Label dragging needs the exact zoom to convert a pointer delta into flow
+  // units, but reading it through a subscription would re-render every edge on
+  // every zoom frame. The store API gives the live value on demand instead.
+  const flowStore = useStoreApi();
   const storedLabelOffsetX = data?.labelOffset?.x ?? 0;
   const storedLabelOffsetY = data?.labelOffset?.y ?? 0;
   const storedLabelOffset = { x: storedLabelOffsetX, y: storedLabelOffsetY };
   const [draftLabelOffset, setDraftLabelOffset] = useState(storedLabelOffset);
   const [isLabelDragging, setLabelDragging] = useState(false);
+  const [isLabelHovered, setLabelHovered] = useState(false);
   const labelDragRef = useRef<
     | {
         pointerId: number;
@@ -1136,10 +1879,18 @@ function ResourceEdge({
   const resourceColor = data?.resource
     ? getInitialResourceColor(data.resource)
     : (data?.color ?? DEFAULT_ITEM_EDGE_COLOR);
-  const edgeColor = resourceColor;
-  const isGlobalView = zoom < 0.45;
+  const theme = useThemeStore((state) => state.theme);
+  // Dominant resource colours are averaged from item sprites, which makes them
+  // muddy; boost saturation everywhere and lift toward white on the dark canvas.
+  const vividColor = saturateHexColor(resourceColor, 0.45);
+  const edgeColor = theme === "dark" ? brightenHexColor(vividColor, 0.15) : vividColor;
+  const isGlobalView = hasEdgeDetail(detailLevel, EDGE_DETAIL_GLOBAL);
   const isHighlighted = selected || data?.isFlowHighlighted === true;
-  const shouldUsePreciseRouting = !isGlobalView;
+  // AGENTS.md requires routing to be deterministic and independent of zoom
+  // level. Precise routing used to be switched off below 0.45 because measuring
+  // was expensive; now that measurements are cached across frames it always runs,
+  // so a route no longer changes shape when the user zooms out.
+  const shouldUsePreciseRouting = true;
   const visualSourceCandidates = getSlotEdgeEndpointCandidates({
     nodeId: source,
     handleId: data?.sourceHandleId ?? sourceHandleId,
@@ -1168,17 +1919,37 @@ function ResourceEdge({
   });
   const visualSource = visualSourceCandidates[0];
   const visualTarget = visualTargetCandidates[0];
-  const rate = data?.bundle?.demand
-    ? `${formatEdgeValue(data.bundle.demand)} ${data.unit}`
-    : formatEdgeRateLabel(data);
+  const rate = formatEdgeRateLabel(data);
+  // One accent per flow state, shared by the label text, the hover ring and
+  // the popover: red = starved consumer, green = producer headroom, cyan =
+  // nothing to flag.
+  const labelTone = isEdgeStarved(data)
+    ? "starved"
+    : isEdgeSurplus(data)
+      ? "surplus"
+      : getEdgeSupplyRatio(data) !== undefined
+        ? "matched"
+        : "normal";
+  const labelTextColor =
+    labelTone === "starved" ? "#fecaca" : labelTone === "surplus" ? "#bbf7d0" : "#f8fafc";
+  const labelAccentColor =
+    labelTone === "starved" ? "#f87171" : labelTone === "surplus" ? "#4ade80" : "#22d3ee";
+  const labelToneWord =
+    labelTone === "starved"
+      ? "Starved"
+      : labelTone === "surplus"
+        ? "Spare capacity"
+        : labelTone === "matched"
+          ? "Matched"
+          : undefined;
   const isHiddenBundleMember =
     data?.bundle?.role === "member" && data.bundle.mode === "single-target";
   const showLabel = Boolean(
     data?.showLabel &&
     !isHiddenBundleMember &&
-    (selected || data.isFlowHighlighted || zoom >= EDGE_LABEL_ZOOM),
+      (selected || data.isFlowHighlighted || hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS)),
   );
-  const showArrowHead = isHighlighted || zoom >= EDGE_ARROW_ZOOM;
+  const showArrowHead = isHighlighted || hasEdgeDetail(detailLevel, EDGE_DETAIL_ARROWS);
   const labelOffset = isLabelDragging ? draftLabelOffset : storedLabelOffset;
   const routedEdge =
     data?.bundle?.role === "primary"
@@ -1262,16 +2033,16 @@ function ResourceEdge({
             interactionWidth={0}
             style={{
               stroke: "#111827",
-              strokeDasharray: isGlobalView && data?.isLimited ? "2 8" : style?.strokeDasharray,
+              strokeDasharray: isGlobalView && isEdgeStarved(data) ? "2 8" : style?.strokeDasharray,
               strokeLinecap: "round",
               strokeLinejoin: "round",
               strokeOpacity: isHighlighted ? 0.95 : isGlobalView ? 0.36 : 0.72,
               strokeWidth:
                 (isHighlighted
-                  ? 6
+                  ? 6.5
                   : data?.bundle?.role === "primary"
-                    ? Math.max(Number(style?.strokeWidth ?? 2.6) + 0.6, 3.2)
-                    : Number(style?.strokeWidth ?? 2.6)) + 2,
+                    ? Math.max(Number(style?.strokeWidth ?? 3.1) + 0.6, 3.7)
+                    : Number(style?.strokeWidth ?? 3.1)) + 2,
               pointerEvents: "none",
             }}
           />
@@ -1281,20 +2052,20 @@ function ResourceEdge({
             style={{
               ...style,
               stroke: edgeColor,
-              strokeDasharray: isGlobalView && data?.isLimited ? "2 8" : style?.strokeDasharray,
+              strokeDasharray: isGlobalView && isEdgeStarved(data) ? "2 8" : style?.strokeDasharray,
               strokeLinecap: "round",
               strokeLinejoin: "round",
               strokeOpacity: isHighlighted
                 ? 1
                 : isGlobalView
-                  ? data?.isLimited
+                  ? isEdgeStarved(data)
                     ? 0.28
                     : 0.52
                   : style?.strokeOpacity,
               strokeWidth: isHighlighted
-                ? 6
+                ? 6.5
                 : data?.bundle?.role === "primary"
-                  ? Math.max(Number(style?.strokeWidth ?? 2.6) + 0.6, 3.2)
+                  ? Math.max(Number(style?.strokeWidth ?? 3.1) + 0.6, 3.7)
                   : style?.strokeWidth,
               filter: isHighlighted ? "drop-shadow(0 0 4px rgba(34,211,238,0.9))" : undefined,
             }}
@@ -1309,13 +2080,13 @@ function ResourceEdge({
             estimatedTargetY: visualTarget.y,
             estimatedTargetPosition: visualTarget.side,
           })}
-          stroke="#252525"
+          stroke="var(--mc-15)"
           strokeWidth={isHighlighted ? 4 : 3.2}
           strokeLinecap="round"
           strokeLinejoin="round"
           fill="none"
           style={{
-            opacity: data?.isLimited ? 0.72 : 0.95,
+            opacity: isEdgeStarved(data) ? 0.72 : 0.95,
             filter: isHighlighted ? "drop-shadow(0 0 4px rgba(34,211,238,0.9))" : undefined,
             pointerEvents: "none",
           }}
@@ -1335,7 +2106,7 @@ function ResourceEdge({
           strokeLinejoin="round"
           fill="none"
           style={{
-            opacity: data?.isLimited ? 0.78 : 1,
+            opacity: isEdgeStarved(data) ? 0.78 : 1,
             filter: isHighlighted ? "drop-shadow(0 0 4px rgba(34,211,238,0.9))" : undefined,
             pointerEvents: "none",
           }}
@@ -1344,16 +2115,22 @@ function ResourceEdge({
       {showLabel && data ? (
         <EdgeLabelRenderer>
           <div
-            className="nodrag nopan absolute flex cursor-grab items-center gap-1 border border-[#252525] bg-[#2b2d32] px-1 py-0.5 text-[10px] font-medium text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.55)] active:cursor-grabbing"
+            className="nodrag nopan absolute flex cursor-grab items-center gap-1.5 border border-[var(--mc-15)] bg-[#2b2d32] px-2 py-1 text-[13px] font-medium text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.55)] transition-shadow duration-100 active:cursor-grabbing"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: "all",
-              color: data.isLimited ? "#fecaca" : "#f8fafc",
-              borderColor: edgeColor,
-              opacity: isHighlighted ? 1 : isGlobalView ? 0.78 : 0.94,
-              boxShadow: isHighlighted ? "0 0 0 2px rgba(34,211,238,0.9)" : undefined,
+              color: labelTextColor,
+              borderColor: isLabelHovered ? labelAccentColor : edgeColor,
+              opacity: isHighlighted || isLabelHovered ? 1 : isGlobalView ? 0.78 : 0.94,
+              boxShadow: isLabelHovered
+                ? `0 0 0 2px ${labelAccentColor}, 0 0 12px ${labelAccentColor}66`
+                : isHighlighted
+                  ? "0 0 0 2px rgba(34,211,238,0.9)"
+                  : undefined,
+              zIndex: isLabelHovered ? 60 : undefined,
             }}
-            title={`${data.resource.displayName ?? data.resource.id}: ${rate}. Drag along cable. Double click to reset label.`}
+            onMouseEnter={() => setLabelHovered(true)}
+            onMouseLeave={() => setLabelHovered(false)}
             onPointerDown={(event) => {
               event.stopPropagation();
               window.dispatchEvent(
@@ -1392,7 +2169,8 @@ function ResourceEdge({
                   y: cablePoint.y - routedEdge.labelY,
                 });
               } else {
-                const scale = zoom > 0 ? zoom : 1;
+                const liveZoom = flowStore.getState().transform[2];
+                const scale = liveZoom > 0 ? liveZoom : 1;
                 setDraftLabelOffset({
                   x: drag.offset.x + (event.clientX - drag.clientX) / scale,
                   y: drag.offset.y + (event.clientY - drag.clientY) / scale,
@@ -1412,10 +2190,44 @@ function ResourceEdge({
               size="sm"
               showAmount={false}
               bare
-              className="!h-4 !w-4"
+              className="!h-[22px] !w-[22px]"
             />
-            <span className="leading-none">{rate}</span>
+            <span className="font-semibold leading-none tracking-tight tabular-nums">{rate}</span>
           </div>
+          {isLabelHovered && !isLabelDragging ? (
+            <div
+              className="nodrag nopan pointer-events-none absolute w-64 border-2 bg-[#2b2d32] px-3 py-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14),inset_-1px_-1px_0_rgba(0,0,0,0.55),0_6px_16px_rgba(0,0,0,0.55)]"
+              style={{
+                transform: `translate(-50%, -100%) translate(${labelX}px, ${labelY - 22}px)`,
+                borderColor: labelAccentColor,
+                zIndex: 70,
+              }}
+            >
+              <div className="flex items-center gap-1.5">
+                <ResourceIcon
+                  resource={data.resource}
+                  size="sm"
+                  showAmount={false}
+                  bare
+                  className="!h-[20px] !w-[20px]"
+                />
+                <span className="truncate text-[13px] font-semibold text-white">
+                  {data.resource.displayName ?? data.resource.id}
+                </span>
+                {labelToneWord ? (
+                  <span
+                    className="ml-auto shrink-0 text-[11px] font-bold uppercase tracking-wide"
+                    style={{ color: labelAccentColor }}
+                  >
+                    {labelToneWord}
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-1 text-[12px] leading-snug text-slate-300">
+                {renderRateSentence(describeEdgeRate(data), labelAccentColor)}
+              </p>
+            </div>
+          ) : null}
         </EdgeLabelRenderer>
       ) : null}
     </>
@@ -1430,7 +2242,7 @@ function ResourceConnectionLine({
   fromPosition,
   toPosition,
   connectionStatus,
-}: ConnectionLineComponentProps<RecipeFlowNode | StorageFlowNode>) {
+}: ConnectionLineComponentProps<BoardFlowNode>) {
   const [edgePath] = getSmoothStepPath({
     sourceX: fromX,
     sourceY: fromY,
@@ -1470,8 +2282,16 @@ function getEdgeBundles(
   edges: FactoryEdge[],
   edgeResults: Record<
     string,
-    { demandPerSecond?: number; transferredPerSecond?: number; isLimited?: boolean }
+    {
+      demandPerSecond?: number;
+      transferredPerSecond?: number;
+      isLimited?: boolean;
+      nameplateDemandPerSecond?: number;
+      sourceCapacityPerSecond?: number;
+      constraint?: EdgeThroughput["constraint"];
+    }
   >,
+  ceilingFor: (sourceId: string) => number = () => 1,
 ) {
   const groups = new Map<string, FactoryEdge[]>();
 
@@ -1520,12 +2340,26 @@ function getEdgeBundles(
     const transferred = group.reduce(
       (sum, edge) =>
         sum +
-        (edgeResults[edge.id]?.isLimited
-          ? (edgeResults[edge.id]?.transferredPerSecond ?? 0)
-          : (edgeResults[edge.id]?.demandPerSecond ?? edge.ratePerSecond ?? 0)),
+        (edgeResults[edge.id]?.transferredPerSecond ??
+          edgeResults[edge.id]?.demandPerSecond ??
+          edge.ratePerSecond ??
+          0),
       0,
     );
     const isLimited = group.some((edge) => edgeResults[edge.id]?.isLimited === true);
+    const isSupplyCapped = group.some((edge) => edgeResults[edge.id]?.constraint === "supply");
+    const nameplateDemand = group.reduce(
+      (sum, edge) => sum + (edgeResults[edge.id]?.nameplateDemandPerSecond ?? 0),
+      0,
+    );
+    // Every edge in the group leaves the same producer, so its capacity is one
+    // shared total, not a per-edge amount to sum - scaled by how fast that
+    // producer can actually run on its own inputs.
+    const sourceCapacity =
+      group.reduce(
+        (max, edge) => Math.max(max, edgeResults[edge.id]?.sourceCapacityPerSecond ?? 0),
+        0,
+      ) * ceilingFor(group[0].source);
     const primarySourceHandleId = primaryEdge.sourceHandle ?? sourceHandleIds[0];
     const edgeIds = group.map((edge) => edge.id);
     if (!primarySourceHandleId) {
@@ -1541,8 +2375,12 @@ function getEdgeBundles(
         primarySourceHandleId,
         edgeIds,
         demand: mode === "single-target" ? demand : undefined,
-        transferred: mode === "single-target" && isLimited ? transferred : undefined,
+        transferred: mode === "single-target" ? transferred : undefined,
+        nameplateDemand: mode === "single-target" ? nameplateDemand : undefined,
+        sourceCapacity:
+          mode === "single-target" && sourceCapacity > 0 ? sourceCapacity : undefined,
         isLimited,
+        isSupplyCapped,
       });
     }
   }
@@ -1836,7 +2674,6 @@ function getBestDirectEdgePoints({
   targetY: number;
   targetPosition: Position;
 }) {
-  const nodeBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]);
   const sourceEndpoints =
     sourceCandidates && sourceCandidates.length > 0
       ? normalizeRouteEndpoints(sourceCandidates)
@@ -1845,19 +2682,22 @@ function getBestDirectEdgePoints({
     targetCandidates && targetCandidates.length > 0
       ? normalizeRouteEndpoints(targetCandidates)
       : normalizeRouteEndpoints([{ x: targetX, y: targetY, side: targetPosition }]);
-  const normalizedNodeBounds = normalizeRouteBounds(nodeBounds);
 
+  // The signature reuses the shared board hash instead of serialising every
+  // node's bounds per edge, so an unchanged board is an O(1) string compare and
+  // a cache hit never touches the obstacle list at all.
   const routeSignature = getDirectRouteSignature({
     laneOffset,
     sourceEndpoints,
     targetEndpoints,
-    nodeBounds: normalizedNodeBounds,
+    boundsHash: getMeasuredAvoidanceSweep().hash,
   });
   const cachedRoute = edgeId ? directRouteCache.get(edgeId) : undefined;
   if (cachedRoute?.signature === routeSignature) {
     return cachedRoute.route.points;
   }
 
+  const normalizedNodeBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]);
   const obstacleSegments = getIndexedRouteObstacleSegments(edgeId, routeIndex, routeSignature);
   const candidates = sourceEndpoints.flatMap((sourceEndpoint) =>
     targetEndpoints.flatMap((targetEndpoint) =>
@@ -2017,19 +2857,16 @@ function getDirectRouteSignature({
   laneOffset,
   sourceEndpoints,
   targetEndpoints,
-  nodeBounds,
+  boundsHash,
 }: {
   laneOffset: number;
   sourceEndpoints: SlotEdgeEndpoint[];
   targetEndpoints: SlotEdgeEndpoint[];
-  nodeBounds: Array<{ left: number; right: number; top: number; bottom: number }>;
+  boundsHash: string;
 }) {
-  return JSON.stringify({
-    laneOffset,
-    source: sourceEndpoints.map(serializeSlotEdgeEndpoint),
-    target: targetEndpoints.map(serializeSlotEdgeEndpoint),
-    bounds: nodeBounds,
-  });
+  return `${laneOffset}|${sourceEndpoints.map(serializeSlotEdgeEndpoint).join(",")}|${targetEndpoints
+    .map(serializeSlotEdgeEndpoint)
+    .join(",")}|${boundsHash}`;
 }
 
 function normalizeRouteEndpoints(endpoints: SlotEdgeEndpoint[]) {
@@ -2047,27 +2884,8 @@ function normalizeRouteEndpoints(endpoints: SlotEdgeEndpoint[]) {
     );
 }
 
-function normalizeRouteBounds(
-  bounds: Array<{ left: number; right: number; top: number; bottom: number }>,
-) {
-  return bounds
-    .map((entry) => ({
-      left: snapRouteCoord(entry.left),
-      right: snapRouteCoord(entry.right),
-      top: snapRouteCoord(entry.top),
-      bottom: snapRouteCoord(entry.bottom),
-    }))
-    .sort(
-      (left, right) => left.left - right.left || left.top - right.top || left.right - right.right,
-    );
-}
-
 function serializeSlotEdgeEndpoint(endpoint: SlotEdgeEndpoint) {
-  return {
-    x: endpoint.x,
-    y: endpoint.y,
-    side: String(endpoint.side),
-  };
+  return `${endpoint.x}:${endpoint.y}:${String(endpoint.side)}`;
 }
 
 function snapRouteCoord(value: number) {
@@ -2983,21 +3801,83 @@ function countPolylineTurns(points: Array<{ x: number; y: number }>) {
   return turns;
 }
 
-function getMeasuredAvoidanceNodeBounds(excludedNodeIds: Array<string | undefined>) {
-  if (typeof document === "undefined") {
-    return [];
+/**
+ * Measures every node on the board once per layout epoch.
+ *
+ * Each edge needs the same obstacle set minus its own two endpoints, so this
+ * used to walk and measure the entire board once per edge â€” O(edges x nodes)
+ * forced layouts every frame. The sweep is now shared and each edge only filters
+ * it.
+ *
+ * Nodes are ordered by id rather than by DOM order so the obstacle list (and
+ * therefore route scoring) does not depend on React's mount order.
+ */
+function getMeasuredAvoidanceSweep() {
+  if (measuredAvoidanceSweep?.epoch === measuredLayoutEpoch) {
+    return measuredAvoidanceSweep;
   }
 
-  const excluded = new Set(excludedNodeIds.filter((id): id is string => Boolean(id)));
-  return [...document.querySelectorAll<HTMLElement>(".react-flow__node")]
-    .filter((element) => {
+  const bounds: Array<{ id: string; bounds: MeasuredBounds }> = [];
+  if (typeof document !== "undefined") {
+    for (const element of document.querySelectorAll<HTMLElement>(".react-flow__node")) {
       const id = element.dataset.id;
-      return id && !excluded.has(id);
-    })
-    .map((element) => getMeasuredNodeBounds(element.dataset.id ?? ""))
-    .filter((bounds): bounds is { left: number; right: number; top: number; bottom: number } =>
-      Boolean(bounds),
+      if (!id) {
+        continue;
+      }
+
+      const cacheKey = `${measuredLayoutEpoch}|${id}`;
+      let measured = measuredNodeBoundsCache.get(cacheKey);
+      if (!measuredNodeBoundsCache.has(cacheKey)) {
+        measured = measureNodeElementBounds(element);
+        measuredNodeBoundsCache.set(cacheKey, measured);
+      }
+
+      if (measured) {
+        bounds.push({ id, bounds: measured });
+      }
+    }
+  }
+
+  bounds.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
+
+  // Snap and geometry-sort once, in the order `normalizeRouteBounds` would have
+  // produced. Filtering an already-sorted list preserves that order, so each edge
+  // no longer has to re-sort the whole board.
+  const normalized = bounds
+    .map((entry) => ({
+      id: entry.id,
+      bounds: {
+        left: snapRouteCoord(entry.bounds.left),
+        right: snapRouteCoord(entry.bounds.right),
+        top: snapRouteCoord(entry.bounds.top),
+        bottom: snapRouteCoord(entry.bounds.bottom),
+      },
+    }))
+    .sort(
+      (left, right) =>
+        left.bounds.left - right.bounds.left ||
+        left.bounds.top - right.bounds.top ||
+        left.bounds.right - right.bounds.right,
     );
+
+  measuredAvoidanceSweep = {
+    epoch: measuredLayoutEpoch,
+    bounds: normalized,
+    hash: bounds
+      .map(
+        (entry) =>
+          `${entry.id}:${snapRouteCoord(entry.bounds.left)},${snapRouteCoord(entry.bounds.top)},${snapRouteCoord(entry.bounds.right)},${snapRouteCoord(entry.bounds.bottom)}`,
+      )
+      .join(";"),
+  };
+  return measuredAvoidanceSweep;
+}
+
+function getMeasuredAvoidanceNodeBounds(excludedNodeIds: Array<string | undefined>) {
+  const excluded = new Set(excludedNodeIds.filter((id): id is string => Boolean(id)));
+  return getMeasuredAvoidanceSweep()
+    .bounds.filter((entry) => !excluded.has(entry.id))
+    .map((entry) => entry.bounds);
 }
 
 function expandBounds(
@@ -3465,16 +4345,9 @@ function getMeasuredSlotEndpoint({
   if (!handleId || typeof document === "undefined") {
     return undefined;
   }
-  scheduleMeasuredSlotCacheClear();
-
-  const cacheKey = [
-    getViewportMeasurementSignature(),
-    "endpoint",
-    nodeId,
-    handleId,
-    edgeSide,
-    endpointOffset,
-  ].join("|");
+  const cacheKey = [measuredLayoutEpoch, "endpoint", nodeId, handleId, edgeSide, endpointOffset].join(
+    "|",
+  );
   if (measuredSlotEndpointCache.has(cacheKey)) {
     return measuredSlotEndpointCache.get(cacheKey);
   }
@@ -3509,9 +4382,7 @@ function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?
   if (!handleId || typeof document === "undefined") {
     return undefined;
   }
-  scheduleMeasuredSlotCacheClear();
-
-  const cacheKey = [getViewportMeasurementSignature(), "center", nodeId, handleId].join("|");
+  const cacheKey = [measuredLayoutEpoch, "center", nodeId, handleId].join("|");
   if (measuredSlotCenterCache.has(cacheKey)) {
     return measuredSlotCenterCache.get(cacheKey);
   }
@@ -3572,13 +4443,25 @@ function getMeasuredNodeBounds(nodeId: string) {
     return undefined;
   }
 
+  const cacheKey = `${measuredLayoutEpoch}|${nodeId}`;
+  if (measuredNodeBoundsCache.has(cacheKey)) {
+    return measuredNodeBoundsCache.get(cacheKey);
+  }
+
   const nodeElement = document.querySelector<HTMLElement>(
     `.react-flow__node[data-id="${cssEscape(nodeId)}"]`,
   );
   if (!nodeElement) {
+    measuredNodeBoundsCache.set(cacheKey, undefined);
     return undefined;
   }
 
+  const bounds = measureNodeElementBounds(nodeElement);
+  measuredNodeBoundsCache.set(cacheKey, bounds);
+  return bounds;
+}
+
+function measureNodeElementBounds(nodeElement: HTMLElement) {
   const rect = nodeElement.getBoundingClientRect();
   const topLeft = screenToFlowPoint({ x: rect.left, y: rect.top }, nodeElement);
   const bottomRight = screenToFlowPoint({ x: rect.right, y: rect.bottom }, nodeElement);
@@ -3595,6 +4478,29 @@ function getMeasuredNodeBounds(nodeId: string) {
 }
 
 function screenToFlowPoint(point: { x: number; y: number }, element: HTMLElement) {
+  const transform = getViewportTransform(element);
+  if (!transform) {
+    return undefined;
+  }
+
+  return {
+    x: (point.x - transform.rendererLeft - transform.translateX) / transform.scaleX,
+    y: (point.y - transform.rendererTop - transform.translateY) / transform.scaleY,
+  };
+}
+
+/**
+ * Reads the live viewport transform at most once per frame.
+ *
+ * `getComputedStyle(...).transform` forces a style recalculation, and this used
+ * to run twice per node per edge â€” so a board with 40 nodes and 80 edges paid
+ * over six thousand forced recalcs in a single frame.
+ */
+function getViewportTransform(element: HTMLElement) {
+  if (viewportTransformCache) {
+    return viewportTransformCache;
+  }
+
   const root = element.closest<HTMLElement>(".react-flow");
   const viewport =
     element.closest<HTMLElement>(".react-flow__viewport") ??
@@ -3607,11 +4513,17 @@ function screenToFlowPoint(point: { x: number; y: number }, element: HTMLElement
   }
 
   const rendererRect = renderer.getBoundingClientRect();
-  const transform = parseCssMatrix(getComputedStyle(viewport).transform);
-  return {
-    x: (point.x - rendererRect.left - transform.translateX) / transform.scaleX,
-    y: (point.y - rendererRect.top - transform.translateY) / transform.scaleY,
+  const matrix = parseCssMatrix(getComputedStyle(viewport).transform);
+  viewportTransformCache = {
+    rendererLeft: rendererRect.left,
+    rendererTop: rendererRect.top,
+    translateX: matrix.translateX,
+    translateY: matrix.translateY,
+    scaleX: matrix.scaleX,
+    scaleY: matrix.scaleY,
   };
+  scheduleViewportTransformClear();
+  return viewportTransformCache;
 }
 
 function parseCssMatrix(transform: string) {
@@ -3653,50 +4565,25 @@ function findResourceEndpointElement(selector: string, nodeId: string, handleId:
   );
 }
 
-function scheduleMeasuredSlotCacheClear() {
-  if (measuredSlotCacheClearScheduled || typeof window === "undefined") {
+function scheduleViewportTransformClear() {
+  if (viewportTransformClearScheduled || typeof window === "undefined") {
+    viewportTransformCache = undefined;
     return;
   }
 
-  measuredSlotCacheClearScheduled = true;
+  viewportTransformClearScheduled = true;
   window.requestAnimationFrame(() => {
-    measuredSlotEndpointCache.clear();
-    measuredSlotCenterCache.clear();
-    measuredSlotCacheClearScheduled = false;
+    viewportTransformCache = undefined;
+    viewportTransformClearScheduled = false;
   });
-}
-
-function getViewportMeasurementSignature() {
-  if (typeof document === "undefined") {
-    return "server";
-  }
-
-  const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
-  return viewport?.style.transform || viewport?.getAttribute("style") || "none";
 }
 
 function cssEscape(value: string) {
   return typeof CSS !== "undefined" && CSS.escape ? CSS.escape(value) : value.replace(/"/g, '\\"');
 }
 
-function formatEdgeRateLabel(data: ResourceEdgeData | undefined) {
-  if (!data) {
-    return "";
-  }
-
-  const visibleRate =
-    data.isLimited && data.transferred !== undefined ? data.transferred : data.demand;
-  return `${formatEdgeValue(visibleRate)} ${data.unit}`;
-}
-
-function formatEdgeValue(value: number) {
-  return trimEdgeNumber(value);
-}
-
 function trimEdgeNumber(value: number) {
-  const abs = Math.abs(value);
-  const digits = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
-  return formatNumberWithThousands(trimTrailingDecimalZeros(value.toFixed(digits)));
+  return formatEdgeValue(value);
 }
 
 function isPointerOverIncompatibleFlowHandle(
@@ -3903,6 +4790,36 @@ function getStorageHandleAtPosition(
   }
 
   return undefined;
+}
+
+function brightenHexColor(color: string, amount: number) {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) {
+    return color;
+  }
+  const value = Number.parseInt(match[1], 16);
+  const lift = (channel: number) => Math.min(255, Math.round(channel + (255 - channel) * amount));
+  const r = lift((value >> 16) & 0xff);
+  const g = lift((value >> 8) & 0xff);
+  const b = lift(value & 0xff);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
+
+// Pushes every channel away from the pixel's grey point, which raises
+// saturation without shifting hue or overall lightness.
+function saturateHexColor(color: string, amount: number) {
+  const match = /^#([0-9a-f]{6})$/i.exec(color);
+  if (!match) {
+    return color;
+  }
+  const value = Number.parseInt(match[1], 16);
+  const r = (value >> 16) & 0xff;
+  const g = (value >> 8) & 0xff;
+  const b = value & 0xff;
+  const grey = 0.299 * r + 0.587 * g + 0.114 * b;
+  const push = (channel: number) =>
+    Math.min(255, Math.max(0, Math.round(grey + (channel - grey) * (1 + amount))));
+  return `#${((push(r) << 16) | (push(g) << 8) | push(b)).toString(16).padStart(6, "0")}`;
 }
 
 function getInitialResourceColor(resource: ResourceEdgeData["resource"]) {
@@ -4143,12 +5060,55 @@ function downloadBlob(blob: Blob, fileName: string) {
   URL.revokeObjectURL(url);
 }
 
-function dispatchImageExportComplete(requestId: string) {
+function dispatchImageExportComplete(requestId: string, dataUrl?: string) {
   window.dispatchEvent(
     new CustomEvent(FLOW_IMAGE_EXPORT_COMPLETE_EVENT, {
-      detail: { requestId },
+      detail: { requestId, dataUrl },
     }),
   );
+}
+
+/**
+ * Downscales a full board capture into a share-card thumbnail, shrinking
+ * until it fits the upload limit so big factories don't silently lose their
+ * preview image.
+ */
+async function makeThumbnailDataUrl(blob: Blob, maxBytes = 380_000): Promise<string> {
+  const bitmap = await createImageBitmap(blob);
+  try {
+    const attempts: Array<{ maxSide: number; quality: number }> = [
+      { maxSide: 720, quality: 0.82 },
+      { maxSide: 560, quality: 0.72 },
+      { maxSide: 420, quality: 0.62 },
+      { maxSide: 320, quality: 0.5 },
+    ];
+
+    let smallest: string | undefined;
+    for (const { maxSide, quality } of attempts) {
+      const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("Canvas 2D context unavailable");
+      }
+
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+      if (dataUrl.length <= maxBytes) {
+        return dataUrl;
+      }
+      smallest = dataUrl;
+    }
+
+    if (!smallest) {
+      throw new Error("Thumbnail encode produced no image");
+    }
+    return smallest;
+  } finally {
+    bitmap.close();
+  }
 }
 
 function getEdgeResource(
