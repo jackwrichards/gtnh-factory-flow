@@ -721,7 +721,15 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   );
 }
 
-export const RecipeNode = memo(RecipeNodeComponent);
+// React Flow hands node components their live position (and dragging state) as
+// props, so the default prop comparison fails on every drag frame — which
+// re-rendered this entire NEI window per frame while its box moved. The
+// component only reads `data` and `selected`; comparing exactly those keeps the
+// heavy content inert while the wrapper is translated around it.
+export const RecipeNode = memo(
+  RecipeNodeComponent,
+  (previous, next) => previous.data === next.data && previous.selected === next.selected,
+);
 
 function formatSlotRate(value: number, kind: string): string {
   const unit = kind === "fluid" ? " L/s" : "/s";

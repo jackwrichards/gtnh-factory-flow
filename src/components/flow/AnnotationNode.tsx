@@ -248,4 +248,14 @@ function TextShape({
   );
 }
 
-export const AnnotationNode = memo(AnnotationNodeComponent);
+// Position props change every drag frame; this component reads only `data`,
+// `selected` and its size, so comparing exactly those keeps annotation bodies
+// from re-rendering while their wrapper is translated (see RecipeNode).
+export const AnnotationNode = memo(
+  AnnotationNodeComponent,
+  (previous, next) =>
+    previous.data === next.data &&
+    previous.selected === next.selected &&
+    previous.width === next.width &&
+    previous.height === next.height,
+);

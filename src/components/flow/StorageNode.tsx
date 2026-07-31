@@ -107,7 +107,13 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   );
 }
 
-export const StorageNode = memo(StorageNodeComponent);
+// Position props change every drag frame; the component only reads `data` and
+// `selected`, so comparing exactly those keeps the card from re-rendering while
+// its wrapper is translated (see RecipeNode for the long version).
+export const StorageNode = memo(
+  StorageNodeComponent,
+  (previous, next) => previous.data === next.data && previous.selected === next.selected,
+);
 
 function StorageHeader({
   storageId,

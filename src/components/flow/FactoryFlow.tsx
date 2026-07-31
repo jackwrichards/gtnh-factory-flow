@@ -1403,6 +1403,43 @@ export function FactoryFlow() {
     cancelResourceConnection();
   }, [cancelResourceConnection, selectNode]);
 
+  // Stable references keep the memoized PaintToolbar from re-rendering on the
+  // per-frame FactoryFlow renders a node drag produces.
+  const handlePaintModeChange = useCallback(
+    (tag: FactoryNodeColorTag | null | undefined) => {
+      setAnnotationTool(undefined);
+      setDeleteMode(false);
+      setNodeColorPaintMode(tag);
+    },
+    [setNodeColorPaintMode],
+  );
+  const handlePaintColorSelect = useCallback(
+    (tag: FactoryNodeColorTag) => {
+      setActiveColorTag(tag);
+      // Changing colour mid-paint keeps painting with the new colour.
+      if (nodeColorPaintMode !== undefined) {
+        setNodeColorPaintMode(tag);
+      }
+    },
+    [nodeColorPaintMode, setNodeColorPaintMode],
+  );
+  const handleAnnotationToolChange = useCallback(
+    (tool: FactoryAnnotationKind | undefined) => {
+      setNodeColorPaintMode(undefined);
+      setDeleteMode(false);
+      setAnnotationTool(tool);
+    },
+    [setNodeColorPaintMode],
+  );
+  const handleDeleteModeChange = useCallback(
+    (enabled: boolean) => {
+      setNodeColorPaintMode(undefined);
+      setAnnotationTool(undefined);
+      setDeleteMode(enabled);
+    },
+    [setNodeColorPaintMode],
+  );
+
   const handleNodeDragStart = useCallback((_: unknown, node: Node, draggedNodes: Node[]) => {
     activelyDraggedNodeIds.clear();
     activelyDraggedNodeIds.add(node.id);
@@ -1622,31 +1659,13 @@ export function FactoryFlow() {
       </ReactFlow>
       <PaintToolbar
         paintMode={nodeColorPaintMode}
-        onPaintModeChange={(tag) => {
-          setAnnotationTool(undefined);
-          setDeleteMode(false);
-          setNodeColorPaintMode(tag);
-        }}
+        onPaintModeChange={handlePaintModeChange}
         activeColorTag={activeColorTag}
-        onColorSelect={(tag) => {
-          setActiveColorTag(tag);
-          // Changing colour mid-paint keeps painting with the new colour.
-          if (nodeColorPaintMode !== undefined) {
-            setNodeColorPaintMode(tag);
-          }
-        }}
+        onColorSelect={handlePaintColorSelect}
         annotationTool={annotationTool}
-        onAnnotationToolChange={(tool) => {
-          setNodeColorPaintMode(undefined);
-          setDeleteMode(false);
-          setAnnotationTool(tool);
-        }}
+        onAnnotationToolChange={handleAnnotationToolChange}
         isDeleteMode={isDeleteMode}
-        onDeleteModeChange={(enabled) => {
-          setNodeColorPaintMode(undefined);
-          setAnnotationTool(undefined);
-          setDeleteMode(enabled);
-        }}
+        onDeleteModeChange={handleDeleteModeChange}
       />
       <SourceToolbar />
       {isProjectImporting ? <FlowLoadingOverlay /> : null}
@@ -1658,7 +1677,7 @@ export function FactoryFlow() {
  * Board tools that drop in source-style nodes (things that produce without
  * crafting, like crop farms). Lives top-left, mirroring the paint toolbar.
  */
-function SourceToolbar() {
+const SourceToolbar = memo(function SourceToolbar() {
   const addCropFarmNode = useFactoryStore((state) => state.addCropFarmNode);
 
   return (
@@ -1677,7 +1696,7 @@ function SourceToolbar() {
       </button>
     </div>
   );
-}
+});
 
 function FlowLoadingOverlay() {
   return (
@@ -1757,7 +1776,9 @@ const ANNOTATION_TOOLS: Array<{
   { kind: "text", label: "Add text note", Icon: Type },
 ];
 
-function PaintToolbar({
+// Memoized because FactoryFlow re-renders every frame of a node drag; with
+// stable callbacks this toolbar renders only when a tool or colour changes.
+const PaintToolbar = memo(function PaintToolbar({
   paintMode,
   onPaintModeChange,
   activeColorTag,
@@ -1897,7 +1918,7 @@ function PaintToolbar({
       </button>
     </div>
   );
-}
+});
 
 /** Matches the figures in a sentence: rates ("10/s", "12 L/s"), percents ("20%") and multipliers ("5×"). */
 const RATE_TOKEN_PATTERN = /(\d[\d,]*(?:\.\d+)?(?:(?:\s?L)?\/[a-z]+|%|×))/g;
