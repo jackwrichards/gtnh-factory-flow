@@ -332,9 +332,33 @@ function pruneNodeDataCaches(
 // the edges that need it re-render every frame anyway via their position props.
 const activelyDraggedNodeIds = new Set<string>();
 
-const measuredSlotEndpointCache = new Map<string, { x: number; y: number } | undefined>();
-const measuredSlotCenterCache = new Map<string, { x: number; y: number } | undefined>();
 const measuredNodeBoundsCache = new Map<string, MeasuredBounds | undefined>();
+// Obstacle geometry for route avoidance, published by the board from React
+// Flow's node state (positions plus measured sizes). The sweep used to scan
+// `.react-flow__node` elements, but with `onlyRenderVisibleElements` the DOM
+// only holds the nodes currently on screen — so every pan frame changed the
+// obstacle set, invalidating every cached route (and quietly making routes
+// depend on the viewport, which AGENTS.md forbids).
+let publishedBoardBounds: Array<{ id: string; bounds: MeasuredBounds }> | undefined;
+let publishedBoardGeometryById = new Map<
+  string,
+  { x: number; y: number; width: number; height: number }
+>();
+
+// Slot endpoints cached relative to their node's origin, keyed by node size.
+// Measuring through the DOM made an edge's endpoints depend on whether its
+// node happened to be mounted (`onlyRenderVisibleElements` culls off-screen
+// nodes), so routes flip-flopped between measured and estimated shapes as the
+// viewport moved — re-scoring on every flip. A slot cannot move inside its
+// node without the node changing size, so node-relative points survive
+// unmounts and moves alike; absolute positions come from the published
+// geometry above.
+const relativeSlotEndpointCache = new Map<string, { x: number; y: number }>();
+const relativeSlotCenterCache = new Map<string, { x: number; y: number }>();
+
+function boardGeometryDimsKey(geometry: { width: number; height: number } | undefined) {
+  return geometry ? `${Math.round(geometry.width)}x${Math.round(geometry.height)}` : "?";
+}
 let measuredAvoidanceSweep:
   | { epoch: number; bounds: Array<{ id: string; bounds: MeasuredBounds }>; hash: string }
   | undefined;
@@ -359,8 +383,6 @@ let viewportTransformClearScheduled = false;
  */
 function invalidateMeasuredLayout() {
   measuredLayoutEpoch += 1;
-  measuredSlotEndpointCache.clear();
-  measuredSlotCenterCache.clear();
   measuredNodeBoundsCache.clear();
   measuredAvoidanceSweep = undefined;
 }
@@ -532,7 +554,17 @@ export function FactoryFlow() {
       return;
     }
 
-    setFlowNodes(nodesFromProject);
+    // Rebuilt node objects don't carry React Flow's `measured` sizes; syncing
+    // them in verbatim would zero every node's dimensions until React Flow
+    // re-measures, which the geometry fingerprints below would read as the
+    // whole board resizing twice — rerouting everything on every hover.
+    setFlowNodes((current) => {
+      const measuredById = new Map(current.map((node) => [node.id, node.measured]));
+      return nodesFromProject.map((node) => {
+        const measured = measuredById.get(node.id);
+        return measured ? { ...node, measured } : node;
+      });
+    });
   }, [nodesFromProject]);
 
   useEffect(() => {
@@ -549,16 +581,26 @@ export function FactoryFlow() {
   // identity for plenty of reasons that move nothing — hover zIndex, solver
   // results, drag frames — and invalidating on each of those used to force the
   // whole board to re-measure and reroute every edge per frame, which is what
-  // made pans and drags stutter on large graphs. Positions are therefore
-  // reduced to a fingerprint; sizes are covered by the ResizeObserver below,
-  // because a node can grow on its own when icons or NEI layout resolve.
-  const nodeLayoutFingerprint = useMemo(
+  // made pans and drags stutter on large graphs. Geometry is therefore reduced
+  // to a fingerprint of positions and React Flow's measured sizes (its own
+  // ResizeObserver reports content growth, e.g. when icons or NEI layout
+  // resolve, through `onNodesChange`).
+  // Dimensions are rounded so re-measure jitter (remounts under culling,
+  // sub-pixel differences) can't masquerade as a resize.
+  const nodeGeometryFingerprint = useMemo(
     () =>
       flowNodes
-        .map((node) => `${node.id}:${node.position.x},${node.position.y}`)
+        .map(
+          (node) =>
+            `${node.id}:${node.position.x},${node.position.y},${Math.round(
+              node.measured?.width ?? node.width ?? 0,
+            )}x${Math.round(node.measured?.height ?? node.height ?? 0)}`,
+        )
         .join(";"),
     [flowNodes],
   );
+  const flowNodesRef = useRef(flowNodes);
+  flowNodesRef.current = flowNodes;
   useLayoutEffect(() => {
     // Drag frames rewrite positions constantly. Measurements stay frozen for
     // the whole drag: untouched edges keep their cached routes, edges on the
@@ -568,65 +610,60 @@ export function FactoryFlow() {
       return;
     }
 
+    // Publish the obstacle set for route avoidance from state, not the DOM:
+    // with `onlyRenderVisibleElements` the DOM only holds on-screen nodes, so a
+    // DOM-derived obstacle set changed on every pan and invalidated every
+    // cached route. Reads through a ref so identity-only `flowNodes` churn
+    // (hover zIndex, solver results) doesn't re-run this.
+    const geometryById = new Map<string, { x: number; y: number; width: number; height: number }>();
+    for (const node of flowNodesRef.current) {
+      geometryById.set(node.id, {
+        x: node.position.x,
+        y: node.position.y,
+        width: node.measured?.width ?? node.width ?? 0,
+        height: node.measured?.height ?? node.height ?? 0,
+      });
+    }
+    publishedBoardGeometryById = geometryById;
+    publishedBoardBounds = [...geometryById.entries()]
+      .map(([id, geometry]) => ({
+        id,
+        bounds: {
+          left: geometry.x,
+          top: geometry.y,
+          right: geometry.x + geometry.width,
+          bottom: geometry.y + geometry.height,
+        },
+      }))
+      .filter((entry) => entry.bounds.right > entry.bounds.left)
+      .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
     invalidateMeasuredLayout();
-  }, [nodeLayoutFingerprint]);
+  }, [nodeGeometryFingerprint]);
 
-  // Re-observing every node on every `flowNodes` identity change made the
-  // ResizeObserver re-fire its initial burst per change, bumping
-  // `layoutVersion` — and with it a full edge reissue — once per hover twitch.
-  // Node membership is the only thing that requires new observations.
-  const nodeMembershipFingerprint = useMemo(
+  // A node growing (icons resolving, layout settling) leaves previously issued
+  // routes stale; re-issuing the edge objects is what makes them re-render and
+  // re-measure. Positions alone don't need this — moves end in a project
+  // update that rebuilds the edges anyway.
+  const nodeDimensionsFingerprint = useMemo(
     () =>
       flowNodes
-        .map((node) => node.id)
+        .map(
+          (node) =>
+            `${node.id}:${Math.round(node.measured?.width ?? node.width ?? 0)}x${Math.round(
+              node.measured?.height ?? node.height ?? 0,
+            )}`,
+        )
         .sort()
-        .join("|"),
+        .join(";"),
     [flowNodes],
   );
   useLayoutEffect(() => {
-    const board = boardRef.current;
-    if (!board || typeof ResizeObserver === "undefined") {
+    if (draggingNodeRef.current) {
       return;
     }
 
-    let pending = false;
-    // The burst ResizeObserver emits when it first observes each node carries
-    // no size change, and reacting to it would reroute the board once per
-    // membership change for nothing — so each element's last seen size is
-    // remembered and only genuine changes count.
-    const lastSeenSizes = new WeakMap<Element, string>();
-    const observer = new ResizeObserver((entries) => {
-      let sizeChanged = false;
-      for (const entry of entries) {
-        const size = `${entry.contentRect.width}x${entry.contentRect.height}`;
-        if (lastSeenSizes.get(entry.target) !== size) {
-          if (lastSeenSizes.has(entry.target)) {
-            sizeChanged = true;
-          }
-          lastSeenSizes.set(entry.target, size);
-        }
-      }
-
-      if (!sizeChanged || pending) {
-        return;
-      }
-
-      pending = true;
-      // Coalesce per-node emissions and re-route only once the browser has
-      // settled on the new sizes.
-      window.requestAnimationFrame(() => {
-        pending = false;
-        invalidateMeasuredLayout();
-        setLayoutVersion((version) => version + 1);
-      });
-    });
-
-    for (const nodeElement of board.querySelectorAll<HTMLElement>(".react-flow__node")) {
-      observer.observe(nodeElement);
-    }
-
-    return () => observer.disconnect();
-  }, [nodeMembershipFingerprint]);
+    setLayoutVersion((version) => version + 1);
+  }, [nodeDimensionsFingerprint]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<BoardFlowNode>[]) => {
@@ -2805,8 +2842,6 @@ function getBestDirectEdgePoints({
     return cachedRoute.route.points;
   }
 
-  const normalizedNodeBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]);
-  const obstacleSegments = getIndexedRouteObstacleSegments(edgeId, routeIndex, routeSignature);
   const candidates = sourceEndpoints.flatMap((sourceEndpoint) =>
     targetEndpoints.flatMap((targetEndpoint) =>
       getDirectEdgePointCandidates({
@@ -2824,6 +2859,44 @@ function getBestDirectEdgePoints({
     ),
   );
 
+  // Scoring every candidate against the whole board is what made rerouting
+  // O(edges × nodes) as plans grew. A candidate can only collide with
+  // geometry inside the candidates' own reach, so obstacles and existing
+  // segments are prefiltered to that envelope (padded by the clearance the
+  // scorer measures against) — scores are identical, the far board is skipped.
+  let reachLeft = Infinity;
+  let reachRight = -Infinity;
+  let reachTop = Infinity;
+  let reachBottom = -Infinity;
+  for (const candidate of candidates) {
+    for (const point of candidate.points) {
+      if (point.x < reachLeft) reachLeft = point.x;
+      if (point.x > reachRight) reachRight = point.x;
+      if (point.y < reachTop) reachTop = point.y;
+      if (point.y > reachBottom) reachBottom = point.y;
+    }
+  }
+  const reachMargin = EDGE_LINK_CLEARANCE + 1;
+  reachLeft -= reachMargin;
+  reachRight += reachMargin;
+  reachTop -= reachMargin;
+  reachBottom += reachMargin;
+
+  const normalizedNodeBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]).filter(
+    (bounds) =>
+      bounds.right >= reachLeft &&
+      bounds.left <= reachRight &&
+      bounds.bottom >= reachTop &&
+      bounds.top <= reachBottom,
+  );
+  const obstacleSegments = getIndexedRouteObstacleSegments(edgeId, routeIndex, routeSignature).filter(
+    (segment) =>
+      Math.max(segment.start.x, segment.end.x) >= reachLeft &&
+      Math.min(segment.start.x, segment.end.x) <= reachRight &&
+      Math.max(segment.start.y, segment.end.y) >= reachTop &&
+      Math.min(segment.start.y, segment.end.y) <= reachBottom,
+  );
+
   const bestRoute = candidates
     .map((candidate) => ({
       points: candidate.points,
@@ -2839,11 +2912,9 @@ function getBestDirectEdgePoints({
   let optimizedRoute = bestRoute;
   let optimizedScore = scoreEdgeRoute(bestRoute, normalizedNodeBounds, obstacleSegments);
   for (let pass = 0; pass < EDGE_ROUTE_RELAXATION_PASSES; pass += 1) {
-    const relaxedObstacleSegments = getIndexedRouteObstacleSegments(
-      edgeId,
-      routeIndex,
-      routeSignature,
-    );
+    // The cache this reads from cannot change within the loop, so the filtered
+    // obstacle set from above is still exact.
+    const relaxedObstacleSegments = obstacleSegments;
     const relaxedRoute = candidates
       .map((candidate) => ({
         points: candidate.points,
@@ -3925,8 +3996,12 @@ function getMeasuredAvoidanceSweep() {
     return measuredAvoidanceSweep;
   }
 
-  const bounds: Array<{ id: string; bounds: MeasuredBounds }> = [];
-  if (typeof document !== "undefined") {
+  let bounds: Array<{ id: string; bounds: MeasuredBounds }> = [];
+  if (publishedBoardBounds) {
+    // Published geometry covers the whole board regardless of which nodes are
+    // currently mounted, and needs no DOM reads.
+    bounds = publishedBoardBounds;
+  } else if (typeof document !== "undefined") {
     for (const element of document.querySelectorAll<HTMLElement>(".react-flow__node")) {
       const id = element.dataset.id;
       if (!id) {
@@ -3944,9 +4019,8 @@ function getMeasuredAvoidanceSweep() {
         bounds.push({ id, bounds: measured });
       }
     }
+    bounds.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
   }
-
-  bounds.sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
 
   // Snap and geometry-sort once, in the order `normalizeRouteBounds` would have
   // produced. Filtering an already-sorted list preserves that order, so each edge
@@ -4453,22 +4527,34 @@ function getMeasuredSlotEndpoint({
   if (!handleId || typeof document === "undefined") {
     return undefined;
   }
-  const cacheKey = [measuredLayoutEpoch, "endpoint", nodeId, handleId, edgeSide, endpointOffset].join(
+  const geometry = publishedBoardGeometryById.get(nodeId);
+  const cacheKey = [nodeId, handleId, edgeSide, endpointOffset, boardGeometryDimsKey(geometry)].join(
     "|",
   );
-  if (measuredSlotEndpointCache.has(cacheKey)) {
-    return measuredSlotEndpointCache.get(cacheKey);
+  const cachedRelative = relativeSlotEndpointCache.get(cacheKey);
+  if (cachedRelative && geometry) {
+    return offsetFlowPointForEdgeSide(
+      { x: geometry.x + cachedRelative.x, y: geometry.y + cachedRelative.y },
+      edgeSide,
+      endpointOffset,
+    );
   }
 
+  // Node element first: with viewport culling the node is often simply not
+  // mounted, and the slot lookups below are document-wide attribute scans that
+  // would run (twice, across every handle on the board) just to find nothing.
+  // A miss is deliberately not cached — the next render after the node mounts
+  // should measure.
+  const nodeElement = document.querySelector<HTMLElement>(
+    `.react-flow__node[data-id="${cssEscape(nodeId)}"]`,
+  );
+  if (!nodeElement) {
+    return undefined;
+  }
   const slotElement =
-    findResourceEndpointElement("[data-resource-edge-anchor='true']", nodeId, handleId) ??
-    findResourceEndpointElement("[data-resource-handle='true']", nodeId, handleId);
-  const nodeElement =
-    slotElement?.closest<HTMLElement>(".react-flow__node") ??
-    document.querySelector<HTMLElement>(`.react-flow__node[data-id="${cssEscape(nodeId)}"]`);
-
-  if (!nodeElement || !slotElement) {
-    measuredSlotEndpointCache.set(cacheKey, undefined);
+    findResourceEndpointElement(nodeElement, "[data-resource-edge-anchor='true']", nodeId, handleId) ??
+    findResourceEndpointElement(nodeElement, "[data-resource-handle='true']", nodeId, handleId);
+  if (!slotElement) {
     return undefined;
   }
 
@@ -4477,33 +4563,41 @@ function getMeasuredSlotEndpoint({
   const flowPoint = screenToFlowPoint(screenPoint, nodeElement);
 
   if (!flowPoint) {
-    measuredSlotEndpointCache.set(cacheKey, undefined);
     return undefined;
   }
 
-  const measuredEndpoint = offsetFlowPointForEdgeSide(flowPoint, edgeSide, endpointOffset);
-  measuredSlotEndpointCache.set(cacheKey, measuredEndpoint);
-  return measuredEndpoint;
+  if (geometry) {
+    relativeSlotEndpointCache.set(cacheKey, {
+      x: flowPoint.x - geometry.x,
+      y: flowPoint.y - geometry.y,
+    });
+  }
+  return offsetFlowPointForEdgeSide(flowPoint, edgeSide, endpointOffset);
 }
 
 function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?: string | null }) {
   if (!handleId || typeof document === "undefined") {
     return undefined;
   }
-  const cacheKey = [measuredLayoutEpoch, "center", nodeId, handleId].join("|");
-  if (measuredSlotCenterCache.has(cacheKey)) {
-    return measuredSlotCenterCache.get(cacheKey);
+  const geometry = publishedBoardGeometryById.get(nodeId);
+  const cacheKey = [nodeId, handleId, boardGeometryDimsKey(geometry)].join("|");
+  const cachedRelative = relativeSlotCenterCache.get(cacheKey);
+  if (cachedRelative && geometry) {
+    return { x: geometry.x + cachedRelative.x, y: geometry.y + cachedRelative.y };
   }
 
+  // Same ordering rationale as the endpoint lookup above; never memoize a
+  // miss, the node may just be culled right now.
+  const nodeElement = document.querySelector<HTMLElement>(
+    `.react-flow__node[data-id="${cssEscape(nodeId)}"]`,
+  );
+  if (!nodeElement) {
+    return undefined;
+  }
   const slotElement =
-    findResourceEndpointElement("[data-resource-edge-anchor='true']", nodeId, handleId) ??
-    findResourceEndpointElement("[data-resource-handle='true']", nodeId, handleId);
-  const nodeElement =
-    slotElement?.closest<HTMLElement>(".react-flow__node") ??
-    document.querySelector<HTMLElement>(`.react-flow__node[data-id="${cssEscape(nodeId)}"]`);
-
-  if (!nodeElement || !slotElement) {
-    measuredSlotCenterCache.set(cacheKey, undefined);
+    findResourceEndpointElement(nodeElement, "[data-resource-edge-anchor='true']", nodeId, handleId) ??
+    findResourceEndpointElement(nodeElement, "[data-resource-handle='true']", nodeId, handleId);
+  if (!slotElement) {
     return undefined;
   }
 
@@ -4512,7 +4606,12 @@ function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?
     { x: slotRect.left + slotRect.width / 2, y: slotRect.top + slotRect.height / 2 },
     nodeElement,
   );
-  measuredSlotCenterCache.set(cacheKey, measuredCenter);
+  if (measuredCenter && geometry) {
+    relativeSlotCenterCache.set(cacheKey, {
+      x: measuredCenter.x - geometry.x,
+      y: measuredCenter.y - geometry.y,
+    });
+  }
   return measuredCenter;
 }
 
@@ -4665,8 +4764,13 @@ function parseCssMatrix(transform: string) {
   };
 }
 
-function findResourceEndpointElement(selector: string, nodeId: string, handleId: string) {
-  return document.querySelector<HTMLElement>(
+function findResourceEndpointElement(
+  scope: ParentNode,
+  selector: string,
+  nodeId: string,
+  handleId: string,
+) {
+  return scope.querySelector<HTMLElement>(
     `${selector}[data-resource-node-id="${cssEscape(nodeId)}"][data-resource-handle-id="${cssEscape(
       handleId,
     )}"]`,
