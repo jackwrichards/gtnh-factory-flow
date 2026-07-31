@@ -373,17 +373,8 @@ textarea {
   background: color-mix(in srgb, var(--recipe-node-tint) 88%, var(--mc-78));
 }
 
-.recipe-node-tinted-area .recipe-node-nei-tint > div {
-  background: color-mix(in srgb, var(--recipe-node-tint) 72%, var(--mc-78));
-}
-
-.recipe-node-tinted-area .recipe-node-nei-tint > div > div {
-  background: color-mix(in srgb, var(--recipe-node-tint) 58%, var(--mc-78));
-}
-
-.recipe-node-tinted-area .recipe-node-nei-tint > div:last-child {
+.recipe-node-tinted-area .recipe-node-nei-tint .recipe-node-window-stats {
   background: color-mix(in srgb, var(--recipe-node-tint) 86%, var(--mc-78));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--recipe-node-tint-border) 35%, var(--mc-47));
 }
 
 .recipe-node-canvas-tint::before {

@@ -85,28 +85,71 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
     );
   }
 
+  const stats = (
+    <div className="relative mt-1 text-[var(--mc-ink)]">
+      <div
+        className={["min-w-0 pr-11 leading-tight", compact ? "text-[10px]" : "text-[16px]"].join(
+          " ",
+        )}
+      >
+        <div>Total: {formatRate(totalEu, 0)} EU</div>
+        <div>
+          Usage: {formatRate(recipe.eut, 0)} EU/t ({powerTier})
+        </div>
+        <div>Time: {formatRate(seconds, seconds >= 10 ? 0 : 1)} seconds</div>
+      </div>
+      {statsAction ? <div className="absolute right-0 top-0">{statsAction}</div> : null}
+    </div>
+  );
+
+  if (compact) {
+    // On the flow board the node shell already provides the outer frame and
+    // the canvas draws its own panel rim, so the window adds no chrome of its
+    // own - the old bevel-in-frame-in-shell nesting read as stacked picture
+    // frames.
+    return (
+      <div
+        className={["relative inline-block font-mono text-[10px] text-[var(--mc-ink)]", className]
+          .join(" ")
+          .trim()}
+      >
+        <NeiRecipeCanvas
+          recipe={recipe}
+          layout={layout}
+          scale={scale}
+          slotPixelSize={compactSlotPixelSize}
+          iconPixelSize={QUICK_SLOT_ICON_PIXEL_SIZE}
+          className={canvasClassName}
+          renderHandle={renderHandle}
+          getSlotConnectionAttributes={getSlotConnectionAttributes}
+          onSlotClick={onSlotClick}
+          suppressSlotHover={suppressSlotHover}
+          suppressConsumedState={suppressConsumedState}
+          getSlotZIndex={getSlotZIndex}
+          slotTooltip={slotTooltip}
+          hideCollapseControls={preserveNativeSlots}
+          contextResource={contextResource}
+        />
+        <div className="recipe-node-window-stats">{stats}</div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={[
-        "relative inline-block bg-[var(--mc-78)] p-1 font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
-        compact ? "text-[10px]" : "text-[14px]",
+        "relative inline-block bg-[var(--mc-78)] p-1 font-mono text-[14px] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
         className,
       ].join(" ")}
     >
       <div className="border-2 border-[var(--mc-98)] bg-[var(--mc-78)] shadow-[inset_-2px_-2px_0_var(--mc-44)]">
-        {!compact ? (
-          <>
-            <NeiTitleBar label={recipeMap} compact={compact} />
-            <NeiPageBar compact={compact} />
-          </>
-        ) : null}
-        <div className={compact ? "p-1" : "p-2"}>
+        <NeiTitleBar label={recipeMap} compact={false} />
+        <NeiPageBar compact={false} />
+        <div className="p-2">
           <NeiRecipeCanvas
             recipe={recipe}
             layout={layout}
             scale={scale}
-            slotPixelSize={compact ? compactSlotPixelSize : undefined}
-            iconPixelSize={compact ? QUICK_SLOT_ICON_PIXEL_SIZE : undefined}
             className={canvasClassName}
             renderHandle={renderHandle}
             getSlotConnectionAttributes={getSlotConnectionAttributes}
@@ -121,20 +164,7 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
         </div>
       </div>
 
-      <div className="relative mt-1 text-[var(--mc-ink)]">
-        <div
-          className={["min-w-0 pr-11 leading-tight", compact ? "text-[10px]" : "text-[16px]"].join(
-            " ",
-          )}
-        >
-          <div>Total: {formatRate(totalEu, 0)} EU</div>
-          <div>
-            Usage: {formatRate(recipe.eut, 0)} EU/t ({powerTier})
-          </div>
-          <div>Time: {formatRate(seconds, seconds >= 10 ? 0 : 1)} seconds</div>
-        </div>
-        {statsAction ? <div className="absolute right-0 top-0">{statsAction}</div> : null}
-      </div>
+      {stats}
     </div>
   );
 });

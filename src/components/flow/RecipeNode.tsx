@@ -64,7 +64,9 @@ import { GT_NODE_COLORS } from "./node-colors";
 import { getPaintBrushCursor } from "./paint-cursor";
 import { GT_TIER_COLORS } from "./tier-colors";
 
-const CROP_CONFIG_PANEL_WIDTH_CLASS = "w-[398px]";
+// Full width so the crop config panel and stat grid line up with the recipe
+// canvas edge instead of forcing their own wider box.
+const CROP_CONFIG_PANEL_WIDTH_CLASS = "w-full";
 
 export interface RecipeNodeData extends Record<string, unknown> {
   projectNode: FactoryNode;
@@ -777,8 +779,14 @@ function RateLedger({
     return null;
   }
 
-  const chips = (entries: typeof inputs, side: "input" | "output") =>
-    entries.map(({ flow, resource }) => (
+  // Some recipes carry hundreds of chanced outputs; past this the strip stops
+  // being a summary. The overflow marker's tooltip lists what was cut.
+  const MAX_CHIPS_PER_SIDE = 8;
+  const chips = (allEntries: typeof inputs, side: "input" | "output") => {
+    const entries = allEntries.slice(0, MAX_CHIPS_PER_SIDE);
+    const hidden = allEntries.slice(MAX_CHIPS_PER_SIDE);
+    return [
+      ...entries.map(({ flow, resource }) => (
       <span
         key={`${side}:${flow.key}`}
         className="flex items-center gap-1"
@@ -806,10 +814,27 @@ function RateLedger({
           {formatSlotRate(flow.amountPerSecond * speed, flow.kind)}
         </span>
       </span>
-    ));
+      )),
+      ...(hidden.length > 0
+        ? [
+            <span
+              key={`${side}:overflow`}
+              className="text-[10px] font-bold leading-4 text-[var(--mc-ink-muted)]"
+              title={hidden
+                .map(({ flow }) => flow.displayName ?? flow.resourceId)
+                .join(", ")}
+            >
+              +{hidden.length}
+            </span>,
+          ]
+        : []),
+    ];
+  };
 
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1.5 py-0.5">
+    // w-0 min-w-full keeps the strip from widening the w-max node shell: it
+    // adopts the node's width (the canvas decides it) and wraps chips to fit.
+    <div className="mt-1 flex w-0 min-w-full flex-wrap items-center gap-x-2 gap-y-0.5 border-2 border-[var(--mc-47)] bg-[var(--mc-71)] px-1.5 py-0.5 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
       <span className="text-[8px] font-black uppercase leading-4 tracking-[1.5px] text-[var(--mc-ink-muted)]">
         Rates
       </span>
