@@ -165,8 +165,11 @@ export function CropPickerMenu({
                       // The default md size (h-12 w-12) must exactly match the
                       // cell above: the sprite draws at 200% of the box and the
                       // box crops the rendered padding away, so a size mismatch
-                      // shows up as an off-center, shrunken icon.
+                      // shows up as an off-center, shrunken icon. The extra
+                      // scale zooms the art without growing the cell; ~1.2 is
+                      // the ceiling before isometric block sprites clip.
                       size="md"
+                      className="scale-[1.2]"
                     />
                   ) : null}
                 </span>
