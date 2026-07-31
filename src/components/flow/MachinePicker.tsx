@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useStore } from "@xyflow/react";
 import type { MachineHandler, MachineTier, Recipe } from "@/lib/model/types";
-import { applyMachineHandlerToRecipe, formatRate } from "@/lib/model";
+import { applyMachineHandlerToRecipe, formatRate, isSteamMachineHandler } from "@/lib/model";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { GT_TIER_COLORS } from "./tier-colors";
 import type { MachineHandlerIcon } from "./machine-icons";
@@ -44,6 +45,8 @@ export interface HandlerRecipeStats {
   eut: number;
   totalEu: number;
   minimumTier: string;
+  /** Steam-line machine: burns steam, never EU. */
+  steam: boolean;
   perfectOverclock: boolean;
   fixedParallels?: number;
   scalingParallels: { label: string; max: number }[];
@@ -106,6 +109,7 @@ export function getHandlerRecipeStats(recipe: Recipe, handler: MachineHandler): 
     eut: applied.eut,
     totalEu: applied.eut * applied.durationTicks,
     minimumTier: applied.minimumTier,
+    steam: isSteamMachineHandler(handler),
     perfectOverclock: applied.machineProfile?.perfectOverclock === true,
     fixedParallels,
     scalingParallels,
@@ -124,7 +128,7 @@ export function getMachineGroup(handler: MachineHandler): MachineGroup {
   if (handler.kind === "multiblock") {
     return "Multiblock";
   }
-  if (/\bsteam\b/i.test(handler.label)) {
+  if (isSteamMachineHandler(handler)) {
     return "Steam";
   }
   const tier = handler.minimumTier;
@@ -152,6 +156,9 @@ function formatCompact(value: number): string {
 }
 
 function powerText(stats: HandlerRecipeStats): string {
+  if (stats.steam) {
+    return "steam";
+  }
   return stats.eut > 0 ? `${formatCompact(stats.eut)} EU/t` : "none";
 }
 
@@ -436,6 +443,11 @@ export function MachineCompareTable({
   const [sortDir, setSortDir] = useState<1 | -1>(1);
   const rootRef = useRef<HTMLDivElement>(null);
   const [alignRight, setAlignRight] = useState(false);
+  // The panel is UI, not a canvas object: counter-scale it against the
+  // canvas zoom so it stays the same readable screen size at every zoom
+  // level, instead of ballooning past small screens when zoomed in.
+  const zoom = useStore((state) => state.transform[2]);
+  const panelScale = 1 / Math.max(0.2, zoom);
 
   // If the panel would run under the app's right sidebar, hang it off the
   // node's right edge instead of its left.
@@ -528,6 +540,11 @@ export function MachineCompareTable({
         "nodrag nowheel absolute top-full z-[140] mt-1 max-h-[360px] w-[660px] overflow-auto border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1.5 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]",
         alignRight ? "right-0" : "left-0",
       ].join(" ")}
+      style={{
+        transform: `scale(${panelScale})`,
+        transformOrigin: alignRight ? "top right" : "top left",
+        maxWidth: "min(660px, 92vw)",
+      }}
       onClick={(event) => event.stopPropagation()}
       role="dialog"
       aria-label="Compare machines"
@@ -630,7 +647,7 @@ function CompareGroupRows({
             </td>
             <td className={`${cell} text-right`}>{formatSeconds(stats.seconds)}s</td>
             <td className={`${cell} text-right`}>
-              {stats.eut > 0 ? formatRate(stats.eut, 0) : "—"}
+              {stats.steam ? "steam" : stats.eut > 0 ? formatRate(stats.eut, 0) : "—"}
             </td>
             <td className={`${cell} text-right`}>
               {stats.fixedParallels !== undefined

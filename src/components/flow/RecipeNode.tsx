@@ -32,6 +32,7 @@ import {
   BEE_INDUSTRIAL_PRODUCTION_CONTROL_ID,
   BEE_INDUSTRIAL_SPEED_CONTROL_ID,
   isRecipeInputConsumed,
+  isSteamMachineHandler,
   isBeeFrameSlotControlId,
   isBeeProductionConfigControl,
   isBeeProductionRecipe,
@@ -126,7 +127,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     // A vanilla furnace or steam machine draws no EU, so offering ULV/LV/...
     // voltage tiers on it is meaningless - the chip disappears instead.
     const machineDrawsEu =
-      effectiveRecipe.eut > 0 && !/\bsteam\b/i.test(selectedMachineHandler.label);
+      effectiveRecipe.eut > 0 && !isSteamMachineHandler(selectedMachineHandler);
     const tierControl = machineDrawsEu
       ? getNodeTierControl(effectiveRecipe, projectNode)
       : undefined;

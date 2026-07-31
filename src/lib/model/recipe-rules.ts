@@ -51,6 +51,17 @@ export function getRecipeMachineHandlers(
   ];
 }
 
+/**
+ * Steam-line machines: they consume steam, never EU. Audited against all 836
+ * exported catalysts: every machine named "Steam ..." or "High Pressure ..."
+ * is a steam MTE without a Voltage IN tooltip line, and no EU machine
+ * matches either pattern ("High Pressure Alloy Smelter" is the one steam
+ * machine that omits the word steam).
+ */
+export function isSteamMachineHandler(handler: Pick<MachineHandler, "label">): boolean {
+  return /\bsteam\b/i.test(handler.label) || /\bhigh pressure\b/i.test(handler.label);
+}
+
 export function getSelectedMachineHandler(
   recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers">,
   node: Pick<FactoryNode, "machineHandlerId">,
@@ -84,13 +95,17 @@ export function applyMachineHandlerToRecipe(
   // default machine; a different selected machine must fall back to the
   // static overclock math seeded with the handler's own duration/EU.
   const runtimeCalculation = handler.id === handlers[0].id ? recipe.runtimeCalculation : undefined;
+  // Steam machines burn steam, not EU. Their handlers carry no EU override,
+  // so without this they would inherit the electric recipe's EU draw and the
+  // planner would bill phantom power for them.
+  const eut = isSteamMachineHandler(handler) ? 0 : (handler.eut ?? recipe.eut);
   return {
     ...recipe,
     runtimeCalculation,
     machineType: handler.machineType,
     minimumTier: handler.minimumTier,
     durationTicks: handler.durationTicks ?? recipe.durationTicks,
-    eut: handler.eut ?? recipe.eut,
+    eut,
     machineConfigControls,
     machineProfile: {
       ...recipe.machineProfile,
