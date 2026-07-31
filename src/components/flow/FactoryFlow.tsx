@@ -601,20 +601,12 @@ export function FactoryFlow() {
   );
   const flowNodesRef = useRef(flowNodes);
   flowNodesRef.current = flowNodes;
-  useLayoutEffect(() => {
-    // Drag frames rewrite positions constantly. Measurements stay frozen for
-    // the whole drag: untouched edges keep their cached routes, edges on the
-    // dragged node use estimated endpoints, and the drop (which flips the ref
-    // back before updating `flowNodes`) runs the one full re-measure.
-    if (draggingNodeRef.current) {
-      return;
-    }
-
-    // Publish the obstacle set for route avoidance from state, not the DOM:
-    // with `onlyRenderVisibleElements` the DOM only holds on-screen nodes, so a
-    // DOM-derived obstacle set changed on every pan and invalidated every
-    // cached route. Reads through a ref so identity-only `flowNodes` churn
-    // (hover zIndex, solver results) doesn't re-run this.
+  // Publish the obstacle set for route avoidance from state, not the DOM: with
+  // `onlyRenderVisibleElements` the DOM only holds on-screen nodes, so a
+  // DOM-derived obstacle set changed on every pan and invalidated every cached
+  // route. Reads through the ref so identity-only `flowNodes` churn (hover
+  // zIndex, solver results) doesn't feed it.
+  const publishBoardGeometry = useCallback(() => {
     const geometryById = new Map<string, { x: number; y: number; width: number; height: number }>();
     for (const node of flowNodesRef.current) {
       geometryById.set(node.id, {
@@ -638,32 +630,27 @@ export function FactoryFlow() {
       .filter((entry) => entry.bounds.right > entry.bounds.left)
       .sort((left, right) => (left.id < right.id ? -1 : left.id > right.id ? 1 : 0));
     invalidateMeasuredLayout();
-  }, [nodeGeometryFingerprint]);
-
-  // A node growing (icons resolving, layout settling) leaves previously issued
-  // routes stale; re-issuing the edge objects is what makes them re-render and
-  // re-measure. Positions alone don't need this — moves end in a project
-  // update that rebuilds the edges anyway.
-  const nodeDimensionsFingerprint = useMemo(
-    () =>
-      flowNodes
-        .map(
-          (node) =>
-            `${node.id}:${Math.round(node.measured?.width ?? node.width ?? 0)}x${Math.round(
-              node.measured?.height ?? node.height ?? 0,
-            )}`,
-        )
-        .sort()
-        .join(";"),
-    [flowNodes],
-  );
+  }, []);
   useLayoutEffect(() => {
+    // Drag frames rewrite positions constantly. Measurements stay frozen for
+    // the whole drag: untouched edges keep their cached routes and edges on
+    // the dragged node use estimated endpoints. The drop republishes
+    // explicitly (see handleNodeDragStop) — it has to, because React Flow
+    // streams the final position into `flowNodes` during the last drag frame,
+    // so this fingerprint does NOT change again after the drag ends.
     if (draggingNodeRef.current) {
       return;
     }
 
+    publishBoardGeometry();
+    // Edges rendered in the pass that carried this geometry change computed
+    // their routes against the PREVIOUS published geometry (render runs before
+    // layout effects), so a moved node's edges would keep pointing at where it
+    // used to be. Re-issuing the edge objects makes them recompute against
+    // what was just published; this also covers nodes growing when icons or
+    // NEI layout resolve.
     setLayoutVersion((version) => version + 1);
-  }, [nodeDimensionsFingerprint]);
+  }, [nodeGeometryFingerprint, publishBoardGeometry]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<BoardFlowNode>[]) => {
@@ -1499,6 +1486,14 @@ export function FactoryFlow() {
 
       activelyDraggedNodeIds.clear();
       draggingNodeRef.current = false;
+      // The geometry-publish effect can't see the drop: React Flow streamed
+      // the final position into `flowNodes` during the last drag frame, so
+      // its fingerprint won't change again. Republish here — the ref already
+      // holds the final layout — so the reroutes triggered by the project
+      // update below compute against current positions, and bump the layout
+      // version so every stale route is reissued.
+      publishBoardGeometry();
+      setLayoutVersion((version) => version + 1);
       setNodeDragging(false);
       setFlowNodes((currentNodes) =>
         currentNodes.map((entry) =>
@@ -1506,7 +1501,7 @@ export function FactoryFlow() {
         ),
       );
     },
-    [setAnnotationPosition, setNodePosition, setStoragePosition],
+    [publishBoardGeometry, setAnnotationPosition, setNodePosition, setStoragePosition],
   );
 
   const handleEdgesDelete = useCallback(
