@@ -60,3 +60,58 @@ export function reuseObjectIdentity<T extends Record<string, unknown>>(
   cache.set(id, next);
   return next;
 }
+
+function deepEquals(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) {
+    return true;
+  }
+
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((entry, index) => deepEquals(entry, right[index]))
+    );
+  }
+
+  if (
+    typeof left !== "object" ||
+    typeof right !== "object" ||
+    left === null ||
+    right === null ||
+    Object.getPrototypeOf(left) !== Object.getPrototypeOf(right)
+  ) {
+    return false;
+  }
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every((key) =>
+      deepEquals((left as Record<string, unknown>)[key], (right as Record<string, unknown>)[key]),
+    )
+  );
+}
+
+/**
+ * `reuseObjectIdentity` for objects whose fields are themselves rebuilt every
+ * pass. Edge objects nest fresh `data`/`style`/`resource` objects on each
+ * rebuild, so shallow comparison never matches; structural equality is what
+ * decides whether the previous identity can stand in. Same purity argument as
+ * above: both identities carry equal values, only the reference differs.
+ */
+export function reuseDeepObjectIdentity<T extends Record<string, unknown>>(
+  cache: Map<string, T>,
+  id: string,
+  next: T,
+): T {
+  const previous = cache.get(id);
+  if (previous && deepEquals(previous, next)) {
+    return previous;
+  }
+
+  cache.set(id, next);
+  return next;
+}

@@ -101,6 +101,7 @@ import {
   EDGE_DETAIL_LABELS,
   getEdgeDetailLevel,
   hasEdgeDetail,
+  reuseDeepObjectIdentity,
   reuseObjectIdentity,
 } from "./edge-detail";
 import { StorageNode, type StorageFlowNode } from "./StorageNode";
@@ -213,6 +214,13 @@ type ResourceEdgeData = {
     isSupplyCapped: boolean;
   };
   isFlowHighlighted?: boolean;
+  /**
+   * Bust token for the edge-identity cache. Node size changes bump it, which
+   * makes every rebuilt edge structurally new so all of them re-render and
+   * re-measure; without it the deep-identity reuse would hand back the old
+   * object and the stale route would never redraw.
+   */
+  layoutEpoch: number;
 };
 
 type ResourceFlowEdge = Edge<ResourceEdgeData, "resourceEdge">;
@@ -280,12 +288,24 @@ function getMissingRecipePlaceholder(recipeId: string) {
 const recipeNodeDataCache = new Map<string, RecipeFlowNode["data"]>();
 const storageNodeDataCache = new Map<string, StorageFlowNode["data"]>();
 const annotationNodeDataCache = new Map<string, AnnotationFlowNode["data"]>();
+// Same idea for edges, but with structural comparison: an edge object nests
+// fresh data/style objects on every rebuild, and handing React Flow an equal-
+// but-new identity re-renders the edge — which re-runs the route solver. Most
+// rebuilds (hover, solver run) leave most edges untouched.
+const edgeObjectCache = new Map<string, ResourceFlowEdge>();
 
 function pruneNodeDataCaches(
   recipeNodeIds: Set<string>,
   storageIds: Set<string>,
   annotationIds: Set<string>,
+  edgeIds: Set<string>,
 ) {
+  for (const id of edgeObjectCache.keys()) {
+    if (!edgeIds.has(id)) {
+      edgeObjectCache.delete(id);
+    }
+  }
+
   for (const id of annotationNodeDataCache.keys()) {
     if (!annotationIds.has(id)) {
       annotationNodeDataCache.delete(id);
@@ -520,19 +540,28 @@ export function FactoryFlow() {
       new Set(project.nodes.map((node) => node.id)),
       new Set((project.storages ?? []).map((storage) => storage.id)),
       new Set((project.annotations ?? []).map((annotation) => annotation.id)),
+      new Set(project.edges.map((edge) => edge.id)),
     );
-  }, [project.nodes, project.storages, project.annotations]);
+  }, [project.nodes, project.storages, project.annotations, project.edges]);
 
-  // Flow-space measurements are cached across frames, so anything that can move a
-  // node or change its size has to drop them explicitly. Positions are covered by
-  // `flowNodes` (drags included, since React Flow rewrites it per frame); sizes
-  // are not, because a node can grow on its own when icons or NEI layout resolve.
+  // Flow-space measurements are cached across frames, so anything that can move
+  // a node or change its size has to drop them explicitly. `flowNodes` changes
+  // identity for plenty of reasons that move nothing — hover zIndex, solver
+  // results, drag frames — and invalidating on each of those used to force the
+  // whole board to re-measure and reroute every edge per frame, which is what
+  // made pans and drags stutter on large graphs. Positions are therefore
+  // reduced to a fingerprint; sizes are covered by the ResizeObserver below,
+  // because a node can grow on its own when icons or NEI layout resolve.
+  const nodeLayoutFingerprint = useMemo(
+    () =>
+      flowNodes
+        .map((node) => `${node.id}:${node.position.x},${node.position.y}`)
+        .join(";"),
+    [flowNodes],
+  );
   useLayoutEffect(() => {
-    // React Flow rewrites `flowNodes` on every drag frame. Invalidating and
-    // re-observing here each frame used to force the whole board to re-measure
-    // and reroute every edge while a single box moved, which is what made drags
-    // stutter on large graphs. During a drag the measurements are deliberately
-    // left frozen: untouched edges keep their cached routes, edges on the
+    // Drag frames rewrite positions constantly. Measurements stay frozen for
+    // the whole drag: untouched edges keep their cached routes, edges on the
     // dragged node use estimated endpoints, and the drop (which flips the ref
     // back before updating `flowNodes`) runs the one full re-measure.
     if (draggingNodeRef.current) {
@@ -540,21 +569,51 @@ export function FactoryFlow() {
     }
 
     invalidateMeasuredLayout();
+  }, [nodeLayoutFingerprint]);
 
+  // Re-observing every node on every `flowNodes` identity change made the
+  // ResizeObserver re-fire its initial burst per change, bumping
+  // `layoutVersion` — and with it a full edge reissue — once per hover twitch.
+  // Node membership is the only thing that requires new observations.
+  const nodeMembershipFingerprint = useMemo(
+    () =>
+      flowNodes
+        .map((node) => node.id)
+        .sort()
+        .join("|"),
+    [flowNodes],
+  );
+  useLayoutEffect(() => {
     const board = boardRef.current;
     if (!board || typeof ResizeObserver === "undefined") {
       return;
     }
 
     let pending = false;
-    const observer = new ResizeObserver(() => {
-      if (pending) {
+    // The burst ResizeObserver emits when it first observes each node carries
+    // no size change, and reacting to it would reroute the board once per
+    // membership change for nothing — so each element's last seen size is
+    // remembered and only genuine changes count.
+    const lastSeenSizes = new WeakMap<Element, string>();
+    const observer = new ResizeObserver((entries) => {
+      let sizeChanged = false;
+      for (const entry of entries) {
+        const size = `${entry.contentRect.width}x${entry.contentRect.height}`;
+        if (lastSeenSizes.get(entry.target) !== size) {
+          if (lastSeenSizes.has(entry.target)) {
+            sizeChanged = true;
+          }
+          lastSeenSizes.set(entry.target, size);
+        }
+      }
+
+      if (!sizeChanged || pending) {
         return;
       }
 
       pending = true;
-      // Coalesce the burst ResizeObserver emits when it first observes each node,
-      // and re-route only once the browser has settled on the new sizes.
+      // Coalesce per-node emissions and re-route only once the browser has
+      // settled on the new sizes.
       window.requestAnimationFrame(() => {
         pending = false;
         invalidateMeasuredLayout();
@@ -567,7 +626,7 @@ export function FactoryFlow() {
     }
 
     return () => observer.disconnect();
-  }, [flowNodes]);
+  }, [nodeMembershipFingerprint]);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange<BoardFlowNode>[]) => {
@@ -666,7 +725,10 @@ export function FactoryFlow() {
       const isFlowHighlighted =
         activeFlowResourceKey === makeResourceKey(edge.resourceKind, edge.resourceId);
 
-      return {
+      // Structural reuse: hover and solver rebuilds leave most edges equal,
+      // and returning the previous identity lets React Flow skip re-rendering
+      // (and re-routing) them entirely.
+      return reuseDeepObjectIdentity(edgeObjectCache, edge.id, {
         id: edge.id,
         zIndex: isNodeDragging ? 2000 : isFlowHighlighted ? 1200 : 20,
         source: edge.source,
@@ -706,6 +768,7 @@ export function FactoryFlow() {
           routeIndex: edgeIndex,
           bundle: edgeBundles.get(edge.id),
           isFlowHighlighted,
+          layoutEpoch: layoutVersion,
         },
         style: {
           stroke: edgeColor,
@@ -729,12 +792,8 @@ export function FactoryFlow() {
                   ? 3.4
                   : 2.9,
         },
-      };
+      });
     });
-    // `layoutVersion` is a deliberate cache-bust token rather than a value this
-    // memo reads: when a node changes size the routes it produces are stale, and
-    // re-issuing the edge objects is what forces them to re-measure.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeFlowResourceKey,
     hoveredStorageResourceKey,
