@@ -305,6 +305,13 @@ function pruneNodeDataCaches(
   }
 }
 
+// Node ids currently being dragged. While a drag is live, edges touching these
+// nodes drop to cheap estimated routing (so they can follow the pointer without
+// DOM measurement), every other edge keeps its cached route untouched, and the
+// full precise reroute runs once on drop. Module state rather than React state:
+// the edges that need it re-render every frame anyway via their position props.
+const activelyDraggedNodeIds = new Set<string>();
+
 const measuredSlotEndpointCache = new Map<string, { x: number; y: number } | undefined>();
 const measuredSlotCenterCache = new Map<string, { x: number; y: number } | undefined>();
 const measuredNodeBoundsCache = new Map<string, MeasuredBounds | undefined>();
@@ -521,6 +528,17 @@ export function FactoryFlow() {
   // `flowNodes` (drags included, since React Flow rewrites it per frame); sizes
   // are not, because a node can grow on its own when icons or NEI layout resolve.
   useLayoutEffect(() => {
+    // React Flow rewrites `flowNodes` on every drag frame. Invalidating and
+    // re-observing here each frame used to force the whole board to re-measure
+    // and reroute every edge while a single box moved, which is what made drags
+    // stutter on large graphs. During a drag the measurements are deliberately
+    // left frozen: untouched edges keep their cached routes, edges on the
+    // dragged node use estimated endpoints, and the drop (which flips the ref
+    // back before updating `flowNodes`) runs the one full re-measure.
+    if (draggingNodeRef.current) {
+      return;
+    }
+
     invalidateMeasuredLayout();
 
     const board = boardRef.current;
@@ -1326,7 +1344,12 @@ export function FactoryFlow() {
     cancelResourceConnection();
   }, [cancelResourceConnection, selectNode]);
 
-  const handleNodeDragStart = useCallback(() => {
+  const handleNodeDragStart = useCallback((_: unknown, node: Node, draggedNodes: Node[]) => {
+    activelyDraggedNodeIds.clear();
+    activelyDraggedNodeIds.add(node.id);
+    for (const dragged of draggedNodes) {
+      activelyDraggedNodeIds.add(dragged.id);
+    }
     draggingNodeRef.current = true;
     setNodeDragging(true);
   }, []);
@@ -1341,6 +1364,7 @@ export function FactoryFlow() {
         setNodePosition(node.id, node.position);
       }
 
+      activelyDraggedNodeIds.clear();
       draggingNodeRef.current = false;
       setNodeDragging(false);
       setFlowNodes((currentNodes) =>
@@ -1889,8 +1913,12 @@ function ResourceEdgeComponent({
   // AGENTS.md requires routing to be deterministic and independent of zoom
   // level. Precise routing used to be switched off below 0.45 because measuring
   // was expensive; now that measurements are cached across frames it always runs,
-  // so a route no longer changes shape when the user zooms out.
-  const shouldUsePreciseRouting = true;
+  // so a route no longer changes shape when the user zooms out. The one
+  // exception is an edge whose endpoint node is mid-drag: measurements are
+  // frozen for the whole drag, so this edge follows the pointer with cheap
+  // estimated endpoints and gets its precise route back on drop.
+  const shouldUsePreciseRouting =
+    !activelyDraggedNodeIds.has(source) && !activelyDraggedNodeIds.has(target);
   const visualSourceCandidates = getSlotEdgeEndpointCandidates({
     nodeId: source,
     handleId: data?.sourceHandleId ?? sourceHandleId,
