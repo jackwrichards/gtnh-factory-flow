@@ -30,6 +30,45 @@ export function basePanel(width: number, height: number): NeiDrawCommand {
   };
 }
 
+/**
+ * Procedural recipe-panel background: flat face plus a 1-unit soft rim
+ * (highlight top-left, shade bottom-right). Replaces the old 64x64
+ * nei_single_recipe.png, whose rounded corners smeared when the flat texture
+ * was stretched across the whole canvas.
+ */
+export function panelBackground(
+  width: number,
+  height: number,
+  semanticTags?: string[],
+): NeiDrawCommand[] {
+  const rim = (
+    x: number,
+    y: number,
+    rimWidth: number,
+    rimHeight: number,
+    color: string,
+    id: string,
+  ): NeiDrawCommand => ({
+    type: "rect",
+    layer: "background",
+    x,
+    y,
+    width: rimWidth,
+    height: rimHeight,
+    color,
+    semanticTags,
+    id,
+  });
+
+  return [
+    { ...basePanel(width, height), semanticTags, id: "panel-face" },
+    rim(0, 0, width, 1, NEI_PALETTE.panelRimLight, "panel-rim-top"),
+    rim(0, 0, 1, height, NEI_PALETTE.panelRimLight, "panel-rim-left"),
+    rim(0, height - 1, width, 1, NEI_PALETTE.panelRimDark, "panel-rim-bottom"),
+    rim(width - 1, 0, 1, height, NEI_PALETTE.panelRimDark, "panel-rim-right"),
+  ];
+}
+
 export function slotCommand({
   x,
   y,

@@ -684,6 +684,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             }}
           />
           )}
+          {!usesNativeNeiRecipe && !isCropFarmPlaceholder ? (
+            <RateLedger recipe={neiDisplayRecipe} result={result} />
+          ) : null}
           {!usesNativeNeiRecipe ? machineConfigPanel : null}
           {!usesNativeNeiRecipe ? passiveProductionPanel : null}
         </div>
@@ -733,7 +736,90 @@ export const RecipeNode = memo(
 
 function formatSlotRate(value: number, kind: string): string {
   const unit = kind === "fluid" ? " L/s" : "/s";
-  return `${formatRate(value, value >= 100 ? 0 : value >= 10 ? 1 : 2)}${unit}`;
+  // Three decimals below 0.01 so slow drips (crop drops, chanced outputs)
+  // don't render as a flat 0.00/s.
+  const digits = value >= 100 ? 0 : value >= 10 ? 1 : value >= 0.01 ? 2 : 3;
+  return `${formatRate(value, digits)}${unit}`;
+}
+
+/**
+ * Always-visible throughput strip under the recipe window: an icon + rate chip
+ * per resource, inputs then outputs. Shows the current (utilization-scaled)
+ * flow so a plan can be read without hovering; the per-slot tooltip keeps the
+ * Now / At-100% breakdown.
+ */
+function RateLedger({
+  recipe,
+  result,
+}: {
+  recipe: Pick<Recipe, "inputs" | "outputs">;
+  result: NodeThroughputResult | undefined;
+}) {
+  if (!result) {
+    return null;
+  }
+
+  const speed = Number.isFinite(result.utilization)
+    ? Math.min(Math.max(result.utilization, 0), 1)
+    : 0;
+  const collect = (flows: NodeThroughputResult["inputs"], resources: ResourceAmount[]) =>
+    Object.values(flows)
+      .filter((flow) => flow.amountPerSecond > 1e-9)
+      .map((flow) => ({
+        flow,
+        resource: resources.find(
+          (entry) => entry.kind === flow.kind && entry.id === flow.resourceId,
+        ),
+      }));
+  const inputs = collect(result.inputs, recipe.inputs);
+  const outputs = collect(result.outputs, recipe.outputs);
+  if (inputs.length === 0 && outputs.length === 0) {
+    return null;
+  }
+
+  const chips = (entries: typeof inputs, side: "input" | "output") =>
+    entries.map(({ flow, resource }) => (
+      <span
+        key={`${side}:${flow.key}`}
+        className="flex items-center gap-1"
+        title={flow.displayName ?? flow.resourceId}
+      >
+        {resource ? (
+          <ResourceIcon
+            // Chance and NC badges are unreadable at 16px and the rate text is
+            // the point here.
+            resource={{ ...resource, amount: 1, chance: undefined }}
+            bare
+            tooltip={false}
+            showAmount={false}
+            showConsumedState={false}
+            iconPixelSize={26}
+            className="!h-4 !w-4 shrink-0"
+          />
+        ) : null}
+        <span
+          className={[
+            "text-[10px] font-bold leading-4 tabular-nums",
+            side === "output" ? "text-emerald-700" : "text-[var(--mc-ink)]",
+          ].join(" ")}
+        >
+          {formatSlotRate(flow.amountPerSecond * speed, flow.kind)}
+        </span>
+      </span>
+    ));
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1.5 py-0.5">
+      <span className="text-[8px] font-black uppercase leading-4 tracking-[1.5px] text-[var(--mc-ink-muted)]">
+        Rates
+      </span>
+      {chips(inputs, "input")}
+      {inputs.length > 0 && outputs.length > 0 ? (
+        <span className="text-[10px] font-black leading-4 text-[var(--mc-ink-muted)]">→</span>
+      ) : null}
+      {chips(outputs, "output")}
+    </div>
+  );
 }
 
 /**

@@ -3,10 +3,10 @@ import type { NeiPositionedStack } from "../core/positioned-stack";
 import type { NeiRenderContext, NeiRecipeHandler } from "../core/recipe-handler";
 import type { NeiRecipeRenderModel, NeiSize } from "../core/render-model";
 import { NEI_TEXT_COLORS } from "../theme/constants";
-import { NEI_TEXTURES } from "../theme/textures";
 import {
   aspectToPositionedStack,
   gridPositions,
+  panelBackground,
   resourceToPositionedStack,
   slotCommand,
 } from "./command-helpers";
@@ -43,16 +43,9 @@ export const EssentiaSmeltingHandler: NeiRecipeHandler = {
     const aspectCount = recipe.aspectOutputs?.length ?? 0;
 
     return [
-      {
-        type: "texture",
-        layer: "background",
-        x: 0,
-        y: 0,
-        width: layout.dimensions.width,
-        height: layout.dimensions.height,
-        imagePath: NEI_TEXTURES.gregtechRecipeBackground,
-        semanticTags: ["thaumcraft-info"],
-      },
+      ...panelBackground(layout.dimensions.width, layout.dimensions.height, [
+        "thaumcraft-info",
+      ]),
       {
         type: "progress",
         layer: "progress",

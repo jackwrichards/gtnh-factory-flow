@@ -11,13 +11,19 @@ describe("NEI recipe handlers", () => {
     const result = render(recipe({ machineType: "Ore Washer" }));
 
     expect(result.handlerId).toBe("gregtech-machine");
+    // The panel is drawn procedurally (face + rim rects), not as a stretched
+    // background texture.
     expect(
       result.commands.some(
         (command) =>
-          command.type === "texture" &&
-          command.imagePath === "/nei/gregtech/gui/background/nei_single_recipe.png",
+          command.type === "rect" && command.layer === "background" && command.id === "panel-face",
       ),
     ).toBe(true);
+    expect(
+      result.commands.some(
+        (command) => command.type === "texture" && command.layer === "background",
+      ),
+    ).toBe(false);
     expect(result.commands.some((command) => command.type === "slot")).toBe(true);
     expect(
       result.commands.some(
@@ -153,7 +159,12 @@ describe("NEI recipe handlers", () => {
         (command) => command.type === "progress" && command.texture === "arrow",
       ),
     ).toBe(true);
-    expect(result.commands.some((command) => command.type === "rect")).toBe(false);
+    // Background panel rects are expected; nothing else should draw rects.
+    expect(
+      result.commands.some(
+        (command) => command.type === "rect" && command.layer !== "background",
+      ),
+    ).toBe(false);
     expect(result.commands.filter((command) => command.type === "aspect")).toHaveLength(6);
     expect(result.commands.find((command) => command.type === "aspect")).toMatchObject({
       stack: {

@@ -2,11 +2,11 @@ import type { NeiDrawCommand } from "../core/commands";
 import type { NeiPositionedStack } from "../core/positioned-stack";
 import type { NeiRecipeHandler } from "../core/recipe-handler";
 import type { NeiSize } from "../core/render-model";
-import { NEI_TEXTURES } from "../theme/textures";
 import {
   frameToPositionedStack,
   frameToSlotCommand,
   gregtechLayout,
+  panelBackground,
   progressCommandsFromLayout,
 } from "./command-helpers";
 
@@ -27,17 +27,9 @@ export const GregTechMachineHandler: NeiRecipeHandler = {
     const commands: NeiDrawCommand[] = [];
 
     if (layout.chrome === "gregtech") {
-      commands.push({
-        type: "texture",
-        layer: "background",
-        x: 0,
-        y: 0,
-        width: layout.canvas.width,
-        height: layout.canvas.height,
-        imagePath: NEI_TEXTURES.gregtechRecipeBackground,
-        semanticTags: ["machine-info"],
-        id: "gregtech-background",
-      });
+      commands.push(
+        ...panelBackground(layout.canvas.width, layout.canvas.height, ["machine-info"]),
+      );
     }
 
     commands.push(
