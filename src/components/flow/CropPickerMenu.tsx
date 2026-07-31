@@ -166,10 +166,11 @@ export function CropPickerMenu({
                       // cell above: the sprite draws at 200% of the box and the
                       // box crops the rendered padding away, so a size mismatch
                       // shows up as an off-center, shrunken icon. The extra
-                      // scale zooms the art without growing the cell; ~1.2 is
-                      // the ceiling before isometric block sprites clip.
+                      // scale zooms the art without growing the cell; beyond
+                      // ~1.2 isometric block sprites start losing their
+                      // corners to the cell edges, which is acceptable here.
                       size="md"
-                      className="scale-[1.2]"
+                      className="scale-[1.4]"
                     />
                   ) : null}
                 </span>
