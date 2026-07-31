@@ -1297,7 +1297,7 @@ function RecipeBookOverlay({
 
   return (
     <div
-      className="pointer-events-auto fixed inset-0 z-30 flex items-center justify-center px-3 py-4 lg:pl-[360px] lg:pr-[440px]"
+      className="pointer-events-auto fixed inset-0 z-30 flex items-center justify-center px-3 py-4 lg:pl-[306px] lg:pr-[330px]"
       onPointerDown={onClose}
     >
       <section

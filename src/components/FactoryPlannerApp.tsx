@@ -209,7 +209,7 @@ export function FactoryPlannerApp() {
   return (
     <div className="flex h-screen min-h-[720px] flex-col bg-canvas text-fg">
       <AppHeader page="editor" />
-      <main className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)_440px]">
+      <main className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[306px_minmax(0,1fr)_330px]">
         {/* Each column carries its own header row, all the same height, so the
             three line up where the full-width bar used to be. */}
         {/* The browser owns its own header row, so no wrapper here — it stays a
