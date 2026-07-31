@@ -152,7 +152,7 @@ export function CropPickerMenu({
                 onClick={() => void handlePick(crop)}
                 className="flex w-full items-center gap-2.5 border-2 border-transparent px-1.5 py-1.5 text-left text-[var(--mc-ink)] hover:border-[var(--mc-47)] hover:bg-[var(--mc-100)]"
               >
-                <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden border border-[var(--mc-33)] bg-[var(--mc-55)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]">
+                <span className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden border border-[var(--mc-33)] bg-[var(--mc-55)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]">
                   {crop.outputs[0] ? (
                     <ResourceIcon
                       // Hide the chance badge here: chances are spelled out in
@@ -162,10 +162,11 @@ export function CropPickerMenu({
                       tooltip={false}
                       showAmount={false}
                       showConsumedState={false}
-                      // No explicit pixel size: ResourceIcon's default draws
-                      // the sprite at 200% of the box and crops the rendered
-                      // padding away - the exact sizing the sidebar list uses.
-                      className="h-10 w-10"
+                      // The default md size (h-12 w-12) must exactly match the
+                      // cell above: the sprite draws at 200% of the box and the
+                      // box crops the rendered padding away, so a size mismatch
+                      // shows up as an off-center, shrunken icon.
+                      size="md"
                     />
                   ) : null}
                 </span>
