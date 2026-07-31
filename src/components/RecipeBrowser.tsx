@@ -782,7 +782,7 @@ function ResourceHistoryPanel({
             }}
             aria-label={resourceLabel(resource)}
             title={resourceLabel(resource)}
-            className="flex aspect-square items-center justify-center rounded-[4px] border border-transparent p-0 hover:border-neutral-500 hover:bg-white/5"
+            className="flex aspect-square items-center justify-center overflow-hidden rounded-[4px] border border-transparent p-0 hover:border-neutral-500 hover:bg-white/5"
           >
             <ResourceIcon
               resource={{ ...resource, amount: 1 }}
@@ -790,6 +790,9 @@ function ResourceHistoryPanel({
               bare
               showAmount={false}
               tooltip={false}
+              // Zoom the art without growing the cell, like the crop picker;
+              // the rendered textures carry ~50% transparent padding.
+              className="scale-[1.4]"
             />
           </button>
         ))}
