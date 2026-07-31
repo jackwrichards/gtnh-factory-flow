@@ -831,18 +831,26 @@ function RateLedger({
     ];
   };
 
+  // One labeled row per side: an inputs→outputs arrow in a single wrapping
+  // line ended up mid-wrap with orphaned chips that read as the wrong side.
+  const row = (label: string, entries: typeof inputs, side: "input" | "output") =>
+    entries.length > 0 ? (
+      <div className="grid grid-cols-[26px_minmax(0,1fr)] items-start gap-x-1">
+        <span className="text-[8px] font-black uppercase leading-4 tracking-[1.5px] text-[var(--mc-ink-muted)]">
+          {label}
+        </span>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          {chips(entries, side)}
+        </span>
+      </div>
+    ) : null;
+
   return (
     // w-0 min-w-full keeps the strip from widening the w-max node shell: it
     // adopts the node's width (the canvas decides it) and wraps chips to fit.
-    <div className="mt-1 flex w-0 min-w-full flex-wrap items-center gap-x-2 gap-y-0.5 border-2 border-[var(--mc-47)] bg-[var(--mc-71)] px-1.5 py-0.5 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
-      <span className="text-[8px] font-black uppercase leading-4 tracking-[1.5px] text-[var(--mc-ink-muted)]">
-        Rates
-      </span>
-      {chips(inputs, "input")}
-      {inputs.length > 0 && outputs.length > 0 ? (
-        <span className="text-[10px] font-black leading-4 text-[var(--mc-ink-muted)]">→</span>
-      ) : null}
-      {chips(outputs, "output")}
+    <div className="mt-1 w-0 min-w-full space-y-0.5 border-2 border-[var(--mc-47)] bg-[var(--mc-71)] px-1.5 py-0.5 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
+      {row("In", inputs, "input")}
+      {row("Out", outputs, "output")}
     </div>
   );
 }
