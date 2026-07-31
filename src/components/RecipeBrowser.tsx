@@ -1115,7 +1115,7 @@ function ResourceResultPage({
                 browse(resource, "uses");
               }}
               className={[
-                "minecraft-pixel-art flex aspect-square items-center justify-center rounded-[4px] border",
+                "minecraft-pixel-art flex aspect-square items-center justify-center overflow-hidden rounded-[4px] border",
                 active
                   ? "border-cyan-400 bg-cyan-500/10"
                   : "border-transparent hover:border-neutral-500 hover:bg-white/5",
@@ -1128,6 +1128,8 @@ function ResourceResultPage({
                 size="md"
                 bare
                 showAmount={false}
+                // Zoom the art without growing the cell (see crop picker).
+                className="scale-[1.5]"
               />
             </button>
           );
@@ -1167,14 +1169,16 @@ function ResourceResultPage({
             role="option"
             aria-selected={active}
           >
-            <span className="minecraft-pixel-art flex h-8 w-8 shrink-0 items-center justify-center">
+            <span className="minecraft-pixel-art flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden">
               <ResourceIcon
                 resource={{ ...resource, amount: 1 }}
                 size="sm"
                 bare
                 showAmount={false}
                 tooltip={false}
-                className="!h-8 !w-8"
+                // Zoom the art without growing the cell (see crop picker);
+                // the wrapper crops the overflow at the 32px cell.
+                className="!h-8 !w-8 scale-[1.5]"
               />
             </span>
             <span className="min-w-0 flex-1">
