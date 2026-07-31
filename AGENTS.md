@@ -121,6 +121,19 @@ gh run watch <run-id> --exit-status
 - When importing image-embedded or JSON plans, preserve node recipe overrides, selected machine handler, tier/config selections, and concrete oredict alternatives.
 - Creating a storage/drawer by dragging from a recipe slot must create both the storage node and the edge.
 
+## Performance
+
+- Performance is a first-class requirement, especially on the flow board. Read
+  `ARCHITECTURE.md` (root) before touching board, routing, or rendering code —
+  it documents the invariants (viewport-independent routing, published
+  geometry, content-keyed cache invalidation, identity reuse, frozen drags,
+  localized route scoring) and the Playwright + CDP profiler stress workflow.
+- Anything O(nodes) per frame is suspect; anything O(nodes × edges) per frame
+  is a bug. No DOM measurement per edge/per frame. Hover must not rebuild the
+  board.
+- Perf-sensitive changes need a before/after check with the stress workflow,
+  not just green tests.
+
 ## Verification
 
 - For code changes:
