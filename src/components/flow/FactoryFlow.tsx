@@ -225,7 +225,16 @@ type ResourceEdgeData = {
 
 type ResourceFlowEdge = Edge<ResourceEdgeData, "resourceEdge">;
 
-type SlotEdgeEndpoint = { x: number; y: number; side: Position };
+type SlotEdgeEndpoint = {
+  x: number;
+  y: number;
+  side: Position;
+  // Whether this side may transit its own node body for free (a slot's
+  // logical exit side, and every side of a small storage node). Other sides
+  // only get a short allowance, so routes cannot tunnel the length of a
+  // recipe node just because a slot technically offers that side.
+  freeExit?: boolean;
+};
 type RoutedEdgePath = {
   path: string;
   labelX: number;
@@ -3067,6 +3076,7 @@ function normalizeRouteEndpoints(endpoints: SlotEdgeEndpoint[]) {
       x: snapRouteCoord(endpoint.x),
       y: snapRouteCoord(endpoint.y),
       side: endpoint.side,
+      freeExit: endpoint.freeExit,
     }))
     .sort(
       (left, right) =>
@@ -3262,6 +3272,7 @@ function scoreEdgeRoute(
 }
 
 const OWN_NODE_CROSSING_WEIGHT = 25_000;
+const NON_LOGICAL_EXIT_STUB_ALLOWANCE = 56;
 
 /**
  * Overlap of a candidate route with the edge's own node rect, minus the
@@ -3301,6 +3312,13 @@ function getOwnNodeCrossingPenalty(
     case Position.Bottom:
       stub = Math.max(0, bounds.bottom - endpoint.y);
       break;
+  }
+  // Non-logical exit sides only get a short free stub: a deep recipe slot
+  // technically offers a top exit, but riding it the full height of the node
+  // (through crate lids, glance bars, config panels) is exactly the tunneling
+  // this penalty exists to stop.
+  if (endpoint.freeExit === false) {
+    stub = Math.min(stub, NON_LOGICAL_EXIT_STUB_ALLOWANCE);
   }
 
   return Math.max(0, overlap - stub - 4) * OWN_NODE_CROSSING_WEIGHT;
@@ -4393,8 +4411,8 @@ function getSlotEdgeEndpointCandidates({
     Position.Right,
   ]);
 
-  return sides.map((edgeSide) =>
-    getSlotEdgeEndpointForSide({
+  return sides.map((edgeSide) => ({
+    ...getSlotEdgeEndpointForSide({
       nodeId,
       handleId,
       edgeSide,
@@ -4404,7 +4422,11 @@ function getSlotEdgeEndpointCandidates({
       isStorageSlotEndpoint,
       measureEndpoint: measureEndpoints,
     }),
-  );
+    // Storage nodes are small and legitimately enter/exit on any side; a
+    // recipe slot only gets a free transit across its own node body toward
+    // its logical side (inputs left, outputs right).
+    freeExit: isStorageSlotEndpoint || !isRecipeSlotEndpoint || edgeSide === logicalRecipeSide,
+  }));
 }
 
 function getSlotEdgeEndpointForSide({
