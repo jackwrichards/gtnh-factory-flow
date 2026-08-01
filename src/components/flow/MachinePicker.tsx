@@ -567,7 +567,7 @@ export function MachineCompareTable({
               >
                 {column.label}
                 {sortKey === column.key ? (
-                  <span className="text-cyan-700"> {sortDir > 0 ? "▲" : "▼"}</span>
+                  <span className="text-[var(--mc-info)]"> {sortDir > 0 ? "▲" : "▼"}</span>
                 ) : null}
               </th>
             ))}

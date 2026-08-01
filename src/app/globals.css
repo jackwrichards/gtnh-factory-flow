@@ -85,6 +85,13 @@
 
   --mc-ink: #202020;
   --mc-ink-muted: #8a8a8a;
+
+  /* Semantic status colors for text sitting on mc-* panel surfaces. The
+     panels flip dark with the theme, so raw Tailwind 700-shades go
+     dark-on-dark; use these instead of hardcoded emerald/red/cyan. */
+  --mc-good: #047857;
+  --mc-bad: #b91c1c;
+  --mc-info: #0e7490;
 }
 
 [data-theme="dark"] {
@@ -142,6 +149,10 @@
 
   --mc-ink: #e8e9ee;
   --mc-ink-muted: #9a9ca4;
+
+  --mc-good: #4ade80;
+  --mc-bad: #f87171;
+  --mc-info: #22d3ee;
 }
 
 @theme inline {

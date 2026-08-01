@@ -131,7 +131,7 @@ export function CropPickerMenu({
           <LoaderCircle className="h-4 w-4 animate-spin" /> Loading crops...
         </div>
       ) : error ? (
-        <div className="px-2 py-3 text-[12px] font-bold text-red-700">{error}</div>
+        <div className="px-2 py-3 text-[12px] font-bold text-[var(--mc-bad)]">{error}</div>
       ) : (
         <div className="max-h-[380px] overflow-y-auto">
           {filtered.map((crop) => {

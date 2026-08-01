@@ -808,7 +808,7 @@ function RateLedger({
         <span
           className={[
             "text-[10px] font-bold leading-4 tabular-nums",
-            side === "output" ? "text-emerald-700" : "text-[var(--mc-ink)]",
+            side === "output" ? "text-[var(--mc-good)]" : "text-[var(--mc-ink)]",
           ].join(" ")}
         >
           {formatSlotRate(flow.amountPerSecond * speed, flow.kind)}
@@ -937,9 +937,9 @@ function UsageStat({
   );
   const valueClassName =
     result?.status === "bottleneck"
-      ? "text-red-700"
+      ? "text-[var(--mc-bad)]"
       : result?.status === "balanced"
-        ? "text-emerald-700"
+        ? "text-[var(--mc-good)]"
         : undefined;
 
   return (
