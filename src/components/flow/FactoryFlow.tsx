@@ -2021,6 +2021,69 @@ function ResourceEdgeComponent({
       }
     | undefined
   >(undefined);
+  // While the cursor over this label sits on a slot handle underneath it, the
+  // label "ducks" (pointer-events: none) so the handle receives the real,
+  // trusted pointerdown and a connection can start. Geometry can force a
+  // label onto a node (short edge into an overlapping drawer), and synthetic
+  // event forwarding cannot start a React Flow connection.
+  const labelDuckWatcherRef = useRef<((event: PointerEvent) => void) | undefined>(undefined);
+  useEffect(
+    () => () => {
+      if (labelDuckWatcherRef.current) {
+        window.removeEventListener("pointermove", labelDuckWatcherRef.current);
+        labelDuckWatcherRef.current = undefined;
+      }
+    },
+    [],
+  );
+  const duckLabelIfCoveringSlot = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (labelDuckWatcherRef.current) {
+      return;
+    }
+    const labelElement = event.currentTarget;
+    const coversHandle = document
+      .elementsFromPoint(event.clientX, event.clientY)
+      .some(
+        (element) =>
+          element instanceof HTMLElement &&
+          !labelElement.contains(element) &&
+          element.matches(".react-flow__handle[data-resource-handle='true']"),
+      );
+    if (!coversHandle) {
+      return;
+    }
+
+    labelElement.style.pointerEvents = "none";
+    setLabelHovered(false);
+    const watch = (moveEvent: PointerEvent) => {
+      // Mid-press (connection drag in progress): stay ducked until release.
+      if (moveEvent.buttons > 0) {
+        return;
+      }
+      const rect = labelElement.getBoundingClientRect();
+      const insideLabel =
+        moveEvent.clientX >= rect.left &&
+        moveEvent.clientX <= rect.right &&
+        moveEvent.clientY >= rect.top &&
+        moveEvent.clientY <= rect.bottom;
+      const stillOverHandle =
+        insideLabel &&
+        document
+          .elementsFromPoint(moveEvent.clientX, moveEvent.clientY)
+          .some(
+            (element) =>
+              element instanceof HTMLElement &&
+              element.matches(".react-flow__handle[data-resource-handle='true']"),
+          );
+      if (!stillOverHandle) {
+        labelElement.style.pointerEvents = "";
+        window.removeEventListener("pointermove", watch);
+        labelDuckWatcherRef.current = undefined;
+      }
+    };
+    labelDuckWatcherRef.current = watch;
+    window.addEventListener("pointermove", watch);
+  }, []);
   const resourceColor = data?.resource
     ? getInitialResourceColor(data.resource)
     : (data?.color ?? DEFAULT_ITEM_EDGE_COLOR);
@@ -2305,6 +2368,7 @@ function ResourceEdgeComponent({
             onPointerMove={(event) => {
               const drag = labelDragRef.current;
               if (!drag) {
+                duckLabelIfCoveringSlot(event);
                 return;
               }
 
@@ -2731,10 +2795,18 @@ function getDirectEdgePath({
       targetY,
       targetPosition,
     });
-  const labelPoint = getPointAtPolylineRatio(points, 0.5) ?? {
-    x: (sourceX + targetX) / 2,
-    y: (sourceY + targetY) / 2,
-  };
+  // Labels are interactive (drag to reposition, click to select) and render
+  // above nodes, so a label parked over a node blocks the slots beneath it —
+  // short edges put the blind polyline midpoint exactly there. Anchor on the
+  // longest stretch of the route that lies outside the edge's own nodes.
+  const labelPoint = getRouteLabelPoint(points, [
+    getMeasuredNodeBoundsById(sourceNodeId),
+    getMeasuredNodeBoundsById(targetNodeId),
+  ]) ??
+    getPointAtPolylineRatio(points, 0.5) ?? {
+      x: (sourceX + targetX) / 2,
+      y: (sourceY + targetY) / 2,
+    };
 
   return {
     path: pointsToSvgPath(points),
@@ -2742,6 +2814,104 @@ function getDirectEdgePath({
     labelY: labelPoint.y,
     points,
   };
+}
+
+/**
+ * Midpoint of the longest route stretch outside the given node rects, or
+ * undefined when the route barely leaves them (then the plain midpoint is the
+ * least-bad anchor anyway).
+ */
+function getRouteLabelPoint(
+  points: Array<{ x: number; y: number }>,
+  ownBounds: Array<{ left: number; right: number; top: number; bottom: number } | undefined>,
+) {
+  const rects = ownBounds.filter(
+    (bounds): bounds is { left: number; right: number; top: number; bottom: number } =>
+      bounds !== undefined,
+  );
+  if (rects.length === 0) {
+    return undefined;
+  }
+
+  let bestLength = 0;
+  let bestPoint: { x: number; y: number } | undefined;
+  for (const segment of getPolylineSegments(points)) {
+    if (segment.length < 1) {
+      continue;
+    }
+
+    const insideIntervals = rects
+      .map((rect) => clipSegmentToRectInterval(segment.start, segment.end, rect))
+      .filter((interval): interval is [number, number] => interval !== undefined)
+      .sort((left, right) => left[0] - right[0]);
+
+    let cursor = 0;
+    const gaps: Array<[number, number]> = [];
+    for (const [enter, exit] of insideIntervals) {
+      if (enter > cursor) {
+        gaps.push([cursor, enter]);
+      }
+      cursor = Math.max(cursor, exit);
+    }
+    if (cursor < 1) {
+      gaps.push([cursor, 1]);
+    }
+
+    for (const [gapStart, gapEnd] of gaps) {
+      const gapLength = (gapEnd - gapStart) * segment.length;
+      if (gapLength > bestLength) {
+        const middle = (gapStart + gapEnd) / 2;
+        bestLength = gapLength;
+        bestPoint = {
+          x: segment.start.x + (segment.end.x - segment.start.x) * middle,
+          y: segment.start.y + (segment.end.y - segment.start.y) * middle,
+        };
+      }
+    }
+  }
+
+  // Below ~three slot widths the label would poke past the stretch anyway.
+  return bestLength >= 96 ? bestPoint : undefined;
+}
+
+/** Liang-Barsky clip: the [enter, exit] parameter interval of the segment inside the rect. */
+function clipSegmentToRectInterval(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  bounds: { left: number; right: number; top: number; bottom: number },
+): [number, number] | undefined {
+  const deltaX = end.x - start.x;
+  const deltaY = end.y - start.y;
+  let enter = 0;
+  let exit = 1;
+
+  const clips = [
+    { p: -deltaX, q: start.x - bounds.left },
+    { p: deltaX, q: bounds.right - start.x },
+    { p: -deltaY, q: start.y - bounds.top },
+    { p: deltaY, q: bounds.bottom - start.y },
+  ];
+
+  for (const { p, q } of clips) {
+    if (Math.abs(p) < 0.0001) {
+      if (q < 0) {
+        return undefined;
+      }
+      continue;
+    }
+
+    const ratio = q / p;
+    if (p < 0) {
+      enter = Math.max(enter, ratio);
+    } else {
+      exit = Math.min(exit, ratio);
+    }
+    if (enter > exit) {
+      return undefined;
+    }
+  }
+
+  return enter < exit ? [enter, exit] : undefined;
 }
 
 function getSimpleOrthogonalEdgePoints({
