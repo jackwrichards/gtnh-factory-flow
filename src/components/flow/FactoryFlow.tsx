@@ -2808,13 +2808,28 @@ function getDirectEdgePath({
       y: (sourceY + targetY) / 2,
     };
 
+  // A short edge (nodes dropped right next to each other) is narrower than
+  // its own label box, so a centered label eclipses the entire line — the
+  // classic "invisible edge" where only the arrowhead pokes out. Float the
+  // label just above the route instead of on it.
+  const routeLength = getPolylineSegments(points).reduce(
+    (sum, segment) => sum + segment.length,
+    0,
+  );
+  const labelLift = routeLength < SHORT_EDGE_LABEL_LIFT_THRESHOLD ? -SHORT_EDGE_LABEL_LIFT : 0;
+
   return {
     path: pointsToSvgPath(points),
     labelX: labelPoint.x,
-    labelY: labelPoint.y,
+    labelY: labelPoint.y + labelLift,
     points,
   };
 }
+
+// Labels render roughly 140-240px wide; below this route length a centered
+// label hides more line than it annotates.
+const SHORT_EDGE_LABEL_LIFT_THRESHOLD = 280;
+const SHORT_EDGE_LABEL_LIFT = 40;
 
 /**
  * Midpoint of the longest route stretch outside the given node rects, or
