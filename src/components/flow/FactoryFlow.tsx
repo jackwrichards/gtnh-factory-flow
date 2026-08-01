@@ -2208,6 +2208,11 @@ function ResourceEdgeComponent({
                   ? Math.max(Number(style?.strokeWidth ?? 3.1) + 0.6, 3.7)
                   : style?.strokeWidth,
               filter: isHighlighted ? "drop-shadow(0 0 4px rgba(34,211,238,0.9))" : undefined,
+              // Edges select/hover through their label, never the stroke:
+              // edges render above nodes (zIndex 20) so their slot-anchored
+              // stubs stay visible, and an interactive stroke there swallows
+              // pointer-downs meant for the slot handles beneath it.
+              pointerEvents: "none",
             }}
           />
         </>
@@ -2837,6 +2842,16 @@ function getBestDirectEdgePoints({
     return cachedRoute.route.points;
   }
 
+  // The edge's own nodes are excluded from the obstacle set below (an edge
+  // must be allowed to leave its node), which made routes that tunnel through
+  // their own node body score as free space — they rendered underneath the
+  // node ("invisible" edges whose arrowheads poked out in odd places). The
+  // crossing penalty here charges for own-node overlap beyond the unavoidable
+  // stub from the slot to the node boundary, so exits still work but a route
+  // that traverses the node loses to one that leaves it first.
+  const sourceOwnBounds = getMeasuredNodeBoundsById(sourceNodeId);
+  const targetOwnBounds = getMeasuredNodeBoundsById(targetNodeId);
+
   const candidates = sourceEndpoints.flatMap((sourceEndpoint) =>
     targetEndpoints.flatMap((targetEndpoint) =>
       getDirectEdgePointCandidates({
@@ -2849,7 +2864,10 @@ function getBestDirectEdgePoints({
         targetPosition: targetEndpoint.side,
       }).map((points) => ({
         points,
-        endpointPenalty: getEndpointDirectionPenalty(sourceEndpoint, targetEndpoint),
+        endpointPenalty:
+          getEndpointDirectionPenalty(sourceEndpoint, targetEndpoint) +
+          getOwnNodeCrossingPenalty(points, sourceEndpoint, sourceOwnBounds) +
+          getOwnNodeCrossingPenalty(points, targetEndpoint, targetOwnBounds),
       })),
     ),
   );
@@ -3241,6 +3259,51 @@ function scoreEdgeRoute(
     turns * 700 +
     length
   );
+}
+
+const OWN_NODE_CROSSING_WEIGHT = 25_000;
+
+/**
+ * Overlap of a candidate route with the edge's own node rect, minus the
+ * unavoidable exit stub (endpoint to node boundary along the endpoint's side)
+ * and a small tolerance. Weighted like foreign node crossings in
+ * scoreEdgeRoute; endpoint-only, so it is computed once per candidate and
+ * survives the relaxation passes untouched.
+ */
+function getOwnNodeCrossingPenalty(
+  points: Array<{ x: number; y: number }>,
+  endpoint: SlotEdgeEndpoint,
+  bounds: { left: number; right: number; top: number; bottom: number } | undefined,
+) {
+  if (!bounds) {
+    return 0;
+  }
+
+  let overlap = 0;
+  for (const segment of getPolylineSegments(points)) {
+    overlap += getSegmentRectOverlapLength(segment.start, segment.end, bounds);
+  }
+  if (overlap <= 0) {
+    return 0;
+  }
+
+  let stub = 0;
+  switch (endpoint.side) {
+    case Position.Right:
+      stub = Math.max(0, bounds.right - endpoint.x);
+      break;
+    case Position.Left:
+      stub = Math.max(0, endpoint.x - bounds.left);
+      break;
+    case Position.Top:
+      stub = Math.max(0, endpoint.y - bounds.top);
+      break;
+    case Position.Bottom:
+      stub = Math.max(0, bounds.bottom - endpoint.y);
+      break;
+  }
+
+  return Math.max(0, overlap - stub - 4) * OWN_NODE_CROSSING_WEIGHT;
 }
 
 function getEndpointDirectionPenalty(source: SlotEdgeEndpoint, target: SlotEdgeEndpoint) {
@@ -4055,6 +4118,13 @@ function getMeasuredAvoidanceNodeBounds(excludedNodeIds: Array<string | undefine
   return getMeasuredAvoidanceSweep()
     .bounds.filter((entry) => !excluded.has(entry.id))
     .map((entry) => entry.bounds);
+}
+
+function getMeasuredNodeBoundsById(nodeId: string | undefined) {
+  if (!nodeId) {
+    return undefined;
+  }
+  return getMeasuredAvoidanceSweep().bounds.find((entry) => entry.id === nodeId)?.bounds;
 }
 
 function expandBounds(
