@@ -170,9 +170,10 @@ const STORAGE_SLOT_EDGE_OFFSET = 55;
 const EDGE_BUNDLE_CLEARANCE = 30;
 // Wires were correct but claustrophobic at 18 — they hugged node walls.
 const DIRECT_EDGE_NODE_CLEARANCE = 30;
-const EDGE_LANE_SPACING = 8;
+// Parallel wires were shoulder-to-shoulder at 8; lanes now sit visibly apart.
+const EDGE_LANE_SPACING = 14;
 const EDGE_LANE_BUCKETS = 4;
-const EDGE_LINK_CLEARANCE = 8;
+const EDGE_LINK_CLEARANCE = 12;
 const EDGE_ENDPOINT_SPACING = 5;
 const EDGE_ROUTE_RELAXATION_PASSES = 2;
 const EDGE_ROUTE_SNAP_GRID = 4;
@@ -3213,6 +3214,15 @@ function getBestDirectEdgePoints({
   const sourceOwnBounds = getMeasuredNodeBoundsById(sourceNodeId);
   const targetOwnBounds = getMeasuredNodeBoundsById(targetNodeId);
   const allAvoidanceBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]);
+  // The edge's own nodes come back as CLIPPED obstacles: the sliver holding
+  // the exit stays open (an edge must be allowed to leave), but the body is
+  // solid — "come out of the output, turn around, and ride over your own
+  // node" now triggers the same avoidance as crossing any other node.
+  const ownClippedObstacles = [
+    clipOwnBoundsForExits(sourceOwnBounds, sourceEndpoints),
+    clipOwnBoundsForExits(targetOwnBounds, targetEndpoints),
+  ].filter((bounds): bounds is NonNullable<typeof bounds> => bounds !== undefined);
+  const boardBounds = allAvoidanceBounds.concat(ownClippedObstacles);
 
   const buildCandidates = (extraRouteXs?: number[], extraRouteYs?: number[]) =>
     sourceEndpoints.flatMap((sourceEndpoint) =>
@@ -3257,7 +3267,7 @@ function getBestDirectEdgePoints({
     }
   }
   const blockReachMargin = EDGE_LINK_CLEARANCE + 1;
-  const blockers = allAvoidanceBounds.filter(
+  const blockers = boardBounds.filter(
     (bounds) =>
       bounds.right >= blockReachLeft - blockReachMargin &&
       bounds.left <= blockReachRight + blockReachMargin &&
@@ -3266,7 +3276,10 @@ function getBestDirectEdgePoints({
   );
   let candidates = baseCandidates;
   if (blockers.length > 0) {
-    const detourMargin = EDGE_LINK_CLEARANCE + 6 + Math.max(EDGE_LINK_CLEARANCE, laneOffset);
+    // Detours clear nodes by the same distance direct shapes do — corridors
+    // derived from the (smaller) link clearance were the "traces around the
+    // node way too close" paths.
+    const detourMargin = DIRECT_EDGE_NODE_CLEARANCE + Math.max(EDGE_LINK_CLEARANCE, laneOffset);
     const extraXs: number[] = [];
     const extraYs: number[] = [];
     let clusterLeft = Infinity;
@@ -3317,7 +3330,7 @@ function getBestDirectEdgePoints({
   reachTop -= reachMargin;
   reachBottom += reachMargin;
 
-  const normalizedNodeBounds = allAvoidanceBounds.filter(
+  const normalizedNodeBounds = boardBounds.filter(
     (bounds) =>
       bounds.right >= reachLeft &&
       bounds.left <= reachRight &&
@@ -3383,7 +3396,7 @@ function getBestDirectEdgePoints({
   // adjacent channel instead of a stack. A failed search keeps the least-bad
   // candidate, and clean routes never pay for the search at all - which keeps
   // the initial mount cascade on big imports at the old router's speed.
-  const candidateCrossesNode = allAvoidanceBounds.some((bounds) =>
+  const candidateCrossesNode = boardBounds.some((bounds) =>
     polylineCrossesRect(optimizedRoute, bounds),
   );
   const candidateOverlap = routeCollinearOverlap(optimizedRoute, obstacleSegments);
@@ -3392,7 +3405,7 @@ function getBestDirectEdgePoints({
       sourceEndpoints,
       targetEndpoints,
       laneOffset,
-      foreignBounds: allAvoidanceBounds,
+      foreignBounds: boardBounds,
       sourceOwnBounds,
       targetOwnBounds,
       congestionSegments: obstacleSegments,
@@ -3417,6 +3430,39 @@ function getBestDirectEdgePoints({
   }
 
   return optimizedRoute;
+}
+
+/**
+ * An edge's own node as a routing obstacle: the wall sliver holding its
+ * exits stays open, the body becomes solid. Only when every endpoint sits on
+ * ONE side (machine ports) — storages exit anywhere, so their bounds keep the
+ * old full exemption rather than walling a legitimate exit.
+ */
+function clipOwnBoundsForExits(
+  bounds: { left: number; right: number; top: number; bottom: number } | undefined,
+  endpoints: SlotEdgeEndpoint[],
+) {
+  if (!bounds || endpoints.length === 0) {
+    return undefined;
+  }
+  const side = endpoints[0]!.side;
+  if (!endpoints.every((endpoint) => endpoint.side === side)) {
+    return undefined;
+  }
+  const PAD = 4;
+  let clipped: { left: number; right: number; top: number; bottom: number };
+  if (side === Position.Right) {
+    clipped = { ...bounds, right: Math.min(...endpoints.map((endpoint) => endpoint.x)) - PAD };
+  } else if (side === Position.Left) {
+    clipped = { ...bounds, left: Math.max(...endpoints.map((endpoint) => endpoint.x)) + PAD };
+  } else if (side === Position.Bottom) {
+    clipped = { ...bounds, bottom: Math.min(...endpoints.map((endpoint) => endpoint.y)) - PAD };
+  } else {
+    clipped = { ...bounds, top: Math.max(...endpoints.map((endpoint) => endpoint.y)) + PAD };
+  }
+  return clipped.right - clipped.left > 8 && clipped.bottom - clipped.top > 8
+    ? clipped
+    : undefined;
 }
 
 function getDirectEdgePointCandidates({
@@ -3580,8 +3626,12 @@ function findBestOrthogonalPortalRoute({
   congestionSegments: Array<{ start: { x: number; y: number }; end: { x: number; y: number } }>;
 }) {
   const lane = Math.min(ORTHO_LANE_CAP, Math.max(0, laneOffset));
+  // Generous clearance first; when fat margins seal every corridor on a
+  // packed board, retry tighter — a squeezed pass always beats the fallback
+  // route that crosses a node.
+  for (const margin of [ORTHO_FOREIGN_MARGIN + lane, EDGE_LINK_CLEARANCE, 6]) {
   const obstacles = [
-    ...foreignBounds.map((bounds) => expandBounds(bounds, ORTHO_FOREIGN_MARGIN + lane)),
+    ...foreignBounds.map((bounds) => expandBounds(bounds, margin)),
     ...[sourceOwnBounds, targetOwnBounds]
       .filter((bounds): bounds is NonNullable<typeof bounds> => Boolean(bounds))
       .map((bounds) => expandBounds(bounds, ORTHO_OWN_INSET)),
@@ -3677,7 +3727,7 @@ function findBestOrthogonalPortalRoute({
         congestion,
         turnCost: ORTHO_TURN_COST,
         crossingCost: ORTHO_CROSSING_COST,
-        nearness: { distance: EDGE_LINK_CLEARANCE, costPerPixel: 6 },
+        nearness: { distance: EDGE_LINK_CLEARANCE, costPerPixel: 8 },
         maxPops: 4000,
       });
       if (!path) {
@@ -3699,8 +3749,12 @@ function findBestOrthogonalPortalRoute({
       break;
     }
   }
+  if (best) {
+    return best;
+  }
+  }
 
-  return best;
+  return undefined;
 }
 
 function getDirectRouteSignature({
