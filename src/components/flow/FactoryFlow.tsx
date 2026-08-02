@@ -4832,19 +4832,54 @@ function getMeasuredSlotEndpoint({
 
   const slotRect = slotElement.getBoundingClientRect();
   const screenPoint = getSlotRectEdgePoint(slotRect, edgeSide);
-  const flowPoint = screenToFlowPoint(screenPoint, nodeElement);
-
-  if (!flowPoint) {
+  const relative = slotScreenPointToNodeRelative(screenPoint, nodeElement, geometry);
+  if (!relative) {
     return undefined;
   }
 
   if (geometry) {
-    relativeSlotEndpointCache.set(cacheKey, {
-      x: flowPoint.x - geometry.x,
-      y: flowPoint.y - geometry.y,
-    });
+    relativeSlotEndpointCache.set(cacheKey, relative);
+    return offsetFlowPointForEdgeSide(
+      { x: geometry.x + relative.x, y: geometry.y + relative.y },
+      edgeSide,
+      endpointOffset,
+    );
   }
-  return offsetFlowPointForEdgeSide(flowPoint, edgeSide, endpointOffset);
+  return undefined;
+}
+
+/**
+ * Converts a screen point inside a node to node-relative FLOW coordinates
+ * using only the node's own rect and its published flow size.
+ *
+ * This deliberately avoids the viewport transform: on reload React Flow
+ * applies the restored viewport mid-frame, so a transform cached moments
+ * earlier no longer matches the rects being measured - and the poisoned
+ * offset used to be cached under a dims key that never changes, leaving
+ * every edge of that node anchored to nonsense until the node was deleted.
+ * Two rects read in the same instant always share whatever transform (and
+ * browser zoom) is live, so their ratio is timing-proof.
+ */
+function slotScreenPointToNodeRelative(
+  point: { x: number; y: number },
+  nodeElement: HTMLElement,
+  geometry: { width: number; height: number } | undefined,
+) {
+  if (!geometry || geometry.width <= 0 || geometry.height <= 0) {
+    return undefined;
+  }
+
+  const nodeRect = nodeElement.getBoundingClientRect();
+  if (nodeRect.width <= 0 || nodeRect.height <= 0) {
+    return undefined;
+  }
+
+  const scaleX = nodeRect.width / geometry.width;
+  const scaleY = nodeRect.height / geometry.height;
+  return {
+    x: (point.x - nodeRect.left) / scaleX,
+    y: (point.y - nodeRect.top) / scaleY,
+  };
 }
 
 function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?: string | null }) {
@@ -4874,17 +4909,16 @@ function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?
   }
 
   const slotRect = slotElement.getBoundingClientRect();
-  const measuredCenter = screenToFlowPoint(
+  const relative = slotScreenPointToNodeRelative(
     { x: slotRect.left + slotRect.width / 2, y: slotRect.top + slotRect.height / 2 },
     nodeElement,
+    geometry,
   );
-  if (measuredCenter && geometry) {
-    relativeSlotCenterCache.set(cacheKey, {
-      x: measuredCenter.x - geometry.x,
-      y: measuredCenter.y - geometry.y,
-    });
+  if (relative && geometry) {
+    relativeSlotCenterCache.set(cacheKey, relative);
+    return { x: geometry.x + relative.x, y: geometry.y + relative.y };
   }
-  return measuredCenter;
+  return undefined;
 }
 
 function getSlotRectEdgePoint(rect: DOMRect, edgeSide: string) {
