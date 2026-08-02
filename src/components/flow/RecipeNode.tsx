@@ -2,7 +2,7 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { memo, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { AlertTriangle, ChevronDown, Minus, Plus, Sprout } from "lucide-react";
+import { AlertTriangle, ChevronDown, Copy, Minus, Plus, Sprout } from "lucide-react";
 import type {
   FactoryNode,
   MachineTier,
@@ -102,6 +102,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const hoveredNodeBottlenecks = useFactoryStore((state) => state.hoveredNodeBottlenecks);
   const selectedNodeBottlenecks = useFactoryStore((state) => state.selectedNodeBottlenecks);
   const deleteNode = useFactoryStore((state) => state.deleteNode);
+  const duplicateNode = useFactoryStore((state) => state.duplicateNode);
   const updateNode = useFactoryStore((state) => state.updateNode);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const maxTierFilter = useFactoryStore((state) => state.maxTierFilter);
@@ -410,8 +411,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           className={[
             "mb-1 grid min-w-0 items-center gap-1",
             tierControl
-              ? "grid-cols-[24px_minmax(0,1fr)_50px]"
-              : "grid-cols-[24px_minmax(0,1fr)]",
+              ? "grid-cols-[24px_24px_minmax(0,1fr)_50px]"
+              : "grid-cols-[24px_24px_minmax(0,1fr)]",
           ].join(" ")}
         >
           <button
@@ -425,6 +426,18 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             aria-label="Delete node"
           >
             -
+          </button>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              duplicateNode(projectNode.id);
+            }}
+            className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+            title="Clone node (same machine and settings, no wires)"
+            aria-label="Clone node"
+          >
+            <Copy aria-hidden className="h-3.5 w-3.5" />
           </button>
           <div className="relative min-w-0">
             <MinecraftTooltip

@@ -104,6 +104,7 @@ import {
   isEdgeSurplus,
 } from "./edge-labels";
 import { buildEdgeStory } from "./flow-explainers";
+import { rateUnitSuffix, type RateUnit } from "@/lib/model/rate-unit";
 import { getSupplyCeiling } from "@/components/inspector/usage-limits";
 import {
   EDGE_DETAIL_ARROWS,
@@ -730,7 +731,7 @@ export function FactoryFlow() {
 
     return project.edges.map((edge, edgeIndex) => {
       const edgeResult = result.edges[edge.id];
-      const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
+      const unit = rateUnitSuffix(edge.resourceKind === "fluid").trim();
       const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
       const sourceStorage = storagesById.get(edge.source);
       const targetStorage = storagesById.get(edge.target);
@@ -1740,13 +1741,21 @@ export function FactoryFlow() {
  * Board tools that drop in source-style nodes (things that produce without
  * crafting, like crop farms). Lives top-left, mirroring the paint toolbar.
  */
+const RATE_UNIT_CHOICES: Array<{ unit: RateUnit; label: string; title: string }> = [
+  { unit: "second", label: "/s", title: "Show all rates per second" },
+  { unit: "minute", label: "/m", title: "Show all rates per minute" },
+  { unit: "hour", label: "/h", title: "Show all rates per hour" },
+];
+
 const SourceToolbar = memo(function SourceToolbar() {
   const addCropFarmNode = useFactoryStore((state) => state.addCropFarmNode);
+  const rateUnit = useFactoryStore((state) => state.rateUnit);
+  const setRateUnit = useFactoryStore((state) => state.setRateUnit);
 
   return (
     <div
       data-board-toolbar
-      className="nodrag pointer-events-none absolute left-3 top-3 z-20 flex items-start"
+      className="nodrag pointer-events-none absolute left-3 top-3 z-20 flex items-start gap-2"
     >
       <button
         type="button"
@@ -1757,6 +1766,25 @@ const SourceToolbar = memo(function SourceToolbar() {
       >
         <Sprout className="h-4 w-4" />
       </button>
+      <div className="pointer-events-auto flex">
+        {RATE_UNIT_CHOICES.map((choice) => (
+          <button
+            key={choice.unit}
+            type="button"
+            onClick={() => setRateUnit(choice.unit)}
+            title={choice.title}
+            aria-pressed={rateUnit === choice.unit}
+            className={[
+              "flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] font-mono text-[12px] font-black",
+              rateUnit === choice.unit
+                ? "bg-[var(--mc-85)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100)]"
+                : "bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110",
+            ].join(" ")}
+          >
+            {choice.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 });
@@ -2111,9 +2139,11 @@ function ResourceEdgeComponent({
     : (data?.color ?? DEFAULT_ITEM_EDGE_COLOR);
   const theme = useThemeStore((state) => state.theme);
   // Dominant resource colours are averaged from item sprites, which makes them
-  // muddy; boost saturation everywhere and lift toward white on the dark canvas.
-  const vividColor = saturateHexColor(resourceColor, 0.45);
-  const edgeColor = theme === "dark" ? brightenHexColor(vividColor, 0.15) : vividColor;
+  // muddy; boost saturation everywhere and lift toward white — a touch more
+  // on the dark canvas.
+  const vividColor = saturateHexColor(resourceColor, 0.6);
+  const edgeColor =
+    theme === "dark" ? brightenHexColor(vividColor, 0.2) : brightenHexColor(vividColor, 0.08);
   const isGlobalView = hasEdgeDetail(detailLevel, EDGE_DETAIL_GLOBAL);
   // Lit when a hovered port or label pulls this line into its flow scope.
   // Boolean selector: only involved edges re-render on hover changes.
@@ -4829,9 +4859,14 @@ function pointsToHoppedSvgPath(
       continue;
     }
 
-    const crossings: number[] = [];
+    // Crossings close to a bend get a SHRUNKEN bump instead of no bump:
+    // margin-hugging routes turn at node corners and cross right there, and
+    // the old fixed-radius end margin silently dropped exactly those hops.
+    const crossings: Array<{ at: number; radius: number }> = [];
     const low = horizontal ? Math.min(from.x, to.x) : Math.min(from.y, to.y);
     const high = horizontal ? Math.max(from.x, to.x) : Math.max(from.y, to.y);
+    const radiusFor = (crossAt: number) =>
+      Math.min(EDGE_HOP_RADIUS, crossAt - low - 1, high - crossAt - 1);
     for (const segment of otherSegments) {
       const segmentHorizontal = Math.abs(segment.start.y - segment.end.y) < 0.01;
       const segmentVertical = Math.abs(segment.start.x - segment.end.x) < 0.01;
@@ -4839,25 +4874,17 @@ function pointsToHoppedSvgPath(
         const crossAt = segment.start.x;
         const otherLow = Math.min(segment.start.y, segment.end.y);
         const otherHigh = Math.max(segment.start.y, segment.end.y);
-        if (
-          crossAt > low + EDGE_HOP_RADIUS + 2 &&
-          crossAt < high - EDGE_HOP_RADIUS - 2 &&
-          from.y > otherLow + 1 &&
-          from.y < otherHigh - 1
-        ) {
-          crossings.push(crossAt);
+        const radius = radiusFor(crossAt);
+        if (radius >= 2.5 && from.y > otherLow + 1 && from.y < otherHigh - 1) {
+          crossings.push({ at: crossAt, radius });
         }
       } else if (vertical && segmentHorizontal) {
         const crossAt = segment.start.y;
         const otherLow = Math.min(segment.start.x, segment.end.x);
         const otherHigh = Math.max(segment.start.x, segment.end.x);
-        if (
-          crossAt > low + EDGE_HOP_RADIUS + 2 &&
-          crossAt < high - EDGE_HOP_RADIUS - 2 &&
-          from.x > otherLow + 1 &&
-          from.x < otherHigh - 1
-        ) {
-          crossings.push(crossAt);
+        const radius = radiusFor(crossAt);
+        if (radius >= 2.5 && from.x > otherLow + 1 && from.x < otherHigh - 1) {
+          crossings.push({ at: crossAt, radius });
         }
       }
     }
@@ -4868,32 +4895,31 @@ function pointsToHoppedSvgPath(
     }
 
     const direction = horizontal ? Math.sign(to.x - from.x) : Math.sign(to.y - from.y);
-    crossings.sort((left, right) => (left - right) * direction);
-    const merged: number[] = [];
-    for (const crossAt of crossings) {
-      if (
-        merged.length === 0 ||
-        Math.abs(crossAt - merged[merged.length - 1]!) > EDGE_HOP_RADIUS * 2 + 2
-      ) {
-        merged.push(crossAt);
+    crossings.sort((left, right) => (left.at - right.at) * direction);
+    const merged: Array<{ at: number; radius: number }> = [];
+    for (const crossing of crossings) {
+      const previous = merged[merged.length - 1];
+      if (!previous || Math.abs(crossing.at - previous.at) > previous.radius + crossing.radius + 2) {
+        merged.push(crossing);
       }
     }
 
-    for (const crossAt of merged) {
+    for (const crossing of merged) {
+      const radius = crossing.radius;
       if (horizontal) {
-        const beforeX = crossAt - EDGE_HOP_RADIUS * direction;
-        const afterX = crossAt + EDGE_HOP_RADIUS * direction;
+        const beforeX = crossing.at - radius * direction;
+        const afterX = crossing.at + radius * direction;
         // SVG sweep=1 is clockwise on screen: traveling east that arcs over
         // the top; traveling west needs sweep=0 for the same upward bump.
         const sweep = direction > 0 ? 1 : 0;
-        path += ` L ${beforeX},${from.y} A ${EDGE_HOP_RADIUS} ${EDGE_HOP_RADIUS} 0 0 ${sweep} ${afterX},${from.y}`;
+        path += ` L ${beforeX},${from.y} A ${radius} ${radius} 0 0 ${sweep} ${afterX},${from.y}`;
       } else {
-        const beforeY = crossAt - EDGE_HOP_RADIUS * direction;
-        const afterY = crossAt + EDGE_HOP_RADIUS * direction;
+        const beforeY = crossing.at - radius * direction;
+        const afterY = crossing.at + radius * direction;
         // Traveling south, clockwise (sweep 1) bulges toward the right;
         // traveling north, sweep 0 keeps the bump on that same side.
         const sweep = direction > 0 ? 1 : 0;
-        path += ` L ${from.x},${beforeY} A ${EDGE_HOP_RADIUS} ${EDGE_HOP_RADIUS} 0 0 ${sweep} ${from.x},${afterY}`;
+        path += ` L ${from.x},${beforeY} A ${radius} ${radius} 0 0 ${sweep} ${from.x},${afterY}`;
       }
     }
     path += ` L ${to.x},${to.y}`;

@@ -6,6 +6,7 @@ import type {
   ResourceKey,
   ResourceKind,
 } from "./types";
+import { rateUnitMultiplier, rateUnitSuffix } from "./rate-unit";
 
 export function makeResourceKey(kind: ResourceKind, resourceId: string): ResourceKey {
   return `${kind}:${resourceId}` as ResourceKey;
@@ -83,13 +84,14 @@ export function formatRate(value: number, digits = 2): string {
 }
 
 export function formatNumberWithThousands(value: number | string): string {
+  // American separators: comma thousands, dot decimal ("1,234.56").
   const text = String(value);
   const sign = text.startsWith("-") ? "-" : "";
   const unsigned = sign ? text.slice(1) : text;
   const [integer, fraction] = unsigned.split(".");
-  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const grouped = integer.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 
-  return `${sign}${grouped}${fraction !== undefined ? `,${fraction}` : ""}`;
+  return `${sign}${grouped}${fraction !== undefined ? `.${fraction}` : ""}`;
 }
 
 export function trimTrailingDecimalZeros(value: string): string {
@@ -101,8 +103,9 @@ export function formatResourceRate(flow: ResourceFlow | undefined): string {
     return "none";
   }
 
-  const unit = flow.kind === "fluid" ? "L/s" : "/s";
-  return `${resourceLabel({ id: flow.resourceId, displayName: flow.displayName })} ${formatRate(flow.amountPerSecond)}${unit}`;
+  return `${resourceLabel({ id: flow.resourceId, displayName: flow.displayName })} ${formatRate(
+    flow.amountPerSecond * rateUnitMultiplier(),
+  )}${rateUnitSuffix(flow.kind === "fluid").trimStart()}`;
 }
 
 export function primaryOutput(recipe: Recipe): RecipeOutput | undefined {

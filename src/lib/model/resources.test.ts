@@ -46,9 +46,9 @@ describe("resource helpers", () => {
   });
 
   it("formats large rates with compact thousands separators", () => {
-    expect(formatRate(125829120, 0)).toBe("125.829.120");
-    expect(formatRate(3040.5, 1)).toBe("3.041");
-    expect(formatRate(77.123, 1)).toBe("77,1");
+    expect(formatRate(125829120, 0)).toBe("125,829,120");
+    expect(formatRate(3040.5, 1)).toBe("3,041");
+    expect(formatRate(77.123, 1)).toBe("77.1");
   });
 
   it("matches GT filled cells against their fluid equivalent", () => {

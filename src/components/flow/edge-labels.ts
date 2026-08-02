@@ -1,4 +1,5 @@
 import { formatNumberWithThousands, trimTrailingDecimalZeros } from "@/lib/model";
+import { rateUnitMultiplier } from "@/lib/model/rate-unit";
 
 /**
  * The parts of an edge's render data that decide its label. Kept structural so
@@ -189,7 +190,11 @@ export function formatEdgeValue(value: number): string {
 
 /** "10/s" reads as one token; "12 L/s" needs the space to stay a unit. */
 function withUnit(value: number, unit: string): string {
-  return unit.startsWith("/") ? `${formatEdgeValue(value)}${unit}` : `${formatEdgeValue(value)} ${unit}`;
+  // Values arrive per-second; the board-wide unit scales them for display.
+  const scaled = value * rateUnitMultiplier();
+  return unit.startsWith("/")
+    ? `${formatEdgeValue(scaled)}${unit}`
+    : `${formatEdgeValue(scaled)} ${unit}`;
 }
 
 /**

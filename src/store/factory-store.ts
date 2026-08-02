@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { createEmptyProject } from "@/examples";
 import type { DatasetManifest, RecipeDataset } from "@/lib/datasets";
 import { normalizeProjectFuelProfiles } from "@/lib/model/fuels";
+import { setActiveRateUnit, type RateUnit } from "@/lib/model/rate-unit";
 import { calculateThroughput } from "@/lib/solver";
 import { applyRecipeInputOverrides } from "@/lib/model/recipe-input-overrides";
 import { createCropFarmPlaceholderRecipe } from "@/lib/model/passive-production";
@@ -85,6 +86,9 @@ interface FactoryStore {
   selectedNodeId?: string;
   selectedRecipeId?: string;
   lastResult: ThroughputResult;
+  /** Board-wide display unit for rates: per second / minute / hour. */
+  rateUnit: RateUnit;
+  setRateUnit: (unit: RateUnit) => void;
   setProject: (project: FactoryProject) => void;
   markHydratedProject: (project: FactoryProject) => void;
   undo: () => void;
@@ -162,6 +166,10 @@ interface FactoryStore {
     handleId: string,
   ) => void;
   deleteStorage: (storageId: string) => void;
+  /** Clone a node (same recipe/config, no wires) beside the original. */
+  duplicateNode: (nodeId: string) => void;
+  /** Clone a tank/drawer (same resource/color, no wires) beside the original. */
+  duplicateStorage: (storageId: string) => void;
   autoRouteStorage: (storageId: string) => void;
   updateStorage: (storageId: string, patch: Partial<FactoryStorage>) => void;
   setStoragePosition: (storageId: string, position: FactoryStorage["position"]) => void;
@@ -268,6 +276,14 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   selectedNodeId: undefined,
   selectedRecipeId: undefined,
   lastResult: calculateThroughput(initialProject),
+  rateUnit: "second",
+  setRateUnit: (unit) => {
+    // The formatters read a module singleton; recomputing the result gives
+    // every rate surface a fresh identity so nothing shows a stale unit.
+    setActiveRateUnit(unit);
+    const { project } = get();
+    set({ rateUnit: unit, lastResult: calculateThroughput(project) });
+  },
   setProject: (project) => {
     const nextProject = touchProject(normalizeProjectFuelProfiles(project));
     set({
@@ -851,6 +867,46 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
           state.pendingResourceConnection?.nodeId === storageId
             ? undefined
             : state.pendingResourceConnection,
+        lastResult: calculateThroughput(project),
+      });
+    });
+  },
+  duplicateNode: (nodeId) => {
+    set((state) => {
+      const node = state.project.nodes.find((entry) => entry.id === nodeId);
+      if (!node) {
+        return state;
+      }
+      const clone = structuredClone(node);
+      clone.id = createId("node");
+      clone.position = { x: node.position.x + 48, y: node.position.y + 48 };
+      const project = touchProject({
+        ...state.project,
+        nodes: [...state.project.nodes, clone],
+      });
+      return withProjectHistory(state, {
+        project,
+        selectedNodeId: clone.id,
+        selectedRecipeId: clone.recipeId,
+        lastResult: calculateThroughput(project),
+      });
+    });
+  },
+  duplicateStorage: (storageId) => {
+    set((state) => {
+      const storage = (state.project.storages ?? []).find((entry) => entry.id === storageId);
+      if (!storage) {
+        return state;
+      }
+      const clone = structuredClone(storage);
+      clone.id = createId("storage");
+      clone.position = { x: storage.position.x + 48, y: storage.position.y + 48 };
+      const project = touchProject({
+        ...state.project,
+        storages: [...(state.project.storages ?? []), clone],
+      });
+      return withProjectHistory(state, {
+        project,
         lastResult: calculateThroughput(project),
       });
     });
