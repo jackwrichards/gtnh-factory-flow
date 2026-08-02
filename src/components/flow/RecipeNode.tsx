@@ -441,7 +441,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                     : undefined
                 }
                 className={[
-                  "minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]",
+                  // 13px: long GT machine names must read fully instead of
+                  // getting chopped by the narrow card.
+                  "minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] text-[13px] leading-[18px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]",
                   // Symmetric padding keeps the crop name in the true middle;
                   // the picker chevron floats on the right without shifting it.
                   isCropFarmNode
@@ -507,15 +509,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           ) : null}
         </div>
         </div>
-        {!isCropFarmPlaceholder ? (
-          <div className="w-0 min-w-full">
-            <VerdictStrip
-              nodeId={projectNode.id}
-              title={recipe.machineType || recipe.name}
-              verdict={verdict}
-            />
-          </div>
-        ) : null}
         <div
           className={nodeColor ? "recipe-node-tinted-area" : undefined}
           style={
@@ -577,6 +570,15 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           {passiveProductionPanel}
         </div>
 
+        {!isCropFarmPlaceholder ? (
+          <div className="w-0 min-w-full">
+            <VerdictStrip
+              nodeId={projectNode.id}
+              title={recipe.machineType || recipe.name}
+              verdict={verdict}
+            />
+          </div>
+        ) : null}
         {!isCropFarmPlaceholder ? (
           <div
             className={[
@@ -679,50 +681,53 @@ function VerdictStrip({
     case "starved": {
       word = "▼ STARVED";
       cause = verdict.binding
-        ? `${verdict.binding.displayName} short −${formatSlotRate(
+        ? `${verdict.binding.displayName} is short −${formatSlotRate(
             verdict.binding.shortfallPerSecond,
             verdict.binding.kind,
-          )}`
-        : "inputs can't keep up";
+          )}, pinning this machine at ${formatRate(verdict.pct, 0)}% of what downstream asks.`
+        : "The inputs can't keep up with what downstream asks.";
       action = verdict.binding?.upstreamName
-        ? `→ fix upstream: ${verdict.binding.upstreamName}`
-        : "→ fix the supply lines";
+        ? `→ Fix upstream: ${verdict.binding.upstreamName} can't deliver more.`
+        : "→ Fix the supply lines feeding this machine.";
       break;
     }
     case "choke": {
       word = "▲ CHOKE POINT";
       cause = verdict.deficit
-        ? `downstream short ${formatSlotRate(
+        ? `Running flat out, but downstream still wants ${formatSlotRate(
             verdict.deficit.missingPerSecond,
             verdict.deficit.kind,
-          )} of ${verdict.deficit.displayName}`
-        : "downstream wants more";
+          )} more ${verdict.deficit.displayName}.`
+        : "Running flat out and downstream still wants more.";
       action = verdict.deficit?.machinesToAdd
-        ? `→ fix here: +${verdict.deficit.machinesToAdd} machine${
+        ? `→ Fix on this node: add +${verdict.deficit.machinesToAdd} machine${
             verdict.deficit.machinesToAdd > 1 ? "s" : ""
-          }`
-        : "→ fix here: add machines or raise the tier";
+          } (or raise the tier).`
+        : "→ Fix on this node: add machines or raise the tier.";
       break;
     }
     case "demand-set":
       word = "● SET BY DEMAND";
-      cause = verdict.pct <= 0.05 ? "no takers downstream" : "downstream isn't asking for more";
+      cause =
+        verdict.pct <= 0.05
+          ? "Nothing downstream is taking this output yet."
+          : "Downstream only asks for this much — part load here is healthy.";
       action =
         verdict.headroomPct !== undefined && verdict.headroomPct > 0
-          ? `→ nothing to do · headroom +${formatRate(verdict.headroomPct, 0)}%`
-          : "→ nothing to do";
+          ? `→ Nothing to fix · headroom +${formatRate(verdict.headroomPct, 0)}% if demand grows.`
+          : "→ Nothing to fix.";
       break;
     case "balanced":
       word = "✔ BALANCED";
-      cause = "all asks met";
+      cause = "Running at full speed and every downstream ask is met.";
       break;
     case "unwired":
       word = "● HAND-FED";
-      cause = "no lines connected · assumes external supply";
+      cause = "No lines connected yet — the planner assumes you feed and empty it by hand.";
       break;
     case "off":
       word = "■ OFF";
-      cause = "node disabled";
+      cause = "Node is disabled.";
       break;
     case "no-recipe":
       word = "■ NO RECIPE";
@@ -749,24 +754,25 @@ function VerdictStrip({
         }
       >
         <div
-          className={["flow-verdict-strip mb-1 px-1.5 py-0.5", VERDICT_STRIP_CLASS[verdict.kind]].join(
+          className={["flow-verdict-strip mt-1 px-2 py-1", VERDICT_STRIP_CLASS[verdict.kind]].join(
             " ",
           )}
         >
           <div className="flex items-baseline gap-2">
-            <span className="whitespace-nowrap text-[10px] font-black leading-4 tracking-[1px]">
+            <span className="whitespace-nowrap text-[11px] font-black leading-4 tracking-[1px]">
               {word}
             </span>
-            {/* Wraps instead of truncating: the cause is the point of the
-                strip, an ellipsis here hides exactly what the user came for. */}
-            <span className="min-w-0 flex-1 text-[9px] leading-3 opacity-95">{cause}</span>
+            <span className="min-w-0 flex-1" />
             {showPct ? (
-              <span className="shrink-0 text-[13px] font-bold leading-4 tabular-nums">
+              <span className="shrink-0 text-[14px] font-bold leading-4 tabular-nums">
                 {formatRate(verdict.pct, verdict.pct >= 100 ? 0 : 1)}%
               </span>
             ) : null}
           </div>
-          {action ? <div className="text-[9px] leading-3 opacity-95">{action}</div> : null}
+          {/* Full sentences that wrap - an ellipsis here would hide exactly
+              what the user came to read. */}
+          {cause ? <div className="mt-0.5 text-[9px] leading-[13px] opacity-95">{cause}</div> : null}
+          {action ? <div className="text-[9px] leading-[13px] opacity-95">{action}</div> : null}
         </div>
       </MinecraftTooltip>
     </span>

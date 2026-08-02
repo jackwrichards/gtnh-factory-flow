@@ -91,6 +91,11 @@ import {
   parseResourceHandleId,
 } from "./resource-handles";
 import {
+  findOrthogonalRoute,
+  polylineCrossesRect,
+  scoreOrthogonalPath,
+} from "./orthogonal-router";
+import {
   describeEdgeRate,
   formatEdgeRateLabel,
   formatEdgeValue,
@@ -2176,11 +2181,13 @@ function ResourceEdgeComponent({
     data?.bundle?.role === "primary"
       ? getBundledEdgePath({
           edgeId: id,
+          routeIndex: data?.routeIndex ?? 0,
           sourceNodeId: source,
           sourceHandleIds: data.bundle.sourceHandleIds,
           sourcePosition: visualSource.side,
           estimatedSource: visualSource,
           targetNodeId: target,
+          targetCandidates: visualTargetCandidates,
           targetX: visualTarget.x,
           targetY: visualTarget.y,
           targetPosition: visualTarget.side,
@@ -2189,11 +2196,13 @@ function ResourceEdgeComponent({
       : data?.bundle?.mode === "multi-target"
         ? getBundledMemberEdgePath({
             edgeId: id,
+            routeIndex: data?.routeIndex ?? 0,
             sourceNodeId: source,
             sourceHandleId: data.sourceHandleId ?? sourceHandleId ?? undefined,
             sourcePosition: visualSource.side,
             estimatedSource: visualSource,
             targetNodeId: target,
+            targetCandidates: visualTargetCandidates,
             targetX: visualTarget.x,
             targetY: visualTarget.y,
             targetPosition: visualTarget.side,
@@ -2825,7 +2834,7 @@ function getDirectEdgePath({
   const labelLift = routeLength < SHORT_EDGE_LABEL_LIFT_THRESHOLD ? -SHORT_EDGE_LABEL_LIFT : 0;
 
   return {
-    path: pointsToSvgPath(points),
+    path: pointsToHoppedSvgPath(points, collectEarlierRouteSegments(edgeId, routeIndex)),
     labelX: labelPoint.x,
     labelY: labelPoint.y + labelLift,
     points,
@@ -3051,6 +3060,7 @@ function getBestDirectEdgePoints({
   // that traverses the node loses to one that leaves it first.
   const sourceOwnBounds = getMeasuredNodeBoundsById(sourceNodeId);
   const targetOwnBounds = getMeasuredNodeBoundsById(targetNodeId);
+  const allAvoidanceBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]);
 
   const buildCandidates = (extraRouteXs?: number[], extraRouteYs?: number[]) =>
     sourceEndpoints.flatMap((sourceEndpoint) =>
@@ -3076,7 +3086,6 @@ function getBestDirectEdgePoints({
       ),
     );
   const baseCandidates = buildCandidates();
-  const allAvoidanceBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]);
 
   // The base shapes only know the two endpoints, so when a third node sits in
   // all of their corridors the least-bad candidate still crossed it. For every
@@ -3213,6 +3222,28 @@ function getBestDirectEdgePoints({
     optimizedScore = relaxedRoute.score;
   }
 
+  // The candidate menu can only jog once, so on packed boards its winner may
+  // still cross a node. Only then does the orthogonal A* router earn its
+  // cost: its moves exist solely through free space, so a found path cannot
+  // pass over any node, no matter how many bends that takes. A failed search
+  // (boxed-in endpoint, budget exhausted) keeps the least-bad candidate, and
+  // clean routes never pay for the search at all - which keeps the initial
+  // mount cascade on big imports at the old router's speed.
+  if (allAvoidanceBounds.some((bounds) => polylineCrossesRect(optimizedRoute, bounds))) {
+    const orthogonalRoute = findBestOrthogonalPortalRoute({
+      sourceEndpoints,
+      targetEndpoints,
+      laneOffset,
+      foreignBounds: allAvoidanceBounds,
+      sourceOwnBounds,
+      targetOwnBounds,
+      congestionSegments: obstacleSegments,
+    });
+    if (orthogonalRoute) {
+      optimizedRoute = orthogonalRoute;
+    }
+  }
+
   if (edgeId && routeIndex !== undefined) {
     const route = buildRoutedEdgePath(optimizedRoute);
     directRouteCache.set(edgeId, {
@@ -3320,6 +3351,163 @@ function getDirectEdgePointCandidates({
   }
 
   return dedupePolylineCandidates(candidates);
+}
+
+// Wires keep a visible gap off every node wall; bundle lanes shift whole
+// corridors apart (capped so detours stay tight); turns cost ~40px of length
+// so bends stay purposeful without being avoided at crossing prices.
+const ORTHO_FOREIGN_MARGIN = EDGE_LINK_CLEARANCE + 6;
+// Port chips sit a few pixels inside the node edge, so the exit stub lands
+// ~9px past the wall. Own bounds must shrink (not grow) or the start vertex
+// is born inside its own obstacle and every search dies immediately.
+const ORTHO_OWN_INSET = -2;
+const ORTHO_LANE_CAP = 24;
+const ORTHO_TURN_COST = 40;
+const ORTHO_CROSSING_COST = 220;
+
+function routeAxisForSide(side: Position): "h" | "v" {
+  return side === Position.Left || side === Position.Right ? "h" : "v";
+}
+
+function findBestOrthogonalPortalRoute({
+  sourceEndpoints,
+  targetEndpoints,
+  laneOffset,
+  foreignBounds,
+  sourceOwnBounds,
+  targetOwnBounds,
+  congestionSegments,
+}: {
+  sourceEndpoints: SlotEdgeEndpoint[];
+  targetEndpoints: SlotEdgeEndpoint[];
+  laneOffset: number;
+  foreignBounds: Array<{ left: number; right: number; top: number; bottom: number }>;
+  sourceOwnBounds?: { left: number; right: number; top: number; bottom: number };
+  targetOwnBounds?: { left: number; right: number; top: number; bottom: number };
+  congestionSegments: Array<{ start: { x: number; y: number }; end: { x: number; y: number } }>;
+}) {
+  const lane = Math.min(ORTHO_LANE_CAP, Math.max(0, laneOffset));
+  const obstacles = [
+    ...foreignBounds.map((bounds) => expandBounds(bounds, ORTHO_FOREIGN_MARGIN + lane)),
+    ...[sourceOwnBounds, targetOwnBounds]
+      .filter((bounds): bounds is NonNullable<typeof bounds> => Boolean(bounds))
+      .map((bounds) => expandBounds(bounds, ORTHO_OWN_INSET)),
+  ];
+
+  let best: Array<{ x: number; y: number }> | undefined;
+  let bestCost = Infinity;
+  let pairsTried = 0;
+  for (const sourceEndpoint of sourceEndpoints) {
+    for (const targetEndpoint of targetEndpoints) {
+      // Storage endpoints offer up to four sides each; a handful of searches
+      // is plenty to find the good exits and keeps dense imports fast.
+      if (pairsTried >= 6) {
+        break;
+      }
+      pairsTried += 1;
+      const sourceExit = offsetPointFromSide(
+        sourceEndpoint,
+        sourceEndpoint.side,
+        DIRECT_EDGE_NODE_CLEARANCE,
+      );
+      const targetExit = offsetPointFromSide(
+        targetEndpoint,
+        targetEndpoint.side,
+        DIRECT_EDGE_NODE_CLEARANCE,
+      );
+      const spanX = Math.abs(sourceExit.x - targetExit.x);
+      const spanY = Math.abs(sourceExit.y - targetExit.y);
+      const pad = Math.max(240, 0.3 * (spanX + spanY));
+      const window = {
+        left: Math.min(sourceExit.x, targetExit.x) - pad,
+        right: Math.max(sourceExit.x, targetExit.x) + pad,
+        top: Math.min(sourceExit.y, targetExit.y) - pad,
+        bottom: Math.max(sourceExit.y, targetExit.y) + pad,
+      };
+      // Bound the grid: on packed boards keep the obstacles nearest the
+      // source-target line; far rects can't shape a sane route anyway. The
+      // no-crossing guarantee is unaffected - obstacles that remain are
+      // still absolute, and a failed search falls back rather than crossing.
+      // A foreign node that swallows an exit point (ports of tightly packed
+      // neighbours) would wall the search in before it starts; hugging that
+      // neighbour beats failing back to a crossing route.
+      const containsExit = (bounds: { left: number; right: number; top: number; bottom: number }) =>
+        (sourceExit.x > bounds.left &&
+          sourceExit.x < bounds.right &&
+          sourceExit.y > bounds.top &&
+          sourceExit.y < bounds.bottom) ||
+        (targetExit.x > bounds.left &&
+          targetExit.x < bounds.right &&
+          targetExit.y > bounds.top &&
+          targetExit.y < bounds.bottom);
+      let windowObstacles = obstacles.filter(
+        (bounds) =>
+          bounds.right >= window.left &&
+          bounds.left <= window.right &&
+          bounds.bottom >= window.top &&
+          bounds.top <= window.bottom &&
+          !containsExit(bounds),
+      );
+      if (windowObstacles.length > 48) {
+        const midX = (sourceExit.x + targetExit.x) / 2;
+        const midY = (sourceExit.y + targetExit.y) / 2;
+        windowObstacles = windowObstacles
+          .map((bounds) => ({
+            bounds,
+            distance:
+              Math.abs((bounds.left + bounds.right) / 2 - midX) +
+              Math.abs((bounds.top + bounds.bottom) / 2 - midY),
+          }))
+          .sort(
+            (left, right) =>
+              left.distance - right.distance ||
+              left.bounds.left - right.bounds.left ||
+              left.bounds.top - right.bounds.top,
+          )
+          .slice(0, 48)
+          .map((entry) => entry.bounds);
+      }
+      const congestion = congestionSegments
+        .filter(
+          (segment) =>
+            Math.max(segment.start.x, segment.end.x) >= window.left &&
+            Math.min(segment.start.x, segment.end.x) <= window.right &&
+            Math.max(segment.start.y, segment.end.y) >= window.top &&
+            Math.min(segment.start.y, segment.end.y) <= window.bottom,
+        )
+        .slice(0, 40);
+      const path = findOrthogonalRoute({
+        source: { ...sourceExit, axis: routeAxisForSide(sourceEndpoint.side) },
+        target: { ...targetExit, axis: routeAxisForSide(targetEndpoint.side) },
+        obstacles: windowObstacles,
+        window,
+        congestion,
+        turnCost: ORTHO_TURN_COST,
+        crossingCost: ORTHO_CROSSING_COST,
+        nearness: { distance: EDGE_LINK_CLEARANCE, costPerPixel: 6 },
+        maxPops: 4000,
+      });
+      if (!path) {
+        continue;
+      }
+      const cost =
+        scoreOrthogonalPath(path, ORTHO_TURN_COST) +
+        getEndpointDirectionPenalty(sourceEndpoint, targetEndpoint);
+      if (cost < bestCost) {
+        bestCost = cost;
+        best = compactPolylinePoints([
+          { x: sourceEndpoint.x, y: sourceEndpoint.y },
+          ...path,
+          { x: targetEndpoint.x, y: targetEndpoint.y },
+        ]);
+      }
+    }
+    if (pairsTried >= 6) {
+      break;
+    }
+  }
+
+  return best;
 }
 
 function getDirectRouteSignature({
@@ -3954,22 +4142,26 @@ function boundsOverlapVertically(
 
 function getBundledEdgePath({
   edgeId,
+  routeIndex,
   sourceNodeId,
   sourceHandleIds,
   sourcePosition,
   estimatedSource,
   targetNodeId,
+  targetCandidates,
   targetX,
   targetY,
   targetPosition,
   usePreciseRouting = true,
 }: {
   edgeId: string;
+  routeIndex?: number;
   sourceNodeId: string;
   sourceHandleIds: string[];
   sourcePosition: Position;
   estimatedSource: { x: number; y: number };
   targetNodeId?: string;
+  targetCandidates?: SlotEdgeEndpoint[];
   targetX: number;
   targetY: number;
   targetPosition: Position;
@@ -4025,18 +4217,36 @@ function getBundledEdgePath({
   const minY = Math.min(...sourcePoints.map((point) => point.y));
   const maxY = Math.max(...sourcePoints.map((point) => point.y));
   const trunkY = sourcePoints[Math.floor(sourcePoints.length / 2)].y;
-  const trunkPoints = getSimpleOrthogonalEdgePoints({
-    sourceX: busX,
-    sourceY: trunkY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
+  // The trunk is an ordinary route from the bus to the target and must obey
+  // the same never-cross rules as any direct edge; only the port-side stubs
+  // and the bus line itself are bundle-specific geometry.
+  const trunkPoints =
+    getBestDirectEdgePoints({
+      edgeId,
+      laneOffset: getEdgeLaneOffset(edgeId),
+      routeIndex,
+      sourceNodeId,
+      sourceX: busX,
+      sourceY: trunkY,
+      sourcePosition,
+      targetNodeId,
+      targetCandidates,
+      targetX,
+      targetY,
+      targetPosition,
+    }) ??
+    getSimpleOrthogonalEdgePoints({
+      sourceX: busX,
+      sourceY: trunkY,
+      sourcePosition,
+      targetX,
+      targetY,
+      targetPosition,
+    });
   const path = [
     ...sourcePoints.map((point) => `M ${point.x},${point.y} L ${busX},${point.y}`),
     `M ${busX},${minY} L ${busX},${maxY}`,
-    pointsToSvgPath(trunkPoints),
+    pointsToHoppedSvgPath(trunkPoints, collectEarlierRouteSegments(edgeId, routeIndex)),
   ].join(" ");
   const labelPoint = getPointAtPolylineRatio(trunkPoints, 0.55) ?? {
     x: (busX + targetX) / 2,
@@ -4053,11 +4263,13 @@ function getBundledEdgePath({
 
 function getBundledMemberEdgePath({
   edgeId,
+  routeIndex,
   sourceNodeId,
   sourceHandleId,
   sourcePosition,
   estimatedSource,
   targetNodeId,
+  targetCandidates,
   targetX,
   targetY,
   targetPosition,
@@ -4065,11 +4277,13 @@ function getBundledMemberEdgePath({
   usePreciseRouting = true,
 }: {
   edgeId: string;
+  routeIndex?: number;
   sourceNodeId: string;
   sourceHandleId?: string;
   sourcePosition: Position;
   estimatedSource: { x: number; y: number };
   targetNodeId?: string;
+  targetCandidates?: SlotEdgeEndpoint[];
   targetX: number;
   targetY: number;
   targetPosition: Position;
@@ -4129,19 +4343,35 @@ function getBundledMemberEdgePath({
       EDGE_BUNDLE_CLEARANCE
     : (sourceBounds?.right ?? Math.max(...allSourcePoints.map((point) => point.x))) +
       EDGE_BUNDLE_CLEARANCE;
-  const points = getSimpleOrthogonalEdgePoints({
-    sourceX: busX,
-    sourceY: ownSourcePoint.y,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
+  // Past the bus this is an ordinary route and must dodge nodes like one.
+  const points =
+    getBestDirectEdgePoints({
+      edgeId,
+      laneOffset: getEdgeLaneOffset(edgeId),
+      routeIndex,
+      sourceNodeId,
+      sourceX: busX,
+      sourceY: ownSourcePoint.y,
+      sourcePosition,
+      targetNodeId,
+      targetCandidates,
+      targetX,
+      targetY,
+      targetPosition,
+    }) ??
+    getSimpleOrthogonalEdgePoints({
+      sourceX: busX,
+      sourceY: ownSourcePoint.y,
+      sourcePosition,
+      targetX,
+      targetY,
+      targetPosition,
+    });
   const labelPoint = getPointAtPolylineRatio(points, 0.55) ?? {
     x: (busX + targetX) / 2,
     y: (ownSourcePoint.y + targetY) / 2,
   };
-  const path = pointsToSvgPath(points);
+  const path = pointsToHoppedSvgPath(points, collectEarlierRouteSegments(edgeId, routeIndex));
   const [estimatedPath, estimatedLabelX, estimatedLabelY] = getSmoothStepPath({
     sourceX: busX,
     sourceY: ownSourcePoint.y,
@@ -4244,6 +4474,134 @@ function pointsToSvgPath(points: Array<{ x: number; y: number }>) {
   }
 
   return [`M ${first.x},${first.y}`, ...rest.map((point) => `L ${point.x},${point.y}`)].join(" ");
+}
+
+const EDGE_HOP_RADIUS = 5;
+
+/**
+ * Earlier-routed edges' segments, for hop rendering: the later routeIndex
+ * hops over the earlier one, so exactly one side of every crossing bumps.
+ * Reads the same cache the relaxation loop uses, with the same staleness
+ * class: a neighbour's reroute refreshes this edge on the next epoch.
+ */
+function collectEarlierRouteSegments(edgeId: string | undefined, routeIndex: number | undefined) {
+  if (routeIndex === undefined) {
+    return [];
+  }
+
+  const segments: Array<{ start: { x: number; y: number }; end: { x: number; y: number } }> = [];
+  for (const [otherId, entry] of directRouteCache) {
+    if (otherId === edgeId || entry.routeIndex >= routeIndex) {
+      continue;
+    }
+    for (const segment of entry.segments) {
+      segments.push(segment);
+    }
+    if (segments.length > 600) {
+      break;
+    }
+  }
+  return segments;
+}
+
+/**
+ * Like pointsToSvgPath, but wherever an orthogonal segment properly crosses
+ * one of the given (earlier-routed) segments, the line lifts over it in a
+ * small semicircular bump - the classic schematic hop that makes crossings
+ * legible instead of a flat X. Horizontal runs bump upward, vertical runs
+ * bump toward the left, so the same crossing always reads the same way.
+ */
+function pointsToHoppedSvgPath(
+  points: Array<{ x: number; y: number }>,
+  otherSegments: Array<{ start: { x: number; y: number }; end: { x: number; y: number } }>,
+) {
+  if (points.length < 2 || otherSegments.length === 0) {
+    return pointsToSvgPath(points);
+  }
+
+  const first = points[0]!;
+  let path = `M ${first.x},${first.y}`;
+  for (let index = 1; index < points.length; index += 1) {
+    const from = points[index - 1]!;
+    const to = points[index]!;
+    const horizontal = Math.abs(from.y - to.y) < 0.01;
+    const vertical = Math.abs(from.x - to.x) < 0.01;
+    if ((!horizontal && !vertical) || (horizontal && vertical)) {
+      path += ` L ${to.x},${to.y}`;
+      continue;
+    }
+
+    const crossings: number[] = [];
+    const low = horizontal ? Math.min(from.x, to.x) : Math.min(from.y, to.y);
+    const high = horizontal ? Math.max(from.x, to.x) : Math.max(from.y, to.y);
+    for (const segment of otherSegments) {
+      const segmentHorizontal = Math.abs(segment.start.y - segment.end.y) < 0.01;
+      const segmentVertical = Math.abs(segment.start.x - segment.end.x) < 0.01;
+      if (horizontal && segmentVertical) {
+        const crossAt = segment.start.x;
+        const otherLow = Math.min(segment.start.y, segment.end.y);
+        const otherHigh = Math.max(segment.start.y, segment.end.y);
+        if (
+          crossAt > low + EDGE_HOP_RADIUS + 2 &&
+          crossAt < high - EDGE_HOP_RADIUS - 2 &&
+          from.y > otherLow + 1 &&
+          from.y < otherHigh - 1
+        ) {
+          crossings.push(crossAt);
+        }
+      } else if (vertical && segmentHorizontal) {
+        const crossAt = segment.start.y;
+        const otherLow = Math.min(segment.start.x, segment.end.x);
+        const otherHigh = Math.max(segment.start.x, segment.end.x);
+        if (
+          crossAt > low + EDGE_HOP_RADIUS + 2 &&
+          crossAt < high - EDGE_HOP_RADIUS - 2 &&
+          from.x > otherLow + 1 &&
+          from.x < otherHigh - 1
+        ) {
+          crossings.push(crossAt);
+        }
+      }
+    }
+
+    if (crossings.length === 0) {
+      path += ` L ${to.x},${to.y}`;
+      continue;
+    }
+
+    const direction = horizontal ? Math.sign(to.x - from.x) : Math.sign(to.y - from.y);
+    crossings.sort((left, right) => (left - right) * direction);
+    const merged: number[] = [];
+    for (const crossAt of crossings) {
+      if (
+        merged.length === 0 ||
+        Math.abs(crossAt - merged[merged.length - 1]!) > EDGE_HOP_RADIUS * 2 + 2
+      ) {
+        merged.push(crossAt);
+      }
+    }
+
+    for (const crossAt of merged) {
+      if (horizontal) {
+        const beforeX = crossAt - EDGE_HOP_RADIUS * direction;
+        const afterX = crossAt + EDGE_HOP_RADIUS * direction;
+        // Traveling east, counterclockwise (sweep 0) bulges up; traveling
+        // west, clockwise (sweep 1) bulges up.
+        const sweep = direction > 0 ? 0 : 1;
+        path += ` L ${beforeX},${from.y} A ${EDGE_HOP_RADIUS} ${EDGE_HOP_RADIUS} 0 0 ${sweep} ${afterX},${from.y}`;
+      } else {
+        const beforeY = crossAt - EDGE_HOP_RADIUS * direction;
+        const afterY = crossAt + EDGE_HOP_RADIUS * direction;
+        // Traveling south, clockwise (sweep 1) bulges left; traveling north,
+        // counterclockwise (sweep 0) bulges left.
+        const sweep = direction > 0 ? 1 : 0;
+        path += ` L ${from.x},${beforeY} A ${EDGE_HOP_RADIUS} ${EDGE_HOP_RADIUS} 0 0 ${sweep} ${from.x},${afterY}`;
+      }
+    }
+    path += ` L ${to.x},${to.y}`;
+  }
+
+  return path;
 }
 
 function getPointAtPolylineRatio(points: Array<{ x: number; y: number }>, ratio: number) {
@@ -4641,37 +4999,41 @@ function getSlotEdgeEndpointCandidates({
 
   const handle = parseResourceHandleId(handleId);
   const logicalRecipeSide = handle?.side === "input" ? Position.Left : Position.Right;
+  if (isRecipeSlotEndpoint) {
+    // Machine ports are strict: inputs enter on the left, outputs leave on
+    // the right - never the top, bottom, or wrong side. The router bends
+    // around whatever that costs.
+    return [
+      {
+        ...getSlotEdgeEndpointForSide({
+          nodeId,
+          handleId,
+          edgeSide: logicalRecipeSide,
+          estimatedX,
+          estimatedY,
+          endpointOffset,
+          isStorageSlotEndpoint,
+          measureEndpoint: measureEndpoints,
+        }),
+        freeExit: true,
+      },
+    ];
+  }
+
   const preferredSide =
-    measureEndpoints &&
-    isRecipeSlotEndpoint &&
-    counterpartX !== undefined &&
-    counterpartY !== undefined
-      ? getRecipeSlotEdgeSideTowardPoint({
+    measureEndpoints && counterpartX !== undefined && counterpartY !== undefined
+      ? getSlotEdgeSideTowardPoint({
           nodeId,
           handleId,
           estimatedX,
           estimatedY,
           counterpartX,
           counterpartY,
-          logicalSide: logicalRecipeSide,
+          estimatedSide,
         })
-      : measureEndpoints &&
-          isStorageSlotEndpoint &&
-          counterpartX !== undefined &&
-          counterpartY !== undefined
-        ? getSlotEdgeSideTowardPoint({
-            nodeId,
-            handleId,
-            estimatedX,
-            estimatedY,
-            counterpartX,
-            counterpartY,
-            estimatedSide,
-          })
-        : estimatedSide;
+      : estimatedSide;
   const sides = dedupeEdgeSides([
     preferredSide,
-    isRecipeSlotEndpoint ? logicalRecipeSide : estimatedSide,
     estimatedSide,
     Position.Bottom,
     Position.Top,
@@ -4679,6 +5041,7 @@ function getSlotEdgeEndpointCandidates({
     Position.Right,
   ]);
 
+  // Storage nodes are small and legitimately enter/exit on any side.
   return sides.map((edgeSide) => ({
     ...getSlotEdgeEndpointForSide({
       nodeId,
@@ -4690,10 +5053,7 @@ function getSlotEdgeEndpointCandidates({
       isStorageSlotEndpoint,
       measureEndpoint: measureEndpoints,
     }),
-    // Storage nodes are small and legitimately enter/exit on any side; a
-    // recipe slot only gets a free transit across its own node body toward
-    // its logical side (inputs left, outputs right).
-    freeExit: isStorageSlotEndpoint || !isRecipeSlotEndpoint || edgeSide === logicalRecipeSide,
+    freeExit: true,
   }));
 }
 
@@ -4820,52 +5180,6 @@ function getSlotEdgeSideTowardPoint({
   }
 
   return estimatedSide;
-}
-
-function getRecipeSlotEdgeSideTowardPoint({
-  nodeId,
-  handleId,
-  estimatedX,
-  estimatedY,
-  counterpartX,
-  counterpartY,
-  logicalSide,
-}: {
-  nodeId: string;
-  handleId?: string | null;
-  estimatedX: number;
-  estimatedY: number;
-  counterpartX: number;
-  counterpartY: number;
-  logicalSide: Position;
-}) {
-  const center = getMeasuredSlotCenter({ nodeId, handleId }) ?? { x: estimatedX, y: estimatedY };
-  const distanceX = counterpartX - center.x;
-  const distanceY = counterpartY - center.y;
-  const horizontalSide = distanceX >= 0 ? Position.Right : Position.Left;
-  const verticalSide = distanceY >= 0 ? Position.Bottom : Position.Top;
-  const isNaturallyHorizontal = horizontalSide === logicalSide && Math.abs(distanceX) >= 48;
-
-  if (Math.abs(distanceY) >= 64 && Math.abs(distanceY) > Math.abs(distanceX) * 0.35) {
-    return verticalSide;
-  }
-
-  if (Math.abs(distanceY) >= 24 && (!isNaturallyHorizontal || verticalSide === Position.Bottom)) {
-    return verticalSide;
-  }
-
-  if (
-    Math.abs(distanceY) > Math.abs(distanceX) * 0.45 &&
-    (!isNaturallyHorizontal || verticalSide === Position.Bottom)
-  ) {
-    return verticalSide;
-  }
-
-  if (horizontalSide === logicalSide) {
-    return logicalSide;
-  }
-
-  return verticalSide;
 }
 
 function getMeasuredSlotEndpoint({
