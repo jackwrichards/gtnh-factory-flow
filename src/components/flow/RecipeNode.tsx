@@ -31,7 +31,6 @@ import {
   getVoltageTierIndex,
   BEE_INDUSTRIAL_PRODUCTION_CONTROL_ID,
   BEE_INDUSTRIAL_SPEED_CONTROL_ID,
-  isRecipeInputConsumed,
   isSteamMachineHandler,
   isBeeFrameSlotControlId,
   isBeeProductionConfigControl,
@@ -46,7 +45,6 @@ import {
   resourceLabel,
   type MachineConfigTierControl,
 } from "@/lib/model";
-import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
 import { CropPickerMenu } from "./CropPickerMenu";
 import { MachineCompareTable, MachineGlanceBar, MachineTabStrip } from "./MachinePicker";
 import { useMachineHandlerIcons } from "./machine-icons";
@@ -56,8 +54,6 @@ import { MachineStatsContent } from "./MachineStatsContent";
 import { UsageLimitContent } from "@/components/inspector/UsageLimitContent";
 import { buildUsageLimitChain } from "@/components/inspector/usage-limits";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
-import { usesNativeNeiChrome } from "@/lib/nei/layout";
-import type { NeiPositionedSlot } from "@/lib/nei/layout";
 import { canonicalizeResourceHandleId, parseResourceHandleId } from "./resource-handles";
 import {
   buildRailPorts,
@@ -88,8 +84,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const [isCompareOpen, setCompareOpen] = useState(false);
   const [previewHandlerId, setPreviewHandlerId] = useState<string>();
   const [isCropMenuOpen, setCropMenuOpen] = useState(false);
-  const [openMachineConfigMenuId, setOpenMachineConfigMenuId] = useState<string>();
-  const browseResource = useFactoryStore((state) => state.browseResource);
   const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
@@ -221,7 +215,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       machineParallelMultiplier: getMachineParallelMultiplier(effectiveRecipe, projectNode),
       overclockedRecipe,
       tierColor: tierControl ? GT_TIER_COLORS[tierControl.current] : undefined,
-      usesNativeNeiRecipe: usesNativeNeiChrome(overclockedRecipe),
     };
   }, [dataset, projectNode, recipe]);
 
@@ -245,7 +238,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     machineParallelMultiplier,
     overclockedRecipe,
     tierColor,
-    usesNativeNeiRecipe,
   } = derived;
   // Verdict + rail ports read the board lazily (no extra subscription): the
   // node re-renders on every solver tick, which is exactly when any of these
@@ -290,8 +282,17 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       machineConfigTiers: nextMachineConfigTiers,
     });
   };
+  // TGS tool slots and bee frame slots used to be icon menus painted over
+  // recipe-canvas slots; with the canvas gone they join the regular config
+  // panel as icon + dropdown rows (tiers filtered to each slot's category).
   const visibleMachineConfigControls = [
     ...(coilControl && coilResource ? [{ ...coilControl, resource: coilResource }] : []),
+    ...tgsToolControls.map((control) => ({
+      ...control,
+      resource: getTreeGrowthSimulatorSlotResource(control),
+      tiers: getTreeGrowthSimulatorSlotTiers(control),
+    })),
+    ...beeFrameControls,
     ...statsMachineConfigControls,
   ];
   const machineConfigPanel =
@@ -343,29 +344,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     : selectedMachineHandler;
   const isPreviewing = hasMachinePicker && previewHandler.id !== selectedMachineHandler.id;
   const machineCategory = recipe.source?.recipeMap ?? recipe.machineType;
-  // While hovering a machine tab, the card's own Total/Usage/Time lines show
-  // that machine's base numbers instead of opening any popup.
-  const neiDisplayRecipe = isPreviewing
-    ? {
-        ...overclockedRecipe,
-        ...(() => {
-          const previewApplied = applyMachineHandlerToRecipe(recipe, {
-            machineHandlerId: previewHandler.id,
-          });
-          return {
-            machineType: previewApplied.machineType,
-            minimumTier: previewApplied.minimumTier,
-            durationTicks: previewApplied.durationTicks,
-            eut: previewApplied.eut,
-          };
-        })(),
-      }
-    : overclockedRecipe;
 
   return (
     <div
       className={[
-        "group relative min-w-[368px] w-max border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
+        "group relative min-w-[252px] w-max border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
         // Marker for the globals.css layer lift: with a picker popup open the
         // node (and the whole nodes layer) must paint above edges.
         isCompareOpen ? "recipe-node-popup-open" : "",
@@ -564,7 +547,20 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               <Sprout className="h-5 w-5" /> Pick a crop
             </button>
           ) : (
-          <div className="flex items-stretch gap-1">
+          // The rails ARE the node now: ports carry the icons, rates, and
+          // health that the recipe canvas used to duplicate. Recipe identity
+          // lives in the header (name hover = full machine stats) and in the
+          // port icons (click = recipes, right-click = uses).
+          <div
+            className={[
+              "flex items-stretch gap-1",
+              rails.inputs.length > 0 && rails.outputs.length > 0
+                ? "justify-between"
+                : rails.outputs.length > 0
+                  ? "justify-end"
+                  : "justify-start",
+            ].join(" ")}
+          >
             <PortRail
               nodeId={projectNode.id}
               side="input"
@@ -575,97 +571,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               }
               pending={pendingResourceConnection}
             />
-            <div className="min-w-0 flex-1">
-          <NeiRecipeWindow
-            recipe={neiDisplayRecipe}
-            scale={2}
-            compact
-            className={["mx-auto", nodeColor ? "recipe-node-nei-tint" : undefined]
-              .filter(Boolean)
-              .join(" ")}
-            canvasClassName={nodeColor ? "recipe-node-canvas-tint" : undefined}
-            statsAction={
-              machineParallelMultiplier > 1 ? (
-                <div className="flex gap-1">
-                  <MachineParallelIndicator multiplier={machineParallelMultiplier} />
-                </div>
-              ) : undefined
-            }
-            onSlotClick={(slot, mode) => {
-              browseResource(
-                {
-                  kind: slot.resource.kind,
-                  id: slot.resource.id,
-                  displayName: slot.resource.displayName,
-                  iconPath: slot.resource.iconPath,
-                  iconAtlas: slot.resource.iconAtlas,
-                  dominantColor:
-                    slot.resource.dominantColor ?? slot.resource.iconAtlas?.dominantColor,
-                  anchorNodeId: projectNode.id,
-                },
-                mode,
-              );
-            }}
-            suppressSlotHover={(slot) =>
-              Boolean(
-                getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls) ??
-                getBeeFrameControlForSlot(slot, beeFrameControls),
-              )
-            }
-            suppressConsumedState={(slot) =>
-              Boolean(getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls)) ||
-              Boolean(getBeeFrameControlForSlot(slot, beeFrameControls)) ||
-              isCropSeedSlot(slot, effectiveRecipe, cropProductionControls)
-            }
-            getSlotZIndex={(slot) => {
-              const control =
-                getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls) ??
-                getBeeFrameControlForSlot(slot, beeFrameControls);
-              if (!control) {
-                return undefined;
-              }
-              return openMachineConfigMenuId === control.id ? 130 : 70;
-            }}
-            renderHandle={(slot) => {
-              const tgsToolControl = getTreeGrowthSimulatorToolControlForSlot(
-                slot,
-                tgsToolControls,
-              );
-              if (tgsToolControl) {
-                return (
-                  <TreeGrowthSimulatorToolSlotMenu
-                    control={tgsToolControl}
-                    dataset={dataset}
-                    isOpen={openMachineConfigMenuId === tgsToolControl.id}
-                    onOpenChange={(isOpen) =>
-                      setOpenMachineConfigMenuId(isOpen ? tgsToolControl.id : undefined)
-                    }
-                    onSelect={(nextTier) => updateMachineConfigTier(tgsToolControl.id, nextTier)}
-                  />
-                );
-              }
-
-              const beeFrameControl = getBeeFrameControlForSlot(slot, beeFrameControls);
-              if (beeFrameControl) {
-                return (
-                  <MachineConfigSlotMenu
-                    control={beeFrameControl}
-                    dataset={dataset}
-                    isOpen={openMachineConfigMenuId === beeFrameControl.id}
-                    onOpenChange={(isOpen) =>
-                      setOpenMachineConfigMenuId(isOpen ? beeFrameControl.id : undefined)
-                    }
-                    onSelect={(nextTier) => updateMachineConfigTier(beeFrameControl.id, nextTier)}
-                  />
-                );
-              }
-
-              // Wires dock on the rails now; canvas slots keep click-to-browse
-              // and their name tooltips but host no flow handles.
-              return null;
-            }}
-          />
-            </div>
+            {rails.inputs.length > 0 && rails.outputs.length > 0 ? (
+              <div className="flex w-5 shrink-0 items-center justify-center text-[15px] font-black text-[var(--mc-ink-muted)]">
+                →
+              </div>
+            ) : null}
             <PortRail
               nodeId={projectNode.id}
               side="output"
@@ -678,14 +588,17 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             />
           </div>
           )}
-          {!usesNativeNeiRecipe ? machineConfigPanel : null}
-          {!usesNativeNeiRecipe ? passiveProductionPanel : null}
+          {machineConfigPanel}
+          {passiveProductionPanel}
         </div>
 
-        {!usesNativeNeiRecipe && !isCropFarmPlaceholder ? (
+        {!isCropFarmPlaceholder ? (
           <div
             className={[
-              "mt-1 grid min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-[var(--mc-ink)]",
+              "mt-1 grid min-w-0 gap-1 text-[12px] leading-4 text-[var(--mc-ink)]",
+              machineParallelMultiplier > 1
+                ? "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,0.7fr)]"
+                : "grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]",
               isCropProductionNode ? CROP_CONFIG_PANEL_WIDTH_CLASS : "",
               nodeColor ? "recipe-node-stat-grid" : "",
             ].join(" ")}
@@ -704,6 +617,12 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   : `${formatRate(result?.euT ?? 0, 0)} EU/t`
               }
             />
+            {machineParallelMultiplier > 1 ? (
+              <Stat
+                label="Parallel"
+                value={`×${formatMachineParallelMultiplier(machineParallelMultiplier)}`}
+              />
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -943,6 +862,7 @@ function PortChip({
   pending: ReturnType<typeof useFactoryStore.getState>["pendingResourceConnection"];
 }) {
   const isInput = port.side === "input";
+  const browseResource = useFactoryStore((state) => state.browseResource);
   const slotState = getConnectionSlotState(
     pending,
     nodeId,
@@ -952,6 +872,19 @@ function PortChip({
     port.resource?.alternatives,
     port.handleId,
   );
+  const browse = (mode: "recipes" | "uses") =>
+    browseResource(
+      {
+        kind: port.kind,
+        id: port.resourceId,
+        displayName: port.resource?.displayName ?? port.displayName,
+        iconPath: port.resource?.iconPath,
+        iconAtlas: port.resource?.iconAtlas,
+        dominantColor: port.resource?.dominantColor ?? port.resource?.iconAtlas?.dominantColor,
+        anchorNodeId: nodeId,
+      },
+      mode,
+    );
   const toneClass =
     port.tone === "bind"
       ? "flow-port--bind"
@@ -990,19 +923,36 @@ function PortChip({
           ].join(" ")}
         />
       ) : null}
-      {port.resource ? (
-        <ResourceIcon
-          resource={{ ...port.resource, amount: 1, chance: undefined }}
-          bare
-          tooltip={false}
-          showAmount={false}
-          showConsumedState={false}
-          iconPixelSize={26}
-          className="!h-5 !w-5 shrink-0"
-        />
-      ) : (
-        <span className="h-5 w-5 shrink-0 border border-[var(--mc-47)] bg-[var(--mc-55)]" />
-      )}
+      <span
+        role="button"
+        tabIndex={-1}
+        className="nodrag relative z-40 shrink-0 cursor-pointer hover:brightness-125"
+        title={`${port.displayName} — click: recipes, right-click: uses`}
+        onClick={(event) => {
+          event.stopPropagation();
+          browse("recipes");
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          browse("uses");
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        {port.resource ? (
+          <ResourceIcon
+            resource={{ ...port.resource, amount: 1, chance: undefined }}
+            bare
+            tooltip={false}
+            showAmount={false}
+            showConsumedState={false}
+            iconPixelSize={26}
+            className="!h-5 !w-5"
+          />
+        ) : (
+          <span className="block h-5 w-5 border border-[var(--mc-47)] bg-[var(--mc-55)]" />
+        )}
+      </span>
       <span className="min-w-0 flex-1">
         <span
           className={[
@@ -1349,31 +1299,6 @@ const BEE_FRAME_SLOTS: Record<string, { x: number; y: number }> = {
   beeFrameSlot3: { x: 66, y: 81 },
 };
 
-function getTreeGrowthSimulatorToolControlForSlot(
-  slot: NeiPositionedSlot,
-  controls: MachineConfigTierControl[],
-) {
-  if (slot.side !== "input" || slot.kind !== "item") {
-    return undefined;
-  }
-
-  return controls.find((control) => {
-    const position = TREE_GROWTH_SIMULATOR_TOOL_SLOTS[control.id];
-    return position?.x === slot.x && position.y === slot.y;
-  });
-}
-
-function getBeeFrameControlForSlot(slot: NeiPositionedSlot, controls: MachineConfigTierControl[]) {
-  if (slot.side !== "input" || slot.kind !== "item") {
-    return undefined;
-  }
-
-  return controls.find((control) => {
-    const position = BEE_FRAME_SLOTS[control.id];
-    return position?.x === slot.x && position.y === slot.y;
-  });
-}
-
 function getBeePanelControls(controls: MachineConfigTierControl[]): MachineConfigTierControl[] {
   const speedControl = controls.find((control) => control.id === BEE_INDUSTRIAL_SPEED_CONTROL_ID);
   if (speedControl?.current.key !== "speed-8-upgraded") {
@@ -1512,147 +1437,6 @@ function getTreeGrowthSimulatorSlotTiers(control: MachineConfigTierControl) {
   return control.tiers.filter(
     (tier) => tier.key === "none" || getTreeGrowthSimulatorToolCategory(tier.key) === category,
   );
-}
-
-function TreeGrowthSimulatorToolSlotMenu({
-  control,
-  dataset,
-  isOpen,
-  onOpenChange,
-  onSelect,
-}: {
-  control: MachineConfigTierControl;
-  dataset: ReturnType<typeof useFactoryStore.getState>["dataset"];
-  isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  onSelect: (nextTier: string) => void;
-}) {
-  const selectedEmpty = isTreeGrowthSimulatorEmptyTool(control);
-  const tiers = getTreeGrowthSimulatorSlotTiers(control);
-  const currentTitle = selectedEmpty
-    ? `${control.label}: empty`
-    : `${control.label}: ${control.resource.displayName ?? control.current.label}`;
-
-  return (
-    <span className="absolute inset-0 z-[70] block">
-      <span
-        role="button"
-        tabIndex={0}
-        className={[
-          "block h-full w-full cursor-pointer",
-          isOpen ? "" : "hover:ring-2 hover:ring-cyan-300",
-        ].join(" ")}
-        title={currentTitle}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onOpenChange(!isOpen);
-        }}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onOpenChange(!isOpen);
-        }}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") {
-            return;
-          }
-          event.preventDefault();
-          event.stopPropagation();
-          onOpenChange(!isOpen);
-        }}
-      >
-        {selectedEmpty ? (
-          <span className="grid h-full w-full place-items-center text-[17px] font-bold leading-none text-white [text-shadow:1px_1px_0_#000]">
-            +
-          </span>
-        ) : null}
-      </span>
-      {isOpen ? (
-        <span
-          className="absolute left-0 top-[calc(100%+6px)] z-[120] grid w-[208px] grid-cols-[repeat(3,52px)] gap-3 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-3 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33),4px_4px_0_rgba(0,0,0,0.35)]"
-          onClick={(event) => event.stopPropagation()}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-          }}
-        >
-          {tiers.map((tier) => {
-            const isEmpty = tier.key === "none";
-            const resource = resolveDatasetMachineConfigResource(tier.resource, dataset);
-            return (
-              <span
-                key={tier.key}
-                role="button"
-                tabIndex={0}
-                className={[
-                  "grid h-[52px] w-[52px] place-items-center overflow-hidden border-2 text-[18px] font-bold leading-none",
-                  !selectedEmpty && tier.key === control.current.key
-                    ? "border-[#6b4fd1] bg-[#8b70dd] text-white"
-                    : "border-[var(--mc-47)] bg-[var(--mc-85)] text-[var(--mc-ink)] hover:bg-[var(--mc-100)]",
-                ].join(" ")}
-                title={isEmpty ? "-" : (resource.displayName ?? tier.label)}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onSelect(tier.key);
-                  onOpenChange(false);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") {
-                    return;
-                  }
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onSelect(tier.key);
-                  onOpenChange(false);
-                }}
-              >
-                {isEmpty ? <span>-</span> : <TreeGrowthSimulatorMenuIcon resource={resource} />}
-              </span>
-            );
-          })}
-        </span>
-      ) : null}
-    </span>
-  );
-}
-
-function MachineConfigSlotMenu(props: {
-  control: MachineConfigTierControl;
-  dataset: ReturnType<typeof useFactoryStore.getState>["dataset"];
-  isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  onSelect: (nextTier: string) => void;
-}) {
-  return <TreeGrowthSimulatorToolSlotMenu {...props} />;
-}
-
-function TreeGrowthSimulatorMenuIcon({ resource }: { resource: ResourceAmount }) {
-  return (
-    <ResourceIcon
-      resource={resource}
-      bare
-      tooltip={false}
-      showAmount={false}
-      showConsumedState={false}
-      iconPixelSize={64}
-      className="h-full w-full"
-    />
-  );
-}
-
-function isCropSeedSlot(
-  slot: NeiPositionedSlot,
-  recipe: Recipe,
-  controls: MachineConfigTierControl[],
-) {
-  if (controls.length === 0 || slot.side !== "input" || slot.kind !== "item") {
-    return false;
-  }
-
-  const firstItemInputIndex = recipe.inputs.findIndex((input) => input.kind === "item");
-  return slot.resourceIndex === firstItemInputIndex;
 }
 
 function MachineConfigControlPanel({
@@ -1945,22 +1729,6 @@ function shortConfigLabel(resource: ResourceAmount) {
     .join("")
     .slice(0, 4)
     .toUpperCase();
-}
-
-function MachineParallelIndicator({ multiplier }: { multiplier: number }) {
-  if (!Number.isFinite(multiplier) || multiplier <= 1) {
-    return null;
-  }
-
-  return (
-    <div
-      className="flex h-10 w-10 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-71)] text-[13px] font-black leading-none text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-93),inset_-2px_-2px_0_var(--mc-47)]"
-      title={`${formatMachineParallelMultiplier(multiplier)} parallels`}
-      aria-label={`${formatMachineParallelMultiplier(multiplier)} parallels`}
-    >
-      {formatMachineParallelMultiplier(multiplier)}
-    </div>
-  );
 }
 
 function formatMachineParallelMultiplier(multiplier: number) {
