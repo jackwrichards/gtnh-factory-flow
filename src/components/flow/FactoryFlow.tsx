@@ -85,7 +85,11 @@ import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { RecipeNode, type RecipeFlowNode } from "./RecipeNode";
 import { GT_NODE_COLORS, GT_NODE_COLOR_PALETTE } from "./node-colors";
 import { getDeleteCursor, getPaintBrushCursor } from "./paint-cursor";
-import { makeResourceHandleId, parseResourceHandleId } from "./resource-handles";
+import {
+  canonicalizeResourceHandleId,
+  makeResourceHandleId,
+  parseResourceHandleId,
+} from "./resource-handles";
 import {
   describeEdgeRate,
   formatEdgeRateLabel,
@@ -749,6 +753,11 @@ export function FactoryFlow() {
       const edgeColor = getInitialResourceColor(resource);
       const sourceHandle = parseResourceHandleId(edge.sourceHandle);
       const targetHandle = parseResourceHandleId(edge.targetHandle);
+      // Rails render one canonical (index-less) handle per resource; stored
+      // edges may carry legacy per-slot ids. Collapse them here or React Flow
+      // refuses to draw the edge and the anchor lookup misses the port.
+      const canonicalSourceHandle = canonicalizeResourceHandleId(edge.sourceHandle);
+      const canonicalTargetHandle = canonicalizeResourceHandleId(edge.targetHandle);
       const isStorageEdgeActive =
         !isStorageEdge || hoveredStorageResourceKey === storageResourceKey;
       const isSearchEdgeActive = edgeMatchesSearch(edge, resource, recipeSearch);
@@ -766,8 +775,8 @@ export function FactoryFlow() {
         zIndex: isNodeDragging ? 2000 : isFlowHighlighted ? 1200 : 20,
         source: edge.source,
         target: edge.target,
-        sourceHandle: edge.sourceHandle,
-        targetHandle: edge.targetHandle,
+        sourceHandle: canonicalSourceHandle,
+        targetHandle: canonicalTargetHandle,
         type: "resourceEdge",
         data: {
           resource,
@@ -790,8 +799,8 @@ export function FactoryFlow() {
           isStorageEdge,
           showLabel: true,
           labelOffset: edge.labelOffset,
-          sourceHandleId: edge.sourceHandle,
-          targetHandleId: edge.targetHandle,
+          sourceHandleId: canonicalSourceHandle,
+          targetHandleId: canonicalTargetHandle,
           sourceSlotEndpoint: Boolean(sourceHandle && !sourceStorage),
           targetSlotEndpoint: Boolean(targetHandle && !targetStorage),
           sourceStorageEndpoint: Boolean(sourceHandle && sourceStorage),
@@ -2619,10 +2628,13 @@ function getEdgeEndpointOffsets(project: FactoryProject) {
   >();
 
   for (const edge of project.edges) {
+    // Rails pool one port per resource, so every edge whose (possibly legacy
+    // per-slot) handle collapses onto the same canonical id shares a port and
+    // must fan out along it.
     const sourceHandle = parseResourceHandleId(edge.sourceHandle);
     if (sourceHandle && !storagesById.has(edge.source)) {
       addEndpointOffsetGroupEntry(groups, {
-        key: `${edge.source}|${sourceHandle.side}|${getResourceHandleSlotRow(edge.sourceHandle)}`,
+        key: `${edge.source}|${canonicalizeResourceHandleId(edge.sourceHandle)}`,
         edgeId: edge.id,
         endpoint: "source",
         counterpartY: nodesById.get(edge.target)?.position.y ?? 0,
@@ -2632,7 +2644,7 @@ function getEdgeEndpointOffsets(project: FactoryProject) {
     const targetHandle = parseResourceHandleId(edge.targetHandle);
     if (targetHandle && !storagesById.has(edge.target)) {
       addEndpointOffsetGroupEntry(groups, {
-        key: `${edge.target}|${targetHandle.side}|${getResourceHandleSlotRow(edge.targetHandle)}`,
+        key: `${edge.target}|${canonicalizeResourceHandleId(edge.targetHandle)}`,
         edgeId: edge.id,
         endpoint: "target",
         counterpartY: nodesById.get(edge.source)?.position.y ?? 0,

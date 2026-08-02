@@ -425,3 +425,149 @@ textarea {
   border-color: var(--mc-12);
   background: black;
 }
+
+/* ===== Node verdict strip + port rails ===================================
+   Verdict color means "where to act": starved = act upstream (red), choke =
+   act on this node (amber), demand-set = healthy part load (steel, no
+   action), balanced = done (green). Never "how big the number is". */
+:root {
+  --verdict-starved-bg: #9c2121;
+  --verdict-starved-edge: #5b0f0f;
+  --verdict-choke-bg: #a06a00;
+  --verdict-choke-edge: #5e3e00;
+  --verdict-demand-bg: #4a5a6c;
+  --verdict-demand-edge: #28323d;
+  --verdict-balanced-bg: #22733a;
+  --verdict-balanced-edge: #123f1f;
+  --verdict-off-bg: #6b6b6b;
+  --verdict-off-edge: #3d3d3d;
+  --rail-bar-track: #6e6e6e;
+  --rail-bar-ok: #3fae5c;
+  --rail-bar-bad: #cf3333;
+  --rail-bar-hot: #e09b17;
+  --rail-bar-calm: #7b8b9c;
+  --port-bind-bg: #d9a6a6;
+  --port-bind-edge: #8c1c1c;
+  --port-hot-bg: #e3c98f;
+  --port-hot-edge: #9c6e00;
+}
+
+[data-theme="dark"] {
+  --verdict-off-bg: #4a4a4a;
+  --rail-bar-track: #3c3c3c;
+  --port-bind-bg: #5d2323;
+  --port-bind-edge: #c34c4c;
+  --port-hot-bg: #57451b;
+  --port-hot-edge: #c99b2e;
+}
+
+.flow-verdict-strip {
+  border: 2px solid var(--verdict-edge, #3d3d3d);
+  background: var(--verdict-bg, #6b6b6b);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.25),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.3);
+  color: #fff;
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5);
+}
+
+.flow-verdict-strip--starved {
+  --verdict-bg: var(--verdict-starved-bg);
+  --verdict-edge: var(--verdict-starved-edge);
+}
+
+.flow-verdict-strip--choke {
+  --verdict-bg: var(--verdict-choke-bg);
+  --verdict-edge: var(--verdict-choke-edge);
+}
+
+.flow-verdict-strip--demand {
+  --verdict-bg: var(--verdict-demand-bg);
+  --verdict-edge: var(--verdict-demand-edge);
+}
+
+.flow-verdict-strip--balanced {
+  --verdict-bg: var(--verdict-balanced-bg);
+  --verdict-edge: var(--verdict-balanced-edge);
+}
+
+.flow-verdict-strip--off {
+  --verdict-bg: var(--verdict-off-bg);
+  --verdict-edge: var(--verdict-off-edge);
+}
+
+.flow-port {
+  background: var(--mc-71);
+  border: 2px solid var(--mc-47);
+  box-shadow:
+    inset 1px 1px 0 var(--mc-93),
+    inset -1px -1px 0 var(--mc-47);
+}
+
+.flow-port--bind {
+  background: var(--port-bind-bg);
+  border-color: var(--port-bind-edge);
+}
+
+.flow-port--hot {
+  background: var(--port-hot-bg);
+  border-color: var(--port-hot-edge);
+}
+
+.flow-port--idle {
+  border-style: dashed;
+  opacity: 0.82;
+}
+
+.flow-port-bar {
+  height: 4px;
+  background: var(--rail-bar-track);
+  box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.flow-port-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--rail-bar-ok);
+}
+
+.flow-port--bind .flow-port-bar > i {
+  background: var(--rail-bar-bad);
+}
+
+.flow-port--hot .flow-port-bar > i {
+  background: var(--rail-bar-hot);
+}
+
+.flow-port--calm .flow-port-bar > i {
+  background: var(--rail-bar-calm);
+}
+
+.flow-port-badge {
+  position: absolute;
+  top: -9px;
+  right: -4px;
+  z-index: 2;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 13px;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.flow-port--bind .flow-port-badge {
+  background: #c22525;
+}
+
+.flow-port--hot .flow-port-badge {
+  background: #cf8e00;
+}
+
+/* Color-tagged nodes tint neutral ports like every other panel; semantic
+   states (binding red, hungry amber) always win over the paint. */
+.recipe-node-tinted-area .flow-port:not(.flow-port--bind):not(.flow-port--hot) {
+  background: color-mix(in srgb, var(--recipe-node-tint) 86%, var(--mc-71));
+  border-color: color-mix(in srgb, var(--recipe-node-tint-border) 62%, var(--mc-47));
+}

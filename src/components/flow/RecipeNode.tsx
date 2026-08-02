@@ -9,7 +9,6 @@ import type {
   NodeThroughputResult,
   Recipe,
   ResourceAmount,
-  ResourceKey,
 } from "@/lib/model/types";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
 import {
@@ -59,7 +58,14 @@ import { buildUsageLimitChain } from "@/components/inspector/usage-limits";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { usesNativeNeiChrome } from "@/lib/nei/layout";
 import type { NeiPositionedSlot } from "@/lib/nei/layout";
-import { makeResourceHandleId } from "./resource-handles";
+import { canonicalizeResourceHandleId, parseResourceHandleId } from "./resource-handles";
+import {
+  buildRailPorts,
+  deriveNodeVerdict,
+  splitRailOverflow,
+  type NodeVerdict,
+  type RailPort,
+} from "./node-verdict";
 import { useFactoryStore } from "@/store/factory-store";
 import { GT_NODE_COLORS } from "./node-colors";
 import { getPaintBrushCursor } from "./paint-cursor";
@@ -95,8 +101,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const maxTierFilter = useFactoryStore((state) => state.maxTierFilter);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
   const dataset = useFactoryStore((state) => state.dataset);
-  const utilization = result?.utilization ?? 0;
-  const utilizationPercent = Number.isFinite(utilization) ? utilization * 100 : 999;
   const isSearchHighlighted = recipeContainsSearchResource(recipe, recipeSearch);
   const isFlowResourceHighlighted = recipeContainsResourceKey(
     recipe,
@@ -243,6 +247,19 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     tierColor,
     usesNativeNeiRecipe,
   } = derived;
+  // Verdict + rail ports read the board lazily (no extra subscription): the
+  // node re-renders on every solver tick, which is exactly when any of these
+  // numbers can change.
+  const { project: liveProject, lastResult } = useFactoryStore.getState();
+  const verdict = deriveNodeVerdict(liveProject, lastResult, projectNode.id);
+  const rails = buildRailPorts(
+    liveProject,
+    lastResult,
+    projectNode.id,
+    overclockedRecipe,
+    verdict,
+  );
+  const [railExpansion, setRailExpansion] = useState({ input: false, output: false });
   const exceedsMaxTier =
     tierControl !== undefined &&
     maxTierFilter !== "all" &&
@@ -514,6 +531,15 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           ) : null}
         </div>
         </div>
+        {!isCropFarmPlaceholder ? (
+          <div className="w-0 min-w-full">
+            <VerdictStrip
+              nodeId={projectNode.id}
+              title={recipe.machineType || recipe.name}
+              verdict={verdict}
+            />
+          </div>
+        ) : null}
         <div
           className={nodeColor ? "recipe-node-tinted-area" : undefined}
           style={
@@ -538,6 +564,18 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               <Sprout className="h-5 w-5" /> Pick a crop
             </button>
           ) : (
+          <div className="flex items-stretch gap-1">
+            <PortRail
+              nodeId={projectNode.id}
+              side="input"
+              ports={rails.inputs}
+              expanded={railExpansion.input}
+              onToggleExpanded={() =>
+                setRailExpansion((state) => ({ ...state, input: !state.input }))
+              }
+              pending={pendingResourceConnection}
+            />
+            <div className="min-w-0 flex-1">
           <NeiRecipeWindow
             recipe={neiDisplayRecipe}
             scale={2}
@@ -553,18 +591,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 </div>
               ) : undefined
             }
-            getSlotConnectionAttributes={(slot) => {
-              if (slot.side === "input" && !isRecipeInputConsumed(slot.resource)) {
-                return undefined;
-              }
-
-              const handleId = makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex);
-              return {
-                "data-resource-handle": "true",
-                "data-resource-node-id": projectNode.id,
-                "data-resource-handle-id": handleId,
-              };
-            }}
             onSlotClick={(slot, mode) => {
               browseResource(
                 {
@@ -634,61 +660,24 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 );
               }
 
-              const isInput = slot.side === "input";
-              if (isInput && !isRecipeInputConsumed(slot.resource)) {
-                return null;
-              }
-              const handleId = makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex);
-              const slotState = getConnectionSlotState(
-                pendingResourceConnection,
-                projectNode.id,
-                slot.side,
-                slot.resource.kind,
-                slot.resource.id,
-                slot.resource.alternatives,
-                handleId,
-              );
-
-              return (
-                <>
-                  {slotState !== "idle" ? (
-                    <span
-                      className={[
-                        "pointer-events-none absolute inset-0 z-20",
-                        slotState === "selected" ? "ring-2 ring-amber-300" : "",
-                        slotState === "compatible" ? "ring-2 ring-cyan-300" : "",
-                      ].join(" ")}
-                    />
-                  ) : null}
-                  <MinecraftTooltip
-                    label={slot.resource.tooltip ?? slot.resource.displayName ?? slot.resource.id}
-                    content={renderSlotRateContent(slot, result, projectNode.id)}
-                  >
-                    <Handle
-                      id={handleId}
-                      type={isInput ? "target" : "source"}
-                      position={isInput ? Position.Left : Position.Right}
-                      data-resource-handle="true"
-                      data-resource-node-id={projectNode.id}
-                      data-resource-handle-id={handleId}
-                      title={`${isInput ? "Input" : "Output"}: ${
-                        slot.resource.displayName ?? slot.resource.id
-                      }`}
-                      className={[
-                        "resource-slot-handle nodrag !absolute !left-0 !right-auto !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0",
-                        "!rounded-none !border-0 !bg-transparent !opacity-0",
-                        "cursor-crosshair",
-                      ].join(" ")}
-                    />
-                  </MinecraftTooltip>
-                </>
-              );
+              // Wires dock on the rails now; canvas slots keep click-to-browse
+              // and their name tooltips but host no flow handles.
+              return null;
             }}
           />
+            </div>
+            <PortRail
+              nodeId={projectNode.id}
+              side="output"
+              ports={rails.outputs}
+              expanded={railExpansion.output}
+              onToggleExpanded={() =>
+                setRailExpansion((state) => ({ ...state, output: !state.output }))
+              }
+              pending={pendingResourceConnection}
+            />
+          </div>
           )}
-          {!usesNativeNeiRecipe && !isCropFarmPlaceholder ? (
-            <RateLedger recipe={neiDisplayRecipe} result={result} />
-          ) : null}
           {!usesNativeNeiRecipe ? machineConfigPanel : null}
           {!usesNativeNeiRecipe ? passiveProductionPanel : null}
         </div>
@@ -696,7 +685,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         {!usesNativeNeiRecipe && !isCropFarmPlaceholder ? (
           <div
             className={[
-              "mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-[var(--mc-ink)]",
+              "mt-1 grid min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-[var(--mc-ink)]",
               isCropProductionNode ? CROP_CONFIG_PANEL_WIDTH_CLASS : "",
               nodeColor ? "recipe-node-stat-grid" : "",
             ].join(" ")}
@@ -707,15 +696,13 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               machineCount={projectNode.machineCount}
               onChange={(machineCount) => updateNode(projectNode.id, { machineCount })}
             />
-            <UsageStat
-              nodeId={projectNode.id}
-              title={recipe.machineType || recipe.name}
-              utilizationPercent={utilizationPercent}
-              result={result}
-            />
             <Stat
-              label={isCropProductionNode ? "Power" : "EU/t"}
-              value={isCropProductionNode ? "Passive" : formatRate(result?.euT ?? 0, 0)}
+              label={isCropProductionNode ? "Power" : "Power draw"}
+              value={
+                isCropProductionNode
+                  ? "Passive"
+                  : `${formatRate(result?.euT ?? 0, 0)} EU/t`
+              }
             />
           </div>
         ) : null}
@@ -742,158 +729,344 @@ function formatSlotRate(value: number, kind: string): string {
   return `${formatRate(value, digits)}${unit}`;
 }
 
+function formatSlotRateBare(value: number): string {
+  const digits = value >= 100 ? 0 : value >= 10 ? 1 : value >= 0.01 ? 2 : 3;
+  return formatRate(value, digits);
+}
+
+const VERDICT_STRIP_CLASS: Record<NodeVerdict["kind"], string> = {
+  starved: "flow-verdict-strip--starved",
+  choke: "flow-verdict-strip--choke",
+  "demand-set": "flow-verdict-strip--demand",
+  balanced: "flow-verdict-strip--balanced",
+  unwired: "flow-verdict-strip--off",
+  off: "flow-verdict-strip--off",
+  "no-recipe": "flow-verdict-strip--off",
+};
+
 /**
- * Always-visible throughput strip under the recipe window: an icon + rate chip
- * per resource, inputs then outputs. Shows the current (utilization-scaled)
- * flow so a plan can be read without hovering; the per-slot tooltip keeps the
- * Now / At-100% breakdown.
+ * The verdict strip replaces "Usage %": one always-visible line saying what
+ * state the node is in, why, and what to do next. The % is demoted to a
+ * detail on the right; hovering keeps the full "what limits this machine"
+ * chain (computed only while hovered, so idle boards pay nothing).
  */
-function RateLedger({
-  recipe,
-  result,
+function VerdictStrip({
+  nodeId,
+  title,
+  verdict,
 }: {
-  recipe: Pick<Recipe, "inputs" | "outputs">;
-  result: NodeThroughputResult | undefined;
+  nodeId: string;
+  title: string;
+  verdict: NodeVerdict;
 }) {
-  if (!result) {
-    return null;
+  const [isHovered, setHovered] = useState(false);
+  const project = useFactoryStore((state) => state.project);
+  const lastResult = useFactoryStore((state) => state.lastResult);
+  const chain = useMemo(
+    () => (isHovered ? buildUsageLimitChain(project, lastResult, nodeId) : []),
+    [isHovered, lastResult, nodeId, project],
+  );
+  const nodeResult = lastResult?.nodes[nodeId];
+
+  let word: string;
+  let cause: string | undefined;
+  let action: string | undefined;
+  switch (verdict.kind) {
+    case "starved": {
+      word = "▼ STARVED";
+      cause = verdict.binding
+        ? `${verdict.binding.displayName} short −${formatSlotRate(
+            verdict.binding.shortfallPerSecond,
+            verdict.binding.kind,
+          )}`
+        : "inputs can't keep up";
+      action = verdict.binding?.upstreamName
+        ? `→ fix upstream: ${verdict.binding.upstreamName}`
+        : "→ fix the supply lines";
+      break;
+    }
+    case "choke": {
+      word = "▲ CHOKE POINT";
+      cause = verdict.deficit
+        ? `downstream short ${formatSlotRate(
+            verdict.deficit.missingPerSecond,
+            verdict.deficit.kind,
+          )} of ${verdict.deficit.displayName}`
+        : "downstream wants more";
+      action = verdict.deficit?.machinesToAdd
+        ? `→ fix here: +${verdict.deficit.machinesToAdd} machine${
+            verdict.deficit.machinesToAdd > 1 ? "s" : ""
+          }`
+        : "→ fix here: add machines or raise the tier";
+      break;
+    }
+    case "demand-set":
+      word = "● SET BY DEMAND";
+      cause = verdict.pct <= 0.05 ? "no takers downstream" : "downstream isn't asking for more";
+      action =
+        verdict.headroomPct !== undefined && verdict.headroomPct > 0
+          ? `→ nothing to do · headroom +${formatRate(verdict.headroomPct, 0)}%`
+          : "→ nothing to do";
+      break;
+    case "balanced":
+      word = "✔ BALANCED";
+      cause = "all asks met";
+      break;
+    case "unwired":
+      word = "● HAND-FED";
+      cause = "no lines connected · assumes external supply";
+      break;
+    case "off":
+      word = "■ OFF";
+      cause = "node disabled";
+      break;
+    case "no-recipe":
+      word = "■ NO RECIPE";
+      break;
   }
 
-  const speed = Number.isFinite(result.utilization)
-    ? Math.min(Math.max(result.utilization, 0), 1)
-    : 0;
-  const collect = (flows: NodeThroughputResult["inputs"], resources: ResourceAmount[]) =>
-    Object.values(flows)
-      .filter((flow) => flow.amountPerSecond > 1e-9)
-      .map((flow) => ({
-        flow,
-        resource: resources.find(
-          (entry) => entry.kind === flow.kind && entry.id === flow.resourceId,
-        ),
-      }));
-  const inputs = collect(result.inputs, recipe.inputs);
-  const outputs = collect(result.outputs, recipe.outputs);
-  if (inputs.length === 0 && outputs.length === 0) {
-    return null;
-  }
-
-  // Some recipes carry hundreds of chanced outputs; past this the strip stops
-  // being a summary. The overflow marker's tooltip lists what was cut.
-  const MAX_CHIPS_PER_SIDE = 8;
-  const chips = (allEntries: typeof inputs, side: "input" | "output") => {
-    const entries = allEntries.slice(0, MAX_CHIPS_PER_SIDE);
-    const hidden = allEntries.slice(MAX_CHIPS_PER_SIDE);
-    return [
-      ...entries.map(({ flow, resource }) => (
-      <span
-        key={`${side}:${flow.key}`}
-        className="flex items-center gap-1"
-        title={flow.displayName ?? flow.resourceId}
-      >
-        {resource ? (
-          <ResourceIcon
-            // Chance and NC badges are unreadable at 16px and the rate text is
-            // the point here.
-            resource={{ ...resource, amount: 1, chance: undefined }}
-            bare
-            tooltip={false}
-            showAmount={false}
-            showConsumedState={false}
-            iconPixelSize={26}
-            className="!h-4 !w-4 shrink-0"
-          />
-        ) : null}
-        <span
-          className={[
-            "text-[10px] font-bold leading-4 tabular-nums",
-            side === "output" ? "text-[var(--mc-good)]" : "text-[var(--mc-ink)]",
-          ].join(" ")}
-        >
-          {formatSlotRate(flow.amountPerSecond * speed, flow.kind)}
-        </span>
-      </span>
-      )),
-      ...(hidden.length > 0
-        ? [
-            <span
-              key={`${side}:overflow`}
-              className="text-[10px] font-bold leading-4 text-[var(--mc-ink-muted)]"
-              title={hidden
-                .map(({ flow }) => flow.displayName ?? flow.resourceId)
-                .join(", ")}
-            >
-              +{hidden.length}
-            </span>,
-          ]
-        : []),
-    ];
-  };
-
-  // One labeled row per side: an inputs→outputs arrow in a single wrapping
-  // line ended up mid-wrap with orphaned chips that read as the wrong side.
-  const row = (label: string, entries: typeof inputs, side: "input" | "output") =>
-    entries.length > 0 ? (
-      <div className="grid grid-cols-[26px_minmax(0,1fr)] items-start gap-x-1">
-        <span className="text-[8px] font-black uppercase leading-4 tracking-[1.5px] text-[var(--mc-ink-muted)]">
-          {label}
-        </span>
-        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          {chips(entries, side)}
-        </span>
-      </div>
-    ) : null;
-
+  const showPct = verdict.kind !== "off" && verdict.kind !== "no-recipe";
   return (
-    // w-0 min-w-full keeps the strip from widening the w-max node shell: it
-    // adopts the node's width (the canvas decides it) and wraps chips to fit.
-    <div className="mt-1 w-0 min-w-full space-y-0.5 border-2 border-[var(--mc-47)] bg-[var(--mc-71)] px-1.5 py-0.5 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
-      {row("In", inputs, "input")}
-      {row("Out", outputs, "output")}
+    <span
+      className="contents"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <MinecraftTooltip
+        content={
+          chain.length > 0 ? (
+            <UsageLimitContent
+              title={title}
+              utilization={nodeResult?.utilization ?? 0}
+              status={nodeResult?.status}
+              entries={chain}
+            />
+          ) : undefined
+        }
+      >
+        <div
+          className={["flow-verdict-strip mb-1 px-1.5 py-0.5", VERDICT_STRIP_CLASS[verdict.kind]].join(
+            " ",
+          )}
+        >
+          <div className="flex items-baseline gap-2">
+            <span className="whitespace-nowrap text-[10px] font-black leading-4 tracking-[1px]">
+              {word}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-[9px] leading-3 opacity-95">{cause}</span>
+            {showPct ? (
+              <span className="shrink-0 text-[13px] font-bold leading-4 tabular-nums">
+                {formatRate(verdict.pct, verdict.pct >= 100 ? 0 : 1)}%
+              </span>
+            ) : null}
+          </div>
+          {action ? (
+            <div className="truncate text-[9px] leading-3 opacity-95">{action}</div>
+          ) : null}
+        </div>
+      </MinecraftTooltip>
+    </span>
+  );
+}
+
+/**
+ * One side of the port rails. Connected ports always render (an edge must
+ * never anchor to a hidden element); unconnected ones collapse behind a
+ * "+N more" chip past the cap so 100-output recipes stay a readable card.
+ */
+function PortRail({
+  nodeId,
+  side,
+  ports,
+  expanded,
+  onToggleExpanded,
+  pending,
+}: {
+  nodeId: string;
+  side: "input" | "output";
+  ports: RailPort[];
+  expanded: boolean;
+  onToggleExpanded: () => void;
+  pending: ReturnType<typeof useFactoryStore.getState>["pendingResourceConnection"];
+}) {
+  if (ports.length === 0) {
+    return null;
+  }
+
+  const { visible, hidden } = splitRailOverflow(ports, expanded);
+  const showCollapse = expanded && ports.length > 8;
+  return (
+    <div className="flex w-[118px] shrink-0 flex-col justify-center gap-1 py-0.5">
+      {visible.map((port) => (
+        <PortChip key={port.key} nodeId={nodeId} port={port} pending={pending} />
+      ))}
+      {hidden.length > 0 ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleExpanded();
+          }}
+          className="nodrag flow-port flow-port--idle px-1.5 py-0.5 text-left text-[9px] font-bold leading-4 text-[var(--mc-ink-muted)] hover:brightness-110"
+          title={hidden.map((port) => port.displayName).join(", ")}
+        >
+          +{hidden.length} more…
+        </button>
+      ) : showCollapse ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleExpanded();
+          }}
+          className="nodrag flow-port flow-port--idle px-1.5 py-0.5 text-left text-[9px] font-bold leading-4 text-[var(--mc-ink-muted)] hover:brightness-110"
+        >
+          show less
+        </button>
+      ) : null}
     </div>
   );
 }
 
 /**
- * The slot hover panel: what this item flows at right now, and what it would
- * flow at with the machine running 100%. Falls back to the plain name label
- * when the solver has no flow for the slot (unconnected boards, NC slots).
- * Slots with several supply lines or several consumers get a per-line
- * breakdown so the pooled allocation is legible: who ships what, whose source
- * is maxed, and how much is still missing or unrouted.
+ * A rail port: the wire, the live rate, and the health bar share one surface.
+ * The chip doubles as the React Flow handle (drag to wire) and as the edge
+ * anchor element the router measures.
  */
-function renderSlotRateContent(
-  slot: NeiPositionedSlot,
-  result: NodeThroughputResult | undefined,
-  nodeId: string,
-) {
-  if (!result) {
+function PortChip({
+  nodeId,
+  port,
+  pending,
+}: {
+  nodeId: string;
+  port: RailPort;
+  pending: ReturnType<typeof useFactoryStore.getState>["pendingResourceConnection"];
+}) {
+  const isInput = port.side === "input";
+  const slotState = getConnectionSlotState(
+    pending,
+    nodeId,
+    port.side,
+    port.kind,
+    port.resourceId,
+    port.resource?.alternatives,
+    port.handleId,
+  );
+  const toneClass =
+    port.tone === "bind"
+      ? "flow-port--bind"
+      : port.tone === "hot"
+        ? "flow-port--hot"
+        : port.tone === "calm"
+          ? "flow-port--calm"
+          : port.tone === "idle"
+            ? "flow-port--idle"
+            : "";
+  const rateText = port.showNameplate
+    ? `${formatSlotRateBare(port.currentPerSecond)} / ${formatSlotRate(
+        port.nameplatePerSecond,
+        port.kind,
+      )}`
+    : formatSlotRate(port.currentPerSecond, port.kind);
+  const badgeText = port.badge
+    ? port.badge.kind === "short"
+      ? `−${formatSlotRate(port.badge.perSecond, port.kind)}`
+      : `asked ${formatSlotRateBare(port.badge.perSecond)}`
+    : undefined;
+
+  return (
+    <div
+      className={["flow-port relative flex items-center gap-1 px-1 py-0.5", toneClass].join(" ")}
+      data-resource-edge-anchor="true"
+      data-resource-node-id={nodeId}
+      data-resource-handle-id={port.handleId}
+    >
+      {slotState !== "idle" ? (
+        <span
+          className={[
+            "pointer-events-none absolute inset-0 z-20",
+            slotState === "selected" ? "ring-2 ring-amber-300" : "",
+            slotState === "compatible" ? "ring-2 ring-cyan-300" : "",
+          ].join(" ")}
+        />
+      ) : null}
+      {port.resource ? (
+        <ResourceIcon
+          resource={{ ...port.resource, amount: 1, chance: undefined }}
+          bare
+          tooltip={false}
+          showAmount={false}
+          showConsumedState={false}
+          iconPixelSize={26}
+          className="!h-5 !w-5 shrink-0"
+        />
+      ) : (
+        <span className="h-5 w-5 shrink-0 border border-[var(--mc-47)] bg-[var(--mc-55)]" />
+      )}
+      <span className="min-w-0 flex-1">
+        <span
+          className={[
+            "block truncate text-[10px] font-bold leading-3.5 tabular-nums",
+            !isInput && port.tone !== "bind" ? "text-[var(--mc-good)]" : "text-[var(--mc-ink)]",
+          ].join(" ")}
+        >
+          {rateText}
+        </span>
+        {port.handFed ? (
+          <span className="block text-[7px] font-black leading-3 tracking-[0.5px] text-[var(--mc-ink-muted)]">
+            HAND-FED
+          </span>
+        ) : (
+          <span className="flow-port-bar mt-0.5 block">
+            <i style={{ width: `${Math.round(Math.min(Math.max(port.fillFraction, 0), 1) * 100)}%` }} />
+          </span>
+        )}
+      </span>
+      {badgeText ? <em className="flow-port-badge not-italic">{badgeText}</em> : null}
+      <MinecraftTooltip
+        label={port.resource?.tooltip ?? port.displayName}
+        content={renderPortHoverContent(port, nodeId)}
+      >
+        <Handle
+          id={port.handleId}
+          type={isInput ? "target" : "source"}
+          position={isInput ? Position.Left : Position.Right}
+          data-resource-handle="true"
+          data-resource-node-id={nodeId}
+          data-resource-handle-id={port.handleId}
+          title={`${isInput ? "Input" : "Output"}: ${port.displayName}`}
+          className={[
+            "resource-slot-handle nodrag !absolute !left-0 !right-auto !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0",
+            "!rounded-none !border-0 !bg-transparent !opacity-0",
+            "cursor-crosshair",
+          ].join(" ")}
+        />
+      </MinecraftTooltip>
+    </div>
+  );
+}
+
+/**
+ * The port hover panel: what this resource flows at right now, what it would
+ * flow at with the machine running 100%, and the per-line breakdown of who
+ * ships what, whose source is maxed, and how much is still missing or
+ * unrouted.
+ */
+function renderPortHoverContent(port: RailPort, nodeId: string) {
+  const maxRate = port.nameplatePerSecond;
+  if (maxRate <= 1e-9) {
     return undefined;
   }
 
-  const isInput = slot.side === "input";
-  const flows = isInput ? result.inputs : result.outputs;
-  const key = makeResourceKey(slot.resource.kind, slot.resource.id);
-  const flow =
-    flows[key] ??
-    Object.values(flows).find(
-      (candidate) => candidate.resourceId === slot.resource.id,
-    );
-  if (!flow || flow.amountPerSecond <= 1e-9) {
-    return undefined;
-  }
-
-  const maxRate = flow.amountPerSecond;
-  const speed = Number.isFinite(result.utilization)
-    ? Math.min(Math.max(result.utilization, 0), 1)
-    : 0;
-  const nowRate = maxRate * speed;
-  const breakdown = buildSlotEdgeBreakdown(nodeId, slot, key);
+  const isInput = port.side === "input";
+  const nowRate = port.currentPerSecond;
+  const breakdown = buildPortEdgeBreakdown(nodeId, port);
 
   return (
     <div className="w-52">
       <div className="flex items-baseline gap-2">
         <span className="truncate text-[13px] font-semibold text-white">
-          {slot.resource.displayName ?? slot.resource.id}
+          {port.displayName}
         </span>
         <span className="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-wide text-slate-400">
           {isInput ? "Input" : "Output"}
@@ -902,13 +1075,13 @@ function renderSlotRateContent(
       <div className="mt-1.5 flex items-baseline justify-between gap-3 text-[12px]">
         <span className="text-slate-400">Now</span>
         <span className="font-bold tabular-nums text-cyan-300">
-          {formatSlotRate(nowRate, flow.kind)}
+          {formatSlotRate(nowRate, port.kind)}
         </span>
       </div>
       <div className="mt-0.5 flex items-baseline justify-between gap-3 text-[12px]">
         <span className="text-slate-400">At 100%</span>
         <span className="font-semibold tabular-nums text-slate-300">
-          {formatSlotRate(maxRate, flow.kind)}
+          {formatSlotRate(maxRate, port.kind)}
         </span>
       </div>
       {breakdown && breakdown.rows.length > 0 ? (
@@ -925,7 +1098,7 @@ function renderSlotRateContent(
             >
               <span className="truncate text-slate-300">{row.name}</span>
               <span className="shrink-0 tabular-nums text-slate-200">
-                {formatSlotRate(row.rate, flow.kind)}
+                {formatSlotRate(row.rate, port.kind)}
                 {row.tag ? (
                   <span className="ml-1 text-[9px] font-bold uppercase text-amber-300">
                     {row.tag}
@@ -936,7 +1109,7 @@ function renderSlotRateContent(
           ))}
           {isInput && breakdown.shortAtFull > 1e-6 ? (
             <div className="mt-1 text-[11px] font-semibold text-amber-300">
-              Short {formatSlotRate(breakdown.shortAtFull, flow.kind)} for full speed
+              Short {formatSlotRate(breakdown.shortAtFull, port.kind)} for full speed
             </div>
           ) : null}
           {isInput && breakdown.shortAtFull <= 1e-6 && breakdown.rows.length > 1 ? (
@@ -946,7 +1119,7 @@ function renderSlotRateContent(
           ) : null}
           {!isInput && breakdown.unrouted > 1e-6 ? (
             <div className="mt-1 text-[11px] text-slate-400">
-              {formatSlotRate(breakdown.unrouted, flow.kind)} not routed anywhere
+              {formatSlotRate(breakdown.unrouted, port.kind)} not routed anywhere
             </div>
           ) : null}
         </div>
@@ -956,14 +1129,15 @@ function renderSlotRateContent(
 }
 
 /**
- * Per-line detail for a slot's tooltip, read lazily from the store (no
+ * Per-line detail for a port's tooltip, read lazily from the store (no
  * subscription: the node re-renders on every solver tick anyway, which is
- * exactly when these numbers change).
+ * exactly when these numbers change). Lines match by resource - directly or
+ * through the edge's stored handle - so legacy per-slot handles and oredict
+ * concretions all land on the pooled port.
  */
-function buildSlotEdgeBreakdown(
+function buildPortEdgeBreakdown(
   nodeId: string,
-  slot: NeiPositionedSlot,
-  resourceKey: string,
+  port: RailPort,
 ):
   | {
       rows: Array<{ name: string; rate: number; tag?: string }>;
@@ -976,8 +1150,7 @@ function buildSlotEdgeBreakdown(
     return undefined;
   }
 
-  const isInput = slot.side === "input";
-  const handleId = makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex);
+  const isInput = port.side === "input";
   const storagesById = new Map((project.storages ?? []).map((storage) => [storage.id, storage]));
   const nodesById = new Map(project.nodes.map((entry) => [entry.id, entry]));
   const recipesById = new Map(project.recipes.map((entry) => [entry.id, entry]));
@@ -988,11 +1161,7 @@ function buildSlotEdgeBreakdown(
     if ((isInput ? edge.target : edge.source) !== nodeId) {
       continue;
     }
-    const edgeHandle = isInput ? edge.targetHandle : edge.sourceHandle;
-    const matches = edgeHandle
-      ? edgeHandle === handleId
-      : edge.resourceKind === slot.resource.kind && edge.resourceId === slot.resource.id;
-    if (!matches) {
+    if (!edgeTouchesPortResource(edge, port)) {
       continue;
     }
 
@@ -1021,19 +1190,10 @@ function buildSlotEdgeBreakdown(
   rows.sort((left, right) => right.rate - left.rate);
 
   const nodeResult = lastResult.nodes[nodeId];
-  const flow = isInput
-    ? (nodeResult?.inputs[resourceKey as ResourceKey] ??
-      Object.values(nodeResult?.inputs ?? {}).find(
-        (candidate) => candidate.resourceId === slot.resource.id,
-      ))
-    : (nodeResult?.outputs[resourceKey as ResourceKey] ??
-      Object.values(nodeResult?.outputs ?? {}).find(
-        (candidate) => candidate.resourceId === slot.resource.id,
-      ));
-  const nameplate = flow?.amountPerSecond ?? 0;
   const speed = Number.isFinite(nodeResult?.utilization)
     ? Math.min(Math.max(nodeResult!.utilization, 0), 1)
     : 0;
+  const nameplate = port.nameplatePerSecond;
 
   return {
     rows,
@@ -1042,62 +1202,16 @@ function buildSlotEdgeBreakdown(
   };
 }
 
-/**
- * The Usage stat, coloured by the solver's status bands, with the "what limits
- * this machine" chain on hover. The chain is only computed while hovered so a
- * board full of nodes pays nothing for it.
- */
-function UsageStat({
-  nodeId,
-  title,
-  utilizationPercent,
-  result,
-}: {
-  nodeId: string;
-  title: string;
-  utilizationPercent: number;
-  result?: NodeThroughputResult;
-}) {
-  const [isHovered, setHovered] = useState(false);
-  const project = useFactoryStore((state) => state.project);
-  const lastResult = useFactoryStore((state) => state.lastResult);
-  const chain = useMemo(
-    () => (isHovered ? buildUsageLimitChain(project, lastResult, nodeId) : []),
-    [isHovered, lastResult, nodeId, project],
-  );
-  const valueClassName =
-    result?.status === "bottleneck"
-      ? "text-[var(--mc-bad)]"
-      : result?.status === "balanced"
-        ? "text-[var(--mc-good)]"
-        : undefined;
-
-  return (
-    <span
-      className="contents"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <MinecraftTooltip
-        content={
-          chain.length > 0 ? (
-            <UsageLimitContent
-              title={title}
-              utilization={result?.utilization ?? 0}
-              status={result?.status}
-              entries={chain}
-            />
-          ) : undefined
-        }
-      >
-        <Stat
-          label="Usage"
-          value={`${formatRate(utilizationPercent, 1)}%`}
-          valueClassName={valueClassName}
-        />
-      </MinecraftTooltip>
-    </span>
-  );
+function edgeTouchesPortResource(
+  edge: ReturnType<typeof useFactoryStore.getState>["project"]["edges"][number],
+  port: RailPort,
+): boolean {
+  const handle = port.side === "input" ? edge.targetHandle : edge.sourceHandle;
+  const parsed = parseResourceHandleId(handle);
+  if (parsed && parsed.kind === port.kind && parsed.resourceId === port.resourceId) {
+    return true;
+  }
+  return edge.resourceKind === port.kind && edge.resourceId === port.resourceId;
 }
 
 function recipeContainsSearchResource(recipe: Recipe, query: string) {
@@ -1870,7 +1984,12 @@ function getConnectionSlotState(
     return "idle";
   }
 
-  if (pending.nodeId === nodeId && pending.handleId === handleId) {
+  // Ports carry canonical (index-less) ids while a pending selection can hold
+  // a legacy per-slot id; compare on the canonical form.
+  if (
+    pending.nodeId === nodeId &&
+    canonicalizeResourceHandleId(pending.handleId) === canonicalizeResourceHandleId(handleId)
+  ) {
     return "selected";
   }
 

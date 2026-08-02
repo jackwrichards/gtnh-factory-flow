@@ -16,6 +16,22 @@ export function makeResourceHandleId(
   return `${side}:${resource.kind}:${encodeURIComponent(resource.id)}${slotIndex === undefined ? "" : `:${slotIndex}`}`;
 }
 
+/**
+ * Collapses any handle id (with or without a trailing slot index) onto the
+ * index-less port id the node actually renders. Rails expose one handle per
+ * unique resource, while historical edges stored per-slot ids - both must
+ * resolve to the same rendered handle or React Flow refuses to draw the edge.
+ * Ids that don't parse (storage schemes, malformed) pass through untouched.
+ */
+export function canonicalizeResourceHandleId(handleId?: string | null): string | undefined {
+  const parsed = parseResourceHandleId(handleId);
+  if (!parsed) {
+    return handleId ?? undefined;
+  }
+
+  return makeResourceHandleId(parsed.side, { kind: parsed.kind, id: parsed.resourceId });
+}
+
 export function parseResourceHandleId(handleId?: string | null): ResourceHandlePayload | undefined {
   if (!handleId) {
     return undefined;

@@ -85,13 +85,24 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
     );
   }
 
-  const stats = (
+  // On-node (compact) the strip states recipe identity only: time per craft
+  // and energy per craft. Live per-second draw lives in the node footer, so
+  // no EU number - and especially no second meaning of the word "Usage" -
+  // appears twice on the same card. The recipe browser keeps the full
+  // NEI-style three lines.
+  const stats = compact ? (
     <div className="relative mt-1 text-[var(--mc-ink)]">
-      <div
-        className={["min-w-0 pr-11 leading-tight", compact ? "text-[10px]" : "text-[16px]"].join(
-          " ",
-        )}
-      >
+      <div className="min-w-0 pr-11 text-[10px] leading-tight">
+        <div>
+          Time: {formatRate(seconds, seconds >= 10 ? 0 : 1)} s
+          {totalEu > 0 ? <> · {formatRate(totalEu, 0)} EU/craft</> : null}
+        </div>
+      </div>
+      {statsAction ? <div className="absolute right-0 top-0">{statsAction}</div> : null}
+    </div>
+  ) : (
+    <div className="relative mt-1 text-[var(--mc-ink)]">
+      <div className="min-w-0 pr-11 text-[16px] leading-tight">
         <div>Total: {formatRate(totalEu, 0)} EU</div>
         <div>
           Usage: {formatRate(recipe.eut, 0)} EU/t ({powerTier})
