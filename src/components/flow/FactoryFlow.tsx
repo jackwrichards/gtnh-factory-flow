@@ -2681,12 +2681,6 @@ function getStackedEndpointOffset(index: number) {
   return index % 2 === 1 ? step : -step;
 }
 
-function getResourceHandleSlotRow(handleId?: string | null) {
-  const rawIndex = handleId?.split(":")[3];
-  const index = rawIndex === undefined ? Number.NaN : Number(rawIndex);
-  return Number.isInteger(index) && index >= 0 ? Math.floor(index / 3) : "unknown";
-}
-
 function addEndpointOffsetGroupEntry(
   groups: Map<
     string,
