@@ -3223,13 +3223,19 @@ function getBestDirectEdgePoints({
   }
 
   // The candidate menu can only jog once, so on packed boards its winner may
-  // still cross a node. Only then does the orthogonal A* router earn its
-  // cost: its moves exist solely through free space, so a found path cannot
-  // pass over any node, no matter how many bends that takes. A failed search
-  // (boxed-in endpoint, budget exhausted) keeps the least-bad candidate, and
-  // clean routes never pay for the search at all - which keeps the initial
-  // mount cascade on big imports at the old router's speed.
-  if (allAvoidanceBounds.some((bounds) => polylineCrossesRect(optimizedRoute, bounds))) {
+  // still cross a node - or lie exactly on top of a neighbouring wire when
+  // every separated corridor scored worse. Either flaw sends the route to the
+  // orthogonal A* router: its moves exist solely through free space (so a
+  // found path cannot pass over any node, no matter how many bends), and its
+  // congestion cost plus lane vertices beside busy wires pull it into an
+  // adjacent channel instead of a stack. A failed search keeps the least-bad
+  // candidate, and clean routes never pay for the search at all - which keeps
+  // the initial mount cascade on big imports at the old router's speed.
+  const candidateCrossesNode = allAvoidanceBounds.some((bounds) =>
+    polylineCrossesRect(optimizedRoute, bounds),
+  );
+  const candidateOverlap = routeCollinearOverlap(optimizedRoute, obstacleSegments);
+  if (candidateCrossesNode || candidateOverlap > EDGE_OVERLAP_REROUTE_THRESHOLD) {
     const orthogonalRoute = findBestOrthogonalPortalRoute({
       sourceEndpoints,
       targetEndpoints,
@@ -3239,7 +3245,11 @@ function getBestDirectEdgePoints({
       targetOwnBounds,
       congestionSegments: obstacleSegments,
     });
-    if (orthogonalRoute) {
+    if (
+      orthogonalRoute &&
+      (candidateCrossesNode ||
+        routeCollinearOverlap(orthogonalRoute, obstacleSegments) < candidateOverlap)
+    ) {
       optimizedRoute = orthogonalRoute;
     }
   }
@@ -3364,6 +3374,37 @@ const ORTHO_OWN_INSET = -2;
 const ORTHO_LANE_CAP = 24;
 const ORTHO_TURN_COST = 40;
 const ORTHO_CROSSING_COST = 220;
+// Above this many pixels of exact co-linear overlap with existing wires, a
+// candidate route reads as "two edges on top of each other" and gets sent to
+// the A* router for a proper adjacent lane.
+const EDGE_OVERLAP_REROUTE_THRESHOLD = 24;
+
+/** Total co-linear overlap between a route and existing edge segments. */
+function routeCollinearOverlap(
+  points: Array<{ x: number; y: number }>,
+  existingSegments: Array<{
+    start: { x: number; y: number };
+    end: { x: number; y: number };
+    length: number;
+  }>,
+) {
+  if (existingSegments.length === 0) {
+    return 0;
+  }
+  let overlap = 0;
+  for (const segment of getPolylineSegments(points)) {
+    if (segment.length < 0.5) {
+      continue;
+    }
+    for (const existing of existingSegments) {
+      if (existing.length < 0.5) {
+        continue;
+      }
+      overlap += getCollinearOverlapLength(segment, existing);
+    }
+  }
+  return overlap;
+}
 
 function routeAxisForSide(side: Position): "h" | "v" {
   return side === Position.Left || side === Position.Right ? "h" : "v";
@@ -4585,15 +4626,15 @@ function pointsToHoppedSvgPath(
       if (horizontal) {
         const beforeX = crossAt - EDGE_HOP_RADIUS * direction;
         const afterX = crossAt + EDGE_HOP_RADIUS * direction;
-        // Traveling east, counterclockwise (sweep 0) bulges up; traveling
-        // west, clockwise (sweep 1) bulges up.
-        const sweep = direction > 0 ? 0 : 1;
+        // SVG sweep=1 is clockwise on screen: traveling east that arcs over
+        // the top; traveling west needs sweep=0 for the same upward bump.
+        const sweep = direction > 0 ? 1 : 0;
         path += ` L ${beforeX},${from.y} A ${EDGE_HOP_RADIUS} ${EDGE_HOP_RADIUS} 0 0 ${sweep} ${afterX},${from.y}`;
       } else {
         const beforeY = crossAt - EDGE_HOP_RADIUS * direction;
         const afterY = crossAt + EDGE_HOP_RADIUS * direction;
-        // Traveling south, clockwise (sweep 1) bulges left; traveling north,
-        // counterclockwise (sweep 0) bulges left.
+        // Traveling south, clockwise (sweep 1) bulges toward the right;
+        // traveling north, sweep 0 keeps the bump on that same side.
         const sweep = direction > 0 ? 1 : 0;
         path += ` L ${from.x},${beforeY} A ${EDGE_HOP_RADIUS} ${EDGE_HOP_RADIUS} 0 0 ${sweep} ${from.x},${afterY}`;
       }

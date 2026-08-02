@@ -74,15 +74,29 @@ export function findOrthogonalRoute(options: OrthogonalRouteOptions): RoutePoint
       rect.top < window.bottom,
   );
 
+  // Busy wires contribute lane coordinates beside themselves: without these
+  // the sparse grid has no vertex "just next to" an existing edge, so the
+  // only expressible route along a shared corridor was exactly on top of it.
+  const laneGap = (nearness?.distance ?? 8) + 2;
+  const laneXs: number[] = [];
+  const laneYs: number[] = [];
+  for (const segment of congestion) {
+    if (Math.abs(segment.start.x - segment.end.x) < COORD_EPSILON) {
+      laneXs.push(segment.start.x - laneGap, segment.start.x + laneGap);
+    } else if (Math.abs(segment.start.y - segment.end.y) < COORD_EPSILON) {
+      laneYs.push(segment.start.y - laneGap, segment.start.y + laneGap);
+    }
+  }
+
   const xs = buildCoordPool(
     [window.left, window.right, source.x, target.x],
-    obstacles.flatMap((rect) => [rect.left, rect.right]),
+    [...obstacles.flatMap((rect) => [rect.left, rect.right]), ...laneXs],
     window.left,
     window.right,
   );
   const ys = buildCoordPool(
     [window.top, window.bottom, source.y, target.y],
-    obstacles.flatMap((rect) => [rect.top, rect.bottom]),
+    [...obstacles.flatMap((rect) => [rect.top, rect.bottom]), ...laneYs],
     window.top,
     window.bottom,
   );

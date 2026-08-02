@@ -86,6 +86,31 @@ describe("findOrthogonalRoute", () => {
     expect(route(obstacles)).toEqual(route(obstacles));
   });
 
+  it("takes an adjacent lane instead of running on top of an existing wire", () => {
+    // A rival wire runs exactly along the naive straight route. The lane
+    // vertices contributed by congestion segments must let the path shift
+    // beside it rather than stack on it.
+    const congestion = [{ start: { x: 0, y: 300 }, end: { x: 1000, y: 300 } }];
+    const points = findOrthogonalRoute({
+      source: { x: 0, y: 300, axis: "h" },
+      target: { x: 1000, y: 300, axis: "h" },
+      obstacles: [],
+      window: WINDOW,
+      congestion,
+      nearness: { distance: 8, costPerPixel: 6 },
+    });
+    expect(points).toBeDefined();
+    let overlapOn300 = 0;
+    for (let index = 1; index < points!.length; index += 1) {
+      const a = points![index - 1]!;
+      const b = points![index]!;
+      if (Math.abs(a.y - 300) < 0.01 && Math.abs(b.y - 300) < 0.01) {
+        overlapOn300 += Math.abs(b.x - a.x);
+      }
+    }
+    expect(overlapOn300).toBeLessThan(80);
+  });
+
   it("avoids crossing existing edge segments when a clean lane exists", () => {
     // A vertical rival segment sits mid-way; with crossing penalised the
     // router should prefer dodging over it when that is cheap.
