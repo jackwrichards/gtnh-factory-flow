@@ -51,20 +51,28 @@ import { useMachineHandlerIcons } from "./machine-icons";
 import { MinecraftSelect } from "./MinecraftSelect";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { MachineStatsContent } from "./MachineStatsContent";
-import { UsageLimitContent } from "@/components/inspector/UsageLimitContent";
-import { buildUsageLimitChain } from "@/components/inspector/usage-limits";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import {
   canonicalizeResourceHandleId,
   makeResourceHandleId,
-  parseResourceHandleId,
 } from "./resource-handles";
 import {
+  buildLimitLadder,
   buildRailPorts,
   deriveNodeVerdict,
   type NodeVerdict,
   type RailPort,
 } from "./node-verdict";
+import {
+  edgeTouchesResource,
+  explainPort,
+  formatPct,
+  formatSlotRate,
+  formatSlotRateBare,
+  formatSlotRateOrNull,
+  formatTimes,
+  type PortStory,
+} from "./flow-explainers";
 import { useFactoryStore } from "@/store/factory-store";
 import { GT_NODE_COLORS } from "./node-colors";
 import { getPaintBrushCursor } from "./paint-cursor";
@@ -576,11 +584,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
 
         {!isCropFarmPlaceholder ? (
           <div className="w-0 min-w-full">
-            <VerdictStrip
-              nodeId={projectNode.id}
-              title={recipe.machineType || recipe.name}
-              verdict={verdict}
-            />
+            <VerdictStrip nodeId={projectNode.id} verdict={verdict} />
           </div>
         ) : null}
         {!isCropFarmPlaceholder ? (
@@ -631,19 +635,6 @@ export const RecipeNode = memo(
   (previous, next) => previous.data === next.data && previous.selected === next.selected,
 );
 
-function formatSlotRate(value: number, kind: string): string {
-  const unit = kind === "fluid" ? " L/s" : "/s";
-  // Three decimals below 0.01 so slow drips (crop drops, chanced outputs)
-  // don't render as a flat 0.00/s.
-  const digits = value >= 100 ? 0 : value >= 10 ? 1 : value >= 0.01 ? 2 : 3;
-  return `${formatRate(value, digits)}${unit}`;
-}
-
-function formatSlotRateBare(value: number): string {
-  const digits = value >= 100 ? 0 : value >= 10 ? 1 : value >= 0.01 ? 2 : 3;
-  return formatRate(value, digits);
-}
-
 const VERDICT_STRIP_CLASS: Record<NodeVerdict["kind"], string> = {
   starved: "flow-verdict-strip--starved",
   choke: "flow-verdict-strip--choke",
@@ -655,75 +646,77 @@ const VERDICT_STRIP_CLASS: Record<NodeVerdict["kind"], string> = {
 };
 
 /**
- * The verdict strip replaces "Usage %": one always-visible line saying what
- * state the node is in, why, and what to do next. The % is demoted to a
- * detail on the right; hovering keeps the full "what limits this machine"
- * chain (computed only while hovered, so idle boards pay nothing).
+ * The verdict strip replaces "Usage %": what state the node is in, why, what
+ * to do next — and the limit ladder underneath: today's wall plus the next
+ * ones in order, so a fix session never re-discovers the board after each
+ * change. All copy follows the explainer voice: plain words, no riddles.
  */
-function VerdictStrip({
-  nodeId,
-  title,
-  verdict,
-}: {
-  nodeId: string;
-  title: string;
-  verdict: NodeVerdict;
-}) {
-  const [isHovered, setHovered] = useState(false);
+function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdict }) {
   const project = useFactoryStore((state) => state.project);
   const lastResult = useFactoryStore((state) => state.lastResult);
-  const chain = useMemo(
-    () => (isHovered ? buildUsageLimitChain(project, lastResult, nodeId) : []),
-    [isHovered, lastResult, nodeId, project],
+  const ladder = useMemo(
+    () => buildLimitLadder(project, lastResult, nodeId),
+    [lastResult, nodeId, project],
   );
-  const nodeResult = lastResult?.nodes[nodeId];
 
   let word: string;
   let cause: string | undefined;
   let action: string | undefined;
   switch (verdict.kind) {
     case "starved": {
-      word = "▼ STARVED";
-      cause = verdict.binding
-        ? `${verdict.binding.displayName} is short −${formatSlotRate(
-            verdict.binding.shortfallPerSecond,
-            verdict.binding.kind,
-          )}, pinning this machine at ${formatRate(verdict.pct, 0)}% of what downstream asks.`
-        : "The inputs can't keep up with what downstream asks.";
-      action = verdict.binding?.upstreamName
-        ? `→ Fix upstream: ${verdict.binding.upstreamName} can't deliver more.`
-        : "→ Fix the supply lines feeding this machine.";
+      word = "▼ STARVING";
+      const binding = verdict.binding;
+      cause = binding
+        ? `${binding.displayName} is the bottleneck: it gets ${formatSlotRate(
+            binding.suppliedPerSecond,
+            binding.kind,
+          )} of the ${formatSlotRate(binding.neededPerSecond, binding.kind)} it needs.`
+        : "Its ingredients can't keep up with what's asked of it.";
+      const upstream = binding?.upstream;
+      if (!upstream) {
+        action = "→ Fix the supply lines feeding this machine.";
+      } else if (upstream.kind === "loop") {
+        action = "→ Fed by its own loop — prime it from a buffer.";
+      } else if (upstream.kind === "buffer") {
+        action = `→ ${upstream.name} is running dry — feed it faster than it drains.`;
+      } else if (upstream.atFullSpeed) {
+        action = `→ Fix upstream: ${upstream.name} is at full speed — add ${
+          upstream.machinesToAdd ? `+${upstream.machinesToAdd}` : "machines"
+        } there.`;
+      } else {
+        action = `→ ${upstream.name} runs at ${formatPct(upstream.pct)}% — it's starving too. Follow the chain up.`;
+      }
       break;
     }
     case "choke": {
-      word = "▲ CHOKE POINT";
+      word = "▲ CAN'T KEEP UP";
       cause = verdict.deficit
-        ? `Running flat out, but downstream still wants ${formatSlotRate(
+        ? `Full speed — and the machines after it still want ${formatSlotRate(
             verdict.deficit.missingPerSecond,
             verdict.deficit.kind,
           )} more ${verdict.deficit.displayName}.`
-        : "Running flat out and downstream still wants more.";
+        : "Full speed, and the machines after it still want more.";
       action = verdict.deficit?.machinesToAdd
-        ? `→ Fix on this node: add +${verdict.deficit.machinesToAdd} machine${
+        ? `→ Add +${verdict.deficit.machinesToAdd} machine${
             verdict.deficit.machinesToAdd > 1 ? "s" : ""
-          } (or raise the tier).`
-        : "→ Fix on this node: add machines or raise the tier.";
+          } here, or use a higher tier.`
+        : "→ Add machines here, or use a higher tier.";
       break;
     }
     case "demand-set":
       word = "● SET BY DEMAND";
       cause =
         verdict.pct <= 0.05
-          ? "Nothing downstream is taking this output yet."
-          : "Downstream only asks for this much — part load here is healthy.";
+          ? "Nothing downstream is taking this yet."
+          : `The machines after it only ask for ${formatPct(verdict.pct)}%.`;
       action =
         verdict.headroomPct !== undefined && verdict.headroomPct > 0
-          ? `→ Nothing to fix · headroom +${formatRate(verdict.headroomPct, 0)}% if demand grows.`
-          : "→ Nothing to fix.";
+          ? `→ Nothing to fix — +${formatPct(verdict.headroomPct)}% is free headroom if demand grows.`
+          : "→ Nothing to fix — the spare speed is free headroom.";
       break;
     case "balanced":
       word = "✔ BALANCED";
-      cause = "Running at full speed and every downstream ask is met.";
+      cause = "Full speed, and every machine after it gets what it asks for.";
       break;
     case "unwired":
       word = "● HAND-FED";
@@ -739,47 +732,52 @@ function VerdictStrip({
   }
 
   const showPct = verdict.kind !== "off" && verdict.kind !== "no-recipe";
+  const showLadder =
+    ladder.length > 1 &&
+    (verdict.kind === "starved" || verdict.kind === "choke" || verdict.kind === "demand-set");
   return (
-    <span
-      className="contents"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+    <div
+      className={["flow-verdict-strip mt-1 px-2 py-1", VERDICT_STRIP_CLASS[verdict.kind]].join(
+        " ",
+      )}
     >
-      <MinecraftTooltip
-        content={
-          chain.length > 0 ? (
-            <UsageLimitContent
-              title={title}
-              utilization={nodeResult?.utilization ?? 0}
-              status={nodeResult?.status}
-              entries={chain}
-            />
-          ) : undefined
-        }
-      >
-        <div
-          className={["flow-verdict-strip mt-1 px-2 py-1", VERDICT_STRIP_CLASS[verdict.kind]].join(
-            " ",
-          )}
-        >
-          <div className="flex items-baseline gap-2">
-            <span className="whitespace-nowrap text-[11px] font-black leading-4 tracking-[1px]">
-              {word}
-            </span>
-            <span className="min-w-0 flex-1" />
-            {showPct ? (
-              <span className="shrink-0 text-[14px] font-bold leading-4 tabular-nums">
-                {formatRate(verdict.pct, verdict.pct >= 100 ? 0 : 1)}%
-              </span>
-            ) : null}
+      <div className="flex items-baseline gap-2">
+        <span className="whitespace-nowrap text-[11px] font-black leading-4 tracking-[1px]">
+          {word}
+        </span>
+        <span className="min-w-0 flex-1" />
+        {showPct ? (
+          <span className="shrink-0 text-[14px] font-bold leading-4 tabular-nums">
+            {formatRate(verdict.pct, verdict.pct >= 100 ? 0 : 1)}%
+          </span>
+        ) : null}
+      </div>
+      {/* Full sentences that wrap - an ellipsis here would hide exactly
+          what the user came to read. */}
+      {cause ? <div className="mt-0.5 text-[9px] leading-[13px] opacity-95">{cause}</div> : null}
+      {action ? <div className="text-[9px] leading-[13px] opacity-95">{action}</div> : null}
+      {showLadder ? (
+        <div className="mt-1 border-t border-white/25 pt-0.5">
+          <div className="text-[7px] font-black tracking-[0.5px] opacity-75">
+            WHAT LIMITS THIS, IN ORDER
           </div>
-          {/* Full sentences that wrap - an ellipsis here would hide exactly
-              what the user came to read. */}
-          {cause ? <div className="mt-0.5 text-[9px] leading-[13px] opacity-95">{cause}</div> : null}
-          {action ? <div className="text-[9px] leading-[13px] opacity-95">{action}</div> : null}
+          {ladder.map((rung) => (
+            <div
+              key={`${rung.label}|${rung.pct}`}
+              className="flex items-baseline gap-1 text-[8.5px] leading-[12px]"
+            >
+              <span className="w-9 shrink-0 text-right font-bold tabular-nums">
+                {formatPct(rung.pct)}%
+              </span>
+              <span className="min-w-0 flex-1 opacity-95">
+                {rung.label}
+                {rung.now ? " — you are here" : ""}
+              </span>
+            </div>
+          ))}
         </div>
-      </MinecraftTooltip>
-    </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -832,7 +830,7 @@ function buildPortFlowScope(nodeId: string, port: RailPort) {
     if ((isInput ? edge.target : edge.source) !== nodeId) {
       continue;
     }
-    if (!edgeTouchesPortResource(edge, port)) {
+    if (!edgeTouchesResource(edge, port.side, port.kind, port.resourceId)) {
       continue;
     }
     edges[edge.id] = true;
@@ -894,20 +892,36 @@ function PortChip({
         ? "flow-port--hot"
         : port.tone === "calm"
           ? "flow-port--calm"
-          : port.tone === "idle"
-            ? "flow-port--idle"
-            : "";
+          : port.tone === "slowed"
+            ? "flow-port--slowed"
+            : port.tone === "idle"
+              ? "flow-port--idle"
+              : "";
   const rateText = port.showNameplate
     ? `${formatSlotRateBare(port.currentPerSecond)} / ${formatSlotRate(
         port.nameplatePerSecond,
         port.kind,
       )}`
     : formatSlotRate(port.currentPerSecond, port.kind);
-  const badgeText = port.badge
-    ? port.badge.kind === "short"
-      ? `−${formatSlotRate(port.badge.perSecond, port.kind)}`
-      : `asked ${formatSlotRateBare(port.badge.perSecond)}`
-    : undefined;
+  // Noise floor: a badge that would read "0.000" says nothing — drop it.
+  const badgeRate = port.badge ? formatSlotRateOrNull(port.badge.perSecond, port.kind) : null;
+  const badgeText =
+    port.badge && badgeRate
+      ? port.badge.kind === "short"
+        ? `missing ${badgeRate}`
+        : `wanted ${formatSlotRateBare(port.badge.perSecond)}`
+      : undefined;
+
+  // One bar, one ruler: 100% = full blast. Solid = now, hatch = would unlock
+  // if fed, caret = wanted, burst tab = wanted is bigger than the machine.
+  const nameplate = port.nameplatePerSecond;
+  const fillPct = nameplate > 1e-9 ? Math.min(port.currentPerSecond / nameplate, 1) * 100 : 0;
+  const couldPct = nameplate > 1e-9 ? Math.min(port.couldPerSecond / nameplate, 1) * 100 : 0;
+  const ghostPct = Math.max(0, couldPct - fillPct);
+  const wantRatio = nameplate > 1e-9 ? port.wantedPerSecond / nameplate : 0;
+  const caretPct =
+    port.wantedPerSecond > 1e-9 ? Math.min(Math.max(wantRatio, 0), 1) * 100 : undefined;
+  const hasBurst = wantRatio > 1.005;
 
   return (
     <div
@@ -987,8 +1001,30 @@ function PortChip({
             HAND-FED
           </span>
         ) : (
-          <span className="flow-port-bar mt-0.5 block">
-            <i style={{ width: `${Math.round(Math.min(Math.max(port.fillFraction, 0), 1) * 100)}%` }} />
+          <span
+            className={["mt-0.5 flex items-center gap-0.5", caretPct !== undefined ? "mb-1" : ""]
+              .join(" ")
+              .trim()}
+          >
+            <span
+              className={["flow-port-bar block flex-1", hasBurst ? "flow-port-bar--burst" : ""]
+                .join(" ")
+                .trim()}
+            >
+              <i style={{ width: `${fillPct}%` }} />
+              {ghostPct > 1 ? (
+                <s
+                  className="flow-port-ghost"
+                  style={{ left: `${fillPct}%`, width: `${ghostPct}%` }}
+                />
+              ) : null}
+              {caretPct !== undefined ? (
+                <u className="flow-port-caret" style={{ left: `${caretPct}%` }} />
+              ) : null}
+            </span>
+            {hasBurst ? (
+              <em className="flow-port-burst not-italic">{formatTimes(wantRatio)}</em>
+            ) : null}
           </span>
         )}
       </span>
@@ -1016,172 +1052,167 @@ function PortChip({
   );
 }
 
+const STORY_TONE_TEXT: Record<PortStory["tone"], string> = {
+  red: "text-red-300",
+  amber: "text-amber-300",
+  green: "text-emerald-300",
+  steel: "text-slate-300",
+  dim: "text-slate-400",
+};
+
+const STORY_TONE_FILL: Record<PortStory["tone"], string> = {
+  red: "#e05252",
+  amber: "#e0a63a",
+  green: "#3fbf6f",
+  steel: "#8aa0b8",
+  dim: "#5a6a80",
+};
+
+const STORY_ACTION_TEXT: Record<"fix" | "fine" | "note", string> = {
+  fix: "text-amber-300",
+  fine: "text-emerald-300",
+  note: "text-slate-300",
+};
+
 /**
- * The port hover panel: what this resource flows at right now, what it would
- * flow at with the machine running 100%, and the per-line breakdown of who
- * ships what, whose source is maxed, and how much is still missing or
- * unrouted.
+ * The port hover panel — the big explainer: a thicker copy of the port's bar
+ * with the same landmarks, the honest numbers, the per-line list, then the
+ * plain answer to "why is it like this" and what to do. All copy comes from
+ * explainPort; styles ride inline so no stale stylesheet chunk can mute the
+ * teaching surface.
  */
 function renderPortHoverContent(port: RailPort, nodeId: string) {
-  const maxRate = port.nameplatePerSecond;
-  if (maxRate <= 1e-9) {
+  if (port.nameplatePerSecond <= 1e-9 && port.currentPerSecond <= 1e-9) {
     return undefined;
   }
 
-  const isInput = port.side === "input";
-  const nowRate = port.currentPerSecond;
-  const breakdown = buildPortEdgeBreakdown(nodeId, port);
+  const { project, lastResult } = useFactoryStore.getState();
+  const verdict = deriveNodeVerdict(project, lastResult, nodeId);
+  const story = explainPort(project, lastResult, nodeId, port, verdict);
+
+  const nameplate = port.nameplatePerSecond;
+  const fillPct = nameplate > 1e-9 ? Math.min(port.currentPerSecond / nameplate, 1) * 100 : 0;
+  const couldPct = nameplate > 1e-9 ? Math.min(port.couldPerSecond / nameplate, 1) * 100 : 0;
+  const ghostPct = Math.max(0, couldPct - fillPct);
+  const wantRatio = nameplate > 1e-9 ? port.wantedPerSecond / nameplate : 0;
+  const caretPct =
+    port.wantedPerSecond > 1e-9 ? Math.min(Math.max(wantRatio, 0), 1) * 100 : undefined;
+  const hasBurst = wantRatio > 1.005;
+  const fillColor = STORY_TONE_FILL[story.tone];
 
   return (
-    <div className="w-52">
+    <div className="w-64">
       <div className="flex items-baseline gap-2">
-        <span className="truncate text-[13px] font-semibold text-white">
+        <span className="min-w-0 truncate text-[13px] font-semibold text-white">
           {port.displayName}
         </span>
-        <span className="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-          {isInput ? "Input" : "Output"}
+        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+          {port.side === "input" ? "Input" : "Output"}
+        </span>
+        <span
+          className={[
+            "ml-auto shrink-0 text-[10px] font-black tracking-wide",
+            STORY_TONE_TEXT[story.tone],
+          ].join(" ")}
+        >
+          {story.stateWord}
         </span>
       </div>
-      <div className="mt-1.5 flex items-baseline justify-between gap-3 text-[12px]">
-        <span className="text-slate-400">Now</span>
-        <span className="font-bold tabular-nums text-cyan-300">
-          {formatSlotRate(nowRate, port.kind)}
-        </span>
-      </div>
-      <div className="mt-0.5 flex items-baseline justify-between gap-3 text-[12px]">
-        <span className="text-slate-400">At 100%</span>
-        <span className="font-semibold tabular-nums text-slate-300">
-          {formatSlotRate(maxRate, port.kind)}
-        </span>
-      </div>
-      {breakdown && breakdown.rows.length > 0 ? (
-        <div className="mt-2 border-t border-white/15 pt-1.5">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-            {isInput
-              ? `Supplied by ${breakdown.rows.length} line${breakdown.rows.length > 1 ? "s" : ""}`
-              : `Feeding ${breakdown.rows.length} line${breakdown.rows.length > 1 ? "s" : ""}`}
+
+      {!port.handFed ? (
+        <div className={["mt-2 flex items-center gap-1", caretPct !== undefined ? "mb-2" : "mb-1"].join(" ")}>
+          <div
+            className="relative h-[9px] flex-1"
+            style={{
+              background: "#101826",
+              border: "1px solid #2c3a52",
+              borderRightWidth: hasBurst ? 2 : 1,
+              borderRightColor: hasBurst ? "rgba(255,255,255,0.9)" : "#2c3a52",
+            }}
+          >
+            <i
+              className="absolute bottom-0 left-0 top-0 block"
+              style={{ width: `${fillPct}%`, background: fillColor }}
+            />
+            {ghostPct > 1 ? (
+              <s
+                className="absolute bottom-0 top-0 block"
+                style={{
+                  left: `${fillPct}%`,
+                  width: `${ghostPct}%`,
+                  background:
+                    "repeating-linear-gradient(45deg, rgba(220,228,245,0.35) 0 3px, transparent 3px 6px)",
+                }}
+              />
+            ) : null}
+            {caretPct !== undefined ? (
+              <u
+                className="absolute block"
+                style={{
+                  left: `${caretPct}%`,
+                  top: "100%",
+                  marginTop: 1,
+                  width: 0,
+                  height: 0,
+                  borderLeft: "4px solid transparent",
+                  borderRight: "4px solid transparent",
+                  borderBottom: "5px solid #f5c542",
+                  transform: "translateX(-4px)",
+                }}
+              />
+            ) : null}
           </div>
-          {breakdown.rows.map((row, index) => (
-            <div
-              key={index}
-              className="mt-0.5 flex items-baseline justify-between gap-3 text-[12px]"
-            >
-              <span className="truncate text-slate-300">{row.name}</span>
-              <span className="shrink-0 tabular-nums text-slate-200">
-                {formatSlotRate(row.rate, port.kind)}
-                {row.tag ? (
-                  <span className="ml-1 text-[9px] font-bold uppercase text-amber-300">
-                    {row.tag}
-                  </span>
-                ) : null}
-              </span>
-            </div>
-          ))}
-          {isInput && breakdown.shortAtFull > 1e-6 ? (
-            <div className="mt-1 text-[11px] font-semibold text-amber-300">
-              Short {formatSlotRate(breakdown.shortAtFull, port.kind)} for full speed
-            </div>
-          ) : null}
-          {isInput && breakdown.shortAtFull <= 1e-6 && breakdown.rows.length > 1 ? (
-            <div className="mt-1 text-[11px] text-emerald-300">
-              Need fully covered by these lines together
-            </div>
-          ) : null}
-          {!isInput && breakdown.unrouted > 1e-6 ? (
-            <div className="mt-1 text-[11px] text-slate-400">
-              {formatSlotRate(breakdown.unrouted, port.kind)} not routed anywhere
-            </div>
+          {hasBurst ? (
+            <em className="shrink-0 border border-dashed border-amber-400/70 bg-amber-400/20 px-1 text-[9px] font-black not-italic leading-[13px] text-amber-300">
+              {formatTimes(wantRatio)}
+            </em>
           ) : null}
         </div>
       ) : null}
+
+      <div className="mt-1">
+        {story.rows.map((row) => (
+          <div key={row.k} className="flex items-baseline justify-between gap-3 text-[12px]">
+            <span className="text-slate-400">{row.k}</span>
+            <span className="font-semibold tabular-nums text-slate-200">{row.v}</span>
+          </div>
+        ))}
+      </div>
+
+      {story.lineRows ? (
+        <div className="mt-2 border-t border-white/15 pt-1.5">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            {story.lineRows.title}
+          </div>
+          {story.lineRows.rows.map((row, index) => (
+            <div
+              key={index}
+              className="mt-0.5 flex items-baseline justify-between gap-2 text-[12px]"
+            >
+              <span className="min-w-0 flex-1 truncate text-slate-300">
+                {row.name}
+                {row.note ? <span className="text-slate-500"> — {row.note}</span> : null}
+              </span>
+              <span className="shrink-0 tabular-nums text-slate-200">{row.rate}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="mt-2 border-t border-white/15 pt-1.5 text-[12px] leading-snug text-slate-200">
+        {story.lines.map((line, index) => (
+          <p key={index} className="mb-1 last:mb-0">
+            {line}
+          </p>
+        ))}
+        {story.action ? (
+          <p className={["mt-1 font-semibold", STORY_ACTION_TEXT[story.action.tone]].join(" ")}>
+            {story.action.text}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
-}
-
-/**
- * Per-line detail for a port's tooltip, read lazily from the store (no
- * subscription: the node re-renders on every solver tick anyway, which is
- * exactly when these numbers change). Lines match by resource - directly or
- * through the edge's stored handle - so legacy per-slot handles and oredict
- * concretions all land on the pooled port.
- */
-function buildPortEdgeBreakdown(
-  nodeId: string,
-  port: RailPort,
-):
-  | {
-      rows: Array<{ name: string; rate: number; tag?: string }>;
-      shortAtFull: number;
-      unrouted: number;
-    }
-  | undefined {
-  const { project, lastResult } = useFactoryStore.getState();
-  if (!lastResult) {
-    return undefined;
-  }
-
-  const isInput = port.side === "input";
-  const storagesById = new Map((project.storages ?? []).map((storage) => [storage.id, storage]));
-  const nodesById = new Map(project.nodes.map((entry) => [entry.id, entry]));
-  const recipesById = new Map(project.recipes.map((entry) => [entry.id, entry]));
-
-  const rows: Array<{ name: string; rate: number; tag?: string }> = [];
-  let routed = 0;
-  for (const edge of project.edges) {
-    if ((isInput ? edge.target : edge.source) !== nodeId) {
-      continue;
-    }
-    if (!edgeTouchesPortResource(edge, port)) {
-      continue;
-    }
-
-    const otherId = isInput ? edge.source : edge.target;
-    const storage = storagesById.get(otherId);
-    const otherNode = nodesById.get(otherId);
-    const otherRecipe = otherNode ? recipesById.get(otherNode.recipeId) : undefined;
-    const name = storage
-      ? `${storage.displayName ?? storage.resourceId} (buffer)`
-      : (otherRecipe?.machineType ?? otherRecipe?.name ?? "Machine");
-    const edgeResult = lastResult.edges[edge.id];
-    const rate = edgeResult?.transferredPerSecond ?? 0;
-    routed += rate;
-    rows.push({
-      name,
-      rate,
-      // "maxed" only when the line is short AND its source has nothing left -
-      // that is the line that needs more machines, not this consumer.
-      tag: isInput && edgeResult?.constraint === "supply" ? "maxed" : undefined,
-    });
-  }
-
-  if (rows.length === 0) {
-    return undefined;
-  }
-  rows.sort((left, right) => right.rate - left.rate);
-
-  const nodeResult = lastResult.nodes[nodeId];
-  const speed = Number.isFinite(nodeResult?.utilization)
-    ? Math.min(Math.max(nodeResult!.utilization, 0), 1)
-    : 0;
-  const nameplate = port.nameplatePerSecond;
-
-  return {
-    rows,
-    shortAtFull: isInput ? Math.max(0, nameplate - routed) : 0,
-    unrouted: isInput ? 0 : Math.max(0, nameplate * speed - routed),
-  };
-}
-
-function edgeTouchesPortResource(
-  edge: ReturnType<typeof useFactoryStore.getState>["project"]["edges"][number],
-  port: RailPort,
-): boolean {
-  const handle = port.side === "input" ? edge.targetHandle : edge.sourceHandle;
-  const parsed = parseResourceHandleId(handle);
-  if (parsed && parsed.kind === port.kind && parsed.resourceId === port.resourceId) {
-    return true;
-  }
-  return edge.resourceKind === port.kind && edge.resourceId === port.resourceId;
 }
 
 function recipeContainsSearchResource(recipe: Recipe, query: string) {

@@ -6,7 +6,7 @@ import type {
   ResourceFlow,
   ThroughputResult,
 } from "@/lib/model/types";
-import { buildRailPorts, deriveNodeVerdict } from "./node-verdict";
+import { buildLimitLadder, buildRailPorts, deriveNodeVerdict } from "./node-verdict";
 
 // Unit tests for the verdict/rail derivation: solver numbers in, one honest
 // state + cause + action out. Solver behaviour itself is covered elsewhere.
@@ -192,6 +192,136 @@ describe("deriveNodeVerdict", () => {
     expect(verdict.deficit?.machinesToAdd).toBe(3);
   });
 
+  it("un-greens a maxed producer whose consumer's ask converged away (the green tower)", () => {
+    // The real-world regression: the solver's demandPerSecond converges down
+    // to what was shipped, so the only honest hunger signal on a
+    // supply-capped line is the nameplate ask. 5.143 L/s made, 32 wanted.
+    const proj = project({
+      recipes: [
+        { id: "r", name: "Oil", machineType: "Distillation Tower", minimumTier: "HV", durationTicks: 20, eut: 1, inputs: [], outputs: [] },
+        { id: "lcr", name: "Desulf", machineType: "LCR", minimumTier: "HV", durationTicks: 20, eut: 1, inputs: [], outputs: [] },
+      ] as unknown as FactoryProject["recipes"],
+      nodes: [machineNode("Tower"), machineNode("LCR", "lcr")],
+      edges: [edge("eGas", "Tower", "LCR", "sulfuricgas")],
+    });
+    const result = throughput(
+      {
+        Tower: nodeResult({
+          nodeId: "Tower",
+          utilization: 1,
+          capableUtilization: 1,
+          demandUtilization: 1,
+          outputs: { "item:sulfuricgas": flow("item", "sulfuricgas", 5.143) },
+        }),
+      },
+      {
+        eGas: edgeResult({
+          transferredPerSecond: 5.143,
+          demandPerSecond: 5.143,
+          nameplateDemandPerSecond: 32,
+          constraint: "supply",
+        }),
+      },
+    );
+
+    const verdict = deriveNodeVerdict(proj, result, "Tower");
+    expect(verdict.kind).toBe("choke");
+    expect(verdict.deficit?.missingPerSecond).toBeCloseTo(26.857, 3);
+    expect(verdict.deficit?.machinesToAdd).toBe(6);
+
+    const rails = buildRailPorts(
+      proj,
+      result,
+      "Tower",
+      { inputs: [], outputs: [{ kind: "item", id: "sulfuricgas", amount: 1 }] } as unknown as Pick<
+        import("@/lib/model/types").Recipe,
+        "inputs" | "outputs"
+      >,
+      verdict,
+    );
+    expect(rails.outputs[0]!.wantedPerSecond).toBeCloseTo(32, 4);
+    expect(rails.outputs[0]!.couldPerSecond).toBeCloseTo(5.143, 4);
+    expect(rails.outputs[0]!.tone).toBe("hot");
+    expect(rails.outputs[0]!.badge?.perSecond).toBeCloseTo(32, 4);
+  });
+
+  it("does not beg upstream for a consumer throttled by its own downstream", () => {
+    // constraint "demand": the nameplate want is big, but the consumer chose
+    // to run slow — telling this producer to add machines would be a lie.
+    const proj = project({
+      recipes: [
+        { id: "r", name: "M", machineType: "M", minimumTier: "ULV", durationTicks: 20, eut: 1, inputs: [], outputs: [] },
+      ] as unknown as FactoryProject["recipes"],
+      nodes: [machineNode("N"), machineNode("C")],
+      edges: [edge("eOut", "N", "C", "pe")],
+    });
+    const result = throughput(
+      { N: nodeResult({ utilization: 1, outputs: { "item:pe": flow("item", "pe", 5) } }) },
+      {
+        eOut: edgeResult({
+          transferredPerSecond: 5,
+          demandPerSecond: 5,
+          nameplateDemandPerSecond: 32,
+          constraint: "demand",
+        }),
+      },
+    );
+
+    expect(deriveNodeVerdict(proj, result, "N").kind).toBe("balanced");
+  });
+
+  it("carries the upstream culprit's own state for the chain pointer", () => {
+    const base = {
+      recipes: [
+        { id: "r", name: "M", machineType: "M", minimumTier: "ULV", durationTicks: 20, eut: 1, inputs: [], outputs: [] },
+        { id: "src", name: "Cracker", machineType: "Cracker", minimumTier: "ULV", durationTicks: 20, eut: 1, inputs: [], outputs: [] },
+      ] as unknown as FactoryProject["recipes"],
+      nodes: [machineNode("N"), machineNode("S", "src")],
+      edges: [edge("eIn", "S", "N", "res")],
+    };
+    const starvedNode = nodeResult({
+      utilization: 0.4,
+      capableUtilization: 0.4,
+      demandUtilization: 1,
+      inputs: { "item:res": flow("item", "res", 10) },
+    });
+
+    // Culprit running slow: point up the chain, never suggest +machines.
+    const slowCulprit = deriveNodeVerdict(
+      project(base),
+      throughput(
+        { N: starvedNode, S: nodeResult({ nodeId: "S", utilization: 0.45 }) },
+        { eIn: edgeResult({ transferredPerSecond: 4, availablePerSecond: 4, constraint: "supply" }) },
+      ),
+      "N",
+    );
+    expect(slowCulprit.binding?.suppliedPerSecond).toBeCloseTo(4, 6);
+    expect(slowCulprit.binding?.neededPerSecond).toBeCloseTo(10, 6);
+    expect(slowCulprit.binding?.upstream?.atFullSpeed).toBe(false);
+    expect(slowCulprit.binding?.upstream?.pct).toBeCloseTo(45, 1);
+    expect(slowCulprit.binding?.upstream?.machinesToAdd).toBeUndefined();
+
+    // Culprit flat out: compute how many machines close the gap.
+    const maxedCulprit = deriveNodeVerdict(
+      project(base),
+      throughput(
+        {
+          N: starvedNode,
+          S: nodeResult({
+            nodeId: "S",
+            utilization: 1,
+            outputs: { "item:res": flow("item", "res", 4) },
+          }),
+        },
+        { eIn: edgeResult({ transferredPerSecond: 4, availablePerSecond: 4, constraint: "supply" }) },
+      ),
+      "N",
+    );
+    expect(maxedCulprit.binding?.upstream?.atFullSpeed).toBe(true);
+    // Short 6/s, each Cracker makes 4/s: +2.
+    expect(maxedCulprit.binding?.upstream?.machinesToAdd).toBe(2);
+  });
+
   it("ignores storage sinks when looking for downstream hunger", () => {
     const proj = project({
       recipes: [
@@ -284,6 +414,87 @@ describe("deriveNodeVerdict", () => {
     expect(deriveNodeVerdict(proj, result, "N").kind).toBe("balanced");
     expect(deriveNodeVerdict(proj, result, "Lonely").kind).toBe("unwired");
     expect(deriveNodeVerdict(proj, result, "Dead").kind).toBe("off");
+  });
+});
+
+describe("buildLimitLadder", () => {
+  it("sorts the rungs and marks the lowest as you-are-here (starved consumer)", () => {
+    const proj = project({
+      recipes: [
+        { id: "r", name: "M", machineType: "M", minimumTier: "ULV", durationTicks: 20, eut: 1, inputs: [], outputs: [] },
+      ] as unknown as FactoryProject["recipes"],
+      nodes: [machineNode("N"), machineNode("S"), machineNode("S2")],
+      edges: [edge("eGas", "S", "N", "sulfuricgas"), edge("eH", "S2", "N", "hydrogen")],
+    });
+    const result = throughput(
+      {
+        N: nodeResult({
+          utilization: 0.16,
+          capableUtilization: 0.16,
+          demandUtilization: 1,
+          inputs: {
+            "item:sulfuricgas": flow("item", "sulfuricgas", 32),
+            "item:hydrogen": flow("item", "hydrogen", 10),
+          },
+        }),
+      },
+      {
+        eGas: edgeResult({ transferredPerSecond: 5.143, availablePerSecond: 5.143, constraint: "supply" }),
+        eH: edgeResult({ transferredPerSecond: 1.6, availablePerSecond: 14 }),
+      },
+    );
+
+    const ladder = buildLimitLadder(proj, result, "N");
+    expect(ladder.map((rung) => rung.label)).toEqual([
+      "sulfuricgas supply",
+      "machine count",
+      "hydrogen supply",
+    ]);
+    expect(ladder[0]!.pct).toBeCloseTo((5.143 / 32) * 100, 3);
+    expect(ladder[0]!.now).toBe(true);
+    expect(ladder[1]!.pct).toBe(100);
+    expect(ladder[2]!.pct).toBeCloseTo(140, 3);
+  });
+
+  it("puts the finish line above a maxed producer (choke tower)", () => {
+    const proj = project({
+      recipes: [
+        { id: "r", name: "Oil", machineType: "Distillation Tower", minimumTier: "HV", durationTicks: 20, eut: 1, inputs: [], outputs: [] },
+      ] as unknown as FactoryProject["recipes"],
+      nodes: [machineNode("Tower"), machineNode("LCR"), machineNode("NSrc")],
+      edges: [edge("eGas", "Tower", "LCR", "sulfuricgas"), edge("eNaph", "NSrc", "Tower", "naphtha")],
+    });
+    const result = throughput(
+      {
+        Tower: nodeResult({
+          nodeId: "Tower",
+          utilization: 1,
+          capableUtilization: 1,
+          demandUtilization: 1,
+          inputs: { "item:naphtha": flow("item", "naphtha", 20) },
+          outputs: { "item:sulfuricgas": flow("item", "sulfuricgas", 5.143) },
+        }),
+      },
+      {
+        eGas: edgeResult({
+          transferredPerSecond: 5.143,
+          demandPerSecond: 5.143,
+          nameplateDemandPerSecond: 32,
+          constraint: "supply",
+        }),
+        eNaph: edgeResult({ transferredPerSecond: 20, availablePerSecond: 36 }),
+      },
+    );
+
+    const ladder = buildLimitLadder(proj, result, "Tower");
+    expect(ladder.map((rung) => rung.label)).toEqual([
+      "machine count",
+      "naphtha supply",
+      "downstream satisfied",
+    ]);
+    expect(ladder[0]!.now).toBe(true);
+    expect(ladder[1]!.pct).toBeCloseTo(180, 3);
+    expect(ladder[2]!.pct).toBeCloseTo((32 / 5.143) * 100, 1);
   });
 });
 

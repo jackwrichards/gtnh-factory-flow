@@ -103,6 +103,7 @@ import {
   isEdgeStarved,
   isEdgeSurplus,
 } from "./edge-labels";
+import { buildEdgeStory } from "./flow-explainers";
 import { getSupplyCeiling } from "@/components/inspector/usage-limits";
 import {
   EDGE_DETAIL_ARROWS,
@@ -2491,40 +2492,107 @@ function ResourceEdgeComponent({
             />
             <span className="font-semibold leading-none tracking-tight tabular-nums">{rate}</span>
           </div>
-          {isLabelHovered && !isLabelDragging ? (
-            <div
-              className="nodrag nopan pointer-events-none absolute w-64 border-2 bg-[#2b2d32] px-3 py-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14),inset_-1px_-1px_0_rgba(0,0,0,0.55),0_6px_16px_rgba(0,0,0,0.55)]"
-              style={{
-                transform: `translate(-50%, -100%) translate(${labelX}px, ${labelY - 22}px)`,
-                borderColor: labelAccentColor,
-                zIndex: 70,
-              }}
-            >
-              <div className="flex items-center gap-1.5">
-                <ResourceIcon
-                  resource={data.resource}
-                  size="sm"
-                  showAmount={false}
-                  bare
-                  className="!h-[20px] !w-[20px]"
-                />
-                <span className="truncate text-[13px] font-semibold text-white">
-                  {data.resource.displayName ?? data.resource.id}
-                </span>
-                {labelToneWord ? (
-                  <span
-                    className="ml-auto shrink-0 text-[11px] font-bold uppercase tracking-wide"
-                    style={{ color: labelAccentColor }}
+          {isLabelHovered && !isLabelDragging
+            ? (() => {
+                // The line's story from BOTH ends, built lazily on hover from
+                // live store state: giver + state, each receiver + its honest
+                // ask (with its share when lines pool), then who's limiting.
+                const storeState = useFactoryStore.getState();
+                const story = buildEdgeStory(
+                  storeState.project,
+                  storeState.lastResult,
+                  data.bundle?.edgeIds ?? [id],
+                );
+                return (
+                  <div
+                    className="nodrag nopan pointer-events-none absolute w-72 border-2 bg-[#2b2d32] px-3 py-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.14),inset_-1px_-1px_0_rgba(0,0,0,0.55),0_6px_16px_rgba(0,0,0,0.55)]"
+                    style={{
+                      transform: `translate(-50%, -100%) translate(${labelX}px, ${labelY - 22}px)`,
+                      borderColor: labelAccentColor,
+                      zIndex: 70,
+                    }}
                   >
-                    {labelToneWord}
-                  </span>
-                ) : null}
-              </div>
-              <p className="mt-1 text-[12px] leading-snug text-slate-300">
-                {renderRateSentence(describeEdgeRate(data), labelAccentColor)}
-              </p>
-            </div>
-          ) : null}
+                    <div className="flex items-center gap-1.5">
+                      <ResourceIcon
+                        resource={data.resource}
+                        size="sm"
+                        showAmount={false}
+                        bare
+                        className="!h-[20px] !w-[20px]"
+                      />
+                      <span className="truncate text-[13px] font-semibold text-white">
+                        {data.resource.displayName ?? data.resource.id}
+                      </span>
+                      <span
+                        className="ml-auto shrink-0 text-[11px] font-bold uppercase tracking-wide"
+                        style={{ color: labelAccentColor }}
+                      >
+                        {story?.stateWord ?? labelToneWord}
+                      </span>
+                    </div>
+                    {story ? (
+                      <>
+                        <div className="mt-0.5 text-[11px] text-slate-400">
+                          carries{" "}
+                          <span className="font-semibold tabular-nums text-slate-200">
+                            {story.carriesText}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 border-t border-white/10 pt-1.5 text-[12px] leading-snug">
+                          <div className="flex gap-1.5">
+                            <span className="w-9 shrink-0 text-right text-[9px] font-black uppercase leading-4 tracking-wide text-slate-500">
+                              from
+                            </span>
+                            <span className="min-w-0 flex-1 text-slate-200">
+                              {story.from.name}
+                              {story.from.note ? (
+                                <span className="text-slate-400"> — {story.from.note}</span>
+                              ) : null}
+                            </span>
+                          </div>
+                          {story.to.map((receiver, index) => (
+                            <div key={index} className="mt-0.5 flex gap-1.5">
+                              <span className="w-9 shrink-0 text-right text-[9px] font-black uppercase leading-4 tracking-wide text-slate-500">
+                                to
+                              </span>
+                              <span className="min-w-0 flex-1 text-slate-200">
+                                {receiver.name}
+                                <span className="text-slate-400"> — {receiver.text}</span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-1.5 border-t border-white/10 pt-1.5 text-[12px] leading-snug text-slate-300">
+                          {story.lines.map((line, index) => (
+                            <p key={index} className="mb-1 last:mb-0">
+                              {renderRateSentence(line, labelAccentColor)}
+                            </p>
+                          ))}
+                          {story.action ? (
+                            <p
+                              className={[
+                                "mt-1 font-semibold",
+                                story.action.tone === "fix"
+                                  ? "text-amber-300"
+                                  : story.action.tone === "fine"
+                                    ? "text-emerald-300"
+                                    : "text-slate-300",
+                              ].join(" ")}
+                            >
+                              {story.action.text}
+                            </p>
+                          ) : null}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="mt-1 text-[12px] leading-snug text-slate-300">
+                        {renderRateSentence(describeEdgeRate(data), labelAccentColor)}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()
+            : null}
         </EdgeLabelRenderer>
       ) : null}
     </>

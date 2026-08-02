@@ -520,7 +520,9 @@ textarea {
 }
 
 .flow-port-bar {
-  height: 4px;
+  position: relative;
+  height: 5px;
+  overflow: visible;
   background: var(--rail-bar-track);
   box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.35);
 }
@@ -529,6 +531,60 @@ textarea {
   display: block;
   height: 100%;
   background: var(--rail-bar-ok);
+}
+
+/* Wanted is bigger than the machine: the bar ends in a hard white notch and
+   a ×N tab bursts past it — a full bar with a burst can't read as "done". */
+.flow-port-bar--burst {
+  border-right: 2px solid rgba(255, 255, 255, 0.9);
+}
+
+/* Headroom feeding would unlock: hatched, never solid. */
+.flow-port-ghost {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(226, 232, 244, 0.4) 0 3px,
+    transparent 3px 6px
+  );
+}
+
+/* The WANT mark: a small caret under the bar at the asked position. */
+.flow-port-caret {
+  position: absolute;
+  top: 100%;
+  margin-top: 1px;
+  width: 0;
+  height: 0;
+  transform: translateX(-3px);
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  border-bottom: 4px solid #f5c542;
+}
+
+.flow-port--bind .flow-port-caret {
+  border-bottom-color: #ff7a7a;
+}
+
+.flow-port-burst {
+  flex: none;
+  border: 1px dashed var(--port-hot-edge);
+  background: rgba(207, 142, 0, 0.28);
+  color: #ffd76a;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 11px;
+  padding: 0 3px;
+  white-space: nowrap;
+}
+
+.flow-port--bind .flow-port-burst,
+.flow-port--slowed .flow-port-burst {
+  border-color: #c22525;
+  background: rgba(194, 37, 37, 0.28);
+  color: #ff9c9c;
 }
 
 .flow-port--bind .flow-port-bar > i {
@@ -541,6 +597,12 @@ textarea {
 
 .flow-port--calm .flow-port-bar > i {
   background: var(--rail-bar-calm);
+}
+
+/* Outputs of a starving machine run slow through no fault of their own:
+   red fill says "slowed", the neutral chip says "the problem isn't here". */
+.flow-port--slowed .flow-port-bar > i {
+  background: var(--rail-bar-bad);
 }
 
 .flow-port-badge {
