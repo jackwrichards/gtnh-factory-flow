@@ -1357,6 +1357,16 @@ function refreshNodeUtilizationFromEdgeResults(
       nodeResult,
       requiredByResource,
     );
+    // A pure sink — inputs but no outputs, e.g. a request-mode custom rate
+    // node — has no output demand to pace it. It always wants full blast;
+    // only input supply below can throttle it.
+    if (
+      Object.keys(nodeResult.outputs).length === 0 &&
+      Object.keys(nodeResult.inputs).length > 0
+    ) {
+      utilizationReport.utilization = 1;
+      utilizationReport.theoreticalMachinesRequired = node.machineCount;
+    }
     const demandOnlyUtilization = utilizationReport.utilization;
     const inputSupply = selectConnectedInputSupplyLimit(
       nodeResult,

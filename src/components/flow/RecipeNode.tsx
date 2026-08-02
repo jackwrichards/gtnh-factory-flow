@@ -45,6 +45,13 @@ import {
   resourceLabel,
   type MachineConfigTierControl,
 } from "@/lib/model";
+import {
+  CUSTOM_RATE_ANY_RESOURCE_ID,
+  getCustomRateSlot,
+  isCustomRateRecipe,
+  type CustomRateMode,
+} from "@/lib/model/custom-rate";
+import { rateUnitMultiplier, rateUnitSuffix } from "@/lib/model/rate-unit";
 import { CropPickerMenu } from "./CropPickerMenu";
 import { MachineCompareTable, MachineTabStrip } from "./MachinePicker";
 import { useMachineHandlerIcons } from "./machine-icons";
@@ -201,6 +208,12 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         : undefined;
     const isCropFarmNode = isCropFarmRecipe(effectiveRecipe);
     const isCropFarmPlaceholder = isCropFarmNode && effectiveRecipe.outputs.length === 0;
+    // Custom rate nodes: the dialed rate lives on the raw recipe (the panel
+    // writes it there), so the slot is read from `recipe`, not the effective
+    // pipeline output.
+    const isCustomRateNode = isCustomRateRecipe(recipe);
+    const customRateSlot = isCustomRateNode ? getCustomRateSlot(recipe) : undefined;
+    const isCustomRatePlaceholder = isCustomRateNode && !customRateSlot;
 
     return {
       machineHandlers,
@@ -214,6 +227,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       cropTitle,
       isCropFarmNode,
       isCropFarmPlaceholder,
+      isCustomRateNode,
+      customRateSlot,
+      isCustomRatePlaceholder,
       isCropProductionNode: cropProductionControls.length > 0,
       beeFrameControls,
       beePanelControls: getBeePanelControls(beeProductionControls),
@@ -243,6 +259,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     cropTitle,
     isCropFarmNode,
     isCropFarmPlaceholder,
+    isCustomRateNode,
+    customRateSlot,
+    isCustomRatePlaceholder,
     isCropProductionNode,
     beeFrameControls,
     beePanelControls,
@@ -444,6 +463,14 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               content={
                 isCropFarmPlaceholder ? (
                   "Click to pick a crop"
+                ) : isCustomRateNode ? (
+                  customRateSlot ? (
+                    customRateSlot.mode === "supply"
+                      ? `Makes ${resourceLabel(customRateSlot.resource)} at the dialed rate for anything that asks.`
+                      : `Constantly drains ${resourceLabel(customRateSlot.resource)} at the dialed rate.`
+                  ) : (
+                    "Wire any port to this — it adopts that resource."
+                  )
                 ) : (
                   <MachineStatsContent
                     recipe={recipe}
@@ -485,7 +512,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 <span className="mx-auto min-w-0 truncate">
                   {isCropFarmPlaceholder
                     ? "Pick a crop..."
-                    : (cropTitle ?? previewHandler.label)}
+                    : isCustomRateNode
+                      ? (customRateSlot
+                          ? `Custom Rate: ${resourceLabel(customRateSlot.resource)}`
+                          : "Custom Rate")
+                      : (cropTitle ?? previewHandler.label)}
                   {isPreviewing ? " ?" : ""}
                 </span>
                 {isCropFarmNode ? (
@@ -561,6 +592,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             >
               <Sprout className="h-5 w-5" /> Pick a crop
             </button>
+          ) : isCustomRatePlaceholder ? (
+            <CustomRateUniversalPorts nodeId={projectNode.id} />
           ) : (
           // The rails ARE the node now: ports carry the icons, rates, and
           // health that the recipe canvas used to duplicate. Recipe identity
@@ -595,16 +628,28 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             />
           </div>
           )}
+          {customRateSlot ? (
+            <CustomRatePanel
+              nodeId={projectNode.id}
+              mode={customRateSlot.mode}
+              kind={customRateSlot.resource.kind}
+              perSecond={customRateSlot.resource.amount}
+            />
+          ) : null}
           {machineConfigPanel}
           {passiveProductionPanel}
         </div>
 
-        {!isCropFarmPlaceholder ? (
+        {!isCropFarmPlaceholder && !isCustomRatePlaceholder ? (
           <div className="w-0 min-w-full">
-            <VerdictStrip nodeId={projectNode.id} verdict={verdict} />
+            <VerdictStrip
+              nodeId={projectNode.id}
+              verdict={verdict}
+              isCustomRate={isCustomRateNode}
+            />
           </div>
         ) : null}
-        {!isCropFarmPlaceholder ? (
+        {!isCropFarmPlaceholder && !isCustomRateNode ? (
           <div
             className={[
               "mt-1 grid min-w-0 gap-1 text-[12px] leading-4 text-[var(--mc-ink)]",
@@ -668,7 +713,15 @@ const VERDICT_STRIP_CLASS: Record<NodeVerdict["kind"], string> = {
  * ones in order, so a fix session never re-discovers the board after each
  * change. All copy follows the explainer voice: plain words, no riddles.
  */
-function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdict }) {
+function VerdictStrip({
+  nodeId,
+  verdict,
+  isCustomRate = false,
+}: {
+  nodeId: string;
+  verdict: NodeVerdict;
+  isCustomRate?: boolean;
+}) {
   const project = useFactoryStore((state) => state.project);
   const lastResult = useFactoryStore((state) => state.lastResult);
   const ladder = useMemo(
@@ -685,7 +738,9 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
     case "starved": {
       word = "▼ STARVING";
       const binding = verdict.binding;
-      cause = `An input shortage forces this machine to run only ${formatPct(verdict.pct)}% of the time.`;
+      cause = isCustomRate
+        ? `A supply shortage leaves this drain only ${formatPct(verdict.pct)}% filled.`
+        : `An input shortage forces this machine to run only ${formatPct(verdict.pct)}% of the time.`;
       const upstream = binding?.upstream;
       if (binding?.tiedWithNames?.length) {
         // Crowning one of a tie is float-dust theater; say what's true.
@@ -713,6 +768,13 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
     case "choke": {
       word = "▲ CAN'T KEEP UP";
       const deficit = verdict.deficit;
+      if (isCustomRate) {
+        cause = "Requests want more than the dialed rate.";
+        action = deficit
+          ? `→ Raise the rate by +${formatSlotRate(deficit.missingPerSecond, deficit.kind)}.`
+          : "→ Raise the rate.";
+        break;
+      }
       cause =
         verdict.pct >= 99.5
           ? "This machine runs full-time, but that still can't satisfy all requests."
@@ -729,7 +791,9 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
       cause =
         verdict.pct <= 0.05
           ? "Nothing draws from this yet."
-          : "Won't run full-time — demand is lower than what it can make.";
+          : isCustomRate
+            ? "Requests draw less than the dialed rate."
+            : "Won't run full-time — demand is lower than what it can make.";
       action =
         verdict.headroomPct !== undefined && verdict.headroomPct > 0
           ? `→ Fine — +${formatPct(verdict.headroomPct)}% free if demand grows.`
@@ -737,11 +801,13 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
       break;
     case "balanced":
       word = "✔ BALANCED";
-      cause = "Full speed, every ask met.";
+      cause = isCustomRate ? "Dialed rate met exactly." : "Full speed, every ask met.";
       break;
     case "unwired":
-      word = "● HAND-FED";
-      cause = "No lines yet — planner assumes hand-feeding.";
+      word = isCustomRate ? "● IDLE" : "● HAND-FED";
+      cause = isCustomRate
+        ? "No wires — this dial does nothing yet."
+        : "No lines yet — planner assumes hand-feeding.";
       break;
     case "off":
       word = "■ OFF";
@@ -1171,6 +1237,160 @@ function PortChip({
           ].join(" ")}
         />
       </MinecraftTooltip>
+    </div>
+  );
+}
+
+// The custom rate placeholder's two wire-here ports. Both are universal: the
+// connect handlers in FactoryFlow spot the `custom-any` resource id and adopt
+// whatever resource the far end carries (the machine side decides direction).
+function CustomRateUniversalPorts({ nodeId }: { nodeId: string }) {
+  return (
+    <div className="my-2 flex flex-col gap-1">
+      <div className="flex items-center justify-between gap-3">
+        <UniversalPortChip nodeId={nodeId} side="input" label="Drain any" />
+        <UniversalPortChip nodeId={nodeId} side="output" label="Supply any" />
+      </div>
+      <p className="mx-auto max-w-[300px] text-center text-[11px] leading-tight text-[var(--mc-ink-muted)]">
+        Wire either port to any machine — this node adopts that resource. Right side
+        supplies it at a dialed rate, left side constantly drains it.
+      </p>
+    </div>
+  );
+}
+
+function UniversalPortChip({
+  nodeId,
+  side,
+  label,
+}: {
+  nodeId: string;
+  side: "input" | "output";
+  label: string;
+}) {
+  const isInput = side === "input";
+  const handleId = makeResourceHandleId(side, { kind: "item", id: CUSTOM_RATE_ANY_RESOURCE_ID });
+  return (
+    <div
+      className="relative flex h-[44px] w-[148px] items-center justify-center border-2 border-dashed border-[var(--mc-33)] bg-[var(--mc-71)] text-[11px] font-bold uppercase tracking-wide text-[var(--mc-ink-muted)]"
+      data-resource-edge-anchor="true"
+      data-resource-node-id={nodeId}
+      data-resource-handle-id={handleId}
+    >
+      {label}
+      <Handle
+        id={handleId}
+        type={isInput ? "target" : "source"}
+        position={isInput ? Position.Left : Position.Right}
+        data-resource-handle="true"
+        data-resource-node-id={nodeId}
+        data-resource-handle-id={handleId}
+        title={
+          isInput
+            ? "Request side: wire a machine output (or tank) here"
+            : "Supply side: wire a machine input (or tank) here"
+        }
+        className={[
+          "resource-slot-handle nodrag !absolute !left-0 !right-auto !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0",
+          "!rounded-none !border-0 !bg-transparent !opacity-0",
+          "cursor-crosshair",
+        ].join(" ")}
+      />
+    </div>
+  );
+}
+
+// Rate dial + Supply/Request flip for an adopted custom rate node. The store
+// keeps the rate per second; the input shows it in the active board unit.
+function CustomRatePanel({
+  nodeId,
+  mode,
+  kind,
+  perSecond,
+}: {
+  nodeId: string;
+  mode: CustomRateMode;
+  kind: ResourceAmount["kind"];
+  perSecond: number;
+}) {
+  const setCustomRateConfig = useFactoryStore((state) => state.setCustomRateConfig);
+  // Subscribe so the shown value re-derives when the board unit flips.
+  useFactoryStore((state) => state.rateUnit);
+  const multiplier = rateUnitMultiplier();
+  const shownRate = String(Math.round(perSecond * multiplier * 1000) / 1000);
+  const [draftState, setDraftState] = useState({ shownRate, draft: shownRate });
+  const draft = draftState.shownRate === shownRate ? draftState.draft : shownRate;
+
+  const commitDraft = (value: string) => {
+    const parsed = Number.parseFloat(value.replace(/,/g, "").trim());
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      setCustomRateConfig(nodeId, { perSecond: parsed / multiplier });
+    }
+  };
+  const flipMode = (nextMode: CustomRateMode) => {
+    if (nextMode !== mode) {
+      setCustomRateConfig(nodeId, { mode: nextMode });
+    }
+  };
+  const modeButtonClassName = (active: boolean) =>
+    [
+      "nodrag h-6 px-2 text-[11px] font-bold uppercase",
+      active
+        ? "bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-25),inset_-2px_-2px_0_var(--mc-85)]"
+        : "bg-[var(--mc-82)] text-[var(--mc-ink-muted)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-47)] hover:bg-[var(--mc-100)]",
+    ].join(" ");
+
+  return (
+    <div className="mt-1 flex items-center gap-1 border border-[var(--mc-47)] bg-[var(--mc-71)] p-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]">
+      <div className="flex border-2 border-[var(--mc-33)]">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            flipMode("supply");
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          className={modeButtonClassName(mode === "supply")}
+          title="Supply: makes the resource at this rate. Flipping reverses the node and drops its wires."
+        >
+          Supply
+        </button>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            flipMode("request");
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          className={modeButtonClassName(mode === "request")}
+          title="Request: constantly drains the resource at this rate. Flipping reverses the node and drops its wires."
+        >
+          Request
+        </button>
+      </div>
+      <input
+        value={draft}
+        onChange={(event) => {
+          const nextDraft = event.target.value;
+          setDraftState({ shownRate, draft: nextDraft });
+          commitDraft(nextDraft);
+        }}
+        onBlur={() => {
+          const parsed = Number.parseFloat(draft.replace(/,/g, "").trim());
+          if (!Number.isFinite(parsed) || parsed < 0) {
+            setDraftState({ shownRate, draft: shownRate });
+          }
+        }}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
+        inputMode="decimal"
+        aria-label="Rate"
+        title="Rate in the board's active unit"
+        className="nodrag h-6 w-0 min-w-0 flex-1 border border-[var(--mc-33)] bg-[var(--mc-93)] px-1 text-right text-[12px] text-[var(--mc-ink)]"
+      />
+      <span className="shrink-0 pr-1 text-[11px] font-bold text-[var(--mc-ink-muted)]">
+        {rateUnitSuffix(kind === "fluid").trim() || "/s"}
+      </span>
     </div>
   );
 }

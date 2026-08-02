@@ -8,6 +8,7 @@ import type {
   ThroughputResult,
 } from "@/lib/model/types";
 import { isRecipeInputConsumed, makeResourceKey } from "@/lib/model";
+import { isCustomRateRecipe } from "@/lib/model/custom-rate";
 import { makeResourceHandleId } from "./resource-handles";
 
 type ProjectEdge = FactoryProject["edges"][number];
@@ -903,8 +904,14 @@ export function buildLimitLadder(
   const rungs: LimitRung[] = [];
 
   // Fleet first: on a 100% tie with a supply rung, "machine count" is the
-  // actionable name (dedupe keeps the first of a tie).
-  rungs.push({ pct: 100, label: "machine count", now: false });
+  // actionable name (dedupe keeps the first of a tie). Custom rate nodes have
+  // no fleet — their 100% ceiling is the dial.
+  const recipe = project.recipes.find((entry) => entry.id === node.recipeId);
+  rungs.push({
+    pct: 100,
+    label: isCustomRateRecipe(recipe) ? "dialed rate" : "machine count",
+    now: false,
+  });
 
   for (const [key, flow] of Object.entries(nodeResult.inputs)) {
     if (flow.amountPerSecond <= RATE_EPSILON) {

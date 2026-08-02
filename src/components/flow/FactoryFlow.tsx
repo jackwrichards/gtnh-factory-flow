@@ -28,6 +28,7 @@ import {
 } from "@xyflow/react";
 import { toBlob, toSvg } from "html-to-image";
 import {
+  Gauge,
   LoaderCircle,
   MoveUpRight,
   Paintbrush,
@@ -104,6 +105,7 @@ import {
   isEdgeSurplus,
 } from "./edge-labels";
 import { buildEdgeStory } from "./flow-explainers";
+import { CUSTOM_RATE_ANY_RESOURCE_ID } from "@/lib/model/custom-rate";
 import { rateUnitSuffix, type RateUnit } from "@/lib/model/rate-unit";
 import { getSupplyCeiling } from "@/components/inspector/usage-limits";
 import {
@@ -448,6 +450,7 @@ export function FactoryFlow() {
   const updateStorage = useFactoryStore((state) => state.updateStorage);
   const setStoragePosition = useFactoryStore((state) => state.setStoragePosition);
   const connectNodes = useFactoryStore((state) => state.connectNodes);
+  const connectCustomRate = useFactoryStore((state) => state.connectCustomRate);
   const addStorageForConnection = useFactoryStore((state) => state.addStorageForConnection);
   const selectedNodeId = useFactoryStore((state) => state.selectedNodeId);
   const deleteNode = useFactoryStore((state) => state.deleteNode);
@@ -931,6 +934,28 @@ export function FactoryFlow() {
         const targetHandle = parseResourceHandleId(connection.targetHandle);
 
         if (sourceHandle && targetHandle && sourceHandle.side !== targetHandle.side) {
+          // A custom-rate node's universal port adopts whatever it's wired to.
+          const sourceIsAny = sourceHandle.resourceId === CUSTOM_RATE_ANY_RESOURCE_ID;
+          const targetIsAny = targetHandle.resourceId === CUSTOM_RATE_ANY_RESOURCE_ID;
+          if (sourceIsAny !== targetIsAny) {
+            const customEnd = sourceIsAny
+              ? { nodeId: connection.source, side: sourceHandle.side }
+              : { nodeId: connection.target, side: targetHandle.side };
+            const machineEnd = sourceIsAny
+              ? { nodeId: connection.target, handleId: connection.targetHandle ?? undefined }
+              : { nodeId: connection.source, handleId: connection.sourceHandle ?? undefined };
+            const machineResource = machineEnd.handleId
+              ? getResourceForHandle(project, machineEnd.nodeId, machineEnd.handleId)
+              : undefined;
+            if (machineResource) {
+              connectCustomRate(customEnd.nodeId, customEnd.side, machineEnd, machineResource);
+            }
+            return;
+          }
+          if (sourceIsAny && targetIsAny) {
+            return;
+          }
+
           const outputHandle =
             sourceHandle.side === "output"
               ? { nodeId: connection.source, handleId: connection.sourceHandle ?? undefined }
@@ -975,7 +1000,7 @@ export function FactoryFlow() {
         connectResourceEdges(connection.source, connection.target);
       }
     },
-    [connectResourceEdges, project],
+    [connectCustomRate, connectResourceEdges, project],
   );
 
   const isValidResourceConnection = useCallback(
@@ -1022,6 +1047,22 @@ export function FactoryFlow() {
       }
 
       if (draggedResource && targetHandle) {
+        // Dropped onto a custom-rate node's universal port: the machine side
+        // decides direction (an output feeds it, an input drinks from it).
+        if (
+          targetHandle.resourceId === CUSTOM_RATE_ANY_RESOURCE_ID &&
+          draggedResource.id !== CUSTOM_RATE_ANY_RESOURCE_ID &&
+          draggedResource.nodeId !== targetHandle.nodeId
+        ) {
+          connectCompletedRef.current = true;
+          connectCustomRate(
+            targetHandle.nodeId,
+            draggedResource.side === "input" ? "output" : "input",
+            { nodeId: draggedResource.nodeId, handleId: draggedResource.handleId },
+            draggedResource,
+          );
+          return;
+        }
         if (isCompatibleDraggedResourceTarget(project, draggedResource, targetHandle)) {
           const source =
             draggedResource.side === "output"
@@ -1095,7 +1136,7 @@ export function FactoryFlow() {
         draggedResource.handleId,
       );
     },
-    [addStorageForConnection, connectResourceEdges, project],
+    [addStorageForConnection, connectCustomRate, connectResourceEdges, project],
   );
 
   useEffect(() => {
@@ -1749,6 +1790,7 @@ const RATE_UNIT_CHOICES: Array<{ unit: RateUnit; label: string; title: string }>
 
 const SourceToolbar = memo(function SourceToolbar() {
   const addCropFarmNode = useFactoryStore((state) => state.addCropFarmNode);
+  const addCustomRateNode = useFactoryStore((state) => state.addCustomRateNode);
   const rateUnit = useFactoryStore((state) => state.rateUnit);
   const setRateUnit = useFactoryStore((state) => state.setRateUnit);
 
@@ -1765,6 +1807,15 @@ const SourceToolbar = memo(function SourceToolbar() {
         aria-label="Add crop farm"
       >
         <Sprout className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        onClick={addCustomRateNode}
+        className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
+        title="Add custom rate node: wire it to any port, dial a rate — supplies the resource, or flips to a constant request drain"
+        aria-label="Add custom rate node"
+      >
+        <Gauge className="h-4 w-4" />
       </button>
       <div className="pointer-events-auto flex">
         {RATE_UNIT_CHOICES.map((choice) => (
@@ -2806,37 +2857,61 @@ function getEdgeEndpointOffsets(project: FactoryProject) {
     }>
   >();
 
+  const storageYById = new Map(
+    (project.storages ?? []).map((storage) => [storage.id, storage.position?.y ?? 0]),
+  );
+  const counterpartYOf = (id: string) =>
+    nodesById.get(id)?.position.y ?? storageYById.get(id) ?? 0;
+
   for (const edge of project.edges) {
     // Rails pool one port per resource, so every edge whose (possibly legacy
     // per-slot) handle collapses onto the same canonical id shares a port and
-    // must fan out along it.
+    // must fan out along it. Storages fan out too — several wires into one
+    // tank used to dock on the same point and ride each other.
     const sourceHandle = parseResourceHandleId(edge.sourceHandle);
-    if (sourceHandle && !storagesById.has(edge.source)) {
+    if (storagesById.has(edge.source)) {
+      addEndpointOffsetGroupEntry(groups, {
+        key: `${edge.source}|storage-out`,
+        edgeId: edge.id,
+        endpoint: "source",
+        counterpartY: counterpartYOf(edge.target),
+      });
+    } else if (sourceHandle) {
       addEndpointOffsetGroupEntry(groups, {
         key: `${edge.source}|${canonicalizeResourceHandleId(edge.sourceHandle)}`,
         edgeId: edge.id,
         endpoint: "source",
-        counterpartY: nodesById.get(edge.target)?.position.y ?? 0,
+        counterpartY: counterpartYOf(edge.target),
       });
     }
 
     const targetHandle = parseResourceHandleId(edge.targetHandle);
-    if (targetHandle && !storagesById.has(edge.target)) {
+    if (storagesById.has(edge.target)) {
+      addEndpointOffsetGroupEntry(groups, {
+        key: `${edge.target}|storage-in`,
+        edgeId: edge.id,
+        endpoint: "target",
+        counterpartY: counterpartYOf(edge.source),
+      });
+    } else if (targetHandle) {
       addEndpointOffsetGroupEntry(groups, {
         key: `${edge.target}|${canonicalizeResourceHandleId(edge.targetHandle)}`,
         edgeId: edge.id,
         endpoint: "target",
-        counterpartY: nodesById.get(edge.source)?.position.y ?? 0,
+        counterpartY: counterpartYOf(edge.source),
       });
     }
   }
 
   const offsets = new Map<string, number>();
-  for (const group of groups.values()) {
+  for (const [key, group] of groups) {
     if (group.length < 2) {
       continue;
     }
 
+    // Storage cards are wide open — spread their dock points far enough
+    // apart to read as separate wires, not a 5px smear.
+    const spacing = key.includes("|storage-") ? 16 : EDGE_ENDPOINT_SPACING;
     const sortedGroup = [...group].sort(
       (left, right) =>
         left.counterpartY - right.counterpartY ||
@@ -2844,19 +2919,19 @@ function getEdgeEndpointOffsets(project: FactoryProject) {
         left.endpoint.localeCompare(right.endpoint),
     );
     sortedGroup.forEach((entry, index) => {
-      offsets.set(`${entry.edgeId}:${entry.endpoint}`, getStackedEndpointOffset(index));
+      offsets.set(`${entry.edgeId}:${entry.endpoint}`, getStackedEndpointOffset(index, spacing));
     });
   }
 
   return offsets;
 }
 
-function getStackedEndpointOffset(index: number) {
+function getStackedEndpointOffset(index: number, spacing = EDGE_ENDPOINT_SPACING) {
   if (index === 0) {
     return 0;
   }
 
-  const step = Math.ceil(index / 2) * EDGE_ENDPOINT_SPACING;
+  const step = Math.ceil(index / 2) * spacing;
   return index % 2 === 1 ? step : -step;
 }
 
@@ -6148,6 +6223,25 @@ function isCompatibleResourceConnection(
   const targetHandle = parseResourceHandleId(connection.targetHandle);
   if (!sourceHandle || !targetHandle) {
     return false;
+  }
+
+  // Custom-rate universal ports accept any concrete resource on the far end.
+  const sourceIsAny = sourceHandle.resourceId === CUSTOM_RATE_ANY_RESOURCE_ID;
+  const targetIsAny = targetHandle.resourceId === CUSTOM_RATE_ANY_RESOURCE_ID;
+  if (sourceIsAny || targetIsAny) {
+    if (sourceIsAny && targetIsAny) {
+      return false;
+    }
+    if (sourceHandle.side === targetHandle.side) {
+      return false;
+    }
+    const machineNodeId = sourceIsAny ? connection.target : connection.source;
+    const machineHandleId = sourceIsAny ? connection.targetHandle : connection.sourceHandle;
+    return Boolean(
+      machineNodeId &&
+        machineHandleId &&
+        getResourceForHandle(project, machineNodeId, machineHandleId),
+    );
   }
 
   const sourceResource =

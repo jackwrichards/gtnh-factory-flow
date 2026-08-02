@@ -32,7 +32,7 @@ type StorageMode = "supply" | "blackhole" | "buffer" | "idle";
 
 const MODE_BADGE: Record<StorageMode, { word: string; className: string }> = {
   supply: { word: "INFINITE SUPPLY", className: "bg-[#2f7a3d] text-white" },
-  blackhole: { word: "BLACK HOLE", className: "bg-[#3a3a3a] text-[#e8b3b3]" },
+  blackhole: { word: "INFINITE STORAGE", className: "bg-[#3f4652] text-white" },
   buffer: { word: "BUFFER", className: "bg-[#5f7f9c] text-white" },
   idle: { word: "UNWIRED", className: "bg-[#8a8a8a] text-white" },
 };
@@ -133,9 +133,9 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
       />
       <div
         className={[
-          "storage-node-card w-[174px] border-2 p-1",
+          "storage-node-card w-[132px] border-2 p-1",
           isTank
-            ? "border-[#6d8fae] bg-[#cfe4f5] shadow-[inset_2px_2px_0_#eef7ff,inset_-2px_-2px_0_#9db8d2]"
+            ? "border-[#565f72] bg-[#b9c2d4] shadow-[inset_2px_2px_0_#e8edf7,inset_-2px_-2px_0_#7b8497]"
             : "border-[#2b1c0e] bg-[#8a6030] shadow-[inset_3px_3px_0_#ad7b3e,inset_-3px_-3px_0_#3e2a13]",
           isHighlighted || isSearchHighlighted ? "brightness-125 saturate-150" : "",
         ].join(" ")}
@@ -171,31 +171,30 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               className="nodrag !absolute !bottom-0 !left-auto !right-0 !top-0 !z-30 !h-full !w-1/2 !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
             />
             {isTank ? (
-              // A tank: pale glass window with a shine, riveted steel-blue frame.
-              <div className="mx-auto grid h-[72px] w-[132px] place-items-center border-2 border-[#7fa3c4] bg-[linear-gradient(135deg,#eaf6ff_0%,#d3e9fb_45%,#bcd9f2_100%)] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#a7c4dd]">
-                <div className="pointer-events-none absolute left-2 top-2 h-1.5 w-10 -skew-x-12 bg-white/70" />
+              // The original tank look — steel frame, dark glass well — just
+              // tighter, with the fluid icon much larger inside it.
+              <div className="mx-auto grid h-[84px] w-[112px] place-items-center border-2 border-[#1f1f1f] bg-black shadow-[inset_5px_5px_0_#1f2933,inset_-5px_-5px_0_#050505]">
                 <ResourceIcon
                   resource={{ ...storage, id: storage.resourceId, amount: 1 }}
                   size="sm"
                   showAmount={false}
                   bare
-                  className="!h-11 !w-11"
+                  className="!h-16 !w-16"
                 />
               </div>
             ) : (
-              // A drawer: wooden front panel with the item as its label and a
-              // knob under it, storage-drawers style.
-              <div className="mx-auto flex h-[72px] w-[132px] flex-col items-center justify-center gap-1 border-2 border-[#3a260f] bg-[#9c6b36] shadow-[inset_2px_2px_0_#c08b4a,inset_-2px_-2px_0_#5a3b1b]">
-                <div className="grid h-11 w-11 place-items-center border-2 border-[#5a3b1b] bg-[#d8c4b4] shadow-[inset_1px_1px_0_#fff,inset_-1px_-1px_0_#7d6d61]">
+              // The original drawer look — wood well, parchment face — tighter,
+              // with the item icon much larger.
+              <div className="mx-auto grid h-[84px] w-[112px] place-items-center border-2 border-[#3a260f] bg-[#7a5427] shadow-[inset_5px_5px_0_#5a3b1b,inset_-5px_-5px_0_#4a3117]">
+                <div className="grid h-[72px] w-[72px] place-items-center border-2 border-[#1f1f1f] bg-[#d8c4b4] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#7d6d61]">
                   <ResourceIcon
                     resource={{ ...storage, id: storage.resourceId, amount: 1 }}
                     size="sm"
                     showAmount={false}
                     bare
-                    className="!h-9 !w-9"
+                    className="!h-16 !w-16"
                   />
                 </div>
-                <span className="h-2 w-2 rounded-full bg-[#3a260f] shadow-[inset_1px_1px_0_#1f1206]" />
               </div>
             )}
           </div>
@@ -239,7 +238,7 @@ function StorageHeader({
     <div
       className={[
         "storage-node-header flex h-6 items-center gap-1 border-b-2 px-1 shadow-[inset_1px_1px_0_rgba(255,255,255,0.55)]",
-        isTank ? "border-[#7fa3c4] bg-[#b7d7ef]" : "border-[#4f3518] bg-[#8a6030]",
+        isTank ? "border-[#747c91] bg-[#b8c1d9]" : "border-[#4f3518] bg-[#8a6030]",
       ].join(" ")}
     >
       <button
@@ -319,7 +318,7 @@ function renderStorageHoverContent(storage: FactoryStorage, mode: StorageMode): 
     mode === "supply"
       ? "Infinite supply: nothing refills this — it hands out whatever is asked."
       : mode === "blackhole"
-        ? "Black hole: nothing draws from this — everything sent here just piles up."
+        ? "Infinite storage: nothing draws from this — everything sent here piles up."
         : mode === "buffer"
           ? "Buffer: fills from the left list, drains to the right one."
           : "Unwired — connect lines to use it.";

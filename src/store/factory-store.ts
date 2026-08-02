@@ -8,6 +8,13 @@ import { setActiveRateUnit, type RateUnit } from "@/lib/model/rate-unit";
 import { calculateThroughput } from "@/lib/solver";
 import { applyRecipeInputOverrides } from "@/lib/model/recipe-input-overrides";
 import { createCropFarmPlaceholderRecipe } from "@/lib/model/passive-production";
+import {
+  createCustomRatePlaceholderRecipe,
+  getCustomRateSlot,
+  isCustomRateRecipe,
+  withCustomRateSlot,
+  type CustomRateMode,
+} from "@/lib/model/custom-rate";
 import { optimizeMachineCountsForProject } from "@/lib/solver/machine-count-optimizer";
 import {
   getFilledCellFluidEquivalent,
@@ -144,6 +151,23 @@ interface FactoryStore {
   updateNode: (nodeId: string, patch: Partial<FactoryNode>) => void;
   /** Drops an empty crop source node; a crop is picked on the node itself. */
   addCropFarmNode: () => void;
+  /** A dial-a-rate source/sink node; adopts its resource from the first wire. */
+  addCustomRateNode: () => void;
+  /** Rate stored per second. Flipping the mode reverses direction and drops wires. */
+  setCustomRateConfig: (
+    nodeId: string,
+    patch: { perSecond?: number; mode?: CustomRateMode },
+  ) => void;
+  /** Wire landed on a custom-rate node's universal port: adopt + connect. */
+  connectCustomRate: (
+    customNodeId: string,
+    customSide: "input" | "output",
+    machine: { nodeId: string; handleId?: string },
+    resource: Pick<
+      ResourceAmount,
+      "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor" | "tooltip"
+    >,
+  ) => void;
   /** Swaps the node onto another recipe (crop pick), resetting per-recipe state. */
   setNodeRecipe: (nodeId: string, recipe: Recipe) => void;
   deleteNode: (nodeId: string) => void;
@@ -676,6 +700,99 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       }),
     );
   },
+  addCustomRateNode: () => {
+    // Each custom rate node owns its recipe (the rate lives on it).
+    set((state) =>
+      addRecipeNodeToState(
+        state,
+        createCustomRatePlaceholderRecipe(createId("recipe")),
+        undefined,
+        { colorTag: "blue" },
+      ),
+    );
+  },
+  setCustomRateConfig: (nodeId, patch) => {
+    set((state) => {
+      const node = state.project.nodes.find((entry) => entry.id === nodeId);
+      const recipe = node
+        ? state.project.recipes.find((entry) => entry.id === node.recipeId)
+        : undefined;
+      if (!node || !recipe || !isCustomRateRecipe(recipe)) {
+        return state;
+      }
+      const slot = getCustomRateSlot(recipe);
+      if (!slot) {
+        return state;
+      }
+      const mode = patch.mode ?? slot.mode;
+      const perSecond = patch.perSecond ?? slot.resource.amount;
+      const nextRecipe = withCustomRateSlot(recipe, slot.resource, mode, perSecond);
+      const modeFlipped = mode !== slot.mode;
+      const project = touchProject({
+        ...state.project,
+        recipes: state.project.recipes.map((entry) =>
+          entry.id === recipe.id ? nextRecipe : entry,
+        ),
+        // A flipped mode reverses the node's direction — old wires point the
+        // wrong way, so they drop.
+        edges: modeFlipped
+          ? state.project.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+          : state.project.edges,
+      });
+      return withProjectHistory(state, { project, lastResult: calculateThroughput(project) });
+    });
+  },
+  connectCustomRate: (customNodeId, customSide, machine, resource) => {
+    set((state) => {
+      const node = state.project.nodes.find((entry) => entry.id === customNodeId);
+      const recipe = node
+        ? state.project.recipes.find((entry) => entry.id === node.recipeId)
+        : undefined;
+      if (!node || !recipe || !isCustomRateRecipe(recipe)) {
+        return state;
+      }
+      const existing = getCustomRateSlot(recipe);
+      const mode: CustomRateMode = customSide === "output" ? "supply" : "request";
+      const perSecond = existing?.resource.amount ?? 1;
+      const resourceChanged =
+        existing !== undefined &&
+        (existing.resource.kind !== resource.kind || existing.resource.id !== resource.id);
+      const modeChanged = existing !== undefined && existing.mode !== mode;
+      const nextRecipe = withCustomRateSlot(recipe, resource, mode, perSecond);
+      const canonicalHandle = makeResourceHandleId(customSide, {
+        kind: resource.kind,
+        id: resource.id,
+      });
+      const edge: FactoryEdge = {
+        id: createId("edge"),
+        source: mode === "supply" ? customNodeId : machine.nodeId,
+        target: mode === "supply" ? machine.nodeId : customNodeId,
+        resourceKind: resource.kind,
+        resourceId: resource.id,
+        label: resource.displayName,
+        sourceHandle: mode === "supply" ? canonicalHandle : machine.handleId,
+        targetHandle: mode === "supply" ? machine.handleId : canonicalHandle,
+      };
+      const keptEdges =
+        resourceChanged || modeChanged
+          ? state.project.edges.filter(
+              (entry) => entry.source !== customNodeId && entry.target !== customNodeId,
+            )
+          : state.project.edges;
+      const project = touchProject({
+        ...state.project,
+        recipes: state.project.recipes.map((entry) =>
+          entry.id === recipe.id ? nextRecipe : entry,
+        ),
+        edges: [...keptEdges, edge],
+      });
+      return withProjectHistory(state, {
+        project,
+        selectedNodeId: customNodeId,
+        lastResult: calculateThroughput(project),
+      });
+    });
+  },
   setNodeRecipe: (nodeId, recipe) => {
     set((state) => {
       const node = state.project.nodes.find((entry) => entry.id === nodeId);
@@ -880,8 +997,17 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       const clone = structuredClone(node);
       clone.id = createId("node");
       clone.position = { x: node.position.x + 48, y: node.position.y + 48 };
+      // Custom rate nodes own their recipe (the dialed rate lives on it), so
+      // the clone gets its own copy — otherwise both nodes share one dial.
+      const recipe = state.project.recipes.find((entry) => entry.id === node.recipeId);
+      let clonedRecipe: Recipe | undefined;
+      if (recipe && isCustomRateRecipe(recipe)) {
+        clonedRecipe = { ...structuredClone(recipe), id: createId("recipe") };
+        clone.recipeId = clonedRecipe.id;
+      }
       const project = touchProject({
         ...state.project,
+        recipes: clonedRecipe ? [...state.project.recipes, clonedRecipe] : state.project.recipes,
         nodes: [...state.project.nodes, clone],
       });
       return withProjectHistory(state, {
