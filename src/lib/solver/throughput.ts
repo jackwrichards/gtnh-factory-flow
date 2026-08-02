@@ -1193,8 +1193,9 @@ function calculateConnectedInputSupply(
 function selectConnectedInputSupplyLimit(
   nodeResult: NodeThroughputResult,
   supplyByResource: Map<ResourceKey, number> | undefined,
-): number | undefined {
+): { limit: number; resourceKey: ResourceKey } | undefined {
   let limit: number | undefined;
+  let limitKey: ResourceKey | undefined;
 
   for (const [resourceKey, suppliedPerSecond] of supplyByResource ?? []) {
     const inputFlow = nodeResult.inputs[resourceKey];
@@ -1203,10 +1204,13 @@ function selectConnectedInputSupplyLimit(
     }
 
     const inputLimit = suppliedPerSecond / inputFlow.amountPerSecond;
-    limit = limit === undefined ? inputLimit : Math.min(limit, inputLimit);
+    if (limit === undefined || inputLimit < limit) {
+      limit = inputLimit;
+      limitKey = resourceKey;
+    }
   }
 
-  return limit;
+  return limit === undefined || limitKey === undefined ? undefined : { limit, resourceKey: limitKey };
 }
 
 function refreshNodeUtilizationFromEdgeResults(
@@ -1294,10 +1298,11 @@ function refreshNodeUtilizationFromEdgeResults(
       requiredByResource,
     );
     const demandOnlyUtilization = utilizationReport.utilization;
-    const inputSupplyLimit = selectConnectedInputSupplyLimit(
+    const inputSupply = selectConnectedInputSupplyLimit(
       nodeResult,
       inputSupplyByNodeAndResource.get(node.id),
     );
+    const inputSupplyLimit = inputSupply?.limit;
     if (inputSupplyLimit !== undefined && inputSupplyLimit < utilizationReport.utilization) {
       utilizationReport.utilization = inputSupplyLimit;
       utilizationReport.requiredRatePerSecond =
@@ -1312,6 +1317,11 @@ function refreshNodeUtilizationFromEdgeResults(
     }
 
     const capableUtilization = clampUtilization(inputSupplyLimit ?? 1);
+    // THE bottleneck, by the solver's own arithmetic: the input whose supply
+    // ratio was the minimum it just took. The UI must never re-derive this
+    // from per-edge figures (the damped asks make them incomparable).
+    nodeResult.limitingInputKey =
+      inputSupply && inputSupply.limit < 1 - EPSILON ? inputSupply.resourceKey : undefined;
     const demandUtilization = clampUtilization(demandOnlyUtilization);
     if (
       Math.abs(nodeResult.utilization - utilizationReport.utilization) > EPSILON ||

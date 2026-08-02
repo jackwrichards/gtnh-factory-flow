@@ -424,6 +424,13 @@ export interface NodeThroughputResult {
   demandUtilization?: number;
   theoreticalMachinesRequired: number;
   limitingResource?: ResourceFlow;
+  /**
+   * THE bottleneck, by the solver's own arithmetic: the connected input whose
+   * supply ratio was the minimum taken when computing `capableUtilization`.
+   * The UI must display this rather than re-derive a pick from per-edge
+   * figures — the damped asks make those incomparable across inputs.
+   */
+  limitingInputKey?: ResourceKey;
   status: "disabled" | "balanced" | "underutilized" | "bottleneck" | "missing-recipe";
   warnings: string[];
 }

@@ -311,32 +311,60 @@ function findBindingInput(
   let binding:
     | { key: string; ratio: number; supplied: number; need: number; edges: ProjectEdge[] }
     | undefined;
-  for (const [key, flow] of Object.entries(nodeResult.inputs)) {
-    if (flow.amountPerSecond <= RATE_EPSILON) {
-      continue;
-    }
+
+  // Jack's definition, verbatim: "bottleneck = the thing that is setting
+  // this machine's usage percent." The solver knows which input that was —
+  // it took the min itself — so trust its report and never out-guess it
+  // with a ratio scan over damped per-edge figures.
+  const solverPick = nodeResult.limitingInputKey;
+  if (solverPick) {
+    const flow = nodeResult.inputs[solverPick];
     const edges = incoming.filter(
-      (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === key,
+      (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === solverPick,
     );
-    // Unconnected inputs are hand-fed by convention and never bind.
-    if (edges.length === 0) {
-      continue;
+    if (flow && flow.amountPerSecond > RATE_EPSILON && edges.length > 0) {
+      let supplied = 0;
+      for (const edge of edges) {
+        const edgeResult = result.edges[edge.id];
+        // Raw figures here — this is the basis the solver actually used.
+        supplied += edgeResult?.availablePerSecond ?? edgeResult?.transferredPerSecond ?? 0;
+      }
+      binding = { key: solverPick, ratio: 0, supplied, need: flow.amountPerSecond, edges };
     }
-    let supplied = 0;
-    for (const edge of edges) {
-      supplied += honestEdgeAvailablePerSecond(result.edges[edge.id], storageIds.has(edge.source));
-    }
-    // A non-dry buffer line covers whatever is needed — this input can't bind.
-    if (!Number.isFinite(supplied)) {
-      continue;
-    }
-    // On a starving machine, demand is by definition not the limiter, so the
-    // honest need is the FULL-BLAST one. Scaling by the solver's damped
-    // demand made this circular ("gets 102 of the needed 102").
-    const need = flow.amountPerSecond;
-    const ratio = need > RATE_EPSILON ? supplied / need : 1;
-    if (!binding || ratio < binding.ratio) {
-      binding = { key, ratio, supplied, need, edges };
+  }
+
+  if (!binding) {
+    // Fallback ratio scan for results that predate the solver's own report.
+    for (const [key, flow] of Object.entries(nodeResult.inputs)) {
+      if (flow.amountPerSecond <= RATE_EPSILON) {
+        continue;
+      }
+      const edges = incoming.filter(
+        (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === key,
+      );
+      // Unconnected inputs are hand-fed by convention and never bind.
+      if (edges.length === 0) {
+        continue;
+      }
+      let supplied = 0;
+      for (const edge of edges) {
+        supplied += honestEdgeAvailablePerSecond(
+          result.edges[edge.id],
+          storageIds.has(edge.source),
+        );
+      }
+      // A non-dry buffer line covers whatever is needed — this input can't bind.
+      if (!Number.isFinite(supplied)) {
+        continue;
+      }
+      // On a starving machine, demand is by definition not the limiter, so the
+      // honest need is the FULL-BLAST one. Scaling by the solver's damped
+      // demand made this circular ("gets 102 of the needed 102").
+      const need = flow.amountPerSecond;
+      const ratio = need > RATE_EPSILON ? supplied / need : 1;
+      if (!binding || ratio < binding.ratio) {
+        binding = { key, ratio, supplied, need, edges };
+      }
     }
   }
 
