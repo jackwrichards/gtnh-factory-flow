@@ -431,6 +431,12 @@ export interface NodeThroughputResult {
    * figures — the damped asks make those incomparable across inputs.
    */
   limitingInputKey?: ResourceKey;
+  /**
+   * Inputs whose supply ratio sits within the tie window of the minimum:
+   * as far as the figures can tell they are the SAME wall, and raising any
+   * one of them may just hand the limit to the next. Order-independent.
+   */
+  limitingInputTiedKeys?: ResourceKey[];
   status: "disabled" | "balanced" | "underutilized" | "bottleneck" | "missing-recipe";
   warnings: string[];
 }

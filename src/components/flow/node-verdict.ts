@@ -66,6 +66,13 @@ export interface NodeVerdict {
     /** Who to fix: the machine/buffer on the short line, if identifiable. */
     upstreamName?: string;
     upstream?: UpstreamCulprit;
+    /**
+     * Inputs tied with this one at the limit (within the solver's tie
+     * window): the figures cannot distinguish them, so the UI marks them
+     * all and says so instead of crowning one arbitrarily.
+     */
+    tiedKeys?: string[];
+    tiedWithNames?: string[];
   };
   /** Choke: the worst unmet downstream ask across this node's outputs. */
   deficit?: {
@@ -382,6 +389,13 @@ function findBindingInput(
     shortfallPerSecond,
     binding.need,
   );
+  const tiedKeys = nodeResult.limitingInputTiedKeys?.filter((key) => key !== binding!.key);
+  const tiedWithNames = tiedKeys
+    ?.map((key) => {
+      const tiedFlow = nodeResult.inputs[key as keyof typeof nodeResult.inputs];
+      return tiedFlow?.displayName ?? tiedFlow?.resourceId ?? key;
+    })
+    .filter(Boolean);
   return {
     resourceKey: binding.key,
     kind: flow?.kind ?? "item",
@@ -391,6 +405,8 @@ function findBindingInput(
     shortfallPerSecond,
     upstreamName: upstream?.name,
     upstream,
+    tiedKeys: tiedKeys && tiedKeys.length > 0 ? tiedKeys : undefined,
+    tiedWithNames: tiedWithNames && tiedWithNames.length > 0 ? tiedWithNames : undefined,
   };
 }
 
@@ -678,7 +694,9 @@ export function buildRailPorts(
       }
       const wantedByLines = machineAsk + storageGet;
 
-      const isBinding = verdict.kind === "starved" && verdict.binding?.resourceKey === key;
+      const isBinding =
+        verdict.kind === "starved" &&
+        (verdict.binding?.resourceKey === key || verdict.binding?.tiedKeys?.includes(key) === true);
       const askRate = nameplate * Math.min(demand, 1);
 
       let tone: RailPort["tone"] = "ok";

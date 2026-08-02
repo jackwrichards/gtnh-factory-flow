@@ -1193,11 +1193,16 @@ function calculateConnectedInputSupply(
 function selectConnectedInputSupplyLimit(
   nodeResult: NodeThroughputResult,
   supplyByResource: Map<ResourceKey, number> | undefined,
-): { limit: number; resourceKey: ResourceKey } | undefined {
+): { limit: number; resourceKey: ResourceKey; tiedKeys: ResourceKey[] } | undefined {
+  // Sorted by key so the answer can never depend on edge-array order —
+  // deleting and re-adding a wire must not move the bottleneck.
+  const entries = [...(supplyByResource ?? [])].sort(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  );
+
   let limit: number | undefined;
   let limitKey: ResourceKey | undefined;
-
-  for (const [resourceKey, suppliedPerSecond] of supplyByResource ?? []) {
+  for (const [resourceKey, suppliedPerSecond] of entries) {
     const inputFlow = nodeResult.inputs[resourceKey];
     if (!inputFlow || inputFlow.amountPerSecond <= EPSILON) {
       continue;
@@ -1209,8 +1214,28 @@ function selectConnectedInputSupplyLimit(
       limitKey = resourceKey;
     }
   }
+  if (limit === undefined || limitKey === undefined) {
+    return undefined;
+  }
 
-  return limit === undefined || limitKey === undefined ? undefined : { limit, resourceKey: limitKey };
+  // Inputs within 1% of the minimum are the SAME wall as far as the damped
+  // figures can tell — crowning exactly one would be float-dust theater.
+  const tieWindow = Math.max(EPSILON, limit * 0.01);
+  const tiedKeys: ResourceKey[] = [];
+  for (const [resourceKey, suppliedPerSecond] of entries) {
+    if (resourceKey === limitKey) {
+      continue;
+    }
+    const inputFlow = nodeResult.inputs[resourceKey];
+    if (!inputFlow || inputFlow.amountPerSecond <= EPSILON) {
+      continue;
+    }
+    if (suppliedPerSecond / inputFlow.amountPerSecond <= limit + tieWindow) {
+      tiedKeys.push(resourceKey);
+    }
+  }
+
+  return { limit, resourceKey: limitKey, tiedKeys };
 }
 
 function refreshNodeUtilizationFromEdgeResults(
@@ -1322,6 +1347,10 @@ function refreshNodeUtilizationFromEdgeResults(
     // from per-edge figures (the damped asks make them incomparable).
     nodeResult.limitingInputKey =
       inputSupply && inputSupply.limit < 1 - EPSILON ? inputSupply.resourceKey : undefined;
+    nodeResult.limitingInputTiedKeys =
+      inputSupply && inputSupply.limit < 1 - EPSILON && inputSupply.tiedKeys.length > 0
+        ? inputSupply.tiedKeys
+        : undefined;
     const demandUtilization = clampUtilization(demandOnlyUtilization);
     if (
       Math.abs(nodeResult.utilization - utilizationReport.utilization) > EPSILON ||

@@ -463,10 +463,21 @@ function explainInputPort(
     };
   }
 
-  if (verdict.kind === "starved" && verdict.binding?.resourceKey === port.key) {
+  if (
+    verdict.kind === "starved" &&
+    (verdict.binding?.resourceKey === port.key ||
+      verdict.binding?.tiedKeys?.includes(port.key) === true)
+  ) {
     const binding = verdict.binding;
     const upstream = binding.upstream;
-    const whyLine = `Bottleneck: gets ${fmt(binding.suppliedPerSecond)} of ${fmt(binding.neededPerSecond)} — machine at ${formatPct(verdict.pct)}%.`;
+    const tieNote = binding.tiedWithNames?.length
+      ? ` Tied with ${
+          binding.resourceKey === port.key
+            ? binding.tiedWithNames.join(", ")
+            : [binding.displayName, ...binding.tiedWithNames.filter((name) => name !== port.displayName)].join(", ")
+        } — the figures can't split them.`
+      : "";
+    const whyLine = `Bottleneck: gets ${fmt(binding.suppliedPerSecond)} of ${fmt(binding.neededPerSecond)} — machine at ${formatPct(verdict.pct)}%.${tieNote}`;
     const action: PortStory["action"] = {
       tone: "fix",
       text:

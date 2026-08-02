@@ -674,7 +674,10 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
       const binding = verdict.binding;
       cause = `An input shortage forces this machine to run only ${formatPct(verdict.pct)}% of the time.`;
       const upstream = binding?.upstream;
-      if (!upstream) {
+      if (binding?.tiedWithNames?.length) {
+        // Crowning one of a tie is float-dust theater; say what's true.
+        action = `→ ${binding.displayName} + ${binding.tiedWithNames.join(" + ")} are tied at the limit — raise either.`;
+      } else if (!upstream) {
         action = "→ Fix the supply lines.";
       } else if (upstream.kind === "loop") {
         action = "→ Fed by its own loop — prime it from a buffer.";
