@@ -364,7 +364,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   return (
     <div
       className={[
-        "group relative w-max",
+        // pointer-events-none: the gutter is measured node (the router must
+        // treat plugs as body) but must never be a phantom drag surface —
+        // empty gutter clicks fall through to the pane. The machine card and
+        // the plugs re-enable their own pointer events below.
+        "group relative w-max pointer-events-none",
         // Marker for the globals.css layer lift: with a picker popup open the
         // node (and the whole nodes layer) must paint above edges.
         isCompareOpen ? "recipe-node-popup-open" : "",
@@ -376,7 +380,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     >
     <div
       className={[
-        "relative min-w-[340px] border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
+        "pointer-events-auto relative min-w-[340px] border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
         selected ? "ring-2 ring-cyan-300" : "",
         isSearchHighlighted ? "ring-4 ring-sky-300" : "",
         isInspectorHighlighted

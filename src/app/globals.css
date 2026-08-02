@@ -611,6 +611,15 @@ textarea {
 
 /* ---------- output sockets: prongs on the wall + the asker's plug ---------- */
 
+/* The recipe node's measured box includes the transparent plug gutter (the
+   router needs plugs treated as node body), but the gutter must never be a
+   phantom drag surface. React Flow puts inline pointer-events on its node
+   wrapper, so the opt-out needs !important; the machine card and the plugs
+   re-enable their own events. Empty gutter clicks fall through to the pane. */
+.react-flow__node-recipeNode {
+  pointer-events: none !important;
+}
+
 /* The asker's block: chip-height, two lines, connected to the maker chip by
    one thick stub in the plug's own color. The row's layout box includes the
    whole plug, so the edge anchor (the row) ends at the plug's right edge. */
