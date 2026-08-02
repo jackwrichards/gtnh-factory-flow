@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   Background,
@@ -168,7 +168,8 @@ const CANVAS_DOT_COLOR: Record<Theme, string> = {
 const RECIPE_SLOT_EDGE_OFFSET = 20;
 const STORAGE_SLOT_EDGE_OFFSET = 55;
 const EDGE_BUNDLE_CLEARANCE = 30;
-const DIRECT_EDGE_NODE_CLEARANCE = 18;
+// Wires were correct but claustrophobic at 18 — they hugged node walls.
+const DIRECT_EDGE_NODE_CLEARANCE = 30;
 const EDGE_LANE_SPACING = 8;
 const EDGE_LANE_BUCKETS = 4;
 const EDGE_LINK_CLEARANCE = 8;
@@ -249,6 +250,11 @@ type RoutedEdgePath = {
   path: string;
   labelX: number;
   labelY: number;
+  /**
+   * Crammed board: the label's only seat is on top of some node, so it
+   * doesn't render at all (a user-dragged offset always overrides this).
+   */
+  labelHidden?: boolean;
   points: Array<{ x: number; y: number }>;
 };
 
@@ -2403,7 +2409,11 @@ function ResourceEdgeComponent({
           }}
         />
       ) : null}
-      {showLabel && data ? (
+      {showLabel &&
+      data &&
+      // A crammed label (only seat is on a node) goes away — unless the user
+      // parked it somewhere themselves.
+      !(routedEdge.labelHidden && !data.labelOffset && !isLabelDragging) ? (
         <EdgeLabelRenderer>
           <div
             className="nodrag nopan absolute flex cursor-grab items-center gap-1.5 border border-[var(--mc-15)] bg-[#2b2d32] px-2 py-1 text-[13px] font-medium text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.55)] transition-shadow duration-100 active:cursor-grabbing"
@@ -2912,7 +2922,7 @@ function getDirectEdgePath({
   targetY: number;
   targetPosition: Position;
   useSmartRouting?: boolean;
-}) {
+}): RoutedEdgePath {
   const points =
     (useSmartRouting
       ? getBestDirectEdgePoints({
@@ -2941,12 +2951,17 @@ function getDirectEdgePath({
     });
   // Labels are interactive (drag to reposition, click to select) and render
   // above nodes, so a label parked over a node blocks the slots beneath it —
-  // short edges put the blind polyline midpoint exactly there. Anchor on the
-  // longest stretch of the route that lies outside the edge's own nodes.
-  const labelPoint = getRouteLabelPoint(points, [
-    getMeasuredNodeBoundsById(sourceNodeId),
-    getMeasuredNodeBoundsById(targetNodeId),
-  ]) ??
+  // short edges put the blind polyline midpoint exactly there. Prefer the
+  // longest stretch of the route clear of EVERY node, then clear of the
+  // edge's own nodes.
+  const allNodeBounds = getMeasuredAvoidanceSweep().bounds.map((entry) => entry.bounds);
+  const clearOfEverything =
+    allNodeBounds.length > 0 ? getRouteLabelPoint(points, allNodeBounds) : undefined;
+  const labelPoint = clearOfEverything ??
+    getRouteLabelPoint(points, [
+      getMeasuredNodeBoundsById(sourceNodeId),
+      getMeasuredNodeBoundsById(targetNodeId),
+    ]) ??
     getPointAtPolylineRatio(points, 0.5) ?? {
       x: (sourceX + targetX) / 2,
       y: (sourceY + targetY) / 2,
@@ -2962,10 +2977,18 @@ function getDirectEdgePath({
   );
   const labelLift = routeLength < SHORT_EDGE_LABEL_LIFT_THRESHOLD ? -SHORT_EDGE_LABEL_LIFT : 0;
 
+  // Crammed board: when the label's seat (its whole box, not just its
+  // center) would overlap any node, the label just goes away.
+  const labelHidden = isPointInsideAnyMeasuredNode({
+    x: labelPoint.x,
+    y: labelPoint.y + labelLift,
+  });
+
   return {
     path: pointsToHoppedSvgPath(points, collectEarlierRouteSegments(edgeId, routeIndex)),
     labelX: labelPoint.x,
     labelY: labelPoint.y + labelLift,
+    labelHidden,
     points,
   };
 }
@@ -3495,7 +3518,7 @@ function getDirectEdgePointCandidates({
 // Wires keep a visible gap off every node wall; bundle lanes shift whole
 // corridors apart (capped so detours stay tight); turns cost ~40px of length
 // so bends stay purposeful without being avoided at crossing prices.
-const ORTHO_FOREIGN_MARGIN = EDGE_LINK_CLEARANCE + 6;
+const ORTHO_FOREIGN_MARGIN = EDGE_LINK_CLEARANCE + 16;
 // Port chips sit a few pixels inside the node edge, so the exit stub lands
 // ~9px past the wall. Own bounds must shrink (not grow) or the start vertex
 // is born inside its own obstacle and every search dies immediately.
@@ -3799,6 +3822,7 @@ function buildRoutedEdgePath(points: Array<{ x: number; y: number }>): RoutedEdg
     path: pointsToSvgPath(points),
     labelX: labelPoint.x,
     labelY: labelPoint.y,
+    labelHidden: isPointInsideAnyMeasuredNode(labelPoint),
     points,
   };
 }
@@ -4427,6 +4451,7 @@ function getBundledEdgePath({
     path,
     labelX: labelPoint.x,
     labelY: labelPoint.y,
+    labelHidden: isPointInsideAnyMeasuredNode(labelPoint),
     points: trunkPoints,
   };
 }
@@ -4555,6 +4580,9 @@ function getBundledMemberEdgePath({
     path: path || estimatedPath,
     labelX: path ? labelPoint.x : estimatedLabelX,
     labelY: path ? labelPoint.y : estimatedLabelY,
+    labelHidden: isPointInsideAnyMeasuredNode(
+      path ? labelPoint : { x: estimatedLabelX, y: estimatedLabelY },
+    ),
     points,
   };
 }
@@ -4985,6 +5013,29 @@ function getMeasuredNodeBoundsById(nodeId: string | undefined) {
     return undefined;
   }
   return getMeasuredAvoidanceSweep().bounds.find((entry) => entry.id === nodeId)?.bounds;
+}
+
+/**
+ * Whether a label ANCHORED here would overlap some node: the margins are
+ * half the label box, so this tests the box, not just the center point.
+ */
+function isPointInsideAnyMeasuredNode(
+  point: { x: number; y: number },
+  marginX = 60,
+  marginY = 16,
+) {
+  for (const entry of getMeasuredAvoidanceSweep().bounds) {
+    const bounds = entry.bounds;
+    if (
+      point.x >= bounds.left - marginX &&
+      point.x <= bounds.right + marginX &&
+      point.y >= bounds.top - marginY &&
+      point.y <= bounds.bottom + marginY
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function expandBounds(

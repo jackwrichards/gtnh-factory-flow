@@ -666,17 +666,13 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
   let word: string;
   let cause: string | undefined;
   let action: string | undefined;
-  // Minimum viable strip: one line of why, one line of fix.
+  // Minimum viable strip: one GENERAL line of why (the specific numbers
+  // already live on the chips), one line of fix.
   switch (verdict.kind) {
     case "starved": {
       word = "▼ STARVING";
       const binding = verdict.binding;
-      cause = binding
-        ? `${binding.displayName}: gets ${formatSlotRate(
-            binding.suppliedPerSecond,
-            binding.kind,
-          )} of ${formatSlotRate(binding.neededPerSecond, binding.kind)}.`
-        : "Ingredients can't keep up.";
+      cause = `An input shortage forces this machine to run only ${formatPct(verdict.pct)}% of the time.`;
       const upstream = binding?.upstream;
       if (!upstream) {
         action = "→ Fix the supply lines.";
@@ -696,17 +692,7 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
     case "choke": {
       word = "▲ CAN'T KEEP UP";
       const deficit = verdict.deficit;
-      cause = deficit
-        ? deficit.hungryOutputs > 1
-          ? `${deficit.hungryOutputs} of ${deficit.pluggedOutputs} outputs over-asked — worst ${deficit.displayName}, short ${formatSlotRate(
-              deficit.missingPerSecond,
-              deficit.kind,
-            )}.`
-          : `${deficit.displayName} over-asked: short ${formatSlotRate(
-              deficit.missingPerSecond,
-              deficit.kind,
-            )}.`
-        : "Outputs over-asked.";
+      cause = "This machine runs full-time, but that still can't satisfy all requests.";
       action = deficit?.machinesToAdd
         ? `→ +${deficit.machinesToAdd} machine${deficit.machinesToAdd > 1 ? "s" : ""} covers ${
             deficit.hungryOutputs > 1 ? `all ${deficit.hungryOutputs}` : "it"
@@ -719,7 +705,7 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
       cause =
         verdict.pct <= 0.05
           ? "Nothing draws from this yet."
-          : `Downstream asks ${formatPct(verdict.pct)}%.`;
+          : "Won't run full-time — demand is lower than what it can make.";
       action =
         verdict.headroomPct !== undefined && verdict.headroomPct > 0
           ? `→ Fine — +${formatPct(verdict.headroomPct)}% free if demand grows.`
