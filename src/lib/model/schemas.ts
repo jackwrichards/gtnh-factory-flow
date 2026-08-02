@@ -184,7 +184,11 @@ export const recipeSchema = z.object({
   durationTicks: z.number().int().positive("Duration must be at least 1 tick"),
   eut: z.number().min(0, "EU/t must be zero or positive"),
   inputs: z.array(recipeInputSchema),
-  outputs: z.array(recipeOutputSchema).min(1, "At least one output is required"),
+  // Zero outputs is legal: the crop-farm placeholder recipe
+  // (factoryflow:crop-farm:empty) has none until a crop is picked, and it
+  // stays in project.recipes, which made plans containing a crop farm fail
+  // validation on community upload and JSON import.
+  outputs: z.array(recipeOutputSchema),
   programmedCircuit: z.string().optional(),
   specialValue: z.number().optional(),
   notes: z.string().optional(),

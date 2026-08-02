@@ -32,6 +32,43 @@ describe("factory JSON import/export", () => {
     ).toThrow(/Invalid factory project/);
   });
 
+  it("accepts recipes with zero outputs (unpicked crop-farm placeholder)", () => {
+    const project = parseFactoryProjectJson(
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "crop-placeholder",
+        name: "Crop placeholder plan",
+        recipes: [
+          {
+            id: "factoryflow:crop-farm:empty",
+            name: "Crop Farm",
+            machineType: "Crop Farm",
+            minimumTier: "ULV",
+            durationTicks: 256,
+            eut: 0,
+            inputs: [],
+            outputs: [],
+          },
+        ],
+        nodes: [
+          {
+            id: "node-crop",
+            recipeId: "factoryflow:crop-farm:empty",
+            machineCount: 1,
+            parallel: 1,
+            overclockTier: "ULV",
+            enabled: true,
+            position: { x: 0, y: 0 },
+          },
+        ],
+        edges: [],
+        fuelProfiles: [],
+      }),
+    );
+
+    expect(project.recipes[0]?.outputs).toEqual([]);
+  });
+
   it("normalizes hidden fractional recipe parallelism to one operation", () => {
     const project = parseFactoryProjectJson(
       JSON.stringify({
