@@ -2,13 +2,14 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { memo, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { AlertTriangle, ChevronDown, Minus, Plus, Sprout, WandSparkles } from "lucide-react";
+import { AlertTriangle, ChevronDown, Minus, Plus, Sprout } from "lucide-react";
 import type {
   FactoryNode,
   MachineTier,
   NodeThroughputResult,
   Recipe,
   ResourceAmount,
+  ResourceKey,
 } from "@/lib/model/types";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
 import {
@@ -90,7 +91,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const selectedNodeBottlenecks = useFactoryStore((state) => state.selectedNodeBottlenecks);
   const deleteNode = useFactoryStore((state) => state.deleteNode);
   const updateNode = useFactoryStore((state) => state.updateNode);
-  const optimizeMachineCount = useFactoryStore((state) => state.optimizeMachineCount);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const maxTierFilter = useFactoryStore((state) => state.maxTierFilter);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
@@ -662,7 +662,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                   ) : null}
                   <MinecraftTooltip
                     label={slot.resource.tooltip ?? slot.resource.displayName ?? slot.resource.id}
-                    content={renderSlotRateContent(slot, result)}
+                    content={renderSlotRateContent(slot, result, projectNode.id)}
                   >
                     <Handle
                       id={handleId}
@@ -705,9 +705,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             <MachineCountStat
               label={isCropProductionNode ? "Seeds" : "Machines"}
               machineCount={projectNode.machineCount}
-              suggestedMachineCount={getSuggestedMachineCount(result, projectNode.machineCount)}
               onChange={(machineCount) => updateNode(projectNode.id, { machineCount })}
-              onOptimize={() => optimizeMachineCount(projectNode.id)}
             />
             <UsageStat
               nodeId={projectNode.id}
@@ -859,10 +857,14 @@ function RateLedger({
  * The slot hover panel: what this item flows at right now, and what it would
  * flow at with the machine running 100%. Falls back to the plain name label
  * when the solver has no flow for the slot (unconnected boards, NC slots).
+ * Slots with several supply lines or several consumers get a per-line
+ * breakdown so the pooled allocation is legible: who ships what, whose source
+ * is maxed, and how much is still missing or unrouted.
  */
 function renderSlotRateContent(
   slot: NeiPositionedSlot,
   result: NodeThroughputResult | undefined,
+  nodeId: string,
 ) {
   if (!result) {
     return undefined;
@@ -885,9 +887,10 @@ function renderSlotRateContent(
     ? Math.min(Math.max(result.utilization, 0), 1)
     : 0;
   const nowRate = maxRate * speed;
+  const breakdown = buildSlotEdgeBreakdown(nodeId, slot, key);
 
   return (
-    <div className="w-48">
+    <div className="w-52">
       <div className="flex items-baseline gap-2">
         <span className="truncate text-[13px] font-semibold text-white">
           {slot.resource.displayName ?? slot.resource.id}
@@ -908,8 +911,135 @@ function renderSlotRateContent(
           {formatSlotRate(maxRate, flow.kind)}
         </span>
       </div>
+      {breakdown && breakdown.rows.length > 0 ? (
+        <div className="mt-2 border-t border-white/15 pt-1.5">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+            {isInput
+              ? `Supplied by ${breakdown.rows.length} line${breakdown.rows.length > 1 ? "s" : ""}`
+              : `Feeding ${breakdown.rows.length} line${breakdown.rows.length > 1 ? "s" : ""}`}
+          </div>
+          {breakdown.rows.map((row, index) => (
+            <div
+              key={index}
+              className="mt-0.5 flex items-baseline justify-between gap-3 text-[12px]"
+            >
+              <span className="truncate text-slate-300">{row.name}</span>
+              <span className="shrink-0 tabular-nums text-slate-200">
+                {formatSlotRate(row.rate, flow.kind)}
+                {row.tag ? (
+                  <span className="ml-1 text-[9px] font-bold uppercase text-amber-300">
+                    {row.tag}
+                  </span>
+                ) : null}
+              </span>
+            </div>
+          ))}
+          {isInput && breakdown.shortAtFull > 1e-6 ? (
+            <div className="mt-1 text-[11px] font-semibold text-amber-300">
+              Short {formatSlotRate(breakdown.shortAtFull, flow.kind)} for full speed
+            </div>
+          ) : null}
+          {isInput && breakdown.shortAtFull <= 1e-6 && breakdown.rows.length > 1 ? (
+            <div className="mt-1 text-[11px] text-emerald-300">
+              Need fully covered by these lines together
+            </div>
+          ) : null}
+          {!isInput && breakdown.unrouted > 1e-6 ? (
+            <div className="mt-1 text-[11px] text-slate-400">
+              {formatSlotRate(breakdown.unrouted, flow.kind)} not routed anywhere
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
+}
+
+/**
+ * Per-line detail for a slot's tooltip, read lazily from the store (no
+ * subscription: the node re-renders on every solver tick anyway, which is
+ * exactly when these numbers change).
+ */
+function buildSlotEdgeBreakdown(
+  nodeId: string,
+  slot: NeiPositionedSlot,
+  resourceKey: string,
+):
+  | {
+      rows: Array<{ name: string; rate: number; tag?: string }>;
+      shortAtFull: number;
+      unrouted: number;
+    }
+  | undefined {
+  const { project, lastResult } = useFactoryStore.getState();
+  if (!lastResult) {
+    return undefined;
+  }
+
+  const isInput = slot.side === "input";
+  const handleId = makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex);
+  const storagesById = new Map((project.storages ?? []).map((storage) => [storage.id, storage]));
+  const nodesById = new Map(project.nodes.map((entry) => [entry.id, entry]));
+  const recipesById = new Map(project.recipes.map((entry) => [entry.id, entry]));
+
+  const rows: Array<{ name: string; rate: number; tag?: string }> = [];
+  let routed = 0;
+  for (const edge of project.edges) {
+    if ((isInput ? edge.target : edge.source) !== nodeId) {
+      continue;
+    }
+    const edgeHandle = isInput ? edge.targetHandle : edge.sourceHandle;
+    const matches = edgeHandle
+      ? edgeHandle === handleId
+      : edge.resourceKind === slot.resource.kind && edge.resourceId === slot.resource.id;
+    if (!matches) {
+      continue;
+    }
+
+    const otherId = isInput ? edge.source : edge.target;
+    const storage = storagesById.get(otherId);
+    const otherNode = nodesById.get(otherId);
+    const otherRecipe = otherNode ? recipesById.get(otherNode.recipeId) : undefined;
+    const name = storage
+      ? `${storage.displayName ?? storage.resourceId} (buffer)`
+      : (otherRecipe?.machineType ?? otherRecipe?.name ?? "Machine");
+    const edgeResult = lastResult.edges[edge.id];
+    const rate = edgeResult?.transferredPerSecond ?? 0;
+    routed += rate;
+    rows.push({
+      name,
+      rate,
+      // "maxed" only when the line is short AND its source has nothing left -
+      // that is the line that needs more machines, not this consumer.
+      tag: isInput && edgeResult?.constraint === "supply" ? "maxed" : undefined,
+    });
+  }
+
+  if (rows.length === 0) {
+    return undefined;
+  }
+  rows.sort((left, right) => right.rate - left.rate);
+
+  const nodeResult = lastResult.nodes[nodeId];
+  const flow = isInput
+    ? (nodeResult?.inputs[resourceKey as ResourceKey] ??
+      Object.values(nodeResult?.inputs ?? {}).find(
+        (candidate) => candidate.resourceId === slot.resource.id,
+      ))
+    : (nodeResult?.outputs[resourceKey as ResourceKey] ??
+      Object.values(nodeResult?.outputs ?? {}).find(
+        (candidate) => candidate.resourceId === slot.resource.id,
+      ));
+  const nameplate = flow?.amountPerSecond ?? 0;
+  const speed = Number.isFinite(nodeResult?.utilization)
+    ? Math.min(Math.max(nodeResult!.utilization, 0), 1)
+    : 0;
+
+  return {
+    rows,
+    shortAtFull: isInput ? Math.max(0, nameplate - routed) : 0,
+    unrouted: isInput ? 0 : Math.max(0, nameplate * speed - routed),
+  };
 }
 
 /**
@@ -1725,15 +1855,6 @@ function formatMachineParallelMultiplier(multiplier: number) {
     : multiplier.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
 }
 
-function getSuggestedMachineCount(result: NodeThroughputResult | undefined, current: number) {
-  const exact = result?.theoreticalMachinesRequired;
-  if (!Number.isFinite(exact) || exact === undefined || exact <= 0) {
-    return Math.max(1, Math.round(current));
-  }
-
-  return Math.max(1, Math.ceil(exact));
-}
-
 type ConnectionSlotState = "idle" | "selected" | "compatible";
 
 function getConnectionSlotState(
@@ -1791,15 +1912,11 @@ function Stat({
 function MachineCountStat({
   label,
   machineCount,
-  suggestedMachineCount,
   onChange,
-  onOptimize,
 }: {
   label: string;
   machineCount: number;
-  suggestedMachineCount: number;
   onChange: (machineCount: number) => void;
-  onOptimize: () => void;
 }) {
   const machineCountText = String(machineCount);
   const [draftState, setDraftState] = useState({
@@ -1882,19 +1999,6 @@ function MachineCountStat({
           aria-label={`Increase ${label.toLowerCase()} count`}
         >
           <Plus className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onOptimize();
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-          className="nodrag flex h-4 w-4 shrink-0 items-center justify-center border border-[var(--mc-33)] bg-[var(--mc-82)] text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-100),inset_-1px_-1px_0_var(--mc-47)] hover:bg-[var(--mc-100)]"
-          title={`Set ${label.toLowerCase()} to ${suggestedMachineCount}x`}
-          aria-label={`Set ${label.toLowerCase()} to ${suggestedMachineCount}`}
-        >
-          <WandSparkles className="h-3 w-3" />
         </button>
       </div>
     </div>

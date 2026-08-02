@@ -14,7 +14,6 @@ import {
   Trash2,
   Undo2,
   Upload,
-  WandSparkles,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -49,7 +48,7 @@ import { useFactoryStore } from "@/store/factory-store";
 import { SharePlanDialog } from "./community/SharePlanDialog";
 
 /**
- * Board actions â€” undo/redo, optimise, clean, import/export, theme.
+ * Board actions - undo/redo, clean, import/export, theme.
  *
  * Lives on the right of the design tab strip: everything here acts on the plan
  * that strip is switching between, so the two belong on the same bar.
@@ -74,7 +73,6 @@ export function BoardActions() {
   const setProject = useFactoryStore((state) => state.setProject);
   const setProjectImporting = useFactoryStore((state) => state.setProjectImporting);
   const cleanBoard = useFactoryStore((state) => state.cleanBoard);
-  const optimizeMachineCounts = useFactoryStore((state) => state.optimizeMachineCounts);
   const undo = useFactoryStore((state) => state.undo);
   const redo = useFactoryStore((state) => state.redo);
 
@@ -244,16 +242,6 @@ export function BoardActions() {
       <div className="flex items-center gap-1">
         <ToolbarButton icon={Undo2} label="Undo" disabled={!canUndo} onClick={undo} />
         <ToolbarButton icon={Redo2} label="Redo" disabled={!canRedo} onClick={redo} />
-        <button
-          type="button"
-          onClick={optimizeMachineCounts}
-          disabled={project.nodes.length === 0}
-          title="Set every machine count to its suggested best ratio"
-          aria-label="Set every machine count to its suggested best ratio"
-          className="inline-flex h-7 w-7 items-center justify-center rounded border border-cyan-700 bg-cyan-600 text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:border-line-strong disabled:bg-surface-sunken disabled:text-fg-muted"
-        >
-          <WandSparkles className="h-3.5 w-3.5" />
-        </button>
         <ToolbarButton
           icon={Trash2}
           label="Clean board"

@@ -165,6 +165,36 @@ describe("solver allocation", () => {
     expect(fed.edges["ext"]!.transferredPerSecond).toBeCloseTo(5, 4);
   });
 
+  it("a trickle source beside a big one is not reported as starving anyone", () => {
+    // Jack's repro: machine needs 0.8/s, sources make 0.05/s and 1.6/s. The
+    // old per-edge-count nameplate made the trickle line read "starved, 13%
+    // of the 0.4/s it owes" while the machine ran at 100%.
+    const result = calculateThroughput(
+      project({
+        recipes: [
+          recipe("trickle", [], [{ kind: "item", id: "item:res", amount: 0.05 }]),
+          recipe("firehose", [], [{ kind: "item", id: "item:res", amount: 1.6 }]),
+          recipe(
+            "machine",
+            [{ kind: "item", id: "item:res", amount: 0.8 }],
+            [{ kind: "item", id: "item:out", amount: 1 }],
+          ),
+        ],
+        nodes: [node("T", "trickle"), node("F", "firehose"), node("M", "machine")],
+        edges: [edge("eT", "T", "M"), edge("eF", "F", "M")],
+      }),
+    );
+
+    expect(result.nodes["M"]!.utilization).toBeCloseTo(1, 4);
+    const trickleEdge = result.edges["eT"]!;
+    expect(trickleEdge.transferredPerSecond).toBeCloseTo(0.05, 6);
+    // The line carries everything asked of it; nothing is missing, so its
+    // nameplate ask equals its delivery and it must not classify as starved.
+    expect(trickleEdge.nameplateDemandPerSecond).toBeCloseTo(0.05, 4);
+    expect(trickleEdge.constraint).toBe("full");
+    expect(result.edges["eF"]!.transferredPerSecond).toBeCloseTo(0.75, 4);
+  });
+
   it("balanced loop stays at full speed", () => {
     const result = calculateThroughput(
       project({

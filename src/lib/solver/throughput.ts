@@ -890,6 +890,12 @@ function refreshEdgeResultsFromNodeUtilization(
     // of the same leftover, mirroring the previous behavior.
   }
 
+  // Per-consumer allocation totals, for honest per-line nameplate figures.
+  const allocatedByNeed = new Map<string, number>();
+  for (const entry of [...machineEdges, ...storageSourceEdges]) {
+    allocatedByNeed.set(entry.needKey, (allocatedByNeed.get(entry.needKey) ?? 0) + entry.allocated);
+  }
+
   for (const entry of [...machineEdges, ...storageSourceEdges, ...storageSinkEdges]) {
     const { edge, key, targetDemandKey } = entry;
     const targetStorage = storagesById.get(edge.target);
@@ -906,10 +912,17 @@ function refreshEdgeResultsFromNodeUtilization(
     const demandPerSecond = targetStorage
       ? entry.allocated
       : entry.allocated + deficitShare;
+    // The old need-divided-by-edge-count figure is meaningless under pooled
+    // allocation: a trickle source next to a big one would read "starved at
+    // 13%" while the machine is fully fed. A line's honest nameplate ask is
+    // what it carries plus its share of whatever the consumer still lacks at
+    // full speed - zero shortfall means every line reads as doing its job.
+    const nameplateNeed = targetResult?.inputs[targetDemandKey]?.amountPerSecond ?? 0;
+    const nameplateShortShare = targetStorage
+      ? 0
+      : Math.max(0, nameplateNeed - (allocatedByNeed.get(entry.needKey) ?? 0)) / targetCount;
     const nameplateDemandPerSecond =
-      targetStorage || !targetResult
-        ? entry.allocated
-        : (targetResult.inputs[targetDemandKey]?.amountPerSecond ?? 0) / targetCount;
+      targetStorage || !targetResult ? entry.allocated : entry.allocated + nameplateShortShare;
 
     edgeResults[edge.id] = buildEdgeResult(edge, key, demandPerSecond, entry.allocated, {
       nameplateDemandPerSecond,

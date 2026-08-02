@@ -166,7 +166,7 @@ describe("describeEdgeRate", () => {
         makeEdge({ demand: 2, transferred: 2, nameplateDemand: 10, isSupplyCapped: true }),
       ),
     ).toBe(
-      "The machine this feeds needs 10/s but this line can only deliver 2/s. It takes 5× the current supply to fill it.",
+      "This line's share of the machine's need is 10/s but its source can only deliver 2/s. It takes 5× the current supply to fill it.",
     );
   });
 

@@ -140,7 +140,9 @@ export function describeEdgeRate(data: EdgeLabelInput | undefined): string {
   const ratio = getEdgeSupplyRatio(data);
   if (ratio !== undefined && ratio < 1 - 1e-6) {
     const canDeliver = ratio * need;
-    return `The machine this feeds needs ${withUnit(need, unit)} but this line can only deliver ${withUnit(canDeliver, unit)}. It takes ${formatEdgeValue(1 / Math.max(ratio, 1e-6))}× the current supply to fill it.`;
+    // "need" here is this line's share after pooling: what it carries plus its
+    // part of whatever the machine still lacks with every line delivering.
+    return `This line's share of the machine's need is ${withUnit(need, unit)} but its source can only deliver ${withUnit(canDeliver, unit)}. It takes ${formatEdgeValue(1 / Math.max(ratio, 1e-6))}× the current supply to fill it.`;
   }
 
   if (ratio !== undefined && ratio > 1 + 1e-6) {
