@@ -456,6 +456,37 @@ describe("buildLimitLadder", () => {
     expect(ladder[2]!.pct).toBeCloseTo(140, 3);
   });
 
+  it("keeps the machine-count label on a 100% tie and skips buffer rungs", () => {
+    const proj = project({
+      recipes: [
+        { id: "r", name: "M", machineType: "M", minimumTier: "ULV", durationTicks: 20, eut: 1, inputs: [], outputs: [] },
+      ] as unknown as FactoryProject["recipes"],
+      storages: [
+        { id: "T", kind: "item", resourceId: "hyd" },
+      ] as unknown as FactoryProject["storages"],
+      nodes: [machineNode("N"), machineNode("S")],
+      edges: [edge("eRes", "S", "N", "res"), edge("eHyd", "T", "N", "hyd")],
+    });
+    const result = throughput(
+      {
+        N: nodeResult({
+          utilization: 1,
+          inputs: { "item:res": flow("item", "res", 10), "item:hyd": flow("item", "hyd", 4) },
+        }),
+      },
+      {
+        // Supply exactly matches the fleet: the tie must read "machine count".
+        eRes: edgeResult({ transferredPerSecond: 10, availablePerSecond: 10 }),
+        // Non-dry buffer: allocation garbage, never a rung.
+        eHyd: edgeResult({ transferredPerSecond: 4, availablePerSecond: 0.02, constraint: "full" }),
+      },
+    );
+
+    const ladder = buildLimitLadder(proj, result, "N");
+    expect(ladder[0]!.label).toBe("machine count");
+    expect(ladder.some((rung) => rung.label === "hyd supply")).toBe(false);
+  });
+
   it("puts the finish line above a maxed producer (choke tower)", () => {
     const proj = project({
       recipes: [

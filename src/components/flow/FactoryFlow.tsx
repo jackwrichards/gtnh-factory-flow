@@ -2258,10 +2258,13 @@ function ResourceEdgeComponent({
   };
   // The whole line is a hover surface now, not just the label - but it stops
   // short of the ports so it can never steal the pointer-down that starts a
-  // wire drag from a chip.
+  // wire drag from a chip. Machine outputs need a much deeper source-side
+  // trim: the wire runs UNDER the asker's plug block through the gutter, and
+  // edges hit-test above nodes — an untrimmed hover stroke would eat every
+  // pointer event the plug needs for its own hover story.
   const hoverTrimmedPoints = isHiddenBundleMember
     ? undefined
-    : trimPolylineEnds(routedEdge.points, 26);
+    : trimPolylineEnds(routedEdge.points, data?.sourceSlotEndpoint ? 196 : 26, 26);
   const hoverPathD = hoverTrimmedPoints ? pointsToSvgPath(hoverTrimmedPoints) : undefined;
 
   const stopLabelDrag = useCallback(
@@ -4647,14 +4650,19 @@ function pointsToSvgPath(points: Array<{ x: number; y: number }>) {
 }
 
 /**
- * The polyline with `trim` px shaved off both ends, or undefined when the
- * route is too short to keep a meaningful middle. The hover-anywhere surface
- * uses this so it never reaches the port chips.
+ * The polyline with `startTrim`/`endTrim` px shaved off its ends, or
+ * undefined when the route is too short to keep a meaningful middle. The
+ * hover-anywhere surface uses this so it never reaches the port chips — and
+ * so it clears the plug block a machine-output wire runs beneath.
  */
-function trimPolylineEnds(points: Array<{ x: number; y: number }>, trim: number) {
+function trimPolylineEnds(
+  points: Array<{ x: number; y: number }>,
+  startTrim: number,
+  endTrim = startTrim,
+) {
   const segments = getPolylineSegments(points);
   const total = segments.reduce((sum, segment) => sum + segment.length, 0);
-  if (total <= trim * 2 + 8) {
+  if (total <= startTrim + endTrim + 8) {
     return undefined;
   }
 
@@ -4673,8 +4681,8 @@ function trimPolylineEnds(points: Array<{ x: number; y: number }>, trim: number)
     return points[points.length - 1]!;
   };
 
-  const startDistance = trim;
-  const endDistance = total - trim;
+  const startDistance = startTrim;
+  const endDistance = total - endTrim;
   const trimmed: Array<{ x: number; y: number }> = [pointAtDistance(startDistance)];
   let cursor = 0;
   for (const segment of segments) {

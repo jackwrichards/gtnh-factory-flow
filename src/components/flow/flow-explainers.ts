@@ -1,7 +1,21 @@
 import type { EdgeThroughput, FactoryProject, ThroughputResult } from "@/lib/model/types";
-import { formatRate, makeResourceKey } from "@/lib/model";
+import { formatNumberWithThousands, formatRate, makeResourceKey } from "@/lib/model";
 import { parseResourceHandleId } from "./resource-handles";
 import { honestEdgeAskPerSecond, type NodeVerdict, type RailPort } from "./node-verdict";
+
+const PLUG_STATE_WORD = {
+  hungry: "HUNGRY",
+  blocked: "BLOCKED UPSTREAM",
+  fed: "FED",
+  soak: "TAKES THE REST",
+} as const;
+
+const PLUG_STATE_TONE = {
+  hungry: "amber",
+  blocked: "red",
+  fed: "green",
+  soak: "steel",
+} as const;
 
 /**
  * Plain-English explainers for ports and lines. Copy rules, per the design
@@ -54,13 +68,14 @@ export function formatPct(value: number): string {
 
 /** "×6.2" style multiplier for asks bigger than the machine. */
 export function formatTimes(ratio: number): string {
-  if (!Number.isFinite(ratio)) {
-    return "×?";
+  if (!Number.isFinite(ratio) || ratio >= 9999.5) {
+    // Real magnitudes teach better than a cap, but four digits is the limit
+    // of useful; beyond that (or a zero-flow division) it's just "hopeless".
+    return "×9999+";
   }
-  if (ratio >= 99.5) {
-    return "×99+";
-  }
-  return ratio >= 10 ? `×${Math.round(ratio)}` : `×${formatRate(ratio, 1)}`;
+  return ratio >= 10
+    ? `×${formatNumberWithThousands(String(Math.round(ratio)))}`
+    : `×${formatRate(ratio, 1)}`;
 }
 
 /** Whether an edge plugs into a port carrying this resource on this side. */
@@ -201,7 +216,131 @@ export function explainPort(
   const breakdown = buildPortBreakdown(project, result, nodeId, port);
   return port.side === "input"
     ? explainInputPort(port, verdict, breakdown)
-    : explainOutputPort(port, verdict, breakdown);
+    : explainOutputPort(project, nodeId, port, verdict, breakdown);
+}
+
+/**
+ * The plug hover: the ASKER's story at full length — who is plugged in, what
+ * they ask, what they get, and the fix. The little sentences live here now
+ * that the plug block itself is only two lines tall.
+ */
+export function explainPlug(
+  project: FactoryProject,
+  result: ThroughputResult | undefined,
+  nodeId: string,
+  port: RailPort,
+): PortStory | undefined {
+  const plug = port.plug;
+  if (!plug || port.side !== "output") {
+    return undefined;
+  }
+
+  const fmt = (value: number) => formatSlotRate(value, port.kind);
+  const storagesById = new Map((project.storages ?? []).map((storage) => [storage.id, storage]));
+  const nodesById = new Map(project.nodes.map((entry) => [entry.id, entry]));
+  const recipesById = new Map(project.recipes.map((entry) => [entry.id, entry]));
+
+  const rows: Array<{ name: string; note?: string; rate: string }> = [];
+  for (const edge of project.edges) {
+    if (edge.source !== nodeId || !edgeTouchesResource(edge, "output", port.kind, port.resourceId)) {
+      continue;
+    }
+    const edgeResult = result?.edges[edge.id];
+    const gets = edgeResult?.transferredPerSecond ?? 0;
+    const storage = storagesById.get(edge.target);
+    if (storage) {
+      rows.push({
+        name: `${storage.displayName ?? storage.resourceId} (buffer)`,
+        note: "takes the rest",
+        rate: fmt(gets),
+      });
+      continue;
+    }
+    const targetNode = nodesById.get(edge.target);
+    const recipe = targetNode ? recipesById.get(targetNode.recipeId) : undefined;
+    const targetResult = result?.nodes[edge.target];
+    const pct =
+      targetResult && Number.isFinite(targetResult.utilization)
+        ? Math.round(Math.min(Math.max(targetResult.utilization, 0), 1) * 100)
+        : undefined;
+    rows.push({
+      name: recipe?.machineType ?? recipe?.name ?? "Machine",
+      note: pct !== undefined ? `runs at ${pct}%` : undefined,
+      rate: fmt(honestEdgeAskPerSecond(edgeResult)),
+    });
+  }
+
+  const machineCount = Math.max(1, nodesById.get(nodeId)?.machineCount ?? 1);
+  const perMachine = port.nameplatePerSecond / machineCount;
+  const missing = Math.max(0, plug.askPerSecond - plug.getPerSecond);
+  const toAdd =
+    perMachine > EPS && missing > EPS
+      ? Math.min(9999, Math.ceil(missing / perMachine - EPS))
+      : undefined;
+
+  const baseRows: PortStory["rows"] = [
+    { k: plug.state === "soak" ? "Soaks up" : "Asks", v: fmt(plug.askPerSecond) },
+    {
+      k: "Gets",
+      v: `${fmt(plug.getPerSecond)} (${formatPct(plug.coveredFraction * 100)}%)`,
+    },
+  ];
+  if (missing > EPS) {
+    baseRows.push({ k: "Short", v: fmt(missing) });
+  }
+  const lineRows =
+    rows.length > 0
+      ? { title: `${rows.length} line${rows.length === 1 ? "" : "s"} plugged in`, rows }
+      : undefined;
+
+  const single = plug.askerMachines === 1;
+  const askerPhrase = single ? `The ${plug.askerName}` : `The ${plug.askerName}`;
+  let lines: string[];
+  let action: PortStory["action"];
+  switch (plug.state) {
+    case "hungry":
+      lines = [
+        `${askerPhrase} ask${single ? "s" : ""} for ${fmt(plug.askPerSecond)}, but this machine can only put in ${fmt(plug.getPerSecond)}.`,
+        single
+          ? `That covers ${formatPct(plug.coveredFraction * 100)}% of what it wants from this line.`
+          : `Together they get ${formatPct(plug.coveredFraction * 100)}% of what they want.`,
+      ];
+      action = {
+        text: toAdd
+          ? `→ Add +${toAdd} of this machine, or use a higher tier.`
+          : "→ Add more of this machine, or use a higher tier.",
+        tone: "fix",
+      };
+      break;
+    case "blocked":
+      lines = [
+        `${askerPhrase} ask${single ? "s" : ""} for ${fmt(plug.askPerSecond)}, but this machine can only put in ${fmt(plug.getPerSecond)}.`,
+        "And this machine is starving itself — it can't run faster no matter how loud they ask.",
+      ];
+      action = {
+        text: "→ Fix this machine's red input first; add machines after, if it's still short.",
+        tone: "fix",
+      };
+      break;
+    case "fed":
+      lines = [`Everyone plugged in gets exactly what they ask: ${fmt(plug.askPerSecond)}.`];
+      action = { text: "Nothing to fix.", tone: "fine" };
+      break;
+    case "soak":
+      lines = [
+        `${plug.askerName} takes whatever comes out — ${fmt(plug.getPerSecond)}. A buffer is never hungry.`,
+      ];
+      break;
+  }
+
+  return {
+    stateWord: PLUG_STATE_WORD[plug.state],
+    tone: PLUG_STATE_TONE[plug.state],
+    rows: baseRows,
+    lineRows,
+    lines,
+    action,
+  };
 }
 
 function supplierNote(row: PortLineRow): string | undefined {
@@ -215,6 +354,8 @@ function supplierNote(row: PortLineRow): string | undefined {
 }
 
 function explainOutputPort(
+  project: FactoryProject,
+  nodeId: string,
   port: RailPort,
   verdict: NodeVerdict,
   breakdown: PortBreakdown | undefined,
@@ -280,9 +421,21 @@ function explainOutputPort(
     };
   }
 
-  if (verdict.kind === "choke" && verdict.deficit?.resourceKey === port.key) {
-    const times = nameplate > EPS ? formatTimes(wanted / nameplate) : "×?";
-    const toAdd = verdict.deficit.machinesToAdd;
+  // Per-port coupling: THIS port's own asked-vs-made decides its story —
+  // never whether it happens to be the node's worst output.
+  if (port.plug?.state === "hungry") {
+    const ask = port.plug.askPerSecond;
+    const times = nameplate > EPS ? formatTimes(ask / nameplate) : "×?";
+    const machineCount = Math.max(
+      1,
+      project.nodes.find((entry) => entry.id === nodeId)?.machineCount ?? 1,
+    );
+    const perMachine = nameplate / machineCount;
+    const missing = Math.max(0, ask - port.plug.getPerSecond);
+    const toAdd =
+      perMachine > EPS && missing > EPS
+        ? Math.min(9999, Math.ceil(missing / perMachine - EPS))
+        : undefined;
     return {
       stateWord: "CAN'T KEEP UP",
       tone: "amber",
@@ -290,7 +443,7 @@ function explainOutputPort(
       lineRows,
       lines: [
         `This machine is already at full speed — ${fmt(current)} is everything it can make.`,
-        `${consumerPhrase} want${consumers.length === 1 ? "s" : ""} ${fmt(wanted)} — ${times} more.`,
+        `${consumerPhrase} want${consumers.length === 1 ? "s" : ""} ${fmt(ask)} — ${times} more.`,
       ],
       action: {
         text: toAdd
@@ -491,9 +644,14 @@ function explainInputPort(
 
   if (verdict.kind === "starved") {
     const bindingName = verdict.binding?.displayName ?? "another ingredient";
+    // A non-dry buffer feeds on demand: it is never a ceiling, so never
+    // predict it as "the next bottleneck at 0%".
+    const bufferFed = !Number.isFinite(couldPct);
     const lines = [
       `This ingredient is not the problem. It arrives slowly only because the whole machine runs at ${formatPct(verdict.pct)}% — ${bindingName} is the real bottleneck.`,
-      `These lines could deliver up to ${formatPct(couldPct)}% whenever the machine speeds up.`,
+      bufferFed
+        ? "A buffer feeds these lines — it delivers on demand, never the cap."
+        : `These lines could deliver up to ${formatPct(couldPct)}% whenever the machine speeds up.`,
     ];
     return {
       stateWord: "NOT THE PROBLEM",
@@ -502,7 +660,7 @@ function explainInputPort(
       lineRows,
       lines,
       action:
-        couldPct < 99.5
+        !bufferFed && couldPct < 99.5
           ? {
               text: `→ Heads-up: after ${bindingName} is fixed, this becomes the next bottleneck, at ${formatPct(couldPct)}%.`,
               tone: "note",
@@ -524,8 +682,11 @@ function explainInputPort(
     };
   }
 
+  const bufferFed = !Number.isFinite(couldPct);
   const lines = ["Fully supplied."];
-  if (couldPct > 105) {
+  if (bufferFed) {
+    lines.push("A buffer feeds this — it delivers on demand, plenty on tap.");
+  } else if (couldPct > 105) {
     lines.push(`The lines could even bring ${formatTimes(could / Math.max(need, EPS))} what full speed needs.`);
   }
   return {
@@ -535,7 +696,7 @@ function explainInputPort(
     lineRows,
     lines,
     action:
-      couldPct > 105
+      bufferFed || couldPct > 105
         ? { text: "Safe to add more of this machine before this ingredient runs short.", tone: "fine" }
         : { text: "Nothing to fix.", tone: "fine" },
   };

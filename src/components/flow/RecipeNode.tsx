@@ -65,6 +65,7 @@ import {
 } from "./node-verdict";
 import {
   edgeTouchesResource,
+  explainPlug,
   explainPort,
   formatPct,
   formatSlotRate,
@@ -354,13 +355,28 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     : selectedMachineHandler;
   const isPreviewing = hasMachinePicker && previewHandler.id !== selectedMachineHandler.id;
 
+  // Outputs end in sockets: the asker's plug block seats through the machine
+  // wall and hangs into a transparent gutter on the node's right. The gutter
+  // is part of the measured node (edges dock at the plug's right edge, the
+  // router treats plugs as node body), but the MACHINE box — border, paint,
+  // rings — stops at the wall.
+  const hasPlugGutter = !isCropFarmPlaceholder && rails.outputs.length > 0;
   return (
     <div
       className={[
-        "group relative min-w-[300px] w-max border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
+        "group relative w-max",
         // Marker for the globals.css layer lift: with a picker popup open the
         // node (and the whole nodes layer) must paint above edges.
         isCompareOpen ? "recipe-node-popup-open" : "",
+      ].join(" ")}
+      style={{
+        ...(hasPlugGutter ? { paddingRight: PLUG_GUTTER_PX } : undefined),
+        ...(paintCursor ? { cursor: paintCursor } : undefined),
+      }}
+    >
+    <div
+      className={[
+        "relative min-w-[300px] border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
         selected ? "ring-2 ring-cyan-300" : "",
         isSearchHighlighted ? "ring-4 ring-sky-300" : "",
         isInspectorHighlighted
@@ -368,16 +384,15 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           : "",
         exceedsMaxTier ? "ring-4 ring-red-500" : "",
       ].join(" ")}
-      style={{
-        ...(nodeColor
+      style={
+        nodeColor
           ? {
               backgroundColor: nodeColor.panel,
               borderColor: nodeColor.border,
               boxShadow: `inset 2px 2px 0 var(--mc-100), inset -2px -2px 0 var(--mc-33), 0 0 0 2px ${nodeColor.shadow}`,
             }
-          : undefined),
-        ...(paintCursor ? { cursor: paintCursor } : undefined),
-      }}
+          : undefined
+      }
     >
       {exceedsMaxTier ? (
         <div className="pointer-events-none absolute -right-3 -top-3 z-40 flex max-w-[210px] items-center gap-2 border-4 border-red-700 bg-[#facc15] px-2 py-1 font-mono text-[13px] font-black uppercase leading-tight text-red-950 shadow-[4px_4px_0_rgba(0,0,0,0.45)] [text-shadow:1px_1px_0_rgba(255,255,255,0.45)]">
@@ -551,7 +566,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           // port icons (click = recipes, right-click = uses).
           <div
             className={[
-              "flex items-stretch gap-1",
+              "flex items-start gap-1",
               rails.inputs.length > 0 && rails.outputs.length > 0
                 ? "justify-between"
                 : rails.outputs.length > 0
@@ -565,11 +580,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               ports={rails.inputs}
               pending={pendingResourceConnection}
             />
-            {rails.inputs.length > 0 && rails.outputs.length > 0 ? (
-              <div className="flex w-5 shrink-0 items-center justify-center text-[15px] font-black text-[var(--mc-ink-muted)]">
-                →
-              </div>
-            ) : null}
             <PortRail
               nodeId={projectNode.id}
               side="output"
@@ -622,8 +632,12 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         ) : null}
       </div>
     </div>
+    </div>
   );
 }
+
+/** How far the asker plug blocks hang past the machine wall, in px. */
+const PLUG_GUTTER_PX = 160;
 
 // React Flow hands node components their live position (and dragging state) as
 // props, so the default prop comparison fails on every drag frame — which
@@ -690,16 +704,24 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
     }
     case "choke": {
       word = "▲ CAN'T KEEP UP";
-      cause = verdict.deficit
-        ? `Full speed — and the machines after it still want ${formatSlotRate(
-            verdict.deficit.missingPerSecond,
-            verdict.deficit.kind,
-          )} more ${verdict.deficit.displayName}.`
+      const deficit = verdict.deficit;
+      // Outputs are independent couplings — several can be hungry at once.
+      // One +N covers them all (machines scale every output together).
+      cause = deficit
+        ? deficit.hungryOutputs > 1
+          ? `${deficit.hungryOutputs} of ${deficit.pluggedOutputs} plugged outputs are over-asked — worst is ${deficit.displayName}: short ${formatSlotRate(
+              deficit.missingPerSecond,
+              deficit.kind,
+            )}.`
+          : `Full speed — and the machines after it still want ${formatSlotRate(
+              deficit.missingPerSecond,
+              deficit.kind,
+            )} more ${deficit.displayName}.`
         : "Full speed, and the machines after it still want more.";
-      action = verdict.deficit?.machinesToAdd
-        ? `→ Add +${verdict.deficit.machinesToAdd} machine${
-            verdict.deficit.machinesToAdd > 1 ? "s" : ""
-          } here, or use a higher tier.`
+      action = deficit?.machinesToAdd
+        ? `→ Add +${deficit.machinesToAdd} machine${
+            deficit.machinesToAdd > 1 ? "s" : ""
+          } here — covers ${deficit.hungryOutputs > 1 ? `all ${deficit.hungryOutputs}` : "it"} — or use a higher tier.`
         : "→ Add machines here, or use a higher tier.";
       break;
     }
@@ -784,7 +806,8 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
 /**
  * One side of the port rails. Every port always renders - a hidden port is a
  * port somebody can't wire, so tall nodes are the accepted trade for big
- * recipes.
+ * recipes. Rows on both rails share one height so input, output, and plug
+ * line up straight across the node.
  */
 function PortRail({
   nodeId,
@@ -801,12 +824,109 @@ function PortRail({
     return null;
   }
 
+  const isInput = side === "input";
   return (
-    <div className="flex w-[118px] shrink-0 flex-col justify-center gap-1 py-0.5">
-      {ports.map((port) => (
-        <PortChip key={port.key} nodeId={nodeId} port={port} pending={pending} />
-      ))}
+    <div
+      className={[
+        "flex shrink-0 flex-col justify-start gap-1 py-0.5",
+        isInput ? "w-[118px]" : "w-[132px]",
+      ].join(" ")}
+    >
+      {ports.map((port) =>
+        isInput ? (
+          <PortChip key={port.key} nodeId={nodeId} port={port} pending={pending} />
+        ) : (
+          <OutputSocketRow key={port.key} nodeId={nodeId} port={port} pending={pending} />
+        ),
+      )}
     </div>
+  );
+}
+
+/**
+ * An output row: the maker chip inside the machine, the socket prongs on the
+ * wall, and the asker's plug block hanging out into the gutter. The row is
+ * the edge anchor, so wires dock at the plug's right edge — where the cord
+ * actually leaves the coupling.
+ */
+function OutputSocketRow({
+  nodeId,
+  port,
+  pending,
+}: {
+  nodeId: string;
+  port: RailPort;
+  pending: ReturnType<typeof useFactoryStore.getState>["pendingResourceConnection"];
+}) {
+  const setHoveredFlowScope = useFactoryStore((state) => state.setHoveredFlowScope);
+  return (
+    <div
+      className="relative flex items-center"
+      data-resource-edge-anchor="true"
+      data-resource-node-id={nodeId}
+      data-resource-handle-id={port.handleId}
+      onPointerEnter={() => setHoveredFlowScope(buildPortFlowScope(nodeId, port))}
+      onPointerLeave={() => setHoveredFlowScope(undefined)}
+    >
+      <PortChip nodeId={nodeId} port={port} pending={pending} plugRow />
+      <span className="flow-prongs shrink-0" aria-hidden>
+        <i />
+        <i />
+      </span>
+      {port.plug ? (
+        <PlugBlock nodeId={nodeId} port={port} />
+      ) : (
+        <span className="flow-socket-empty nodrag">
+          {formatSlotRateOrNull(port.currentPerSecond, port.kind)
+            ? `empty — ${formatSlotRate(port.currentPerSecond, port.kind)} vanishes`
+            : "empty socket"}
+        </span>
+      )}
+    </div>
+  );
+}
+
+const PLUG_GLOW_STYLE: CSSProperties = {
+  boxShadow: "0 0 0 2px #fde047, 0 0 0 5px #22d3ee, 0 0 14px 3px rgba(34,211,238,0.95)",
+  filter: "brightness(1.22)",
+  zIndex: 15,
+};
+
+/** The asker's block: two lines, chip-height, in the asker's own frame. */
+function PlugBlock({ nodeId, port }: { nodeId: string; port: RailPort }) {
+  const plug = port.plug!;
+  const isFlowScopeLit = useFactoryStore((state) =>
+    Boolean(state.hoveredFlowScope?.ports[`${nodeId}|${port.handleId}`]),
+  );
+  const askText = `${plug.state === "soak" ? "soaks" : "asks"} ${formatSlotRate(
+    plug.askPerSecond,
+    port.kind,
+  )}`;
+  return (
+    <MinecraftTooltip
+      label={`${port.displayName} — the asker's side`}
+      content={renderPlugHoverContent(port, nodeId)}
+    >
+      <span
+        className={["flow-plug nodrag", `flow-plug--${plug.state}`].join(" ")}
+        style={isFlowScopeLit ? PLUG_GLOW_STYLE : undefined}
+      >
+        <span className="flow-plug-top">
+          <b>{plug.askerName}</b>
+          <i className="not-italic">{askText}</i>
+        </span>
+        <span className="flow-plug-bar">
+          <span className="flow-plug-track">
+            <i style={{ width: `${Math.round(Math.min(Math.max(plug.coveredFraction, 0), 1) * 100)}%` }} />
+          </span>
+          {plug.timesShort !== undefined ? (
+            <em className="not-italic">{formatTimes(plug.timesShort)}</em>
+          ) : plug.state === "fed" ? (
+            <em className="not-italic">✓</em>
+          ) : null}
+        </span>
+      </span>
+    </MinecraftTooltip>
   );
 }
 
@@ -852,10 +972,13 @@ function PortChip({
   nodeId,
   port,
   pending,
+  plugRow = false,
 }: {
   nodeId: string;
   port: RailPort;
   pending: ReturnType<typeof useFactoryStore.getState>["pendingResourceConnection"];
+  /** Inside an OutputSocketRow: the row owns the edge anchor and hover scope. */
+  plugRow?: boolean;
 }) {
   const isInput = port.side === "input";
   const browseResource = useFactoryStore((state) => state.browseResource);
@@ -913,20 +1036,21 @@ function PortChip({
       : undefined;
 
   // One bar, one ruler: 100% = full blast. Solid = now, hatch = would unlock
-  // if fed, caret = wanted, burst tab = wanted is bigger than the machine.
+  // if fed. The caret/burst (the want) is an INPUT-side signal — on outputs
+  // that story belongs to the asker and lives on the plug block instead.
   const nameplate = port.nameplatePerSecond;
   const fillPct = nameplate > 1e-9 ? Math.min(port.currentPerSecond / nameplate, 1) * 100 : 0;
   const couldPct = nameplate > 1e-9 ? Math.min(port.couldPerSecond / nameplate, 1) * 100 : 0;
   const ghostPct = Math.max(0, couldPct - fillPct);
   const wantRatio = nameplate > 1e-9 ? port.wantedPerSecond / nameplate : 0;
   const caretPct =
-    port.wantedPerSecond > 1e-9 ? Math.min(Math.max(wantRatio, 0), 1) * 100 : undefined;
-  const hasBurst = wantRatio > 1.005;
+    isInput && port.wantedPerSecond > 1e-9 ? Math.min(Math.max(wantRatio, 0), 1) * 100 : undefined;
+  const hasBurst = isInput && wantRatio > 1.005;
 
   return (
     <div
       className={[
-        "flow-port relative flex items-center gap-1 px-1 py-0.5",
+        "flow-port relative flex min-h-[34px] flex-1 items-center gap-1 px-1 py-0.5",
         toneClass,
         isFlowScopeLit ? "flow-port--flow-lit" : "",
       ].join(" ")}
@@ -942,11 +1066,18 @@ function PortChip({
             }
           : undefined
       }
-      data-resource-edge-anchor="true"
-      data-resource-node-id={nodeId}
-      data-resource-handle-id={port.handleId}
-      onPointerEnter={() => setHoveredFlowScope(buildPortFlowScope(nodeId, port))}
-      onPointerLeave={() => setHoveredFlowScope(undefined)}
+      // Inside a socket row the ROW is the anchor (wires dock at the plug's
+      // right edge) and owns the hover scope; a second anchor here would win
+      // the DOM lookup and pull edges back to the chip.
+      {...(plugRow
+        ? {}
+        : {
+            "data-resource-edge-anchor": "true",
+            "data-resource-node-id": nodeId,
+            "data-resource-handle-id": port.handleId,
+            onPointerEnter: () => setHoveredFlowScope(buildPortFlowScope(nodeId, port)),
+            onPointerLeave: () => setHoveredFlowScope(undefined),
+          })}
     >
       {slotState !== "idle" ? (
         <span
@@ -1001,11 +1132,7 @@ function PortChip({
             HAND-FED
           </span>
         ) : (
-          <span
-            className={["mt-0.5 flex items-center gap-0.5", caretPct !== undefined ? "mb-1" : ""]
-              .join(" ")
-              .trim()}
-          >
+          <span className="mt-0.5 flex items-center gap-0.5">
             <span
               className={["flow-port-bar block flex-1", hasBurst ? "flow-port-bar--burst" : ""]
                 .join(" ")
@@ -1170,6 +1297,15 @@ function renderPortHoverContent(port: RailPort, nodeId: string) {
         </div>
       ) : null}
 
+      <StoryBody story={story} />
+    </div>
+  );
+}
+
+/** The shared teaching body: honest rows, per-line list, plain answer, fix. */
+function StoryBody({ story }: { story: PortStory }) {
+  return (
+    <>
       <div className="mt-1">
         {story.rows.map((row) => (
           <div key={row.k} className="flex items-baseline justify-between gap-3 text-[12px]">
@@ -1189,10 +1325,12 @@ function renderPortHoverContent(port: RailPort, nodeId: string) {
               key={index}
               className="mt-0.5 flex items-baseline justify-between gap-2 text-[12px]"
             >
-              <span className="min-w-0 flex-1 truncate text-slate-300">
-                {row.name}
-                {row.note ? <span className="text-slate-500"> — {row.note}</span> : null}
-              </span>
+              {/* Name and note truncate separately so "runs at 45%" never
+                  disappears behind a long machine name. */}
+              <span className="min-w-0 flex-1 truncate text-slate-300">{row.name}</span>
+              {row.note ? (
+                <span className="shrink-0 text-[11px] text-slate-500">{row.note}</span>
+              ) : null}
               <span className="shrink-0 tabular-nums text-slate-200">{row.rate}</span>
             </div>
           ))}
@@ -1211,6 +1349,62 @@ function renderPortHoverContent(port: RailPort, nodeId: string) {
           </p>
         ) : null}
       </div>
+    </>
+  );
+}
+
+/**
+ * The plug hover — the asker's story at full length: who is plugged in, what
+ * they ask, what they get, and the fix. The covered bar rides the asker's
+ * own frame: full = the ask is covered.
+ */
+function renderPlugHoverContent(port: RailPort, nodeId: string) {
+  const { project, lastResult } = useFactoryStore.getState();
+  const story = explainPlug(project, lastResult, nodeId, port);
+  if (!story) {
+    return undefined;
+  }
+  const plug = port.plug!;
+  const coveredPct = Math.round(Math.min(Math.max(plug.coveredFraction, 0), 1) * 100);
+  const fillColor = STORY_TONE_FILL[story.tone];
+
+  return (
+    <div className="w-64">
+      <div className="flex items-baseline gap-2">
+        <span className="min-w-0 truncate text-[13px] font-semibold text-white">
+          {port.displayName}
+        </span>
+        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+          Plug
+        </span>
+        <span
+          className={[
+            "ml-auto shrink-0 text-[10px] font-black tracking-wide",
+            STORY_TONE_TEXT[story.tone],
+          ].join(" ")}
+        >
+          {story.stateWord}
+        </span>
+      </div>
+
+      <div className="mb-1 mt-2 flex items-center gap-1">
+        <div
+          className="relative h-[9px] flex-1"
+          style={{ background: "#101826", border: "1px solid #2c3a52" }}
+        >
+          <i
+            className="absolute bottom-0 left-0 top-0 block"
+            style={{ width: `${coveredPct}%`, minWidth: coveredPct > 0 ? 2 : 0, background: fillColor }}
+          />
+        </div>
+        {plug.timesShort !== undefined ? (
+          <em className="shrink-0 border border-dashed border-amber-400/70 bg-amber-400/20 px-1 text-[9px] font-black not-italic leading-[13px] text-amber-300">
+            {formatTimes(plug.timesShort)}
+          </em>
+        ) : null}
+      </div>
+
+      <StoryBody story={story} />
     </div>
   );
 }

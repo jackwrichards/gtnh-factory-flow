@@ -9,6 +9,7 @@ import type {
 import { buildRailPorts, deriveNodeVerdict } from "./node-verdict";
 import {
   buildEdgeStory,
+  explainPlug,
   explainPort,
   formatSlotRateOrNull,
   formatTimes,
@@ -150,10 +151,12 @@ describe("format helpers", () => {
     expect(formatSlotRateOrNull(0.5, "item")).toBe("0,50/s");
   });
 
-  it("formats ask multipliers compactly", () => {
+  it("formats ask multipliers compactly, with real magnitudes up to four digits", () => {
     expect(formatTimes(32 / 5.143)).toBe("×6,2");
     expect(formatTimes(15.7)).toBe("×16");
-    expect(formatTimes(300)).toBe("×99+");
+    expect(formatTimes(235)).toBe("×235");
+    expect(formatTimes(15000)).toBe("×9999+");
+    expect(formatTimes(Number.POSITIVE_INFINITY)).toBe("×9999+");
   });
 });
 
@@ -326,6 +329,242 @@ describe("explainPort — inputs", () => {
     expect(story.lines[0]).toBe("Nothing is connected here.");
     expect(story.lines[1]).toContain("drop this ingredient in by hand");
     expect(story.action?.text).toContain("Connect a real source");
+  });
+});
+
+describe("explainPlug — the asker's side", () => {
+  it("tells the hungry plug's story with the per-port fix", () => {
+    const { proj, result } = sulfuricFixture();
+    const verdict = deriveNodeVerdict(proj, result, "Tower");
+    const rails = buildRailPorts(
+      proj,
+      result,
+      "Tower",
+      { inputs: [], outputs: [{ kind: "fluid", id: "sulfuricgas", amount: 1 }] } as unknown as RecipeResources,
+      verdict,
+    );
+    const story = explainPlug(proj, result, "Tower", rails.outputs[0]!)!;
+
+    expect(rails.outputs[0]!.plug?.state).toBe("hungry");
+    expect(rails.outputs[0]!.plug?.askerName).toBe("LCR");
+    expect(story.stateWord).toBe("HUNGRY");
+    expect(story.lines[0]).toBe(
+      "The LCR asks for 32,0 L/s, but this machine can only put in 5,14 L/s.",
+    );
+    expect(story.action?.text).toBe("→ Add +6 of this machine, or use a higher tier.");
+    expect(story.rows.some((row) => row.k === "Short")).toBe(true);
+  });
+
+  it("reads blocked-upstream when the machine is starving itself", () => {
+    const proj = project({
+      recipes: towerRecipes,
+      nodes: [machineNode("N"), machineNode("C", "lcr"), machineNode("S")],
+      edges: [edge("eOut", "N", "C", "pe"), edge("eIn", "S", "N", "res")],
+    });
+    const result = throughput(
+      {
+        N: nodeResult({
+          utilization: 0.35,
+          capableUtilization: 0.35,
+          demandUtilization: 1,
+          inputs: { "item:res": flow("item", "res", 10) },
+          outputs: { "item:pe": flow("item", "pe", 60) },
+        }),
+      },
+      {
+        eOut: edgeResult({
+          transferredPerSecond: 21,
+          demandPerSecond: 21,
+          nameplateDemandPerSecond: 60,
+          constraint: "supply",
+        }),
+        eIn: edgeResult({ transferredPerSecond: 3.5, availablePerSecond: 3.5, constraint: "supply" }),
+      },
+    );
+    const verdict = deriveNodeVerdict(proj, result, "N");
+    const rails = buildRailPorts(
+      proj,
+      result,
+      "N",
+      {
+        inputs: [{ kind: "item", id: "res", amount: 1 }],
+        outputs: [{ kind: "item", id: "pe", amount: 1 }],
+      } as unknown as RecipeResources,
+      verdict,
+    );
+    const story = explainPlug(proj, result, "N", rails.outputs[0]!)!;
+
+    expect(rails.outputs[0]!.plug?.state).toBe("blocked");
+    expect(story.stateWord).toBe("BLOCKED UPSTREAM");
+    expect(story.lines[1]).toContain("starving itself");
+    expect(story.action?.text).toContain("Fix this machine's red input first");
+  });
+
+  it("keeps buffer-only plugs calm", () => {
+    const proj = project({
+      recipes: towerRecipes,
+      storages: [
+        { id: "T", kind: "item", resourceId: "pe", displayName: "PE Drawer" },
+      ] as unknown as FactoryProject["storages"],
+      nodes: [machineNode("N")],
+      edges: [edge("eTank", "N", "T", "pe")],
+    });
+    const result = throughput(
+      { N: nodeResult({ utilization: 1, outputs: { "item:pe": flow("item", "pe", 10) } }) },
+      { eTank: edgeResult({ transferredPerSecond: 10, demandPerSecond: 10 }) },
+    );
+    const verdict = deriveNodeVerdict(proj, result, "N");
+    const rails = buildRailPorts(
+      proj,
+      result,
+      "N",
+      { inputs: [], outputs: [{ kind: "item", id: "pe", amount: 1 }] } as unknown as RecipeResources,
+      verdict,
+    );
+    const story = explainPlug(proj, result, "N", rails.outputs[0]!)!;
+
+    expect(rails.outputs[0]!.plug?.state).toBe("soak");
+    expect(rails.outputs[0]!.plug?.askerName).toBe("PE Drawer (buffer)");
+    expect(story.stateWord).toBe("TAKES THE REST");
+    expect(story.lines[0]).toContain("A buffer is never hungry");
+  });
+});
+
+describe("per-port coupling (no worst-only gating)", () => {
+  it("marks EVERY over-asked output, not just the node's worst", () => {
+    const proj = project({
+      recipes: towerRecipes,
+      nodes: [machineNode("N"), machineNode("A", "lcr"), machineNode("B", "lcr")],
+      edges: [edge("eA", "N", "A", "big"), edge("eB", "N", "B", "small")],
+    });
+    const result = throughput(
+      {
+        N: nodeResult({
+          utilization: 1,
+          capableUtilization: 1,
+          demandUtilization: 1,
+          outputs: { "item:big": flow("item", "big", 10), "item:small": flow("item", "small", 2) },
+        }),
+      },
+      {
+        eA: edgeResult({
+          transferredPerSecond: 10,
+          demandPerSecond: 10,
+          nameplateDemandPerSecond: 30,
+          constraint: "supply",
+        }),
+        eB: edgeResult({
+          transferredPerSecond: 2,
+          demandPerSecond: 2,
+          nameplateDemandPerSecond: 10,
+          constraint: "supply",
+        }),
+      },
+    );
+    const verdict = deriveNodeVerdict(proj, result, "N");
+    const rails = buildRailPorts(
+      proj,
+      result,
+      "N",
+      {
+        inputs: [],
+        outputs: [
+          { kind: "item", id: "big", amount: 1 },
+          { kind: "item", id: "small", amount: 1 },
+        ],
+      } as unknown as RecipeResources,
+      verdict,
+    );
+
+    // Both plugs hungry at once — couplings are independent.
+    expect(rails.outputs.map((port) => port.plug?.state)).toEqual(["hungry", "hungry"]);
+
+    // The NON-worst output still tells its own can't-keep-up story with its
+    // own per-port fix: short 8/s at 2/s per machine = +4.
+    const smallStory = explainPort(proj, result, "N", rails.outputs[1]!, verdict);
+    expect(smallStory.stateWord).toBe("CAN'T KEEP UP");
+    expect(smallStory.action?.text).toBe("→ Add +4 of this machine, or use a higher tier.");
+
+    // The node-level verdict: worst by missing is "big" (20/s), but the one
+    // +N that covers everything comes from "small" (+4 beats +2).
+    expect(verdict.deficit?.displayName).toBe("big");
+    expect(verdict.deficit?.machinesToAdd).toBe(4);
+    expect(verdict.deficit?.hungryOutputs).toBe(2);
+    expect(verdict.deficit?.pluggedOutputs).toBe(2);
+  });
+});
+
+describe("buffer honesty on inputs", () => {
+  it("never predicts a non-dry buffer as the next bottleneck", () => {
+    const proj = project({
+      recipes: towerRecipes,
+      storages: [
+        { id: "T", kind: "fluid", resourceId: "hydrogen", displayName: "Hydrogen" },
+      ] as unknown as FactoryProject["storages"],
+      nodes: [machineNode("LCR", "lcr"), machineNode("Tower")],
+      edges: [
+        edge("eGas", "Tower", "LCR", "sulfuricgas", "fluid"),
+        edge("eH", "T", "LCR", "hydrogen", "fluid"),
+      ],
+    });
+    const result = throughput(
+      {
+        LCR: nodeResult({
+          nodeId: "LCR",
+          utilization: 0.004,
+          capableUtilization: 0.004,
+          demandUtilization: 0.004,
+          inputs: {
+            "fluid:sulfuricgas": flow("fluid", "sulfuricgas", 24000),
+            "fluid:hydrogen": flow("fluid", "hydrogen", 4000),
+          },
+        }),
+        Tower: nodeResult({
+          nodeId: "Tower",
+          utilization: 1,
+          outputs: { "fluid:sulfuricgas": flow("fluid", "sulfuricgas", 102) },
+        }),
+      },
+      {
+        eGas: edgeResult({
+          transferredPerSecond: 102,
+          availablePerSecond: 102,
+          constraint: "supply",
+        }),
+        // The buffer line's "available" is allocation garbage (17 of 4000) —
+        // it must read as no-cap, not as a 0% ceiling.
+        eH: edgeResult({ transferredPerSecond: 17, availablePerSecond: 17, constraint: "full" }),
+      },
+    );
+    const verdict = deriveNodeVerdict(proj, result, "LCR");
+
+    // The lie from the live board: "gets 102 of the needed 102, runs at 0%".
+    // Starved machines measure need at FULL BLAST.
+    expect(verdict.kind).toBe("starved");
+    expect(verdict.binding?.resourceKey).toBe("fluid:sulfuricgas");
+    expect(verdict.binding?.neededPerSecond).toBeCloseTo(24000, 3);
+    expect(verdict.binding?.suppliedPerSecond).toBeCloseTo(102, 3);
+    expect(verdict.binding?.upstream?.machinesToAdd).toBe(235);
+
+    const rails = buildRailPorts(
+      proj,
+      result,
+      "LCR",
+      {
+        inputs: [
+          { kind: "fluid", id: "sulfuricgas", amount: 1 },
+          { kind: "fluid", id: "hydrogen", amount: 1 },
+        ],
+        outputs: [],
+      } as unknown as RecipeResources,
+      verdict,
+    );
+    expect(rails.inputs[1]!.couldPerSecond).toBe(Number.POSITIVE_INFINITY);
+
+    const hydrogenStory = explainPort(proj, result, "LCR", rails.inputs[1]!, verdict);
+    expect(hydrogenStory.stateWord).toBe("NOT THE PROBLEM");
+    expect(hydrogenStory.lines[1]).toContain("delivers on demand, never the cap");
+    expect(hydrogenStory.action).toBeUndefined();
   });
 });
 

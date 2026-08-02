@@ -67,8 +67,15 @@ export interface NodeVerdict {
     kind: ResourceKind;
     displayName: string;
     missingPerSecond: number;
-    /** Machines to add so the ask is met; undefined when not computable. */
+    /**
+     * Machines to add so EVERY hungry output is fed (machine count scales all
+     * outputs together, so this is the max of the per-output requirements).
+     */
     machinesToAdd?: number;
+    /** How many outputs are over-asked right now (they're independent). */
+    hungryOutputs: number;
+    /** How many outputs have anything plugged in at all. */
+    pluggedOutputs: number;
   };
   /** Demand-set: percentage points the node could climb if asked. */
   headroomPct?: number;
@@ -100,6 +107,22 @@ export function honestEdgeAskPerSecond(edgeResult: EdgeThroughput | undefined): 
     return Math.max(edgeResult.nameplateDemandPerSecond ?? 0, edgeResult.demandPerSecond ?? 0);
   }
   return edgeResult.demandPerSecond ?? 0;
+}
+
+/**
+ * What a supply line could deliver. A buffer grants whatever is asked, and the
+ * damped ask can be ~nothing — so a buffer line must never read as a ceiling
+ * unless the solver actually marked it dry (constraint "supply"). Infinity
+ * here means "not a cap"; callers skip or clamp it for display.
+ */
+export function honestEdgeAvailablePerSecond(
+  edgeResult: EdgeThroughput | undefined,
+  sourceIsStorage: boolean,
+): number {
+  if (sourceIsStorage && edgeResult?.constraint !== "supply") {
+    return Number.POSITIVE_INFINITY;
+  }
+  return edgeResult?.availablePerSecond ?? edgeResult?.transferredPerSecond ?? 0;
 }
 
 export function deriveNodeVerdict(
@@ -145,7 +168,7 @@ export function deriveNodeVerdict(
   return {
     kind: "starved",
     pct,
-    binding: findBindingInput(project, result, nodeResult, nodeId, incoming, demand),
+    binding: findBindingInput(project, result, nodeResult, nodeId, incoming),
     deficit,
   };
 }
@@ -193,21 +216,46 @@ function findWorstOutputDeficit(
     return undefined;
   }
 
-  const flow = nodeResult.outputs[worst.key as keyof typeof nodeResult.outputs];
+  // Outputs are independent couplings: any number can be over-asked at once.
+  // One +N still fixes them all (machines scale every output together), so
+  // take the biggest per-output requirement, not the worst output's.
   const node = project.nodes.find((entry) => entry.id === nodeId);
   const machineCount = Math.max(1, node?.machineCount ?? 1);
-  const perMachine = flow ? flow.amountPerSecond / machineCount : 0;
-  const machinesToAdd =
-    perMachine > RATE_EPSILON
-      ? Math.min(9999, Math.ceil(worst.missing / perMachine - RATE_EPSILON))
-      : undefined;
+  let machinesToAdd: number | undefined;
+  for (const [key, missing] of missingByKey) {
+    const keyFlow = nodeResult.outputs[key as keyof typeof nodeResult.outputs];
+    const perMachine = keyFlow ? keyFlow.amountPerSecond / machineCount : 0;
+    if (perMachine <= RATE_EPSILON) {
+      continue;
+    }
+    const toAdd = Math.min(9999, Math.ceil(missing / perMachine - RATE_EPSILON));
+    if (toAdd > 0 && (machinesToAdd === undefined || toAdd > machinesToAdd)) {
+      machinesToAdd = toAdd;
+    }
+  }
 
+  let pluggedOutputs = 0;
+  for (const [key, flow] of Object.entries(nodeResult.outputs)) {
+    if (flow.amountPerSecond <= RATE_EPSILON) {
+      continue;
+    }
+    const plugged = outgoing.some(
+      (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === key,
+    );
+    if (plugged) {
+      pluggedOutputs += 1;
+    }
+  }
+
+  const flow = nodeResult.outputs[worst.key as keyof typeof nodeResult.outputs];
   return {
     resourceKey: worst.key,
     kind: flow?.kind ?? "item",
     displayName: flow?.displayName ?? flow?.resourceId ?? worst.key,
     missingPerSecond: worst.missing,
-    machinesToAdd: machinesToAdd && machinesToAdd > 0 ? machinesToAdd : undefined,
+    machinesToAdd,
+    hungryOutputs: missingByKey.size,
+    pluggedOutputs,
   };
 }
 
@@ -217,12 +265,12 @@ function findBindingInput(
   nodeResult: NodeThroughputResult,
   nodeId: string,
   incoming: ProjectEdge[],
-  demand: number,
 ): NodeVerdict["binding"] {
   if (!result) {
     return undefined;
   }
 
+  const storageIds = new Set((project.storages ?? []).map((storage) => storage.id));
   let binding:
     | { key: string; ratio: number; supplied: number; need: number; edges: ProjectEdge[] }
     | undefined;
@@ -239,10 +287,16 @@ function findBindingInput(
     }
     let supplied = 0;
     for (const edge of edges) {
-      const edgeResult = result.edges[edge.id];
-      supplied += edgeResult?.availablePerSecond ?? edgeResult?.transferredPerSecond ?? 0;
+      supplied += honestEdgeAvailablePerSecond(result.edges[edge.id], storageIds.has(edge.source));
     }
-    const need = flow.amountPerSecond * Math.min(Math.max(demand, 0), 1);
+    // A non-dry buffer line covers whatever is needed — this input can't bind.
+    if (!Number.isFinite(supplied)) {
+      continue;
+    }
+    // On a starving machine, demand is by definition not the limiter, so the
+    // honest need is the FULL-BLAST one. Scaling by the solver's damped
+    // demand made this circular ("gets 102 of the needed 102").
+    const need = flow.amountPerSecond;
     const ratio = need > RATE_EPSILON ? supplied / need : 1;
     if (!binding || ratio < binding.ratio) {
       binding = { key, ratio, supplied, need, edges };
@@ -342,6 +396,31 @@ function findUpstreamCulprit(
 }
 
 /**
+ * The plug block seated through the node's wall on an output: the ASKER's
+ * story, in the asker's frame. Any number of plugs can be hungry at once —
+ * couplings are independent contracts, there is no "worst output".
+ */
+export interface PortPlug {
+  /**
+   * hungry  = askers want more and THIS machine is the one to grow (amber)
+   * blocked = askers want more but this machine is starving itself (red)
+   * fed     = every asker gets what it asks for (green)
+   * soak    = only buffers attached; they take whatever comes (steel)
+   */
+  state: "hungry" | "blocked" | "fed" | "soak";
+  /** One machine's name, "N machines", or the buffer's name. */
+  askerName: string;
+  /** Distinct machine consumers on this port (0 when buffers only). */
+  askerMachines: number;
+  askPerSecond: number;
+  getPerSecond: number;
+  /** get/ask, clamped 0..1 — the plug bar's fill. */
+  coveredFraction: number;
+  /** ask/get when hungry (Infinity when nothing flows yet). */
+  timesShort?: number;
+}
+
+/**
  * One rail port per unique resource a node can exchange: the wire, the live
  * rate, and the health readout share a single surface. Ports pool repeated
  * recipe slots exactly the way the solver pools their flows.
@@ -375,6 +454,8 @@ export interface RailPort {
   couldPerSecond: number;
   fillFraction: number;
   tone: "ok" | "bind" | "hot" | "calm" | "idle" | "slowed";
+  /** Outputs only: the asker-side coupling, when anything is plugged in. */
+  plug?: PortPlug;
   badge?: { kind: "short" | "asked"; perSecond: number };
   /** Render "current / nameplate" instead of the bare current rate. */
   showNameplate: boolean;
@@ -393,6 +474,18 @@ export function buildRailPorts(
   const capable = clamp01(nodeResult?.capableUtilization, 1);
   const incoming = project.edges.filter((edge) => edge.target === nodeId);
   const outgoing = project.edges.filter((edge) => edge.source === nodeId);
+  const storagesById = new Map((project.storages ?? []).map((storage) => [storage.id, storage]));
+  const nodesById = new Map(project.nodes.map((entry) => [entry.id, entry]));
+  const recipesById = new Map(project.recipes.map((entry) => [entry.id, entry]));
+  const machineNameOf = (id: string): string => {
+    const node = nodesById.get(id);
+    const recipe = node ? recipesById.get(node.recipeId) : undefined;
+    return recipe?.machineType ?? recipe?.name ?? "Machine";
+  };
+  const storageNameOf = (id: string): string => {
+    const storage = storagesById.get(id);
+    return storage ? `${storage.displayName ?? storage.resourceId} (buffer)` : "Buffer";
+  };
 
   const buildSide = (side: "input" | "output"): RailPort[] => {
     const isInput = side === "input";
@@ -427,18 +520,29 @@ export function buildRailPorts(
       const connected = edges.length > 0;
       let transferred = 0;
       let available = 0;
-      let wantedByLines = 0;
+      let machineAsk = 0;
+      let machineGet = 0;
+      let storageGet = 0;
+      const machineTargets = new Set<string>();
+      const storageTargets = new Set<string>();
       for (const edge of edges) {
         const edgeResult = result?.edges[edge.id];
-        transferred += edgeResult?.transferredPerSecond ?? 0;
-        available += edgeResult?.availablePerSecond ?? edgeResult?.transferredPerSecond ?? 0;
-        if (!isInput) {
-          wantedByLines += honestEdgeAskPerSecond(edgeResult);
+        const rate = edgeResult?.transferredPerSecond ?? 0;
+        transferred += rate;
+        if (isInput) {
+          available += honestEdgeAvailablePerSecond(edgeResult, storagesById.has(edge.source));
+        } else if (storagesById.has(edge.target)) {
+          storageGet += rate;
+          storageTargets.add(edge.target);
+        } else {
+          machineAsk += honestEdgeAskPerSecond(edgeResult);
+          machineGet += rate;
+          machineTargets.add(edge.target);
         }
       }
+      const wantedByLines = machineAsk + storageGet;
 
       const isBinding = verdict.kind === "starved" && verdict.binding?.resourceKey === key;
-      const isDeficit = verdict.kind === "choke" && verdict.deficit?.resourceKey === key;
       const askRate = nameplate * Math.min(demand, 1);
 
       let tone: RailPort["tone"] = "ok";
@@ -468,17 +572,48 @@ export function buildRailPorts(
         wantedPerSecond = connected ? wantedByLines : 0;
         couldPerSecond = nameplate * capable;
         fillFraction = utilization;
-        if (isDeficit) {
+        // The chip is the MACHINE's story: one machine, one color across all
+        // its maker bars. The asker's mood lives on the plug, not here.
+        if (verdict.kind === "choke") {
           tone = "hot";
-          badge = {
-            kind: "asked",
-            perSecond: currentPerSecond + (verdict.deficit?.missingPerSecond ?? 0),
-          };
         } else if (verdict.kind === "starved") {
-          // The whole machine is slowed by an input; its outputs run slow too.
           tone = "slowed";
         } else if (verdict.kind === "demand-set") {
           tone = "calm";
+        }
+      }
+
+      // The plug: the asker-side coupling, independent per output.
+      let plug: RailPort["plug"];
+      if (!isInput && connected) {
+        const hasMachines = machineTargets.size > 0;
+        const ask = hasMachines ? machineAsk : storageGet;
+        const get = hasMachines ? machineGet : storageGet;
+        const hungry =
+          hasMachines && ask > get + Math.max(RATE_EPSILON, ask * VERDICT_EPSILON);
+        plug = {
+          state: !hasMachines
+            ? "soak"
+            : hungry
+              ? utilization >= 1 - VERDICT_EPSILON
+                ? "hungry"
+                : "blocked"
+              : "fed",
+          askerName: hasMachines
+            ? machineTargets.size === 1
+              ? machineNameOf([...machineTargets][0]!)
+              : `${machineTargets.size} machines`
+            : storageTargets.size === 1
+              ? storageNameOf([...storageTargets][0]!)
+              : `${storageTargets.size} buffers`,
+          askerMachines: machineTargets.size,
+          askPerSecond: ask,
+          getPerSecond: get,
+          coveredFraction: ask > RATE_EPSILON ? clamp01(get / ask, 1) : 1,
+          timesShort: hungry ? (get > RATE_EPSILON ? ask / get : Number.POSITIVE_INFINITY) : undefined,
+        };
+        if (hungry) {
+          badge = { kind: "asked", perSecond: ask };
         }
       }
 
@@ -498,6 +633,7 @@ export function buildRailPorts(
         couldPerSecond,
         fillFraction,
         tone,
+        plug,
         badge,
         showNameplate: isInput && isBinding,
       });
@@ -561,6 +697,10 @@ export function buildLimitLadder(
   const storageIds = new Set((project.storages ?? []).map((storage) => storage.id));
   const rungs: LimitRung[] = [];
 
+  // Fleet first: on a 100% tie with a supply rung, "machine count" is the
+  // actionable name (dedupe keeps the first of a tie).
+  rungs.push({ pct: 100, label: "machine count", now: false });
+
   for (const [key, flow] of Object.entries(nodeResult.inputs)) {
     if (flow.amountPerSecond <= RATE_EPSILON) {
       continue;
@@ -574,17 +714,19 @@ export function buildLimitLadder(
     }
     let available = 0;
     for (const edge of edges) {
-      const edgeResult = result?.edges[edge.id];
-      available += edgeResult?.availablePerSecond ?? edgeResult?.transferredPerSecond ?? 0;
+      available += honestEdgeAvailablePerSecond(result?.edges[edge.id], storageIds.has(edge.source));
+    }
+    const pct = (available / flow.amountPerSecond) * 100;
+    // A non-dry buffer feeds on demand — never a rung on the ladder.
+    if (!Number.isFinite(pct)) {
+      continue;
     }
     rungs.push({
-      pct: (available / flow.amountPerSecond) * 100,
+      pct,
       label: `${flow.displayName ?? flow.resourceId} supply`,
       now: false,
     });
   }
-
-  rungs.push({ pct: 100, label: "machine count", now: false });
 
   let demandRatio: number | undefined;
   for (const [key, flow] of Object.entries(nodeResult.outputs)) {
