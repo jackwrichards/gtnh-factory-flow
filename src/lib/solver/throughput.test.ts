@@ -962,7 +962,9 @@ describe("calculateThroughput", () => {
     const result = calculateThroughput(project, { generatedAt: "fixed" });
 
     expect(result.nodes["mega-distillation"].utilization).toBeCloseTo(15_000 / 256_000);
-    expect(result.edges["tank-to-mega-distillation"].demandPerSecond).toBeCloseTo(15_000);
+    // Demand is the machine's honest ask (its full-speed appetite; nothing
+    // else limits it), no longer an echo of its own starved throttle.
+    expect(result.edges["tank-to-mega-distillation"].demandPerSecond).toBeCloseTo(256_000);
     expect(result.edges["tank-to-mega-distillation"].transferredPerSecond).toBeCloseTo(15_000);
     expect(result.storages["woodtar-tank"].producedPerSecond).toBeCloseTo(15_000);
     expect(result.storages["woodtar-tank"].consumedPerSecond).toBeCloseTo(15_000);
@@ -1954,14 +1956,14 @@ describe("calculateThroughput", () => {
     const result = calculateThroughput(project, { generatedAt: "fixed" });
     const edge = result.edges["producer-to-consumer"];
 
-    // The consumer wants 100/s but the producer only makes 1/s. Node
-    // utilisation converges downwards until demand matches supply, which is why
-    // demandPerSecond and isLimited cannot detect this on their own.
+    // The consumer wants 100/s but the producer only makes 1/s. Asks no
+    // longer track the consumer's own starved throttle, so the edge reports
+    // the honest shortfall directly instead of hiding it behind convergence.
     expect(edge.transferredPerSecond).toBeCloseTo(1);
-    expect(edge.demandPerSecond).toBeCloseTo(1);
-    expect(edge.isLimited).toBe(false);
+    expect(edge.demandPerSecond).toBeCloseTo(100);
+    expect(edge.isLimited).toBe(true);
 
-    // The nameplate comparison is what survives that convergence.
+    // The nameplate comparison agrees.
     expect(edge.nameplateDemandPerSecond).toBeCloseTo(100);
     expect(edge.sourceCapacityPerSecond).toBeCloseTo(1);
     expect(edge.constraint).toBe("supply");

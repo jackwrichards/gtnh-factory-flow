@@ -380,6 +380,13 @@ export interface EdgeThroughput {
   /** What the producer could emit at 100% utilisation. */
   sourceCapacityPerSecond: number;
   /**
+   * This line's share of what the consumer COULD be supplied (capability
+   * allocation, ignoring demand throttles). Solver-internal: consumer
+   * capability derives from this rather than from `transferredPerSecond`,
+   * which is demand-scaled and would ratchet capability downward.
+   */
+  availablePerSecond?: number;
+  /**
    * Which end is holding the flow back:
    * - `supply`  producer is maxed out and the consumer is starved
    * - `demand`  both ends have slack; the plan just doesn't need more
@@ -407,6 +414,14 @@ export interface NodeThroughputResult {
    * could ramp up to if asked, or an initially low ask locks in forever.
    */
   capableUtilization?: number;
+  /**
+   * How hard this node WANTS to run from demand alone (targets and consumer
+   * asks), before any input-supply clamp. Solver-internal: a consumer's ask
+   * for an ingredient must not shrink just because that same ingredient is
+   * currently short - allocation is capped by asks, so utilization could
+   * ratchet down through any transient but never climb back up.
+   */
+  demandUtilization?: number;
   theoreticalMachinesRequired: number;
   limitingResource?: ResourceFlow;
   status: "disabled" | "balanced" | "underutilized" | "bottleneck" | "missing-recipe";

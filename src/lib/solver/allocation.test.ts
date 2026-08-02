@@ -97,7 +97,9 @@ describe("solver allocation", () => {
     expect(result.nodes["C2"]!.utilization).toBeCloseTo(0.625, 4);
   });
 
-  it("gives a lossy loop the same answer regardless of unrelated board size", () => {
+  // Generous timeout: the 300-filler board legitimately needs ~1000 passes to
+  // decay the loop, and suite-parallel workers share cores.
+  it("gives a lossy loop the same answer regardless of unrelated board size", { timeout: 30000 }, () => {
     const build = (extraNodes: number) => {
       const recipes = [
         recipe(
