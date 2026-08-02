@@ -2107,7 +2107,13 @@ function ResourceEdgeComponent({
   const vividColor = saturateHexColor(resourceColor, 0.45);
   const edgeColor = theme === "dark" ? brightenHexColor(vividColor, 0.15) : vividColor;
   const isGlobalView = hasEdgeDetail(detailLevel, EDGE_DETAIL_GLOBAL);
-  const isHighlighted = selected || data?.isFlowHighlighted === true;
+  // Lit when a hovered port or label pulls this line into its flow scope.
+  // Boolean selector: only involved edges re-render on hover changes.
+  const isFlowScopeLit = useFactoryStore((state) =>
+    Boolean(state.hoveredFlowScope?.edges[id]),
+  );
+  const setHoveredFlowScope = useFactoryStore((state) => state.setHoveredFlowScope);
+  const isHighlighted = selected || data?.isFlowHighlighted === true || isFlowScopeLit;
   // AGENTS.md requires routing to be deterministic and independent of zoom
   // level. Precise routing used to be switched off below 0.45 because measuring
   // was expensive; now that measurements are cached across frames it always runs,
@@ -2364,8 +2370,33 @@ function ResourceEdgeComponent({
                   : undefined,
               zIndex: isLabelHovered ? 60 : undefined,
             }}
-            onMouseEnter={() => setLabelHovered(true)}
-            onMouseLeave={() => setLabelHovered(false)}
+            onMouseEnter={() => {
+              setLabelHovered(true);
+              // The label is the edge's hover surface: light this line (or
+              // the whole bundle) plus both endpoint ports.
+              const edges: Record<string, true> = {};
+              for (const bundleEdgeId of data.bundle?.edgeIds ?? [id]) {
+                edges[bundleEdgeId] = true;
+              }
+              const ports: Record<string, true> = {};
+              const sourcePortHandle = canonicalizeResourceHandleId(data.sourceHandleId);
+              const targetPortHandle = canonicalizeResourceHandleId(data.targetHandleId);
+              if (sourcePortHandle) {
+                ports[`${source}|${sourcePortHandle}`] = true;
+              }
+              if (targetPortHandle) {
+                ports[`${target}|${targetPortHandle}`] = true;
+              }
+              setHoveredFlowScope({
+                edges,
+                ports,
+                nodes: { [source]: true, [target]: true },
+              });
+            }}
+            onMouseLeave={() => {
+              setLabelHovered(false);
+              setHoveredFlowScope(undefined);
+            }}
             onPointerDown={(event) => {
               event.stopPropagation();
               window.dispatchEvent(

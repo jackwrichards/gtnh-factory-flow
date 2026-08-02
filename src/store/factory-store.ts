@@ -66,6 +66,17 @@ interface FactoryStore {
   hoveredStorageResourceKey?: string;
   hoveredFlowResourceKey?: string;
   selectedFlowResourceKey?: string;
+  /**
+   * The flow neighbourhood under the cursor: hovering a port lights every
+   * edge on it plus their far-end ports; hovering an edge label lights that
+   * line and both endpoints. Maps give O(1) membership for per-element
+   * selectors.
+   */
+  hoveredFlowScope?: {
+    edges: Record<string, true>;
+    ports: Record<string, true>;
+    nodes: Record<string, true>;
+  };
   hoveredNodeBottlenecks: boolean;
   selectedNodeBottlenecks: boolean;
   /** Node hovered in the inspector's usage grid, highlighted on the canvas. */
@@ -97,6 +108,11 @@ interface FactoryStore {
   setNodeColorPaintMode: (colorTag?: FactoryNodeColorTag | null) => void;
   setHoveredStorageResourceKey: (key?: string) => void;
   setHoveredFlowResourceKey: (key?: string) => void;
+  setHoveredFlowScope: (scope?: {
+    edges: Record<string, true>;
+    ports: Record<string, true>;
+    nodes: Record<string, true>;
+  }) => void;
   selectFlowResourceKey: (key?: string) => void;
   setHoveredNodeBottlenecks: (isHovered: boolean) => void;
   toggleNodeBottlenecks: () => void;
@@ -244,6 +260,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   nodeColorPaintMode: undefined,
   hoveredStorageResourceKey: undefined,
   hoveredFlowResourceKey: undefined,
+  hoveredFlowScope: undefined,
   selectedFlowResourceKey: undefined,
   hoveredNodeBottlenecks: false,
   selectedNodeBottlenecks: false,
@@ -557,6 +574,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
   setHoveredFlowResourceKey: (key) => {
     set({ hoveredFlowResourceKey: key });
+  },
+  setHoveredFlowScope: (scope) => {
+    set({ hoveredFlowScope: scope });
   },
   selectFlowResourceKey: (key) => {
     set((state) => ({

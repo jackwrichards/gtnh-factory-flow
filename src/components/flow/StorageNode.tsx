@@ -27,6 +27,10 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
     (state) => state.setHoveredStorageResourceKey,
   );
   const resourceKey = makeResourceKey(storage.kind, storage.resourceId);
+  // Lit when a hovered port/label pulls this buffer into its flow scope.
+  const isFlowScopeLit = useFactoryStore((state) =>
+    Boolean(state.hoveredFlowScope?.nodes[storage.id]),
+  );
   const isHighlighted =
     hoveredStorageResourceKey === resourceKey ||
     (hoveredFlowResourceKey ?? selectedFlowResourceKey) === resourceKey;
@@ -64,6 +68,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
         "group relative text-[#202020]",
         storageColor ? "storage-node-tinted" : "",
         selected ? "ring-2 ring-cyan-300" : "",
+        isFlowScopeLit && !isHighlighted ? "ring-4 ring-cyan-300" : "",
         isHighlighted
           ? "outline outline-4 outline-offset-4 outline-yellow-300 ring-8 ring-cyan-300 [filter:drop-shadow(0_0_16px_rgba(34,211,238,0.95))]"
           : "",

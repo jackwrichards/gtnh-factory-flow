@@ -54,7 +54,11 @@ import { MachineStatsContent } from "./MachineStatsContent";
 import { UsageLimitContent } from "@/components/inspector/UsageLimitContent";
 import { buildUsageLimitChain } from "@/components/inspector/usage-limits";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
-import { canonicalizeResourceHandleId, parseResourceHandleId } from "./resource-handles";
+import {
+  canonicalizeResourceHandleId,
+  makeResourceHandleId,
+  parseResourceHandleId,
+} from "./resource-handles";
 import {
   buildRailPorts,
   deriveNodeVerdict,
@@ -813,6 +817,39 @@ function PortRail({
  * The chip doubles as the React Flow handle (drag to wire) and as the edge
  * anchor element the router measures.
  */
+/**
+ * The flow neighbourhood a port hover lights up: every line on this port,
+ * the far-end port of each line, and the nodes involved (so storages can
+ * glow too). Built lazily on pointer-enter from live store state.
+ */
+function buildPortFlowScope(nodeId: string, port: RailPort) {
+  const { project } = useFactoryStore.getState();
+  const edges: Record<string, true> = {};
+  const ports: Record<string, true> = { [`${nodeId}|${port.handleId}`]: true };
+  const nodes: Record<string, true> = { [nodeId]: true };
+  const isInput = port.side === "input";
+  for (const edge of project.edges) {
+    if ((isInput ? edge.target : edge.source) !== nodeId) {
+      continue;
+    }
+    if (!edgeTouchesPortResource(edge, port)) {
+      continue;
+    }
+    edges[edge.id] = true;
+    const otherId = isInput ? edge.source : edge.target;
+    nodes[otherId] = true;
+    const rawOtherHandle = isInput ? edge.sourceHandle : edge.targetHandle;
+    const otherHandle =
+      canonicalizeResourceHandleId(rawOtherHandle) ??
+      makeResourceHandleId(isInput ? "output" : "input", {
+        kind: edge.resourceKind,
+        id: edge.resourceId,
+      });
+    ports[`${otherId}|${otherHandle}`] = true;
+  }
+  return { edges, ports, nodes };
+}
+
 function PortChip({
   nodeId,
   port,
@@ -824,6 +861,10 @@ function PortChip({
 }) {
   const isInput = port.side === "input";
   const browseResource = useFactoryStore((state) => state.browseResource);
+  const setHoveredFlowScope = useFactoryStore((state) => state.setHoveredFlowScope);
+  const isFlowScopeLit = useFactoryStore((state) =>
+    Boolean(state.hoveredFlowScope?.ports[`${nodeId}|${port.handleId}`]),
+  );
   const slotState = getConnectionSlotState(
     pending,
     nodeId,
@@ -870,10 +911,16 @@ function PortChip({
 
   return (
     <div
-      className={["flow-port relative flex items-center gap-1 px-1 py-0.5", toneClass].join(" ")}
+      className={[
+        "flow-port relative flex items-center gap-1 px-1 py-0.5",
+        toneClass,
+        isFlowScopeLit ? "z-10 ring-2 ring-cyan-300 brightness-110" : "",
+      ].join(" ")}
       data-resource-edge-anchor="true"
       data-resource-node-id={nodeId}
       data-resource-handle-id={port.handleId}
+      onPointerEnter={() => setHoveredFlowScope(buildPortFlowScope(nodeId, port))}
+      onPointerLeave={() => setHoveredFlowScope(undefined)}
     >
       {slotState !== "idle" ? (
         <span
