@@ -241,8 +241,13 @@ describe("deriveNodeVerdict", () => {
     );
     expect(rails.outputs[0]!.wantedPerSecond).toBeCloseTo(32, 4);
     expect(rails.outputs[0]!.couldPerSecond).toBeCloseTo(5.143, 4);
-    expect(rails.outputs[0]!.tone).toBe("hot");
-    expect(rails.outputs[0]!.badge?.perSecond).toBeCloseTo(32, 4);
+    // The chip stays the machine's story — green at full speed. The hunger
+    // lives on the plug, in the asker's frame.
+    expect(rails.outputs[0]!.tone).toBe("ok");
+    expect(rails.outputs[0]!.badge).toBeUndefined();
+    expect(rails.outputs[0]!.plug?.state).toBe("hungry");
+    expect(rails.outputs[0]!.plug?.askPerSecond).toBeCloseTo(32, 4);
+    expect(rails.outputs[0]!.plug?.timesShort).toBeCloseTo(32 / 5.143, 3);
   });
 
   it("does not beg upstream for a consumer throttled by its own downstream", () => {
@@ -609,8 +614,9 @@ describe("buildRailPorts", () => {
     );
     const chokeVerdict = deriveNodeVerdict(proj, choke, "N");
     const chokeRails = buildRailPorts(proj, choke, "N", recipeResources, chokeVerdict);
-    expect(chokeRails.outputs[0]!.tone).toBe("hot");
-    expect(chokeRails.outputs[0]!.badge?.perSecond).toBeCloseTo(340, 4);
+    expect(chokeRails.outputs[0]!.tone).toBe("ok");
+    expect(chokeRails.outputs[0]!.plug?.state).toBe("hungry");
+    expect(chokeRails.outputs[0]!.plug?.askPerSecond).toBeCloseTo(340, 4);
   });
 });
 

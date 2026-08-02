@@ -161,7 +161,7 @@ describe("format helpers", () => {
 });
 
 describe("explainPort — outputs", () => {
-  it("tells the can't-keep-up story with the +N fix", () => {
+  it("keeps the maker's story green at full speed and points at the plug", () => {
     const { proj, result } = sulfuricFixture();
     const verdict = deriveNodeVerdict(proj, result, "Tower");
     const rails = buildRailPorts(
@@ -173,13 +173,13 @@ describe("explainPort — outputs", () => {
     );
     const story = explainPort(proj, result, "Tower", rails.outputs[0]!, verdict);
 
-    expect(story.stateWord).toBe("CAN'T KEEP UP");
-    expect(story.tone).toBe("amber");
-    expect(story.lines[0]).toContain("already at full speed");
-    expect(story.lines[0]).toContain("5,14 L/s");
-    expect(story.lines[1]).toContain("32,0 L/s");
+    // The machine is doing everything it can — its story is a good one.
+    // The hunger (and the +N fix) belongs to the plug's hover.
+    expect(story.stateWord).toBe("DONE");
+    expect(story.tone).toBe("green");
+    expect(story.lines[0]).toContain("doing everything it can");
     expect(story.lines[1]).toContain("×6,2 more");
-    expect(story.action?.text).toBe("→ Add +6 of this machine, or use a higher tier.");
+    expect(story.lines[1]).toContain("hover the block");
     expect(story.rows.some((row) => row.k === "Wanted by 1 machine")).toBe(true);
   });
 });
@@ -479,10 +479,10 @@ describe("per-port coupling (no worst-only gating)", () => {
     // Both plugs hungry at once — couplings are independent.
     expect(rails.outputs.map((port) => port.plug?.state)).toEqual(["hungry", "hungry"]);
 
-    // The NON-worst output still tells its own can't-keep-up story with its
+    // The NON-worst output's plug still tells its own hungry story with its
     // own per-port fix: short 8/s at 2/s per machine = +4.
-    const smallStory = explainPort(proj, result, "N", rails.outputs[1]!, verdict);
-    expect(smallStory.stateWord).toBe("CAN'T KEEP UP");
+    const smallStory = explainPlug(proj, result, "N", rails.outputs[1]!)!;
+    expect(smallStory.stateWord).toBe("HUNGRY");
     expect(smallStory.action?.text).toBe("→ Add +4 of this machine, or use a higher tier.");
 
     // The node-level verdict: worst by missing is "big" (20/s), but the one

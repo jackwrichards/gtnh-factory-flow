@@ -611,27 +611,9 @@ textarea {
 
 /* ---------- output sockets: prongs on the wall + the asker's plug ---------- */
 
-.flow-prongs {
-  display: flex;
-  width: 8px;
-  height: 18px;
-  flex-direction: column;
-  justify-content: space-between;
-  margin-left: 1px;
-}
-
-.flow-prongs > i {
-  display: block;
-  height: 6px;
-  background: var(--mc-47);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5);
-}
-
-/* The asker's block: chip-height, two lines, seated through the machine
-   wall — its first ~12px sit inside the border, the rest hangs into the
-   node's transparent gutter (the negative margin keeps row layout honest). */
+/* The asker's block: chip-height, two lines, connected to the maker chip by
+   one thick stub in the plug's own color. The row's layout box includes the
+   whole plug, so the edge anchor (the row) ends at the plug's right edge. */
 .flow-plug {
   position: relative;
   z-index: 5;
@@ -639,7 +621,7 @@ textarea {
   flex: none;
   width: 170px;
   height: 34px;
-  margin-right: -158px;
+  margin-left: 9px;
   flex-direction: column;
   justify-content: center;
   gap: 3px;
@@ -652,14 +634,30 @@ textarea {
     inset -1px -1px 0 rgba(0, 0, 0, 0.3);
 }
 
+/* The coupling stub: one thick connector, colored like its plug. */
+.flow-plug::before {
+  content: "";
+  position: absolute;
+  left: -11px;
+  top: 50%;
+  width: 11px;
+  height: 8px;
+  transform: translateY(-50%);
+  background: var(--mc-47);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.5);
+}
+
 .flow-plug-top {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 4px;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 800;
-  line-height: 11px;
+  line-height: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .flow-plug-top > b {
@@ -707,6 +705,9 @@ textarea {
   background: var(--port-hot-bg);
   border-color: var(--port-hot-edge);
 }
+.flow-plug--hungry::before {
+  background: var(--port-hot-edge);
+}
 .flow-plug--hungry .flow-plug-track > i {
   background: var(--rail-bar-hot);
 }
@@ -715,6 +716,9 @@ textarea {
   background: var(--port-bind-bg);
   border-color: var(--port-bind-edge);
 }
+.flow-plug--blocked::before {
+  background: var(--port-bind-edge);
+}
 .flow-plug--blocked .flow-plug-track > i {
   background: var(--rail-bar-bad);
 }
@@ -722,6 +726,9 @@ textarea {
 .flow-plug--fed {
   background: var(--port-fed-bg);
   border-color: var(--port-fed-edge);
+}
+.flow-plug--fed::before {
+  background: var(--port-fed-edge);
 }
 .flow-plug--fed .flow-plug-track > i {
   background: var(--rail-bar-ok);
@@ -737,7 +744,7 @@ textarea {
   flex: none;
   width: 170px;
   height: 34px;
-  margin-right: -158px;
+  margin-left: 9px;
   align-items: center;
   padding: 0 8px;
   border: 2px dashed var(--mc-47);

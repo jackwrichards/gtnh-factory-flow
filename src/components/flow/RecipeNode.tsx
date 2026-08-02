@@ -376,7 +376,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     >
     <div
       className={[
-        "relative min-w-[300px] border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
+        "relative min-w-[340px] border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
         selected ? "ring-2 ring-cyan-300" : "",
         isSearchHighlighted ? "ring-4 ring-sky-300" : "",
         isInspectorHighlighted
@@ -580,6 +580,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               ports={rails.inputs}
               pending={pendingResourceConnection}
             />
+            {rails.inputs.length > 0 && rails.outputs.length > 0 ? (
+              <div className="flex w-5 shrink-0 items-center justify-center self-stretch text-[15px] font-black text-[var(--mc-ink-muted)]">
+                →
+              </div>
+            ) : null}
             <PortRail
               nodeId={projectNode.id}
               side="output"
@@ -860,8 +865,11 @@ function OutputSocketRow({
 }) {
   const setHoveredFlowScope = useFactoryStore((state) => state.setHoveredFlowScope);
   return (
+    // w-max: the row's box must physically include the overhanging plug so
+    // the edge anchor (this row) ends at the plug's right edge — wires dock
+    // where the cord actually leaves the coupling.
     <div
-      className="relative flex items-center"
+      className="relative flex w-max items-center"
       data-resource-edge-anchor="true"
       data-resource-node-id={nodeId}
       data-resource-handle-id={port.handleId}
@@ -869,10 +877,6 @@ function OutputSocketRow({
       onPointerLeave={() => setHoveredFlowScope(undefined)}
     >
       <PortChip nodeId={nodeId} port={port} pending={pending} plugRow />
-      <span className="flow-prongs shrink-0" aria-hidden>
-        <i />
-        <i />
-      </span>
       {port.plug ? (
         <PlugBlock nodeId={nodeId} port={port} />
       ) : (
@@ -892,16 +896,17 @@ const PLUG_GLOW_STYLE: CSSProperties = {
   zIndex: 15,
 };
 
-/** The asker's block: two lines, chip-height, in the asker's own frame. */
+/**
+ * The asker's block: two lines, chip-height, pure numbers — "gets / asks"
+ * over the covered bar. WHO is asking (one machine, three machines, a
+ * buffer) lives in the hover; many machines can share one output and a
+ * name would lie by omission.
+ */
 function PlugBlock({ nodeId, port }: { nodeId: string; port: RailPort }) {
   const plug = port.plug!;
   const isFlowScopeLit = useFactoryStore((state) =>
     Boolean(state.hoveredFlowScope?.ports[`${nodeId}|${port.handleId}`]),
   );
-  const askText = `${plug.state === "soak" ? "soaks" : "asks"} ${formatSlotRate(
-    plug.askPerSecond,
-    port.kind,
-  )}`;
   return (
     <MinecraftTooltip
       label={`${port.displayName} — the asker's side`}
@@ -912,8 +917,14 @@ function PlugBlock({ nodeId, port }: { nodeId: string; port: RailPort }) {
         style={isFlowScopeLit ? PLUG_GLOW_STYLE : undefined}
       >
         <span className="flow-plug-top">
-          <b>{plug.askerName}</b>
-          <i className="not-italic">{askText}</i>
+          {plug.state === "soak" ? (
+            <b>takes {formatSlotRate(plug.getPerSecond, port.kind)}</b>
+          ) : (
+            <b>
+              {formatSlotRateBare(plug.getPerSecond)} /{" "}
+              {formatSlotRate(plug.askPerSecond, port.kind)}
+            </b>
+          )}
         </span>
         <span className="flow-plug-bar">
           <span className="flow-plug-track">
@@ -1027,13 +1038,9 @@ function PortChip({
       )}`
     : formatSlotRate(port.currentPerSecond, port.kind);
   // Noise floor: a badge that would read "0.000" says nothing — drop it.
+  // Only inputs badge now ("missing X"); the output ask story is the plug's.
   const badgeRate = port.badge ? formatSlotRateOrNull(port.badge.perSecond, port.kind) : null;
-  const badgeText =
-    port.badge && badgeRate
-      ? port.badge.kind === "short"
-        ? `missing ${badgeRate}`
-        : `wanted ${formatSlotRateBare(port.badge.perSecond)}`
-      : undefined;
+  const badgeText = port.badge && badgeRate ? `missing ${badgeRate}` : undefined;
 
   // One bar, one ruler: 100% = full blast. Solid = now, hatch = would unlock
   // if fed. The caret/burst (the want) is an INPUT-side signal — on outputs
@@ -1050,7 +1057,8 @@ function PortChip({
   return (
     <div
       className={[
-        "flow-port relative flex min-h-[34px] flex-1 items-center gap-1 px-1 py-0.5",
+        "flow-port relative flex min-h-[34px] items-center gap-1 px-1 py-0.5",
+        plugRow ? "w-[118px] flex-none" : "flex-1",
         toneClass,
         isFlowScopeLit ? "flow-port--flow-lit" : "",
       ].join(" ")}

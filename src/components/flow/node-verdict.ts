@@ -572,11 +572,10 @@ export function buildRailPorts(
         wantedPerSecond = connected ? wantedByLines : 0;
         couldPerSecond = nameplate * capable;
         fillFraction = utilization;
-        // The chip is the MACHINE's story: one machine, one color across all
-        // its maker bars. The asker's mood lives on the plug, not here.
-        if (verdict.kind === "choke") {
-          tone = "hot";
-        } else if (verdict.kind === "starved") {
+        // The chip is the MACHINE's story only: at full speed it reads green
+        // no matter how loudly the plugs beg — "everything here is amazing,
+        // it's the plug that says where's my stuff". One machine, one color.
+        if (verdict.kind === "starved") {
           tone = "slowed";
         } else if (verdict.kind === "demand-set") {
           tone = "calm";
@@ -612,9 +611,6 @@ export function buildRailPorts(
           coveredFraction: ask > RATE_EPSILON ? clamp01(get / ask, 1) : 1,
           timesShort: hungry ? (get > RATE_EPSILON ? ask / get : Number.POSITIVE_INFINITY) : undefined,
         };
-        if (hungry) {
-          badge = { kind: "asked", perSecond: ask };
-        }
       }
 
       ports.push({

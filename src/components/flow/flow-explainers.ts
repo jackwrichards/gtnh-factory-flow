@@ -216,7 +216,7 @@ export function explainPort(
   const breakdown = buildPortBreakdown(project, result, nodeId, port);
   return port.side === "input"
     ? explainInputPort(port, verdict, breakdown)
-    : explainOutputPort(project, nodeId, port, verdict, breakdown);
+    : explainOutputPort(port, verdict, breakdown);
 }
 
 /**
@@ -354,8 +354,6 @@ function supplierNote(row: PortLineRow): string | undefined {
 }
 
 function explainOutputPort(
-  project: FactoryProject,
-  nodeId: string,
   port: RailPort,
   verdict: NodeVerdict,
   breakdown: PortBreakdown | undefined,
@@ -368,10 +366,6 @@ function explainOutputPort(
   const speedPct = nameplate > EPS ? (current / nameplate) * 100 : 0;
 
   const consumers = breakdown?.rows.filter((row) => !row.isStorage) ?? [];
-  const consumerPhrase =
-    consumers.length === 1
-      ? `The ${consumers[0]!.name} after it`
-      : `The ${consumers.length} machines after it`;
   const machineWant = breakdown?.wantedByMachinesPerSecond ?? 0;
   const storageTake = breakdown?.storageTakePerSecond ?? 0;
 
@@ -418,39 +412,6 @@ function explainOutputPort(
         "Nothing collects it, so it vanishes.",
       ],
       action: { text: "→ Connect a buffer if you want to keep it.", tone: "note" },
-    };
-  }
-
-  // Per-port coupling: THIS port's own asked-vs-made decides its story —
-  // never whether it happens to be the node's worst output.
-  if (port.plug?.state === "hungry") {
-    const ask = port.plug.askPerSecond;
-    const times = nameplate > EPS ? formatTimes(ask / nameplate) : "×?";
-    const machineCount = Math.max(
-      1,
-      project.nodes.find((entry) => entry.id === nodeId)?.machineCount ?? 1,
-    );
-    const perMachine = nameplate / machineCount;
-    const missing = Math.max(0, ask - port.plug.getPerSecond);
-    const toAdd =
-      perMachine > EPS && missing > EPS
-        ? Math.min(9999, Math.ceil(missing / perMachine - EPS))
-        : undefined;
-    return {
-      stateWord: "CAN'T KEEP UP",
-      tone: "amber",
-      rows,
-      lineRows,
-      lines: [
-        `This machine is already at full speed — ${fmt(current)} is everything it can make.`,
-        `${consumerPhrase} want${consumers.length === 1 ? "s" : ""} ${fmt(ask)} — ${times} more.`,
-      ],
-      action: {
-        text: toAdd
-          ? `→ Add +${toAdd} of this machine, or use a higher tier.`
-          : "→ Add more of this machine, or use a higher tier.",
-        tone: "fix",
-      },
     };
   }
 
@@ -521,6 +482,23 @@ function explainOutputPort(
         `It could make ${fmt(Math.max(could, nameplate))} if they asked for more.`,
       ],
       action: { text: "This is fine — nothing to fix.", tone: "fine" },
+    };
+  }
+
+  // The chip is the machine's story, and the machine's story at full speed
+  // is a good one — even when the plug is begging. The coupling's trouble
+  // (and its fix) lives on the plug block.
+  if (port.plug?.state === "hungry") {
+    const times = nameplate > EPS ? formatTimes(port.plug.askPerSecond / nameplate) : "×?";
+    return {
+      stateWord: "DONE",
+      tone: "green",
+      rows,
+      lineRows,
+      lines: [
+        `Full speed, making ${fmt(current)} — this machine is doing everything it can.`,
+        `The plug on this output asks for ${times} more — hover the block for that story and the fix.`,
+      ],
     };
   }
 
