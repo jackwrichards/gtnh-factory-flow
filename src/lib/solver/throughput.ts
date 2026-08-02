@@ -1251,6 +1251,41 @@ function refreshNodeUtilizationFromEdgeResults(
     edgeResults,
     storagesById,
   );
+  // HONEST per-input deliverability, for REPORTING the bottleneck only. The
+  // allocation figures set the actual utilization (that stays), but the ask
+  // coupling drags innocent inputs' allocations down to the binder's level —
+  // crowning from them misleads the UI and the honest-ask gate (apples get
+  // blamed for an orange shortage). Honest = source capacity when this line
+  // is the producer's sole outlet, Infinity for a non-dry buffer, allocation
+  // otherwise.
+  const outletCounts = new Map<string, number>();
+  for (const edge of project.edges) {
+    const outletKey = `${edge.source}|${edge.resourceKind}|${edge.resourceId}`;
+    outletCounts.set(outletKey, (outletCounts.get(outletKey) ?? 0) + 1);
+  }
+  const honestSupplyByNodeAndResource = new Map<string, Map<ResourceKey, number>>();
+  for (const edge of project.edges) {
+    if (storagesById.has(edge.target)) {
+      continue;
+    }
+    const targetDemandKey =
+      getEdgeTargetDemandKey(project, edge) ?? makeResourceKey(edge.resourceKind, edge.resourceId);
+    const edgeResult = edgeResults[edge.id];
+    let honest: number;
+    if (storagesById.has(edge.source) && edgeResult?.constraint !== "supply") {
+      honest = Number.POSITIVE_INFINITY;
+    } else {
+      const allocated =
+        edgeResult?.availablePerSecond ?? edgeResult?.transferredPerSecond ?? 0;
+      const soleOutlet =
+        (outletCounts.get(`${edge.source}|${edge.resourceKind}|${edge.resourceId}`) ?? 0) === 1;
+      honest =
+        soleOutlet && edgeResult?.sourceCapacityPerSecond !== undefined
+          ? Math.max(allocated, edgeResult.sourceCapacityPerSecond)
+          : allocated;
+    }
+    addRequiredRate(honestSupplyByNodeAndResource, edge.target, targetDemandKey, honest);
+  }
   const projectStorages = project.storages ?? [];
   const storageOutgoingDemand = calculateEffectiveStorageOutgoingDemand(
     project,
@@ -1342,15 +1377,59 @@ function refreshNodeUtilizationFromEdgeResults(
     }
 
     const capableUtilization = clampUtilization(inputSupplyLimit ?? 1);
-    // THE bottleneck, by the solver's own arithmetic: the input whose supply
-    // ratio was the minimum it just took. The UI must never re-derive this
-    // from per-edge figures (the damped asks make them incomparable).
-    nodeResult.limitingInputKey =
-      inputSupply && inputSupply.limit < 1 - EPSILON ? inputSupply.resourceKey : undefined;
-    nodeResult.limitingInputTiedKeys =
-      inputSupply && inputSupply.limit < 1 - EPSILON && inputSupply.tiedKeys.length > 0
-        ? inputSupply.tiedKeys
-        : undefined;
+    // THE bottleneck, reported from the HONEST book: rank every connected
+    // input by honest deliverability ÷ full-blast need, sorted keys for
+    // order independence, real ties within 1%. The allocation min still
+    // sets the utilization above; this only decides who gets blamed — and
+    // who gets to beg at nameplate through the honest-ask gate.
+    let limitingKey: ResourceKey | undefined;
+    let limitingTied: ResourceKey[] | undefined;
+    if (inputSupply && inputSupply.limit < 1 - EPSILON) {
+      const honestMap = honestSupplyByNodeAndResource.get(node.id);
+      const supplyMap = inputSupplyByNodeAndResource.get(node.id);
+      const keys = [...(supplyMap?.keys() ?? [])].sort((left, right) =>
+        left < right ? -1 : left > right ? 1 : 0,
+      );
+      let bestRatio = Number.POSITIVE_INFINITY;
+      for (const key of keys) {
+        const flow = nodeResult.inputs[key];
+        if (!flow || flow.amountPerSecond <= EPSILON) {
+          continue;
+        }
+        const honest = honestMap?.get(key);
+        const ratio =
+          honest === undefined ? Number.POSITIVE_INFINITY : honest / flow.amountPerSecond;
+        if (ratio < bestRatio) {
+          bestRatio = ratio;
+          limitingKey = key;
+        }
+      }
+      if (limitingKey !== undefined && Number.isFinite(bestRatio)) {
+        const tieWindow = Math.max(0.01, bestRatio * 0.01);
+        const tied: ResourceKey[] = [];
+        for (const key of keys) {
+          if (key === limitingKey) {
+            continue;
+          }
+          const flow = nodeResult.inputs[key];
+          if (!flow || flow.amountPerSecond <= EPSILON) {
+            continue;
+          }
+          const honest = honestMap?.get(key);
+          if (honest !== undefined && honest / flow.amountPerSecond <= bestRatio + tieWindow) {
+            tied.push(key);
+          }
+        }
+        limitingTied = tied.length > 0 ? tied : undefined;
+      } else {
+        // Every input honestly covers the need (or nothing is measurable):
+        // fall back to the allocation's own argmin rather than blame no one.
+        limitingKey = inputSupply.resourceKey;
+        limitingTied = inputSupply.tiedKeys.length > 0 ? inputSupply.tiedKeys : undefined;
+      }
+    }
+    nodeResult.limitingInputKey = limitingKey;
+    nodeResult.limitingInputTiedKeys = limitingTied;
     const demandUtilization = clampUtilization(demandOnlyUtilization);
     if (
       Math.abs(nodeResult.utilization - utilizationReport.utilization) > EPSILON ||
