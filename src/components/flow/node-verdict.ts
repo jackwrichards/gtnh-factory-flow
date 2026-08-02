@@ -405,10 +405,15 @@ export interface PortPlug {
    * hungry  = askers want more and THIS machine is the one to grow (amber)
    * blocked = askers want more but this machine is starving itself (red)
    * fed     = every asker gets what it asks for (green)
-   * soak    = only buffers attached; they take whatever comes (steel)
+   * dump    = only dead-end buffers attached — nothing ever draws from
+   *           them, so there is no ask to satisfy, just a place flow goes
+   *
+   * A buffer that HAS consumers is not a dump: it relays their asks one hop
+   * upstream ("a recipe that crafts itself — the input is the output"), so
+   * it participates in hungry/fed like any machine asker.
    */
-  state: "hungry" | "blocked" | "fed" | "soak";
-  /** One machine's name, "N machines", or the buffer's name. */
+  state: "hungry" | "blocked" | "fed" | "dump";
+  /** One machine's name, "N machines", "via <buffer>", or the dump's name. */
   askerName: string;
   /** Distinct machine consumers on this port (0 when buffers only). */
   askerMachines: number;
@@ -418,6 +423,44 @@ export interface PortPlug {
   coveredFraction: number;
   /** ask/get when hungry (Infinity when nothing flows yet). */
   timesShort?: number;
+}
+
+/**
+ * A buffer's relayed ask: what everything drawing FROM the buffer honestly
+ * wants, one hop through. `share` divides it among the buffer's suppliers by
+ * their current contribution (equal split before anything flows).
+ */
+function relayedBufferAskPerSecond(
+  project: FactoryProject,
+  result: ThroughputResult | undefined,
+  storageId: string,
+  supplierRate: number,
+): number {
+  let consumersAsk = 0;
+  let outgoing = 0;
+  for (const edge of project.edges) {
+    if (edge.source !== storageId) {
+      continue;
+    }
+    outgoing += 1;
+    consumersAsk += honestEdgeAskPerSecond(result?.edges[edge.id]);
+  }
+  if (outgoing === 0) {
+    return -1;
+  }
+
+  let inflowTotal = 0;
+  let inflowEdges = 0;
+  for (const edge of project.edges) {
+    if (edge.target !== storageId) {
+      continue;
+    }
+    inflowEdges += 1;
+    inflowTotal += result?.edges[edge.id]?.transferredPerSecond ?? 0;
+  }
+  const share =
+    inflowTotal > RATE_EPSILON ? supplierRate / inflowTotal : 1 / Math.max(1, inflowEdges);
+  return consumersAsk * share;
 }
 
 /**
@@ -524,7 +567,8 @@ export function buildRailPorts(
       let machineGet = 0;
       let storageGet = 0;
       const machineTargets = new Set<string>();
-      const storageTargets = new Set<string>();
+      const relayTargets = new Set<string>();
+      const dumpTargets = new Set<string>();
       for (const edge of edges) {
         const edgeResult = result?.edges[edge.id];
         const rate = edgeResult?.transferredPerSecond ?? 0;
@@ -532,8 +576,17 @@ export function buildRailPorts(
         if (isInput) {
           available += honestEdgeAvailablePerSecond(edgeResult, storagesById.has(edge.source));
         } else if (storagesById.has(edge.target)) {
-          storageGet += rate;
-          storageTargets.add(edge.target);
+          const relayed = relayedBufferAskPerSecond(project, result, edge.target, rate);
+          if (relayed < 0) {
+            // Dead end: nothing draws from the buffer — a dump, not an ask.
+            storageGet += rate;
+            dumpTargets.add(edge.target);
+          } else {
+            // The buffer relays its consumers' asks one hop upstream.
+            machineAsk += Math.max(relayed, rate);
+            machineGet += rate;
+            relayTargets.add(edge.target);
+          }
         } else {
           machineAsk += honestEdgeAskPerSecond(edgeResult);
           machineGet += rate;
@@ -582,29 +635,35 @@ export function buildRailPorts(
         }
       }
 
-      // The plug: the asker-side coupling, independent per output.
+      // The plug: the asker-side coupling, independent per output. Relay
+      // buffers count as askers (their consumers' asks pass through); only
+      // dead-end buffers are a dump.
       let plug: RailPort["plug"];
       if (!isInput && connected) {
-        const hasMachines = machineTargets.size > 0;
-        const ask = hasMachines ? machineAsk : storageGet;
-        const get = hasMachines ? machineGet : storageGet;
+        const demanders = machineTargets.size + relayTargets.size;
+        const ask = demanders > 0 ? machineAsk : storageGet;
+        const get = demanders > 0 ? machineGet : storageGet;
         const hungry =
-          hasMachines && ask > get + Math.max(RATE_EPSILON, ask * VERDICT_EPSILON);
+          demanders > 0 && ask > get + Math.max(RATE_EPSILON, ask * VERDICT_EPSILON);
         plug = {
-          state: !hasMachines
-            ? "soak"
-            : hungry
-              ? utilization >= 1 - VERDICT_EPSILON
-                ? "hungry"
-                : "blocked"
-              : "fed",
-          askerName: hasMachines
-            ? machineTargets.size === 1
+          state:
+            demanders === 0
+              ? "dump"
+              : hungry
+                ? utilization >= 1 - VERDICT_EPSILON
+                  ? "hungry"
+                  : "blocked"
+                : "fed",
+          askerName:
+            machineTargets.size === 1 && relayTargets.size === 0
               ? machineNameOf([...machineTargets][0]!)
-              : `${machineTargets.size} machines`
-            : storageTargets.size === 1
-              ? storageNameOf([...storageTargets][0]!)
-              : `${storageTargets.size} buffers`,
+              : machineTargets.size === 0 && relayTargets.size === 1
+                ? `via ${storageNameOf([...relayTargets][0]!)}`
+                : demanders > 0
+                  ? `${demanders} takers`
+                  : dumpTargets.size === 1
+                    ? storageNameOf([...dumpTargets][0]!)
+                    : `${dumpTargets.size} buffers`,
           askerMachines: machineTargets.size,
           askPerSecond: ask,
           getPerSecond: get,

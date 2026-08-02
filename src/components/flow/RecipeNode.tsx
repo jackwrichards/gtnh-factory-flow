@@ -666,73 +666,72 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
   let word: string;
   let cause: string | undefined;
   let action: string | undefined;
+  // Minimum viable strip: one line of why, one line of fix.
   switch (verdict.kind) {
     case "starved": {
       word = "▼ STARVING";
       const binding = verdict.binding;
       cause = binding
-        ? `${binding.displayName} is the bottleneck: it gets ${formatSlotRate(
+        ? `${binding.displayName}: gets ${formatSlotRate(
             binding.suppliedPerSecond,
             binding.kind,
-          )} of the ${formatSlotRate(binding.neededPerSecond, binding.kind)} it needs.`
-        : "Its ingredients can't keep up with what's asked of it.";
+          )} of ${formatSlotRate(binding.neededPerSecond, binding.kind)}.`
+        : "Ingredients can't keep up.";
       const upstream = binding?.upstream;
       if (!upstream) {
-        action = "→ Fix the supply lines feeding this machine.";
+        action = "→ Fix the supply lines.";
       } else if (upstream.kind === "loop") {
         action = "→ Fed by its own loop — prime it from a buffer.";
       } else if (upstream.kind === "buffer") {
-        action = `→ ${upstream.name} is running dry — feed it faster than it drains.`;
+        action = `→ ${upstream.name} running dry — feed it faster.`;
       } else if (upstream.atFullSpeed) {
-        action = `→ Fix upstream: ${upstream.name} is at full speed — add ${
+        action = `→ ${upstream.name} is maxed — add ${
           upstream.machinesToAdd ? `+${upstream.machinesToAdd}` : "machines"
         } there.`;
       } else {
-        action = `→ ${upstream.name} runs at ${formatPct(upstream.pct)}% — it's starving too. Follow the chain up.`;
+        action = `→ ${upstream.name} at ${formatPct(upstream.pct)}% — fix above it.`;
       }
       break;
     }
     case "choke": {
       word = "▲ CAN'T KEEP UP";
       const deficit = verdict.deficit;
-      // Outputs are independent couplings — several can be hungry at once.
-      // One +N covers them all (machines scale every output together).
       cause = deficit
         ? deficit.hungryOutputs > 1
-          ? `${deficit.hungryOutputs} of ${deficit.pluggedOutputs} plugged outputs are over-asked — worst is ${deficit.displayName}: short ${formatSlotRate(
+          ? `${deficit.hungryOutputs} of ${deficit.pluggedOutputs} outputs over-asked — worst ${deficit.displayName}, short ${formatSlotRate(
               deficit.missingPerSecond,
               deficit.kind,
             )}.`
-          : `Full speed — and the machines after it still want ${formatSlotRate(
+          : `${deficit.displayName} over-asked: short ${formatSlotRate(
               deficit.missingPerSecond,
               deficit.kind,
-            )} more ${deficit.displayName}.`
-        : "Full speed, and the machines after it still want more.";
+            )}.`
+        : "Outputs over-asked.";
       action = deficit?.machinesToAdd
-        ? `→ Add +${deficit.machinesToAdd} machine${
-            deficit.machinesToAdd > 1 ? "s" : ""
-          } here — covers ${deficit.hungryOutputs > 1 ? `all ${deficit.hungryOutputs}` : "it"} — or use a higher tier.`
-        : "→ Add machines here, or use a higher tier.";
+        ? `→ +${deficit.machinesToAdd} machine${deficit.machinesToAdd > 1 ? "s" : ""} covers ${
+            deficit.hungryOutputs > 1 ? `all ${deficit.hungryOutputs}` : "it"
+          } (or higher tier).`
+        : "→ Add machines, or a higher tier.";
       break;
     }
     case "demand-set":
       word = "● SET BY DEMAND";
       cause =
         verdict.pct <= 0.05
-          ? "Nothing downstream is taking this yet."
-          : `The machines after it only ask for ${formatPct(verdict.pct)}%.`;
+          ? "Nothing draws from this yet."
+          : `Downstream asks ${formatPct(verdict.pct)}%.`;
       action =
         verdict.headroomPct !== undefined && verdict.headroomPct > 0
-          ? `→ Nothing to fix — +${formatPct(verdict.headroomPct)}% is free headroom if demand grows.`
-          : "→ Nothing to fix — the spare speed is free headroom.";
+          ? `→ Fine — +${formatPct(verdict.headroomPct)}% free if demand grows.`
+          : "→ Fine.";
       break;
     case "balanced":
       word = "✔ BALANCED";
-      cause = "Full speed, and every machine after it gets what it asks for.";
+      cause = "Full speed, every ask met.";
       break;
     case "unwired":
       word = "● HAND-FED";
-      cause = "No lines connected yet — the planner assumes you feed and empty it by hand.";
+      cause = "No lines yet — planner assumes hand-feeding.";
       break;
     case "off":
       word = "■ OFF";
@@ -783,7 +782,7 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
               </span>
               <span className="min-w-0 flex-1 opacity-95">
                 {rung.label}
-                {rung.now ? " — you are here" : ""}
+                {rung.now ? " ← here" : ""}
               </span>
             </div>
           ))}
@@ -901,14 +900,23 @@ function PlugBlock({ nodeId, port }: { nodeId: string; port: RailPort }) {
         className={["flow-plug nodrag", `flow-plug--${plug.state}`].join(" ")}
         style={isFlowScopeLit ? PLUG_GLOW_STYLE : undefined}
       >
-        <span className="flow-plug-top">
-          <b>{coveredPct}%</b>
-        </span>
-        <span className="flow-plug-bar">
-          <span className="flow-plug-track">
-            <i style={{ width: `${coveredPct}%` }} />
+        {plug.state === "dump" ? (
+          // No ask exists to be a percent of — flow just ends here.
+          <span className="flow-plug-top">
+            <b>DUMP</b>
           </span>
-        </span>
+        ) : (
+          <>
+            <span className="flow-plug-top">
+              <b>{coveredPct}%</b>
+            </span>
+            <span className="flow-plug-bar">
+              <span className="flow-plug-track">
+                <i style={{ width: `${coveredPct}%` }} />
+              </span>
+            </span>
+          </>
+        )}
       </span>
     </MinecraftTooltip>
   );
@@ -1100,12 +1108,9 @@ function PortChip({
         )}
       </span>
       <span className="min-w-0 flex-1">
-        <span
-          className={[
-            "block truncate text-[10px] font-bold leading-3.5 tabular-nums",
-            !isInput && port.tone !== "bind" ? "text-[var(--mc-good)]" : "text-[var(--mc-ink)]",
-          ].join(" ")}
-        >
+        {/* Neutral ink always: the chip's BAR carries the machine story's
+            color. Green text over a red bar told two stories at once. */}
+        <span className="block truncate text-[10px] font-bold leading-3.5 tabular-nums text-[var(--mc-ink)]">
           {rateText}
         </span>
         {port.handFed ? (
@@ -1287,14 +1292,16 @@ function renderPortHoverContent(port: RailPort, nodeId: string) {
 function StoryBody({ story }: { story: PortStory }) {
   return (
     <>
-      <div className="mt-1">
-        {story.rows.map((row) => (
-          <div key={row.k} className="flex items-baseline justify-between gap-3 text-[12px]">
-            <span className="text-slate-400">{row.k}</span>
-            <span className="font-semibold tabular-nums text-slate-200">{row.v}</span>
-          </div>
-        ))}
-      </div>
+      {story.rows.length > 0 ? (
+        <div className="mt-1">
+          {story.rows.map((row) => (
+            <div key={row.k} className="flex items-baseline justify-between gap-3 text-[12px]">
+              <span className="text-slate-400">{row.k}</span>
+              <span className="font-semibold tabular-nums text-slate-200">{row.v}</span>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {story.lineRows ? (
         <div className="mt-2 border-t border-white/15 pt-1.5">
@@ -1346,8 +1353,6 @@ function renderPlugHoverContent(port: RailPort, nodeId: string) {
     return undefined;
   }
   const plug = port.plug!;
-  const coveredPct = Math.round(Math.min(Math.max(plug.coveredFraction, 0), 1) * 100);
-  const fillColor = STORY_TONE_FILL[story.tone];
 
   return (
     <div className="w-64">
@@ -1365,24 +1370,8 @@ function renderPlugHoverContent(port: RailPort, nodeId: string) {
           ].join(" ")}
         >
           {story.stateWord}
+          {plug.timesShort !== undefined ? ` ${formatTimes(plug.timesShort)}` : ""}
         </span>
-      </div>
-
-      <div className="mb-1 mt-2 flex items-center gap-1">
-        <div
-          className="relative h-[9px] flex-1"
-          style={{ background: "#101826", border: "1px solid #2c3a52" }}
-        >
-          <i
-            className="absolute bottom-0 left-0 top-0 block"
-            style={{ width: `${coveredPct}%`, minWidth: coveredPct > 0 ? 2 : 0, background: fillColor }}
-          />
-        </div>
-        {plug.timesShort !== undefined ? (
-          <em className="shrink-0 border border-dashed border-amber-400/70 bg-amber-400/20 px-1 text-[9px] font-black not-italic leading-[13px] text-amber-300">
-            {formatTimes(plug.timesShort)}
-          </em>
-        ) : null}
       </div>
 
       <StoryBody story={story} />

@@ -687,8 +687,9 @@ textarea {
   background: var(--rail-bar-ok);
 }
 
-.flow-plug--soak .flow-plug-track > i {
-  background: var(--rail-bar-calm);
+/* A dump has no ask to be a percent of — muted word, no bar. */
+.flow-plug--dump {
+  color: var(--mc-ink-muted);
 }
 
 /* Nothing wired: an open invitation, not a warning. */
