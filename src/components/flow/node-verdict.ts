@@ -430,37 +430,3 @@ export function buildRailPorts(
   return { inputs: buildSide("input"), outputs: buildSide("output") };
 }
 
-/**
- * Rails cap how many unconnected ports show; connected ports always render
- * because an edge must never anchor to a hidden element. Order stays recipe
- * order among the visible.
- */
-export function splitRailOverflow(
-  ports: RailPort[],
-  expanded: boolean,
-  cap = 8,
-): { visible: RailPort[]; hidden: RailPort[] } {
-  if (expanded || ports.length <= cap) {
-    return { visible: ports, hidden: [] };
-  }
-
-  const connectedCount = ports.filter((port) => port.connected).length;
-  const budget = Math.max(cap, connectedCount);
-  let unconnectedAllowance = budget - connectedCount;
-  const visible: RailPort[] = [];
-  const hidden: RailPort[] = [];
-  for (const port of ports) {
-    if (port.connected) {
-      visible.push(port);
-      continue;
-    }
-    if (unconnectedAllowance > 0) {
-      visible.push(port);
-      unconnectedAllowance -= 1;
-    } else {
-      hidden.push(port);
-    }
-  }
-
-  return { visible, hidden };
-}

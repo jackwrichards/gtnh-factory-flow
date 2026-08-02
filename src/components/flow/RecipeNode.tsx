@@ -46,7 +46,7 @@ import {
   type MachineConfigTierControl,
 } from "@/lib/model";
 import { CropPickerMenu } from "./CropPickerMenu";
-import { MachineCompareTable, MachineGlanceBar, MachineTabStrip } from "./MachinePicker";
+import { MachineCompareTable, MachineTabStrip } from "./MachinePicker";
 import { useMachineHandlerIcons } from "./machine-icons";
 import { MinecraftSelect } from "./MinecraftSelect";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
@@ -58,7 +58,6 @@ import { canonicalizeResourceHandleId, parseResourceHandleId } from "./resource-
 import {
   buildRailPorts,
   deriveNodeVerdict,
-  splitRailOverflow,
   type NodeVerdict,
   type RailPort,
 } from "./node-verdict";
@@ -251,7 +250,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     overclockedRecipe,
     verdict,
   );
-  const [railExpansion, setRailExpansion] = useState({ input: false, output: false });
   const exceedsMaxTier =
     tierControl !== undefined &&
     maxTierFilter !== "all" &&
@@ -343,12 +341,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     ? (machineHandlers.find((handler) => handler.id === previewHandlerId) ?? selectedMachineHandler)
     : selectedMachineHandler;
   const isPreviewing = hasMachinePicker && previewHandler.id !== selectedMachineHandler.id;
-  const machineCategory = recipe.source?.recipeMap ?? recipe.machineType;
 
   return (
     <div
       className={[
-        "group relative min-w-[252px] w-max border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
+        "group relative min-w-[300px] w-max border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
         // Marker for the globals.css layer lift: with a picker popup open the
         // node (and the whole nodes layer) must paint above edges.
         isCompareOpen ? "recipe-node-popup-open" : "",
@@ -427,47 +424,43 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 )
               }
             >
-              {hasMachinePicker ? (
-                <MachineGlanceBar
-                  recipe={recipe}
-                  category={machineCategory}
-                  handler={previewHandler}
-                  icon={machineIcons.get(previewHandler.id)}
-                  isPreview={isPreviewing}
-                />
-              ) : (
-                <div
-                  role={isCropFarmNode ? "button" : undefined}
-                  tabIndex={isCropFarmNode ? 0 : undefined}
-                  onClick={
-                    isCropFarmNode
-                      ? (event) => {
-                          event.stopPropagation();
-                          setCropMenuOpen((open) => !open);
-                        }
-                      : undefined
-                  }
-                  className={[
-                    "minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]",
-                    // Symmetric padding keeps the crop name in the true middle;
-                    // the picker chevron floats on the right without shifting it.
-                    isCropFarmNode
-                      ? "nodrag relative cursor-pointer px-5 hover:brightness-110"
-                      : "px-2",
-                  ].join(" ")}
-                  style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
-                  title={isCropFarmNode ? "Pick a crop" : undefined}
-                >
-                  <span className="mx-auto min-w-0 truncate">
-                    {isCropFarmPlaceholder
-                      ? "Pick a crop..."
-                      : (cropTitle ?? selectedMachineHandler.label)}
-                  </span>
-                  {isCropFarmNode ? (
-                    <ChevronDown className="absolute right-1 top-1/2 h-3 w-3 shrink-0 -translate-y-1/2" />
-                  ) : null}
-                </div>
-              )}
+              {/* One plain name bar for every node. Picker nodes already show
+                  the selected machine in the tab strip above, so the old
+                  icon-box + TIME/POWER/PARALLEL glance cells only overflowed
+                  the narrow card; those numbers live in the hover and the
+                  footer. */}
+              <div
+                role={isCropFarmNode ? "button" : undefined}
+                tabIndex={isCropFarmNode ? 0 : undefined}
+                onClick={
+                  isCropFarmNode
+                    ? (event) => {
+                        event.stopPropagation();
+                        setCropMenuOpen((open) => !open);
+                      }
+                    : undefined
+                }
+                className={[
+                  "minecraft-title flex h-6 min-w-0 items-center border-2 border-[var(--mc-33)] bg-[var(--mc-61)] text-[17px] leading-[20px] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-29)]",
+                  // Symmetric padding keeps the crop name in the true middle;
+                  // the picker chevron floats on the right without shifting it.
+                  isCropFarmNode
+                    ? "nodrag relative cursor-pointer px-5 hover:brightness-110"
+                    : "px-2",
+                ].join(" ")}
+                style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
+                title={isCropFarmNode ? "Pick a crop" : undefined}
+              >
+                <span className="mx-auto min-w-0 truncate">
+                  {isCropFarmPlaceholder
+                    ? "Pick a crop..."
+                    : (cropTitle ?? previewHandler.label)}
+                  {isPreviewing ? " ?" : ""}
+                </span>
+                {isCropFarmNode ? (
+                  <ChevronDown className="absolute right-1 top-1/2 h-3 w-3 shrink-0 -translate-y-1/2" />
+                ) : null}
+              </div>
             </MinecraftTooltip>
             {isCropMenuOpen ? (
               <CropPickerMenu
@@ -565,10 +558,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               nodeId={projectNode.id}
               side="input"
               ports={rails.inputs}
-              expanded={railExpansion.input}
-              onToggleExpanded={() =>
-                setRailExpansion((state) => ({ ...state, input: !state.input }))
-              }
               pending={pendingResourceConnection}
             />
             {rails.inputs.length > 0 && rails.outputs.length > 0 ? (
@@ -580,10 +569,6 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               nodeId={projectNode.id}
               side="output"
               ports={rails.outputs}
-              expanded={railExpansion.output}
-              onToggleExpanded={() =>
-                setRailExpansion((state) => ({ ...state, output: !state.output }))
-              }
               pending={pendingResourceConnection}
             />
           </div>
@@ -772,16 +757,16 @@ function VerdictStrip({
             <span className="whitespace-nowrap text-[10px] font-black leading-4 tracking-[1px]">
               {word}
             </span>
-            <span className="min-w-0 flex-1 truncate text-[9px] leading-3 opacity-95">{cause}</span>
+            {/* Wraps instead of truncating: the cause is the point of the
+                strip, an ellipsis here hides exactly what the user came for. */}
+            <span className="min-w-0 flex-1 text-[9px] leading-3 opacity-95">{cause}</span>
             {showPct ? (
               <span className="shrink-0 text-[13px] font-bold leading-4 tabular-nums">
                 {formatRate(verdict.pct, verdict.pct >= 100 ? 0 : 1)}%
               </span>
             ) : null}
           </div>
-          {action ? (
-            <div className="truncate text-[9px] leading-3 opacity-95">{action}</div>
-          ) : null}
+          {action ? <div className="text-[9px] leading-3 opacity-95">{action}</div> : null}
         </div>
       </MinecraftTooltip>
     </span>
@@ -789,60 +774,30 @@ function VerdictStrip({
 }
 
 /**
- * One side of the port rails. Connected ports always render (an edge must
- * never anchor to a hidden element); unconnected ones collapse behind a
- * "+N more" chip past the cap so 100-output recipes stay a readable card.
+ * One side of the port rails. Every port always renders - a hidden port is a
+ * port somebody can't wire, so tall nodes are the accepted trade for big
+ * recipes.
  */
 function PortRail({
   nodeId,
   side,
   ports,
-  expanded,
-  onToggleExpanded,
   pending,
 }: {
   nodeId: string;
   side: "input" | "output";
   ports: RailPort[];
-  expanded: boolean;
-  onToggleExpanded: () => void;
   pending: ReturnType<typeof useFactoryStore.getState>["pendingResourceConnection"];
 }) {
   if (ports.length === 0) {
     return null;
   }
 
-  const { visible, hidden } = splitRailOverflow(ports, expanded);
-  const showCollapse = expanded && ports.length > 8;
   return (
     <div className="flex w-[118px] shrink-0 flex-col justify-center gap-1 py-0.5">
-      {visible.map((port) => (
+      {ports.map((port) => (
         <PortChip key={port.key} nodeId={nodeId} port={port} pending={pending} />
       ))}
-      {hidden.length > 0 ? (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleExpanded();
-          }}
-          className="nodrag flow-port flow-port--idle px-1.5 py-0.5 text-left text-[9px] font-bold leading-4 text-[var(--mc-ink-muted)] hover:brightness-110"
-          title={hidden.map((port) => port.displayName).join(", ")}
-        >
-          +{hidden.length} more…
-        </button>
-      ) : showCollapse ? (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggleExpanded();
-          }}
-          className="nodrag flow-port flow-port--idle px-1.5 py-0.5 text-left text-[9px] font-bold leading-4 text-[var(--mc-ink-muted)] hover:brightness-110"
-        >
-          show less
-        </button>
-      ) : null}
     </div>
   );
 }

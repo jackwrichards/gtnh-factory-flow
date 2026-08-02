@@ -6,7 +6,7 @@ import type {
   ResourceFlow,
   ThroughputResult,
 } from "@/lib/model/types";
-import { buildRailPorts, deriveNodeVerdict, splitRailOverflow } from "./node-verdict";
+import { buildRailPorts, deriveNodeVerdict } from "./node-verdict";
 
 // Unit tests for the verdict/rail derivation: solver numbers in, one honest
 // state + cause + action out. Solver behaviour itself is covered elsewhere.
@@ -372,37 +372,3 @@ describe("buildRailPorts", () => {
   });
 });
 
-describe("splitRailOverflow", () => {
-  it("always keeps connected ports visible and caps the rest", () => {
-    const port = (id: string, connected: boolean) =>
-      ({
-        side: "output",
-        key: `item:${id}`,
-        kind: "item",
-        resourceId: id,
-        displayName: id,
-        handleId: `output:item:${id}`,
-        connected,
-        handFed: false,
-        currentPerSecond: 0,
-        nameplatePerSecond: 0,
-        fillFraction: 0,
-        tone: "ok",
-        showNameplate: false,
-      }) as import("./node-verdict").RailPort;
-
-    const ports = [
-      port("a", false),
-      port("b", true),
-      port("c", false),
-      port("d", false),
-      port("e", true),
-      port("f", false),
-    ];
-    const { visible, hidden } = splitRailOverflow(ports, false, 4);
-    expect(visible.map((entry) => entry.resourceId)).toEqual(["a", "b", "c", "e"]);
-    expect(hidden.map((entry) => entry.resourceId)).toEqual(["d", "f"]);
-
-    expect(splitRailOverflow(ports, true, 4).hidden).toHaveLength(0);
-  });
-});

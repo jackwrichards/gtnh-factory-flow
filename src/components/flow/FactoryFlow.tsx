@@ -3052,25 +3052,86 @@ function getBestDirectEdgePoints({
   const sourceOwnBounds = getMeasuredNodeBoundsById(sourceNodeId);
   const targetOwnBounds = getMeasuredNodeBoundsById(targetNodeId);
 
-  const candidates = sourceEndpoints.flatMap((sourceEndpoint) =>
-    targetEndpoints.flatMap((targetEndpoint) =>
-      getDirectEdgePointCandidates({
-        laneOffset,
-        sourceX: sourceEndpoint.x,
-        sourceY: sourceEndpoint.y,
-        sourcePosition: sourceEndpoint.side,
-        targetX: targetEndpoint.x,
-        targetY: targetEndpoint.y,
-        targetPosition: targetEndpoint.side,
-      }).map((points) => ({
-        points,
-        endpointPenalty:
-          getEndpointDirectionPenalty(sourceEndpoint, targetEndpoint) +
-          getOwnNodeCrossingPenalty(points, sourceEndpoint, sourceOwnBounds) +
-          getOwnNodeCrossingPenalty(points, targetEndpoint, targetOwnBounds),
-      })),
-    ),
+  const buildCandidates = (extraRouteXs?: number[], extraRouteYs?: number[]) =>
+    sourceEndpoints.flatMap((sourceEndpoint) =>
+      targetEndpoints.flatMap((targetEndpoint) =>
+        getDirectEdgePointCandidates({
+          laneOffset,
+          sourceX: sourceEndpoint.x,
+          sourceY: sourceEndpoint.y,
+          sourcePosition: sourceEndpoint.side,
+          targetX: targetEndpoint.x,
+          targetY: targetEndpoint.y,
+          targetPosition: targetEndpoint.side,
+          extraRouteXs,
+          extraRouteYs,
+          extrasOnly: Boolean(extraRouteXs || extraRouteYs),
+        }).map((points) => ({
+          points,
+          endpointPenalty:
+            getEndpointDirectionPenalty(sourceEndpoint, targetEndpoint) +
+            getOwnNodeCrossingPenalty(points, sourceEndpoint, sourceOwnBounds) +
+            getOwnNodeCrossingPenalty(points, targetEndpoint, targetOwnBounds),
+        })),
+      ),
+    );
+  const baseCandidates = buildCandidates();
+  const allAvoidanceBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]);
+
+  // The base shapes only know the two endpoints, so when a third node sits in
+  // all of their corridors the least-bad candidate still crossed it. For every
+  // node the base shapes could touch, add detour corridors hugging that rect
+  // (and the whole blocking cluster) with clearance - the around-route the
+  // scorer already prefers now always exists as a candidate.
+  let blockReachLeft = Infinity;
+  let blockReachRight = -Infinity;
+  let blockReachTop = Infinity;
+  let blockReachBottom = -Infinity;
+  for (const candidate of baseCandidates) {
+    for (const point of candidate.points) {
+      if (point.x < blockReachLeft) blockReachLeft = point.x;
+      if (point.x > blockReachRight) blockReachRight = point.x;
+      if (point.y < blockReachTop) blockReachTop = point.y;
+      if (point.y > blockReachBottom) blockReachBottom = point.y;
+    }
+  }
+  const blockReachMargin = EDGE_LINK_CLEARANCE + 1;
+  const blockers = allAvoidanceBounds.filter(
+    (bounds) =>
+      bounds.right >= blockReachLeft - blockReachMargin &&
+      bounds.left <= blockReachRight + blockReachMargin &&
+      bounds.bottom >= blockReachTop - blockReachMargin &&
+      bounds.top <= blockReachBottom + blockReachMargin,
   );
+  let candidates = baseCandidates;
+  if (blockers.length > 0) {
+    const detourMargin = EDGE_LINK_CLEARANCE + 6 + Math.max(EDGE_LINK_CLEARANCE, laneOffset);
+    const extraXs: number[] = [];
+    const extraYs: number[] = [];
+    let clusterLeft = Infinity;
+    let clusterRight = -Infinity;
+    let clusterTop = Infinity;
+    let clusterBottom = -Infinity;
+    for (const bounds of blockers) {
+      if (bounds.left < clusterLeft) clusterLeft = bounds.left;
+      if (bounds.right > clusterRight) clusterRight = bounds.right;
+      if (bounds.top < clusterTop) clusterTop = bounds.top;
+      if (bounds.bottom > clusterBottom) clusterBottom = bounds.bottom;
+    }
+    // Deterministic cap keeps the candidate count bounded on dense boards;
+    // the cluster extremes stay uncapped so a clean outside line always
+    // exists even past the cap.
+    const cappedBlockers = [...blockers]
+      .sort((left, right) => left.left - right.left || left.top - right.top)
+      .slice(0, 6);
+    for (const bounds of cappedBlockers) {
+      extraXs.push(bounds.left - detourMargin, bounds.right + detourMargin);
+      extraYs.push(bounds.top - detourMargin, bounds.bottom + detourMargin);
+    }
+    extraXs.push(clusterLeft - detourMargin, clusterRight + detourMargin);
+    extraYs.push(clusterTop - detourMargin, clusterBottom + detourMargin);
+    candidates = baseCandidates.concat(buildCandidates(extraXs, extraYs));
+  }
 
   // Scoring every candidate against the whole board is what made rerouting
   // O(edges × nodes) as plans grew. A candidate can only collide with
@@ -3095,7 +3156,7 @@ function getBestDirectEdgePoints({
   reachTop -= reachMargin;
   reachBottom += reachMargin;
 
-  const normalizedNodeBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]).filter(
+  const normalizedNodeBounds = allAvoidanceBounds.filter(
     (bounds) =>
       bounds.right >= reachLeft &&
       bounds.left <= reachRight &&
@@ -3173,6 +3234,9 @@ function getDirectEdgePointCandidates({
   targetX,
   targetY,
   targetPosition,
+  extraRouteXs,
+  extraRouteYs,
+  extrasOnly = false,
 }: {
   laneOffset: number;
   sourceX: number;
@@ -3181,6 +3245,11 @@ function getDirectEdgePointCandidates({
   targetX: number;
   targetY: number;
   targetPosition: Position;
+  /** Detour corridor positions derived from blocking nodes' bounds. */
+  extraRouteXs?: number[];
+  extraRouteYs?: number[];
+  /** Emit only the extra corridors (base shapes were already generated). */
+  extrasOnly?: boolean;
 }) {
   const source = { x: sourceX, y: sourceY };
   const target = { x: targetX, y: targetY };
@@ -3191,30 +3260,38 @@ function getDirectEdgePointCandidates({
   const maxX = Math.max(sourceExit.x, targetExit.x);
   const minY = Math.min(sourceExit.y, targetExit.y);
   const maxY = Math.max(sourceExit.y, targetExit.y);
-  const routeXs = [
-    (sourceExit.x + targetExit.x) / 2,
-    minX - 56 - lane,
-    maxX + 56 + lane,
-    sourceExit.x + (targetExit.x >= sourceExit.x ? 72 + lane : -72 - lane),
-    targetExit.x + (targetExit.x >= sourceExit.x ? -72 - lane : 72 + lane),
-  ];
-  const routeYs = [
-    (sourceExit.y + targetExit.y) / 2,
-    minY - 56 - lane,
-    maxY + 56 + lane,
-    sourceExit.y + (targetExit.y >= sourceExit.y ? 72 + lane : -72 - lane),
-    targetExit.y + (targetExit.y >= sourceExit.y ? -72 - lane : 72 + lane),
-  ];
-  const candidates = [
-    getSimpleOrthogonalEdgePoints({
-      sourceX,
-      sourceY,
-      sourcePosition,
-      targetX,
-      targetY,
-      targetPosition,
-    }),
-  ];
+  const routeXs = extrasOnly
+    ? (extraRouteXs ?? [])
+    : [
+        (sourceExit.x + targetExit.x) / 2,
+        minX - 56 - lane,
+        maxX + 56 + lane,
+        sourceExit.x + (targetExit.x >= sourceExit.x ? 72 + lane : -72 - lane),
+        targetExit.x + (targetExit.x >= sourceExit.x ? -72 - lane : 72 + lane),
+        ...(extraRouteXs ?? []),
+      ];
+  const routeYs = extrasOnly
+    ? (extraRouteYs ?? [])
+    : [
+        (sourceExit.y + targetExit.y) / 2,
+        minY - 56 - lane,
+        maxY + 56 + lane,
+        sourceExit.y + (targetExit.y >= sourceExit.y ? 72 + lane : -72 - lane),
+        targetExit.y + (targetExit.y >= sourceExit.y ? -72 - lane : 72 + lane),
+        ...(extraRouteYs ?? []),
+      ];
+  const candidates = extrasOnly
+    ? []
+    : [
+        getSimpleOrthogonalEdgePoints({
+          sourceX,
+          sourceY,
+          sourcePosition,
+          targetX,
+          targetY,
+          targetPosition,
+        }),
+      ];
 
   for (const routeX of routeXs) {
     candidates.push(
