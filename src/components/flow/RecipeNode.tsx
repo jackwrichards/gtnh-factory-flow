@@ -916,6 +916,18 @@ function PortChip({
         toneClass,
         isFlowScopeLit ? "flow-port--flow-lit" : "",
       ].join(" ")}
+      // Inline so the highlight can never be lost to a stale stylesheet
+      // chunk: this is the "you are looking at this port's flow" signal.
+      style={
+        isFlowScopeLit
+          ? {
+              boxShadow:
+                "0 0 0 2px #fde047, 0 0 0 5px #22d3ee, 0 0 14px 3px rgba(34,211,238,0.95)",
+              filter: "brightness(1.22)",
+              zIndex: 15,
+            }
+          : undefined
+      }
       data-resource-edge-anchor="true"
       data-resource-node-id={nodeId}
       data-resource-handle-id={port.handleId}
