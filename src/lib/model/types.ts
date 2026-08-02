@@ -400,6 +400,13 @@ export interface NodeThroughputResult {
   requiredRatePerSecond: number;
   maxRatePerSecond: number;
   utilization: number;
+  /**
+   * How hard this node COULD run given only its own input supply (1 when
+   * nothing upstream limits it). Solver-internal: `utilization` is demand-
+   * throttled, but supply allocation must offer consumers what a producer
+   * could ramp up to if asked, or an initially low ask locks in forever.
+   */
+  capableUtilization?: number;
   theoreticalMachinesRequired: number;
   limitingResource?: ResourceFlow;
   status: "disabled" | "balanced" | "underutilized" | "bottleneck" | "missing-recipe";
