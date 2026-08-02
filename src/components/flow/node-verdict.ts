@@ -216,6 +216,7 @@ function findWorstOutputDeficit(
 
   const storageIds = new Set((project.storages ?? []).map((storage) => storage.id));
   const missingByKey = new Map<string, number>();
+  const wantedByKey = new Map<string, number>();
   for (const edge of outgoing) {
     // A buffer absorbing surplus is not hunger; only machine asks count.
     if (storageIds.has(edge.target)) {
@@ -225,16 +226,14 @@ function findWorstOutputDeficit(
     if (!edgeResult) {
       continue;
     }
-    const missing = Math.max(
-      0,
-      honestEdgeAskPerSecond(edgeResult, result.nodes[edge.target]) -
-        (edgeResult.transferredPerSecond ?? 0),
-    );
+    const wanted = honestEdgeAskPerSecond(edgeResult, result.nodes[edge.target]);
+    const missing = Math.max(0, wanted - (edgeResult.transferredPerSecond ?? 0));
     if (missing <= RATE_EPSILON) {
       continue;
     }
     const key = makeResourceKey(edge.resourceKind, edge.resourceId);
     missingByKey.set(key, (missingByKey.get(key) ?? 0) + missing);
+    wantedByKey.set(key, (wantedByKey.get(key) ?? 0) + wanted);
   }
 
   let worst: { key: string; missing: number } | undefined;
@@ -249,17 +248,24 @@ function findWorstOutputDeficit(
 
   // Outputs are independent couplings: any number can be over-asked at once.
   // One +N still fixes them all (machines scale every output together), so
-  // take the biggest per-output requirement, not the worst output's.
+  // take the biggest per-output requirement. Measured from FULL BLAST, not
+  // from current speed: a half-idle machine's free headroom counts before
+  // any new machines do (keeps +N coherent with the ladder's ×ratio).
   const node = project.nodes.find((entry) => entry.id === nodeId);
   const machineCount = Math.max(1, node?.machineCount ?? 1);
   let machinesToAdd: number | undefined;
-  for (const [key, missing] of missingByKey) {
+  for (const [key, wanted] of wantedByKey) {
     const keyFlow = nodeResult.outputs[key as keyof typeof nodeResult.outputs];
-    const perMachine = keyFlow ? keyFlow.amountPerSecond / machineCount : 0;
+    const nameplate = keyFlow?.amountPerSecond ?? 0;
+    const perMachine = nameplate / machineCount;
     if (perMachine <= RATE_EPSILON) {
       continue;
     }
-    const toAdd = Math.min(9999, Math.ceil(missing / perMachine - RATE_EPSILON));
+    const missingAtFull = Math.max(0, wanted - nameplate);
+    if (missingAtFull <= RATE_EPSILON) {
+      continue;
+    }
+    const toAdd = Math.min(9999, Math.ceil(missingAtFull / perMachine - RATE_EPSILON));
     if (toAdd > 0 && (machinesToAdd === undefined || toAdd > machinesToAdd)) {
       machinesToAdd = toAdd;
     }
@@ -340,7 +346,14 @@ function findBindingInput(
 
   const flow = nodeResult.inputs[binding.key as keyof typeof nodeResult.inputs];
   const shortfallPerSecond = Math.max(0, binding.need - binding.supplied);
-  const upstream = findUpstreamCulprit(project, result, nodeId, binding.edges, shortfallPerSecond);
+  const upstream = findUpstreamCulprit(
+    project,
+    result,
+    nodeId,
+    binding.edges,
+    shortfallPerSecond,
+    binding.need,
+  );
   return {
     resourceKey: binding.key,
     kind: flow?.kind ?? "item",
@@ -365,6 +378,7 @@ function findUpstreamCulprit(
   nodeId: string,
   edges: ProjectEdge[],
   shortfallPerSecond: number,
+  neededPerSecond: number,
 ): UpstreamCulprit | undefined {
   let pick: ProjectEdge | undefined;
   let pickTransferred = -1;
@@ -419,10 +433,17 @@ function findUpstreamCulprit(
       sourceResult.outputs[key as keyof typeof sourceResult.outputs] ??
       Object.values(sourceResult.outputs).find((entry) => entry.resourceId === pick.resourceId);
     const machineCount = Math.max(1, sourceNode?.machineCount ?? 1);
-    const perMachine = sourceFlow ? sourceFlow.amountPerSecond / machineCount : 0;
+    const nameplate = sourceFlow?.amountPerSecond ?? 0;
+    const perMachine = nameplate / machineCount;
     if (perMachine > RATE_EPSILON) {
-      const toAdd = Math.min(9999, Math.ceil(shortfallPerSecond / perMachine - RATE_EPSILON));
-      machinesToAdd = toAdd > 0 ? toAdd : undefined;
+      // Measured from the culprit's FULL BLAST: its free headroom counts
+      // before any new machines do (coherent with its own ladder).
+      const missingAtFull = Math.max(0, neededPerSecond - nameplate);
+      const toAdd =
+        missingAtFull > RATE_EPSILON
+          ? Math.min(9999, Math.ceil(missingAtFull / perMachine - RATE_EPSILON))
+          : undefined;
+      machinesToAdd = toAdd && toAdd > 0 ? toAdd : undefined;
     }
   }
 
@@ -861,6 +882,18 @@ export function buildLimitLadder(
   const capped = deduped.slice(0, 4);
   if (capped.length > 0) {
     capped[0] = { ...capped[0]!, now: true };
+  }
+
+  // Running BELOW every limit: the damped ask is holding the machine down
+  // (it doesn't know it can ask for more). Say so instead of pretending the
+  // lowest rung explains the current speed.
+  const utilizationPct = clamp01(nodeResult.utilization, 0) * 100;
+  if (capped.length > 0 && utilizationPct < capped[0]!.pct - 0.5) {
+    capped[0] = { ...capped[0]!, now: false };
+    capped.unshift({ pct: utilizationPct, label: "current — the plan under-asks it", now: true });
+    if (capped.length > 4) {
+      capped.pop();
+    }
   }
   return capped;
 }

@@ -288,10 +288,11 @@ export function explainPlug(
 
   const machineCount = Math.max(1, nodesById.get(nodeId)?.machineCount ?? 1);
   const perMachine = port.nameplatePerSecond / machineCount;
-  const missing = Math.max(0, plug.askPerSecond - plug.getPerSecond);
+  // From FULL BLAST: free headroom counts before new machines do.
+  const missingAtFull = Math.max(0, plug.askPerSecond - port.nameplatePerSecond);
   const toAdd =
-    perMachine > EPS && missing > EPS
-      ? Math.min(9999, Math.ceil(missing / perMachine - EPS))
+    perMachine > EPS && missingAtFull > EPS
+      ? Math.min(9999, Math.ceil(missingAtFull / perMachine - EPS))
       : undefined;
 
   const lineRows = rows.length > 0 ? { title: "Plugged in", rows } : undefined;

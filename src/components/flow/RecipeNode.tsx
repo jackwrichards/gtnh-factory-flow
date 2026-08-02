@@ -700,7 +700,7 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
       cause =
         verdict.pct >= 99.5
           ? "This machine runs full-time, but that still can't satisfy all requests."
-          : "Requests exceed what this machine is making.";
+          : "Requests exceed what this machine is making — the plan under-asks it.";
       action = deficit?.machinesToAdd
         ? `→ +${deficit.machinesToAdd} machine${deficit.machinesToAdd > 1 ? "s" : ""} covers ${
             deficit.hungryOutputs > 1 ? `all ${deficit.hungryOutputs}` : "it"
