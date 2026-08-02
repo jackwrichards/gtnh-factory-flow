@@ -171,7 +171,9 @@ export function buildPortBreakdown(
             : undefined,
       });
     } else {
-      const wanted = storage ? rate : honestEdgeAskPerSecond(edgeResult);
+      const wanted = storage
+        ? rate
+        : honestEdgeAskPerSecond(edgeResult, result.nodes[edge.target], edge);
       if (storage) {
         storageTake += rate;
       } else {
@@ -261,7 +263,7 @@ export function explainPlug(
           continue;
         }
         consumers += 1;
-        consumersAsk += honestEdgeAskPerSecond(result?.edges[out.id], result?.nodes[out.target]);
+        consumersAsk += honestEdgeAskPerSecond(result?.edges[out.id], result?.nodes[out.target], out);
       }
       rows.push({
         name: `via ${storageName}`,
@@ -281,7 +283,7 @@ export function explainPlug(
       name: recipe?.machineType ?? recipe?.name ?? "Machine",
       note: pct !== undefined ? `at ${pct}%` : undefined,
       rate: `asks ${formatSlotRateBare(
-        honestEdgeAskPerSecond(edgeResult, targetResult),
+        honestEdgeAskPerSecond(edgeResult, targetResult, edge),
       )} · gets ${formatSlotRateBare(gets)}`,
     });
   }
@@ -638,7 +640,7 @@ export function buildEdgeStory(
       continue;
     }
 
-    const wanted = honestEdgeAskPerSecond(edgeResult, result.nodes[edge.target]);
+    const wanted = honestEdgeAskPerSecond(edgeResult, result.nodes[edge.target], edge);
     wantedByMachines += wanted;
     getsByMachines += gets;
     machineReceivers += 1;

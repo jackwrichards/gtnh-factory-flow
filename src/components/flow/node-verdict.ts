@@ -119,6 +119,7 @@ function clamp01(value: number | undefined, fallback: number): number {
 export function honestEdgeAskPerSecond(
   edgeResult: EdgeThroughput | undefined,
   targetResult?: NodeThroughputResult,
+  edge?: Pick<ProjectEdge, "resourceKind" | "resourceId">,
 ): number {
   if (!edgeResult) {
     return 0;
@@ -132,7 +133,18 @@ export function honestEdgeAskPerSecond(
     const capable = clamp01(targetResult.capableUtilization, 1);
     const demand = clamp01(targetResult.demandUtilization, capable);
     const demandSet = demand < capable - VERDICT_EPSILON && demand < 1 - VERDICT_EPSILON;
-    if (!demandSet && capable < 1 - VERDICT_EPSILON) {
+    // Beg at nameplate ONLY on the consumer's actually-limiting input.
+    // A starved machine's OTHER lines ask for what it can really eat —
+    // apples-and-oranges: short on oranges at 50% means the apple line
+    // honestly asks for half the apples, and the apple maker is FINE.
+    const limitsThisLine =
+      edge === undefined ||
+      targetResult.limitingInputKey === undefined ||
+      makeResourceKey(edge.resourceKind, edge.resourceId) === targetResult.limitingInputKey ||
+      targetResult.limitingInputTiedKeys?.includes(
+        makeResourceKey(edge.resourceKind, edge.resourceId),
+      ) === true;
+    if (!demandSet && capable < 1 - VERDICT_EPSILON && limitsThisLine) {
       return Math.max(nameplate, damped);
     }
   }
@@ -140,19 +152,42 @@ export function honestEdgeAskPerSecond(
 }
 
 /**
- * What a supply line could deliver. A buffer grants whatever is asked, and the
- * damped ask can be ~nothing — so a buffer line must never read as a ceiling
- * unless the solver actually marked it dry (constraint "supply"). Infinity
- * here means "not a cap"; callers skip or clamp it for display.
+ * What a supply line could HONESTLY deliver — the edge-label book, the one
+ * Jack verified against reality:
+ * - a non-dry buffer grants whatever is asked (Infinity: never a cap);
+ * - a machine line whose producer has this as its sole outlet can deliver
+ *   the producer's full-blast capacity (`sourceCapacityPerSecond`);
+ * - otherwise fall back to the allocation figure (damped, least trusted).
+ * The allocation-only version of this is what mis-crowned bottlenecks: the
+ * ask coupling drags innocent lines' allocations down to the binder's level.
  */
 export function honestEdgeAvailablePerSecond(
   edgeResult: EdgeThroughput | undefined,
   sourceIsStorage: boolean,
+  sourceHasSoleOutlet = false,
 ): number {
   if (sourceIsStorage && edgeResult?.constraint !== "supply") {
     return Number.POSITIVE_INFINITY;
   }
-  return edgeResult?.availablePerSecond ?? edgeResult?.transferredPerSecond ?? 0;
+  const allocated = edgeResult?.availablePerSecond ?? edgeResult?.transferredPerSecond ?? 0;
+  if (sourceHasSoleOutlet && edgeResult?.sourceCapacityPerSecond !== undefined) {
+    return Math.max(allocated, edgeResult.sourceCapacityPerSecond);
+  }
+  return allocated;
+}
+
+/** How many outgoing lines each source has per resource — the sole-outlet test. */
+export function countSourceOutlets(project: FactoryProject): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const edge of project.edges) {
+    const key = `${edge.source}|${edge.resourceKind}|${edge.resourceId}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function edgeSourceHasSoleOutlet(outletCounts: Map<string, number>, edge: ProjectEdge): boolean {
+  return (outletCounts.get(`${edge.source}|${edge.resourceKind}|${edge.resourceId}`) ?? 0) === 1;
 }
 
 export function deriveNodeVerdict(
@@ -233,7 +268,7 @@ function findWorstOutputDeficit(
     if (!edgeResult) {
       continue;
     }
-    const wanted = honestEdgeAskPerSecond(edgeResult, result.nodes[edge.target]);
+    const wanted = honestEdgeAskPerSecond(edgeResult, result.nodes[edge.target], edge);
     const missing = Math.max(0, wanted - (edgeResult.transferredPerSecond ?? 0));
     if (missing <= RATE_EPSILON) {
       continue;
@@ -315,65 +350,70 @@ function findBindingInput(
   }
 
   const storageIds = new Set((project.storages ?? []).map((storage) => storage.id));
-  let binding:
-    | { key: string; ratio: number; supplied: number; need: number; edges: ProjectEdge[] }
-    | undefined;
+  const outletCounts = countSourceOutlets(project);
 
-  // Jack's definition, verbatim: "bottleneck = the thing that is setting
-  // this machine's usage percent." The solver knows which input that was —
-  // it took the min itself — so trust its report and never out-guess it
-  // with a ratio scan over damped per-edge figures.
-  const solverPick = nodeResult.limitingInputKey;
-  if (solverPick) {
-    const flow = nodeResult.inputs[solverPick];
+  // Jack's definition: "bottleneck = the thing that is setting this
+  // machine's usage percent — increase it and the percent moves; increase
+  // anything else and it doesn't." Only the HONEST per-line deliverability
+  // (the edge-label book: source capacity, buffer-∞) can prove that; the
+  // allocation figures get dragged down in lockstep by the ask coupling and
+  // tie everything at the machine's own speed. Scan sorted for order
+  // independence; keep genuine ties within 1%.
+  const candidates: Array<{
+    key: string;
+    ratio: number;
+    supplied: number;
+    need: number;
+    edges: ProjectEdge[];
+  }> = [];
+  for (const [key, flow] of Object.entries(nodeResult.inputs).sort(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  )) {
+    if (flow.amountPerSecond <= RATE_EPSILON) {
+      continue;
+    }
     const edges = incoming.filter(
-      (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === solverPick,
+      (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === key,
     );
-    if (flow && flow.amountPerSecond > RATE_EPSILON && edges.length > 0) {
-      let supplied = 0;
-      for (const edge of edges) {
-        const edgeResult = result.edges[edge.id];
-        // Raw figures here — this is the basis the solver actually used.
-        supplied += edgeResult?.availablePerSecond ?? edgeResult?.transferredPerSecond ?? 0;
-      }
-      binding = { key: solverPick, ratio: 0, supplied, need: flow.amountPerSecond, edges };
+    // Unconnected inputs are hand-fed by convention and never bind.
+    if (edges.length === 0) {
+      continue;
     }
+    let supplied = 0;
+    for (const edge of edges) {
+      supplied += honestEdgeAvailablePerSecond(
+        result.edges[edge.id],
+        storageIds.has(edge.source),
+        edgeSourceHasSoleOutlet(outletCounts, edge),
+      );
+    }
+    // A non-dry buffer line covers whatever is needed — this input can't bind.
+    if (!Number.isFinite(supplied)) {
+      continue;
+    }
+    // On a starving machine, demand is by definition not the limiter, so the
+    // honest need is the FULL-BLAST one. Scaling by the solver's damped
+    // demand made this circular ("gets 102 of the needed 102").
+    const need = flow.amountPerSecond;
+    const ratio = need > RATE_EPSILON ? supplied / need : 1;
+    candidates.push({ key, ratio, supplied, need, edges });
   }
 
-  if (!binding) {
-    // Fallback ratio scan for results that predate the solver's own report.
-    for (const [key, flow] of Object.entries(nodeResult.inputs)) {
-      if (flow.amountPerSecond <= RATE_EPSILON) {
-        continue;
-      }
-      const edges = incoming.filter(
-        (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === key,
-      );
-      // Unconnected inputs are hand-fed by convention and never bind.
-      if (edges.length === 0) {
-        continue;
-      }
-      let supplied = 0;
-      for (const edge of edges) {
-        supplied += honestEdgeAvailablePerSecond(
-          result.edges[edge.id],
-          storageIds.has(edge.source),
-        );
-      }
-      // A non-dry buffer line covers whatever is needed — this input can't bind.
-      if (!Number.isFinite(supplied)) {
-        continue;
-      }
-      // On a starving machine, demand is by definition not the limiter, so the
-      // honest need is the FULL-BLAST one. Scaling by the solver's damped
-      // demand made this circular ("gets 102 of the needed 102").
-      const need = flow.amountPerSecond;
-      const ratio = need > RATE_EPSILON ? supplied / need : 1;
-      if (!binding || ratio < binding.ratio) {
-        binding = { key, ratio, supplied, need, edges };
-      }
+  let binding: (typeof candidates)[number] | undefined;
+  for (const candidate of candidates) {
+    if (!binding || candidate.ratio < binding.ratio) {
+      binding = candidate;
     }
   }
+  const honestTiedKeys = binding
+    ? candidates
+        .filter(
+          (candidate) =>
+            candidate.key !== binding!.key &&
+            candidate.ratio <= binding!.ratio + Math.max(0.01, binding!.ratio * 0.01),
+        )
+        .map((candidate) => candidate.key)
+    : [];
 
   if (!binding) {
     return undefined;
@@ -389,9 +429,9 @@ function findBindingInput(
     shortfallPerSecond,
     binding.need,
   );
-  const tiedKeys = nodeResult.limitingInputTiedKeys?.filter((key) => key !== binding!.key);
+  const tiedKeys = honestTiedKeys;
   const tiedWithNames = tiedKeys
-    ?.map((key) => {
+    .map((key) => {
       const tiedFlow = nodeResult.inputs[key as keyof typeof nodeResult.inputs];
       return tiedFlow?.displayName ?? tiedFlow?.resourceId ?? key;
     })
@@ -542,7 +582,7 @@ function relayedBufferAskPerSecond(
       continue;
     }
     outgoing += 1;
-    consumersAsk += honestEdgeAskPerSecond(result?.edges[edge.id], result?.nodes[edge.target]);
+    consumersAsk += honestEdgeAskPerSecond(result?.edges[edge.id], result?.nodes[edge.target], edge);
   }
   if (outgoing === 0) {
     return -1;
@@ -619,6 +659,7 @@ export function buildRailPorts(
   const storagesById = new Map((project.storages ?? []).map((storage) => [storage.id, storage]));
   const nodesById = new Map(project.nodes.map((entry) => [entry.id, entry]));
   const recipesById = new Map(project.recipes.map((entry) => [entry.id, entry]));
+  const outletCounts = countSourceOutlets(project);
   const machineNameOf = (id: string): string => {
     const node = nodesById.get(id);
     const recipe = node ? recipesById.get(node.recipeId) : undefined;
@@ -673,7 +714,11 @@ export function buildRailPorts(
         const rate = edgeResult?.transferredPerSecond ?? 0;
         transferred += rate;
         if (isInput) {
-          available += honestEdgeAvailablePerSecond(edgeResult, storagesById.has(edge.source));
+          available += honestEdgeAvailablePerSecond(
+            edgeResult,
+            storagesById.has(edge.source),
+            edgeSourceHasSoleOutlet(outletCounts, edge),
+          );
         } else if (storagesById.has(edge.target)) {
           const relayed = relayedBufferAskPerSecond(project, result, edge.target, rate);
           if (relayed < 0) {
@@ -687,7 +732,7 @@ export function buildRailPorts(
             relayTargets.add(edge.target);
           }
         } else {
-          machineAsk += honestEdgeAskPerSecond(edgeResult, result?.nodes[edge.target]);
+          machineAsk += honestEdgeAskPerSecond(edgeResult, result?.nodes[edge.target], edge);
           machineGet += rate;
           machineTargets.add(edge.target);
         }
@@ -854,6 +899,7 @@ export function buildLimitLadder(
   const incoming = project.edges.filter((edge) => edge.target === nodeId);
   const outgoing = project.edges.filter((edge) => edge.source === nodeId);
   const storageIds = new Set((project.storages ?? []).map((storage) => storage.id));
+  const outletCounts = countSourceOutlets(project);
   const rungs: LimitRung[] = [];
 
   // Fleet first: on a 100% tie with a supply rung, "machine count" is the
@@ -873,7 +919,11 @@ export function buildLimitLadder(
     }
     let available = 0;
     for (const edge of edges) {
-      available += honestEdgeAvailablePerSecond(result?.edges[edge.id], storageIds.has(edge.source));
+      available += honestEdgeAvailablePerSecond(
+        result?.edges[edge.id],
+        storageIds.has(edge.source),
+        edgeSourceHasSoleOutlet(outletCounts, edge),
+      );
     }
     const pct = (available / flow.amountPerSecond) * 100;
     // A non-dry buffer feeds on demand — never a rung on the ladder.
@@ -902,7 +952,7 @@ export function buildLimitLadder(
     }
     let wanted = 0;
     for (const edge of machineEdges) {
-      wanted += honestEdgeAskPerSecond(result?.edges[edge.id], result?.nodes[edge.target]);
+      wanted += honestEdgeAskPerSecond(result?.edges[edge.id], result?.nodes[edge.target], edge);
     }
     const ratio = wanted / flow.amountPerSecond;
     demandRatio = Math.max(demandRatio ?? 0, ratio);
