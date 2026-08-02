@@ -914,7 +914,7 @@ function PortChip({
       className={[
         "flow-port relative flex items-center gap-1 px-1 py-0.5",
         toneClass,
-        isFlowScopeLit ? "z-10 ring-2 ring-cyan-300 brightness-110" : "",
+        isFlowScopeLit ? "flow-port--flow-lit" : "",
       ].join(" ")}
       data-resource-edge-anchor="true"
       data-resource-node-id={nodeId}

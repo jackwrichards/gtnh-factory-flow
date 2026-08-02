@@ -571,3 +571,16 @@ textarea {
   background: color-mix(in srgb, var(--recipe-node-tint) 86%, var(--mc-71));
   border-color: color-mix(in srgb, var(--recipe-node-tint-border) 62%, var(--mc-47));
 }
+
+/* A port pulled into the hovered flow scope must be unmissable: yellow inner
+   ring, cyan outer ring, and a glow - the same loud language the inspector
+   highlight uses. Works over tints and semantic tones alike. */
+.flow-port--flow-lit {
+  position: relative;
+  z-index: 15;
+  box-shadow:
+    0 0 0 2px #fde047,
+    0 0 0 5px #22d3ee,
+    0 0 14px 3px rgba(34, 211, 238, 0.95);
+  filter: brightness(1.22);
+}

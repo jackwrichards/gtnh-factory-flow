@@ -2233,6 +2233,35 @@ function ResourceEdgeComponent({
           });
   const labelX = routedEdge.labelX + labelOffset.x;
   const labelY = routedEdge.labelY + labelOffset.y;
+  // Lights this line (or its whole bundle) plus both endpoint ports; shared
+  // by the label and the hover-anywhere line surface below.
+  const applyEdgeFlowScope = () => {
+    const scopeEdges: Record<string, true> = {};
+    for (const bundleEdgeId of data?.bundle?.edgeIds ?? [id]) {
+      scopeEdges[bundleEdgeId] = true;
+    }
+    const scopePorts: Record<string, true> = {};
+    const sourcePortHandle = canonicalizeResourceHandleId(data?.sourceHandleId);
+    const targetPortHandle = canonicalizeResourceHandleId(data?.targetHandleId);
+    if (sourcePortHandle) {
+      scopePorts[`${source}|${sourcePortHandle}`] = true;
+    }
+    if (targetPortHandle) {
+      scopePorts[`${target}|${targetPortHandle}`] = true;
+    }
+    setHoveredFlowScope({
+      edges: scopeEdges,
+      ports: scopePorts,
+      nodes: { [source]: true, [target]: true },
+    });
+  };
+  // The whole line is a hover surface now, not just the label - but it stops
+  // short of the ports so it can never steal the pointer-down that starts a
+  // wire drag from a chip.
+  const hoverTrimmedPoints = isHiddenBundleMember
+    ? undefined
+    : trimPolylineEnds(routedEdge.points, 26);
+  const hoverPathD = hoverTrimmedPoints ? pointsToSvgPath(hoverTrimmedPoints) : undefined;
 
   const stopLabelDrag = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -2353,6 +2382,26 @@ function ResourceEdgeComponent({
           }}
         />
       ) : null}
+      {hoverPathD ? (
+        <path
+          d={hoverPathD}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={14}
+          style={{ pointerEvents: "stroke" }}
+          onMouseEnter={applyEdgeFlowScope}
+          onMouseLeave={() => setHoveredFlowScope(undefined)}
+          onPointerDown={(event) => {
+            // Clicking the line selects the edge exactly like its label does.
+            event.stopPropagation();
+            window.dispatchEvent(
+              new CustomEvent(FLOW_EDGE_LABEL_SELECT_EVENT, {
+                detail: { edgeIds: data?.bundle?.edgeIds ?? [id] },
+              }),
+            );
+          }}
+        />
+      ) : null}
       {showLabel && data ? (
         <EdgeLabelRenderer>
           <div
@@ -2372,26 +2421,7 @@ function ResourceEdgeComponent({
             }}
             onMouseEnter={() => {
               setLabelHovered(true);
-              // The label is the edge's hover surface: light this line (or
-              // the whole bundle) plus both endpoint ports.
-              const edges: Record<string, true> = {};
-              for (const bundleEdgeId of data.bundle?.edgeIds ?? [id]) {
-                edges[bundleEdgeId] = true;
-              }
-              const ports: Record<string, true> = {};
-              const sourcePortHandle = canonicalizeResourceHandleId(data.sourceHandleId);
-              const targetPortHandle = canonicalizeResourceHandleId(data.targetHandleId);
-              if (sourcePortHandle) {
-                ports[`${source}|${sourcePortHandle}`] = true;
-              }
-              if (targetPortHandle) {
-                ports[`${target}|${targetPortHandle}`] = true;
-              }
-              setHoveredFlowScope({
-                edges,
-                ports,
-                nodes: { [source]: true, [target]: true },
-              });
+              applyEdgeFlowScope();
             }}
             onMouseLeave={() => {
               setLabelHovered(false);
@@ -4546,6 +4576,47 @@ function pointsToSvgPath(points: Array<{ x: number; y: number }>) {
   }
 
   return [`M ${first.x},${first.y}`, ...rest.map((point) => `L ${point.x},${point.y}`)].join(" ");
+}
+
+/**
+ * The polyline with `trim` px shaved off both ends, or undefined when the
+ * route is too short to keep a meaningful middle. The hover-anywhere surface
+ * uses this so it never reaches the port chips.
+ */
+function trimPolylineEnds(points: Array<{ x: number; y: number }>, trim: number) {
+  const segments = getPolylineSegments(points);
+  const total = segments.reduce((sum, segment) => sum + segment.length, 0);
+  if (total <= trim * 2 + 8) {
+    return undefined;
+  }
+
+  const pointAtDistance = (distance: number) => {
+    let cursor = 0;
+    for (const segment of segments) {
+      if (cursor + segment.length >= distance) {
+        const ratio = segment.length > 0 ? (distance - cursor) / segment.length : 0;
+        return {
+          x: segment.start.x + (segment.end.x - segment.start.x) * ratio,
+          y: segment.start.y + (segment.end.y - segment.start.y) * ratio,
+        };
+      }
+      cursor += segment.length;
+    }
+    return points[points.length - 1]!;
+  };
+
+  const startDistance = trim;
+  const endDistance = total - trim;
+  const trimmed: Array<{ x: number; y: number }> = [pointAtDistance(startDistance)];
+  let cursor = 0;
+  for (const segment of segments) {
+    cursor += segment.length;
+    if (cursor > startDistance && cursor < endDistance) {
+      trimmed.push(segment.end);
+    }
+  }
+  trimmed.push(pointAtDistance(endDistance));
+  return trimmed;
 }
 
 const EDGE_HOP_RADIUS = 5;
