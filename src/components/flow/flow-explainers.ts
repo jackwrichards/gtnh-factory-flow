@@ -497,7 +497,7 @@ function explainOutputPort(
       lineRows,
       lines: [
         `Full speed, making ${fmt(current)} — this machine is doing everything it can.`,
-        `The plug on this output asks for ${times} more — hover the block for that story and the fix.`,
+        `The plug on this output asks for ${times} more — hover the plug for that story and the fix.`,
       ],
     };
   }

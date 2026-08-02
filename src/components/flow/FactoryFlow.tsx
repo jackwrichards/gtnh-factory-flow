@@ -2258,13 +2258,10 @@ function ResourceEdgeComponent({
   };
   // The whole line is a hover surface now, not just the label - but it stops
   // short of the ports so it can never steal the pointer-down that starts a
-  // wire drag from a chip. Machine outputs need a much deeper source-side
-  // trim: the wire runs UNDER the asker's plug block through the gutter, and
-  // edges hit-test above nodes — an untrimmed hover stroke would eat every
-  // pointer event the plug needs for its own hover story.
+  // wire drag from a chip (edges hit-test above nodes).
   const hoverTrimmedPoints = isHiddenBundleMember
     ? undefined
-    : trimPolylineEnds(routedEdge.points, data?.sourceSlotEndpoint ? 196 : 26, 26);
+    : trimPolylineEnds(routedEdge.points, 26);
   const hoverPathD = hoverTrimmedPoints ? pointsToSvgPath(hoverTrimmedPoints) : undefined;
 
   const stopLabelDrag = useCallback(

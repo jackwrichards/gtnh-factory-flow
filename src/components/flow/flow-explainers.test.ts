@@ -179,7 +179,7 @@ describe("explainPort — outputs", () => {
     expect(story.tone).toBe("green");
     expect(story.lines[0]).toContain("doing everything it can");
     expect(story.lines[1]).toContain("×6,2 more");
-    expect(story.lines[1]).toContain("hover the block");
+    expect(story.lines[1]).toContain("hover the plug");
     expect(story.rows.some((row) => row.k === "Wanted by 1 machine")).toBe(true);
   });
 });

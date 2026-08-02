@@ -609,32 +609,24 @@ textarea {
   background: var(--rail-bar-bad);
 }
 
-/* ---------- output sockets: prongs on the wall + the asker's plug ---------- */
+/* ---------- output couplings: the slim plug chip at the node's edge ---------- */
 
-/* The recipe node's measured box includes the transparent plug gutter (the
-   router needs plugs treated as node body), but the gutter must never be a
-   phantom drag surface. React Flow puts inline pointer-events on its node
-   wrapper, so the opt-out needs !important; the machine card and the plugs
-   re-enable their own events. Empty gutter clicks fall through to the pane. */
-.react-flow__node-recipeNode {
-  pointer-events: none !important;
-}
-
-/* The asker's block: chip-height, two lines, connected to the maker chip by
-   one thick stub in the plug's own color. The row's layout box includes the
-   whole plug, so the edge anchor (the row) ends at the plug's right edge. */
+/* The coupling chip: one percent over one bar, in the asker's frame, colored
+   by the coupling's state. Sits INSIDE the card at the row's right edge —
+   wires reach it exactly the way they reach an input chip. Everything wordy
+   (who asks, gets/asks, ×N, the fix) lives in its hover. */
 .flow-plug {
   position: relative;
   z-index: 5;
   display: flex;
   flex: none;
-  width: 170px;
+  width: 44px;
   height: 34px;
-  margin-left: 9px;
+  margin-left: 2px;
   flex-direction: column;
   justify-content: center;
-  gap: 3px;
-  padding: 3px 6px;
+  gap: 2px;
+  padding: 2px 4px;
   border: 2px solid var(--mc-47);
   background: var(--mc-71);
   color: var(--mc-ink);
@@ -643,50 +635,18 @@ textarea {
     inset -1px -1px 0 rgba(0, 0, 0, 0.3);
 }
 
-/* The coupling stub: one thick connector, colored like its plug. */
-.flow-plug::before {
-  content: "";
-  position: absolute;
-  left: -11px;
-  top: 50%;
-  width: 11px;
-  height: 8px;
-  transform: translateY(-50%);
-  background: var(--mc-47);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.5);
-}
-
 .flow-plug-top {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 4px;
+  justify-content: center;
   font-size: 10px;
   font-weight: 800;
   line-height: 12px;
   font-variant-numeric: tabular-nums;
 }
 
-.flow-plug-top > b {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.flow-plug-top > i {
-  flex: none;
-  font-weight: 700;
-  opacity: 0.85;
-  font-variant-numeric: tabular-nums;
-}
-
 .flow-plug-bar {
   display: flex;
   align-items: center;
-  gap: 3px;
 }
 
 .flow-plug-track {
@@ -703,19 +663,9 @@ textarea {
   min-width: 2px;
 }
 
-.flow-plug-bar > em {
-  flex: none;
-  font-size: 8px;
-  font-weight: 900;
-  line-height: 10px;
-}
-
 .flow-plug--hungry {
   background: var(--port-hot-bg);
   border-color: var(--port-hot-edge);
-}
-.flow-plug--hungry::before {
-  background: var(--port-hot-edge);
 }
 .flow-plug--hungry .flow-plug-track > i {
   background: var(--rail-bar-hot);
@@ -725,9 +675,6 @@ textarea {
   background: var(--port-bind-bg);
   border-color: var(--port-bind-edge);
 }
-.flow-plug--blocked::before {
-  background: var(--port-bind-edge);
-}
 .flow-plug--blocked .flow-plug-track > i {
   background: var(--rail-bar-bad);
 }
@@ -735,9 +682,6 @@ textarea {
 .flow-plug--fed {
   background: var(--port-fed-bg);
   border-color: var(--port-fed-edge);
-}
-.flow-plug--fed::before {
-  background: var(--port-fed-edge);
 }
 .flow-plug--fed .flow-plug-track > i {
   background: var(--rail-bar-ok);
@@ -751,17 +695,15 @@ textarea {
 .flow-socket-empty {
   display: flex;
   flex: none;
-  width: 170px;
+  width: 44px;
   height: 34px;
-  margin-left: 9px;
+  margin-left: 2px;
   align-items: center;
-  padding: 0 8px;
+  justify-content: center;
   border: 2px dashed var(--mc-47);
   color: var(--mc-ink-muted);
-  font-size: 8px;
+  font-size: 12px;
   font-weight: 800;
-  letter-spacing: 0.3px;
-  line-height: 1.3;
 }
 
 .flow-port-badge {

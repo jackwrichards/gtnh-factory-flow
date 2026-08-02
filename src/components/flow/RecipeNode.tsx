@@ -355,32 +355,16 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     : selectedMachineHandler;
   const isPreviewing = hasMachinePicker && previewHandler.id !== selectedMachineHandler.id;
 
-  // Outputs end in sockets: the asker's plug block seats through the machine
-  // wall and hangs into a transparent gutter on the node's right. The gutter
-  // is part of the measured node (edges dock at the plug's right edge, the
-  // router treats plugs as node body), but the MACHINE box — border, paint,
-  // rings — stops at the wall.
-  const hasPlugGutter = !isCropFarmPlaceholder && rails.outputs.length > 0;
+  // Outputs end in coupling chips at the node's right edge — inside the
+  // card, like inputs — so the node's box is the machine's box again and
+  // wires reach the chips the same way they reach input chips.
   return (
     <div
       className={[
-        // pointer-events-none: the gutter is measured node (the router must
-        // treat plugs as body) but must never be a phantom drag surface —
-        // empty gutter clicks fall through to the pane. The machine card and
-        // the plugs re-enable their own pointer events below.
-        "group relative w-max pointer-events-none",
+        "group relative min-w-[340px] w-max border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
         // Marker for the globals.css layer lift: with a picker popup open the
         // node (and the whole nodes layer) must paint above edges.
         isCompareOpen ? "recipe-node-popup-open" : "",
-      ].join(" ")}
-      style={{
-        ...(hasPlugGutter ? { paddingRight: PLUG_GUTTER_PX } : undefined),
-        ...(paintCursor ? { cursor: paintCursor } : undefined),
-      }}
-    >
-    <div
-      className={[
-        "pointer-events-auto relative min-w-[340px] border-2 border-[var(--mc-96)] bg-[var(--mc-78)] font-mono text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]",
         selected ? "ring-2 ring-cyan-300" : "",
         isSearchHighlighted ? "ring-4 ring-sky-300" : "",
         isInspectorHighlighted
@@ -388,15 +372,16 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           : "",
         exceedsMaxTier ? "ring-4 ring-red-500" : "",
       ].join(" ")}
-      style={
-        nodeColor
+      style={{
+        ...(nodeColor
           ? {
               backgroundColor: nodeColor.panel,
               borderColor: nodeColor.border,
               boxShadow: `inset 2px 2px 0 var(--mc-100), inset -2px -2px 0 var(--mc-33), 0 0 0 2px ${nodeColor.shadow}`,
             }
-          : undefined
-      }
+          : undefined),
+        ...(paintCursor ? { cursor: paintCursor } : undefined),
+      }}
     >
       {exceedsMaxTier ? (
         <div className="pointer-events-none absolute -right-3 -top-3 z-40 flex max-w-[210px] items-center gap-2 border-4 border-red-700 bg-[#facc15] px-2 py-1 font-mono text-[13px] font-black uppercase leading-tight text-red-950 shadow-[4px_4px_0_rgba(0,0,0,0.45)] [text-shadow:1px_1px_0_rgba(255,255,255,0.45)]">
@@ -585,7 +570,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               pending={pendingResourceConnection}
             />
             {rails.inputs.length > 0 && rails.outputs.length > 0 ? (
-              <div className="flex w-5 shrink-0 items-center justify-center self-stretch text-[15px] font-black text-[var(--mc-ink-muted)]">
+              <div className="flex w-7 shrink-0 items-center justify-center self-stretch text-[24px] font-black text-[var(--mc-ink-muted)]">
                 →
               </div>
             ) : null}
@@ -641,12 +626,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         ) : null}
       </div>
     </div>
-    </div>
   );
 }
-
-/** How far the asker plug blocks hang past the machine wall, in px. */
-const PLUG_GUTTER_PX = 160;
 
 // React Flow hands node components their live position (and dragging state) as
 // props, so the default prop comparison fails on every drag frame — which
@@ -838,7 +819,7 @@ function PortRail({
     <div
       className={[
         "flex shrink-0 flex-col justify-start gap-1 py-0.5",
-        isInput ? "w-[118px]" : "w-[132px]",
+        isInput ? "w-[118px]" : "w-[168px]",
       ].join(" ")}
     >
       {ports.map((port) =>
@@ -853,10 +834,9 @@ function PortRail({
 }
 
 /**
- * An output row: the maker chip inside the machine, the socket prongs on the
- * wall, and the asker's plug block hanging out into the gutter. The row is
- * the edge anchor, so wires dock at the plug's right edge — where the cord
- * actually leaves the coupling.
+ * An output row: the maker chip plus the coupling chip at the node's right
+ * edge — inside the card, like inputs. The row is the edge anchor, so wires
+ * reach the coupling the same way they reach an input chip.
  */
 function OutputSocketRow({
   nodeId,
@@ -869,11 +849,8 @@ function OutputSocketRow({
 }) {
   const setHoveredFlowScope = useFactoryStore((state) => state.setHoveredFlowScope);
   return (
-    // w-max: the row's box must physically include the overhanging plug so
-    // the edge anchor (this row) ends at the plug's right edge — wires dock
-    // where the cord actually leaves the coupling.
     <div
-      className="relative flex w-max items-center"
+      className="relative flex items-center"
       data-resource-edge-anchor="true"
       data-resource-node-id={nodeId}
       data-resource-handle-id={port.handleId}
@@ -884,11 +861,15 @@ function OutputSocketRow({
       {port.plug ? (
         <PlugBlock nodeId={nodeId} port={port} />
       ) : (
-        <span className="flow-socket-empty nodrag">
-          {formatSlotRateOrNull(port.currentPerSecond, port.kind)
-            ? `empty — ${formatSlotRate(port.currentPerSecond, port.kind)} vanishes`
-            : "empty socket"}
-        </span>
+        <MinecraftTooltip
+          label={
+            formatSlotRateOrNull(port.currentPerSecond, port.kind)
+              ? `Empty socket — ${formatSlotRate(port.currentPerSecond, port.kind)} vanishes. Wire it to keep it.`
+              : "Empty socket — nothing plugged in."
+          }
+        >
+          <span className="flow-socket-empty nodrag">—</span>
+        </MinecraftTooltip>
       )}
     </div>
   );
@@ -901,16 +882,16 @@ const PLUG_GLOW_STYLE: CSSProperties = {
 };
 
 /**
- * The asker's block: two lines, chip-height, pure numbers — "gets / asks"
- * over the covered bar. WHO is asking (one machine, three machines, a
- * buffer) lives in the hover; many machines can share one output and a
- * name would lie by omission.
+ * The coupling chip: how covered the askers are, as one percent over one
+ * bar, colored by the coupling's state. Everything else — who asks, the
+ * gets/asks rates, the ×N short multiplier, the fix — lives in the hover.
  */
 function PlugBlock({ nodeId, port }: { nodeId: string; port: RailPort }) {
   const plug = port.plug!;
   const isFlowScopeLit = useFactoryStore((state) =>
     Boolean(state.hoveredFlowScope?.ports[`${nodeId}|${port.handleId}`]),
   );
+  const coveredPct = Math.round(Math.min(Math.max(plug.coveredFraction, 0), 1) * 100);
   return (
     <MinecraftTooltip
       label={`${port.displayName} — the asker's side`}
@@ -921,24 +902,12 @@ function PlugBlock({ nodeId, port }: { nodeId: string; port: RailPort }) {
         style={isFlowScopeLit ? PLUG_GLOW_STYLE : undefined}
       >
         <span className="flow-plug-top">
-          {plug.state === "soak" ? (
-            <b>takes {formatSlotRate(plug.getPerSecond, port.kind)}</b>
-          ) : (
-            <b>
-              {formatSlotRateBare(plug.getPerSecond)} /{" "}
-              {formatSlotRate(plug.askPerSecond, port.kind)}
-            </b>
-          )}
+          <b>{coveredPct}%</b>
         </span>
         <span className="flow-plug-bar">
           <span className="flow-plug-track">
-            <i style={{ width: `${Math.round(Math.min(Math.max(plug.coveredFraction, 0), 1) * 100)}%` }} />
+            <i style={{ width: `${coveredPct}%` }} />
           </span>
-          {plug.timesShort !== undefined ? (
-            <em className="not-italic">{formatTimes(plug.timesShort)}</em>
-          ) : plug.state === "fed" ? (
-            <em className="not-italic">✓</em>
-          ) : null}
         </span>
       </span>
     </MinecraftTooltip>
