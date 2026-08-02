@@ -38,6 +38,12 @@ export interface UpstreamCulprit {
   pct: number;
   /** True when the culprit runs flat out — adding machines there helps. */
   atFullSpeed: boolean;
+  /**
+   * True when the culprit COULD run faster (its own inputs allow it) — it
+   * isn't starving, the damped ask just isn't pulling it. Advice is still
+   * "act there" (+machines/tier), never "fix above it".
+   */
+  hasHeadroom: boolean;
   /** Machines to add at the culprit to close this gap, when computable. */
   machinesToAdd?: number;
 }
@@ -95,18 +101,35 @@ function clamp01(value: number | undefined, fallback: number): number {
 /**
  * What the consumer on this edge truly asks for. The solver's converged
  * `demandPerSecond` is self-damped (it collapses to whatever was shipped, by
- * design, to stay stable), so on a supply-capped line the only honest ask is
- * the nameplate one. Everything the UI says about hunger must go through
- * here — never through the damped figure directly.
+ * design, to stay stable), so the honest ask is the nameplate one whenever
+ * the consumer is genuinely capability-starved — flagged by the solver
+ * (constraint "supply") OR read off the consumer itself, because the damping
+ * can also keep the flag from ever being raised (a starving reactor whose
+ * ask collapsed leaves its furnace looking "demand-set"). Deliberately
+ * throttled consumers (true demand-set) never beg. Everything the UI says
+ * about hunger must go through here — never the damped figure directly.
  */
-export function honestEdgeAskPerSecond(edgeResult: EdgeThroughput | undefined): number {
+export function honestEdgeAskPerSecond(
+  edgeResult: EdgeThroughput | undefined,
+  targetResult?: NodeThroughputResult,
+): number {
   if (!edgeResult) {
     return 0;
   }
+  const nameplate = edgeResult.nameplateDemandPerSecond ?? 0;
+  const damped = edgeResult.demandPerSecond ?? 0;
   if (edgeResult.constraint === "supply") {
-    return Math.max(edgeResult.nameplateDemandPerSecond ?? 0, edgeResult.demandPerSecond ?? 0);
+    return Math.max(nameplate, damped);
   }
-  return edgeResult.demandPerSecond ?? 0;
+  if (targetResult) {
+    const capable = clamp01(targetResult.capableUtilization, 1);
+    const demand = clamp01(targetResult.demandUtilization, capable);
+    const demandSet = demand < capable - VERDICT_EPSILON && demand < 1 - VERDICT_EPSILON;
+    if (!demandSet && capable < 1 - VERDICT_EPSILON) {
+      return Math.max(nameplate, damped);
+    }
+  }
+  return damped;
 }
 
 /**
@@ -161,8 +184,15 @@ export function deriveNodeVerdict(
   // demand is the strictly smaller limit; a tie means something upstream
   // ultimately caps the line, so the arrow should point that way.
   if (demand < capable - VERDICT_EPSILON && demand < 1 - VERDICT_EPSILON) {
+    // "Demand-set" with a real deficit is the damped ask lying to this node:
+    // downstream is genuinely hungry, the machine has headroom, and the
+    // solver just isn't relaying the pull. That's a can't-keep-up seat —
+    // adding machines (or tiers) here is what actually moves it.
+    if (deficit) {
+      return { kind: "choke", pct, deficit };
+    }
     const headroomPct = Math.max(0, Math.round((Math.min(capable, 1) - utilization) * 1000) / 10);
-    return { kind: "demand-set", pct, headroomPct, deficit };
+    return { kind: "demand-set", pct, headroomPct };
   }
 
   return {
@@ -197,7 +227,8 @@ function findWorstOutputDeficit(
     }
     const missing = Math.max(
       0,
-      honestEdgeAskPerSecond(edgeResult) - (edgeResult.transferredPerSecond ?? 0),
+      honestEdgeAskPerSecond(edgeResult, result.nodes[edge.target]) -
+        (edgeResult.transferredPerSecond ?? 0),
     );
     if (missing <= RATE_EPSILON) {
       continue;
@@ -353,7 +384,7 @@ function findUpstreamCulprit(
     return undefined;
   }
   if (pick.source === nodeId) {
-    return { name: "its own loop", kind: "loop", pct: 100, atFullSpeed: false };
+    return { name: "its own loop", kind: "loop", pct: 100, atFullSpeed: false, hasHeadroom: false };
   }
 
   const storage = (project.storages ?? []).find((entry) => entry.id === pick.source);
@@ -363,6 +394,7 @@ function findUpstreamCulprit(
       kind: "buffer",
       pct: 100,
       atFullSpeed: false,
+      hasHeadroom: false,
     };
   }
 
@@ -378,8 +410,10 @@ function findUpstreamCulprit(
   const sourceResult = result.nodes[pick.source];
   const pct = Math.round(clamp01(sourceResult?.utilization, 0) * 1000) / 10;
   const atFullSpeed = pct >= 99.5;
+  const hasHeadroom =
+    !atFullSpeed && clamp01(sourceResult?.capableUtilization, 1) >= 1 - VERDICT_EPSILON;
   let machinesToAdd: number | undefined;
-  if (atFullSpeed && sourceResult && shortfallPerSecond > RATE_EPSILON) {
+  if ((atFullSpeed || hasHeadroom) && sourceResult && shortfallPerSecond > RATE_EPSILON) {
     const key = makeResourceKey(pick.resourceKind, pick.resourceId);
     const sourceFlow =
       sourceResult.outputs[key as keyof typeof sourceResult.outputs] ??
@@ -392,7 +426,7 @@ function findUpstreamCulprit(
     }
   }
 
-  return { name, kind: "machine", pct, atFullSpeed, machinesToAdd };
+  return { name, kind: "machine", pct, atFullSpeed, hasHeadroom, machinesToAdd };
 }
 
 /**
@@ -443,7 +477,7 @@ function relayedBufferAskPerSecond(
       continue;
     }
     outgoing += 1;
-    consumersAsk += honestEdgeAskPerSecond(result?.edges[edge.id]);
+    consumersAsk += honestEdgeAskPerSecond(result?.edges[edge.id], result?.nodes[edge.target]);
   }
   if (outgoing === 0) {
     return -1;
@@ -588,7 +622,7 @@ export function buildRailPorts(
             relayTargets.add(edge.target);
           }
         } else {
-          machineAsk += honestEdgeAskPerSecond(edgeResult);
+          machineAsk += honestEdgeAskPerSecond(edgeResult, result?.nodes[edge.target]);
           machineGet += rate;
           machineTargets.add(edge.target);
         }
@@ -646,13 +680,16 @@ export function buildRailPorts(
         const hungry =
           demanders > 0 && ask > get + Math.max(RATE_EPSILON, ask * VERDICT_EPSILON);
         plug = {
+          // Blocked only when this machine is genuinely starving (fix its
+          // red input first). Anything else with a hungry plug — full speed
+          // OR damped-ask headroom — is an act-HERE seat: hungry.
           state:
             demanders === 0
               ? "dump"
               : hungry
-                ? utilization >= 1 - VERDICT_EPSILON
-                  ? "hungry"
-                  : "blocked"
+                ? verdict.kind === "starved"
+                  ? "blocked"
+                  : "hungry"
                 : "fed",
           askerName:
             machineTargets.size === 1 && relayTargets.size === 0
@@ -798,7 +835,7 @@ export function buildLimitLadder(
     }
     let wanted = 0;
     for (const edge of machineEdges) {
-      wanted += honestEdgeAskPerSecond(result?.edges[edge.id]);
+      wanted += honestEdgeAskPerSecond(result?.edges[edge.id], result?.nodes[edge.target]);
     }
     const ratio = wanted / flow.amountPerSecond;
     demandRatio = Math.max(demandRatio ?? 0, ratio);

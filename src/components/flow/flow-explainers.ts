@@ -261,7 +261,7 @@ export function explainPlug(
           continue;
         }
         consumers += 1;
-        consumersAsk += honestEdgeAskPerSecond(result?.edges[out.id]);
+        consumersAsk += honestEdgeAskPerSecond(result?.edges[out.id], result?.nodes[out.target]);
       }
       rows.push({
         name: `via ${storageName}`,
@@ -280,7 +280,9 @@ export function explainPlug(
     rows.push({
       name: recipe?.machineType ?? recipe?.name ?? "Machine",
       note: pct !== undefined ? `at ${pct}%` : undefined,
-      rate: `asks ${formatSlotRateBare(honestEdgeAskPerSecond(edgeResult))} · gets ${formatSlotRateBare(gets)}`,
+      rate: `asks ${formatSlotRateBare(
+        honestEdgeAskPerSecond(edgeResult, targetResult),
+      )} · gets ${formatSlotRateBare(gets)}`,
     });
   }
 
@@ -471,11 +473,13 @@ function explainInputPort(
           ? "→ Fed by its own loop — prime it from a buffer."
           : upstream?.kind === "buffer"
             ? `→ ${upstream.name} is running dry — feed it faster.`
-            : upstream && !upstream.atFullSpeed
-              ? `→ ${upstream.name} at ${formatPct(upstream.pct)}% — it's starving too, fix above it.`
-              : upstream
-                ? `→ ${upstream.name} is maxed — add ${upstream.machinesToAdd ? `+${upstream.machinesToAdd}` : "more"} there.`
-                : "→ Add more of the machine making it.",
+            : upstream?.atFullSpeed
+              ? `→ ${upstream.name} is maxed — add ${upstream.machinesToAdd ? `+${upstream.machinesToAdd}` : "more"} there.`
+              : upstream?.hasHeadroom
+                ? `→ ${upstream.name} can make more — add ${upstream.machinesToAdd ? `+${upstream.machinesToAdd}` : "machines"} there.`
+                : upstream
+                  ? `→ ${upstream.name} at ${formatPct(upstream.pct)}% — it's starving too, fix above it.`
+                  : "→ Add more of the machine making it.",
     };
     return { stateWord: "BOTTLENECK", tone: "red", rows: [], lineRows, lines: [whyLine], action };
   }
@@ -622,7 +626,7 @@ export function buildEdgeStory(
       continue;
     }
 
-    const wanted = honestEdgeAskPerSecond(edgeResult);
+    const wanted = honestEdgeAskPerSecond(edgeResult, result.nodes[edge.target]);
     wantedByMachines += wanted;
     getsByMachines += gets;
     machineReceivers += 1;

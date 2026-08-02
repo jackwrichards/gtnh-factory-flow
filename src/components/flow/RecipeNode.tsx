@@ -684,6 +684,11 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
         action = `→ ${upstream.name} is maxed — add ${
           upstream.machinesToAdd ? `+${upstream.machinesToAdd}` : "machines"
         } there.`;
+      } else if (upstream.hasHeadroom) {
+        // Not starving — it could run faster; "fix above it" would mislead.
+        action = `→ ${upstream.name} can make more — add ${
+          upstream.machinesToAdd ? `+${upstream.machinesToAdd}` : "machines"
+        } there.`;
       } else {
         action = `→ ${upstream.name} at ${formatPct(upstream.pct)}% — fix above it.`;
       }
@@ -692,7 +697,10 @@ function VerdictStrip({ nodeId, verdict }: { nodeId: string; verdict: NodeVerdic
     case "choke": {
       word = "▲ CAN'T KEEP UP";
       const deficit = verdict.deficit;
-      cause = "This machine runs full-time, but that still can't satisfy all requests.";
+      cause =
+        verdict.pct >= 99.5
+          ? "This machine runs full-time, but that still can't satisfy all requests."
+          : "Requests exceed what this machine is making.";
       action = deficit?.machinesToAdd
         ? `→ +${deficit.machinesToAdd} machine${deficit.machinesToAdd > 1 ? "s" : ""} covers ${
             deficit.hungryOutputs > 1 ? `all ${deficit.hungryOutputs}` : "it"
