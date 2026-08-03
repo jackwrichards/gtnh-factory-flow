@@ -241,6 +241,7 @@ function IconImage({
     <img
       src={iconPath}
       alt={resourceLabel(resource)}
+      draggable={false}
       className={
         iconPixelSize
           ? "minecraft-pixel-art max-w-none object-contain"

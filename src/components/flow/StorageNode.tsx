@@ -1,6 +1,6 @@
 "use client";
 
-import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import { Handle, Position, useStoreApi, type Node, type NodeProps } from "@xyflow/react";
 import { memo, type CSSProperties, type ReactNode } from "react";
 import { Copy } from "lucide-react";
 import type { FactoryStorage, StorageThroughputResult } from "@/lib/model/types";
@@ -39,6 +39,13 @@ const MODE_BADGE: Record<StorageMode, { word: string; className: string }> = {
 
 function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   const { storage, result } = data;
+  const reactFlowStore = useStoreApi();
+  // The invisible wire handles blanket the card body, and React Flow does not
+  // select a node for clicks that land on a handle - so a plain click (no
+  // drag) selects explicitly, keeping Delete-to-remove reachable for tanks.
+  const selectOnHandleClick = () => {
+    reactFlowStore.getState().addSelectedNodes([storage.id]);
+  };
   const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
@@ -159,6 +166,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               data-resource-handle="true"
               data-resource-node-id={storage.id}
               data-resource-handle-id={inputHandleId}
+              onClick={selectOnHandleClick}
               className="nodrag !absolute !bottom-0 !left-0 !top-0 !z-30 !h-full !w-1/2 !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
             />
             <Handle
@@ -168,6 +176,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               data-resource-handle="true"
               data-resource-node-id={storage.id}
               data-resource-handle-id={outputHandleId}
+              onClick={selectOnHandleClick}
               className="nodrag !absolute !bottom-0 !left-auto !right-0 !top-0 !z-30 !h-full !w-1/2 !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
             />
             {isTank ? (

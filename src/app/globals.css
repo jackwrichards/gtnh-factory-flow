@@ -232,6 +232,13 @@ textarea {
   display: none;
 }
 
+/* Icons must never become the browser's native drag ghost - dragging on the
+   board moves nodes and pulls wires, nothing else. */
+img {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
 .factory-flow-board--moving .react-flow__edges,
 .factory-flow-board--moving .react-flow__edgelabel-renderer,
 .factory-flow-board--moving .react-flow__nodes {
@@ -258,6 +265,13 @@ textarea {
    the delete tool needs the lines themselves to take the click. */
 .factory-flow-board--deleting .react-flow__edge path {
   pointer-events: stroke !important;
+}
+
+/* The delete tool must reach the node under the pointer. Wire handles - which
+   blanket a storage card's whole body - give up their pointer events while it
+   is armed, so clicking a tank deletes it instead of starting a connection. */
+.factory-flow-board--deleting .react-flow__handle {
+  pointer-events: none !important;
 }
 
 /* While an annotation tool is armed, everything on the board draws. */
