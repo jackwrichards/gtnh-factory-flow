@@ -26,6 +26,14 @@ import type {
 import { TICKS_PER_SECOND } from "../model/types";
 import { applyRecipeInputOverrides } from "../model/recipe-input-overrides";
 import { applyMachineHandlerToRecipe } from "../model/recipe-rules";
+import {
+  addRequiredRate,
+  clampUtilization,
+  getCompatibleOutputFlowForKey,
+  getEdgeTargetDemandKey,
+  solveEquilibrium,
+  type EquilibriumSolution,
+} from "./equilibrium";
 import { getMachineOutputMultiplier, getMachineParallelMultiplier } from "./machine-effects";
 import { getOverclockedRecipeStats } from "./overclock";
 import {
@@ -161,169 +169,14 @@ export function calculateThroughput(
     };
   }
 
-  const incomingEdgeCounts = countIncomingEdgesByTargetResource(project);
-  const requiredByNodeAndResource = new Map<string, Map<ResourceKey, number>>();
+  // The equilibrium engine owns the iteration: every node starts at full
+  // blast and descends to the largest self-consistent answer, so mutually
+  // starved gridlocks ("no apples because no bananas because no apples")
+  // are unreachable by construction. See equilibrium.ts for the mechanics.
+  const equilibrium = solveEquilibrium(project, nodes, storagesById);
   const edgeResults: Record<string, EdgeThroughput> = {};
-  const storageOutgoingDemand = calculateStorageOutgoingDemand(project, nodes, projectStorages);
-  const storageIncomingCounts = countIncomingEdgesToStorageResource(project, projectStorages);
-  const storageIncomingTransferred = new Map<string, number>();
-
-  for (const edge of project.edges) {
-    const key = makeResourceKey(edge.resourceKind, edge.resourceId);
-    const targetDemandKey = getEdgeTargetDemandKey(project, edge) ?? key;
-    const sourceStorage = storagesById.get(edge.source);
-    const targetStorage = storagesById.get(edge.target);
-
-    if (sourceStorage || targetStorage) {
-      if (sourceStorage && targetStorage) {
-        continue;
-      }
-
-      if (targetStorage) {
-        const sourceResult = nodes[edge.source];
-        const countKey = `${targetStorage.id}|${key}`;
-        const targetDemand = storageOutgoingDemand.get(key) ?? 0;
-        const targetCount = storageIncomingCounts.get(key) ?? 1;
-        const sourceCapacity = getCompatibleOutputFlow(sourceResult, edge)?.amountPerSecond ?? 0;
-        const demandedPerSecond = targetDemand / targetCount;
-        const displayedDemandPerSecond = Math.max(sourceCapacity, demandedPerSecond);
-        const transferredPerSecond = Math.min(sourceCapacity, displayedDemandPerSecond);
-
-        if (demandedPerSecond > EPSILON) {
-          addRequiredRate(requiredByNodeAndResource, edge.source, key, demandedPerSecond);
-        }
-        storageIncomingTransferred.set(
-          countKey,
-          (storageIncomingTransferred.get(countKey) ?? 0) + transferredPerSecond,
-        );
-        updateStorageFlow(storages[targetStorage.id], transferredPerSecond, 0);
-        edgeResults[edge.id] = buildEdgeResult(
-          edge,
-          key,
-          displayedDemandPerSecond,
-          transferredPerSecond,
-        );
-        continue;
-      }
-
-      if (sourceStorage) {
-        const targetResult = nodes[edge.target];
-        const targetCount = incomingEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1;
-        const targetDemand = targetResult?.inputs[targetDemandKey]?.amountPerSecond ?? 0;
-        const demandPerSecond = targetDemand / targetCount;
-        const transferredPerSecond = demandPerSecond;
-
-        updateStorageFlow(storages[sourceStorage.id], 0, transferredPerSecond);
-        edgeResults[edge.id] = buildEdgeResult(edge, key, demandPerSecond, transferredPerSecond);
-        continue;
-      }
-    }
-
-    const sourceResult = nodes[edge.source];
-    const targetResult = nodes[edge.target];
-    const targetCount = incomingEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1;
-    const targetDemand = targetResult?.inputs[targetDemandKey]?.amountPerSecond ?? 0;
-    const demandPerSecond = targetDemand / targetCount;
-    const sourceCapacity = getCompatibleOutputFlow(sourceResult, edge)?.amountPerSecond ?? 0;
-    const transferredPerSecond = Math.min(sourceCapacity, demandPerSecond);
-
-    addRequiredRate(requiredByNodeAndResource, edge.source, key, demandPerSecond);
-
-    edgeResults[edge.id] = buildEdgeResult(edge, key, demandPerSecond, transferredPerSecond);
-  }
-
-  aggregateStorageFlowsByResource(projectStorages, storages);
-
-  for (const storageResult of Object.values(storages)) {
-    finalizeStorageFlow(storageResult);
-  }
-
-  applyProjectTarget(project, nodes, requiredByNodeAndResource);
-
-  for (const node of project.nodes) {
-    const nodeResult = nodes[node.id];
-    const recipe = recipesById.get(node.recipeId);
-
-    if (!nodeResult || !recipe || nodeResult.status === "missing-recipe") {
-      continue;
-    }
-
-    if (!node.enabled) {
-      continue;
-    }
-
-    const requiredByResource = new Map(requiredByNodeAndResource.get(node.id));
-
-    if (node.targetOutput) {
-      const targetKey = makeResourceKey(node.targetOutput.kind, node.targetOutput.resourceId);
-      const previous = requiredByResource.get(targetKey) ?? 0;
-      requiredByResource.set(targetKey, Math.max(previous, node.targetOutput.amountPerSecond));
-    }
-
-    const outputFlows = Object.values(nodeResult.outputs);
-    if (requiredByResource.size === 0 && outputFlows.length > 0) {
-      const output = primaryOutput(recipe);
-      if (output) {
-        const key = makeResourceKey(output.kind, output.id);
-        requiredByResource.set(key, nodeResult.outputs[key]?.amountPerSecond ?? 0);
-      }
-    }
-
-    const nodeRecipe = applyRecipeInputOverrides(recipe, node);
-    const overclockedRecipe = {
-      ...applyMachineHandlerToRecipe(nodeRecipe, node),
-      ...getOverclockedRecipeStats(nodeRecipe, node),
-      outputs: applyOutputMultipliers(nodeRecipe, node),
-    };
-    const utilizationReport = selectLimitingOutput(
-      overclockedRecipe,
-      node,
-      nodeResult,
-      requiredByResource,
-    );
-    nodeResult.requiredRatePerSecond = utilizationReport.requiredRatePerSecond;
-    nodeResult.maxRatePerSecond = utilizationReport.maxRatePerSecond;
-    nodeResult.utilization = utilizationReport.utilization;
-    nodeResult.demandUtilization = clampUtilization(utilizationReport.utilization);
-    nodeResult.theoreticalMachinesRequired = utilizationReport.theoreticalMachinesRequired;
-    nodeResult.limitingResource = utilizationReport.limitingResource;
-    nodeResult.status = getNodeStatus(nodeResult.utilization);
-  }
-
-  // Iterate to convergence, not to an arbitrary pass count. The old cap of
-  // node-count+1 froze un-settled boards wherever they happened to be, which
-  // made a lossy recycle loop read 98% on a small board and 22% on a big one
-  // for identical wiring. With pooled allocation each pass has the true
-  // steady state as its fixed point, so running until the numbers stop moving
-  // yields the same answer regardless of unrelated board size. Lossy loops
-  // decay geometrically (0.99x per pass at worst-realistic), hence the high
-  // cap; healthy boards settle in a handful of passes and exit early.
-  const maxUtilizationPasses = 4096;
-  for (let pass = 0; pass < maxUtilizationPasses; pass += 1) {
-    refreshEdgeResultsFromNodeUtilization(
-      project,
-      recipesById,
-      projectStorages,
-      nodes,
-      edgeResults,
-      incomingEdgeCounts,
-      storagesById,
-    );
-    if (
-      !refreshNodeUtilizationFromEdgeResults(project, recipesById, nodes, edgeResults, storagesById)
-    ) {
-      break;
-    }
-  }
-  refreshEdgeResultsFromNodeUtilization(
-    project,
-    recipesById,
-    projectStorages,
-    nodes,
-    edgeResults,
-    incomingEdgeCounts,
-    storagesById,
-  );
+  writeEdgeResultsFromEquilibrium(project, nodes, edgeResults, equilibrium);
+  finalizeNodeReports(project, recipesById, nodes, edgeResults, storagesById);
   refreshStorageResultsFromEdges(projectStorages, storages, project.edges, edgeResults);
 
   for (const node of project.nodes) {
@@ -596,530 +449,73 @@ function applyConvertedStorageOutputBalances(
   }
 }
 
-function countIncomingEdgesByTargetResource(project: FactoryProject): Map<string, number> {
-  const counts = new Map<string, number>();
-
-  for (const edge of project.edges) {
-    const key =
-      getEdgeTargetDemandKey(project, edge) ?? makeResourceKey(edge.resourceKind, edge.resourceId);
-    const countKey = `${edge.target}|${key}`;
-    counts.set(countKey, (counts.get(countKey) ?? 0) + 1);
-  }
-
-  return counts;
-}
-
-function getEdgeTargetDemandKey(project: FactoryProject, edge: FactoryProject["edges"][number]) {
-  const targetNode = project.nodes.find((node) => node.id === edge.target);
-  const targetRecipe = project.recipes.find((recipe) => recipe.id === targetNode?.recipeId);
-  const edgeResource = { kind: edge.resourceKind, id: edge.resourceId };
-  const effectiveTargetRecipe =
-    targetNode && targetRecipe ? applyRecipeInputOverrides(targetRecipe, targetNode) : undefined;
-  const input = effectiveTargetRecipe?.inputs.find(
-    (entry) => isRecipeInputConsumed(entry) && resourceMatchesInput(edgeResource, entry),
-  );
-
-  return input ? makeResourceKey(input.kind, input.id) : undefined;
-}
-
-function countIncomingEdgesToStorageResource(
-  project: FactoryProject,
-  storages: FactoryStorage[],
-): Map<string, number> {
-  const storageIds = new Set(storages.map((storage) => storage.id));
-  const storagesById = new Map(storages.map((storage) => [storage.id, storage]));
-  const counts = new Map<string, number>();
-
-  for (const edge of project.edges) {
-    const storage = storagesById.get(edge.target);
-    if (!storageIds.has(edge.target) || !storage) {
-      continue;
-    }
-
-    const key = makeResourceKey(storage.kind, storage.resourceId);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-
-  return counts;
-}
-
-function calculateStorageIncomingSupply(
-  project: FactoryProject,
-  storages: FactoryStorage[],
-  edgeResults: Record<string, EdgeThroughput>,
-): Map<string, number> {
-  const storageIds = new Set(storages.map((storage) => storage.id));
-  const storagesById = new Map(storages.map((storage) => [storage.id, storage]));
-  const supply = new Map<string, number>();
-
-  for (const edge of project.edges) {
-    if (storageIds.has(edge.source) || !storageIds.has(edge.target)) {
-      continue;
-    }
-
-    const storage = storagesById.get(edge.target);
-    if (!storage) {
-      continue;
-    }
-
-    const key = makeResourceKey(storage.kind, storage.resourceId);
-    supply.set(key, (supply.get(key) ?? 0) + (edgeResults[edge.id]?.transferredPerSecond ?? 0));
-  }
-
-  return supply;
-}
 
 /**
- * Rebuilds every edge's demand/transfer from current node utilizations using
- * pooled allocation instead of the old per-edge arithmetic.
- *
- * The old version had two defects the community found on real boards:
- * - a consumer's demand was split equally by incoming edge COUNT, so a strong
- *   source was never asked to cover a weak co-supplier's shortfall (machines
- *   starved beside idle supply, ratcheting further down every pass), and
- * - every edge took min(source output, own demand) independently, so a split
- *   output could be "transferred" to several consumers at once (10/s machines
- *   showing 16/s delivered downstream).
- *
- * Now each producer output is a budget and each consumer input is a pooled
- * need; a few water-filling rounds distribute budgets over the edge graph
- * max-min fairly. Conservation holds by construction and unmet need migrates
- * to sources that still have budget. Storage-source edges top up whatever
- * machines could not cover (machines drain first); storage-sink edges receive
- * only the leftover budget after machine consumers are served.
+ * Writes displayed edge results from the equilibrium engine's allocations.
+ * Transfers, availability, and demand come straight from the converged
+ * fixed point; this layer only adds the display-facing nameplate share.
  */
-function refreshEdgeResultsFromNodeUtilization(
+function writeEdgeResultsFromEquilibrium(
   project: FactoryProject,
-  recipesById: Map<string, Recipe>,
-  projectStorages: FactoryStorage[],
   nodes: Record<string, NodeThroughputResult>,
   edgeResults: Record<string, EdgeThroughput>,
-  incomingEdgeCounts: Map<string, number>,
-  storagesById: Map<string, FactoryStorage>,
+  equilibrium: EquilibriumSolution,
 ): void {
-  const storageIncomingCounts = countIncomingEdgesToStorageResource(project, projectStorages);
-  // Two ask ledgers per pass, answering different questions:
-  // - availability: what COULD each input receive if wanted (asks capped only
-  //   by sibling-input potentials) - feeds capableUtilization, so capability
-  //   can climb to the true fixed point instead of ratcheting down.
-  // - desired: what demand actually pulls (asks scaled by demand-side desire)
-  //   - feeds displayed transfers, storage flows, and producer required rates.
-  const availabilityAsks = calculateAskRates(project, nodes, edgeResults, storagesById, "availability");
-  const desiredAsks = calculateAskRates(project, nodes, edgeResults, storagesById, "desired");
-  const storageOutgoingAvailability = calculateEffectiveStorageOutgoingDemand(
-    project,
-    projectStorages,
-    availabilityAsks,
-  );
-  const storageOutgoingDemand = calculateEffectiveStorageOutgoingDemand(
-    project,
-    projectStorages,
-    desiredAsks,
-  );
-  const storageIncomingSupply = calculateStorageIncomingSupply(
-    project,
-    projectStorages,
-    edgeResults,
-  );
-
-  type FillEdge = {
-    edge: FactoryProject["edges"][number];
-    key: ResourceKey;
-    targetDemandKey: ResourceKey;
-    budgetKey: string;
-    needKey: string;
-    sourceFullCapacity: number;
-    allocatedAvailable: number;
-    allocatedEaten: number;
-    role: "machine" | "storage-source" | "storage-sink";
-  };
-
-  // Budgets: producer output per (source|resource), capability-scaled.
-  const budgets = new Map<string, number>();
-  const machineEdges: FillEdge[] = [];
-  const storageSourceEdges: FillEdge[] = [];
-  const storageSinkEdges: FillEdge[] = [];
-  const edgesByNeed = new Map<string, FillEdge[]>();
-  const needEdgeCounts = new Map<string, number>();
-
   for (const edge of project.edges) {
-    const key = makeResourceKey(edge.resourceKind, edge.resourceId);
-    const targetDemandKey = getEdgeTargetDemandKey(project, edge) ?? key;
-    const sourceStorage = storagesById.get(edge.source);
-    const targetStorage = storagesById.get(edge.target);
-
-    if (sourceStorage && targetStorage) {
+    const allocation = equilibrium.edgeAllocations.get(edge.id);
+    if (!allocation) {
       continue;
     }
 
-    const sourceResult = nodes[edge.source];
-    const sourceOutputFlow = getCompatibleOutputFlow(sourceResult, edge);
-    const sourceFullCapacity =
-      sourceStorage || !sourceResult
-        ? Number.POSITIVE_INFINITY
-        : (sourceOutputFlow?.amountPerSecond ?? 0);
-    const budgetKey = `${edge.source}|${sourceOutputFlow?.key ?? key}`;
-    const needKey = `${edge.target}|${targetDemandKey}`;
-    const fillEdge: FillEdge = {
-      edge,
-      key,
-      targetDemandKey,
-      budgetKey,
-      needKey,
-      sourceFullCapacity,
-      allocatedAvailable: 0,
-      allocatedEaten: 0,
-      role: targetStorage ? "storage-sink" : sourceStorage ? "storage-source" : "machine",
-    };
-
-    if (!sourceStorage && sourceResult && !budgets.has(budgetKey)) {
-      budgets.set(
-        budgetKey,
-        getEffectiveFlowRate(sourceOutputFlow, sourceResult.capableUtilization ?? 1),
+    if (allocation.role === "storage-sink") {
+      // A sink line carries whatever the producer had left over; its demand
+      // additionally carries the tank's unmet pull-through so a dry buffer
+      // reads as "wants more" instead of silently starving its drinkers.
+      edgeResults[edge.id] = buildEdgeResult(
+        edge,
+        allocation.resourceKey,
+        allocation.demandPerSecond,
+        allocation.transferredPerSecond,
+        {
+          nameplateDemandPerSecond: allocation.transferredPerSecond,
+          sourceCapacityPerSecond: allocation.sourceCapacityPerSecond,
+          availablePerSecond: allocation.transferredPerSecond,
+        },
       );
-    }
-
-    if (targetStorage) {
-      storageSinkEdges.push(fillEdge);
       continue;
     }
 
-    needEdgeCounts.set(needKey, (needEdgeCounts.get(needKey) ?? 0) + 1);
-    edgesByNeed.set(needKey, [...(edgesByNeed.get(needKey) ?? []), fillEdge]);
-
-    if (sourceStorage) {
-      storageSourceEdges.push(fillEdge);
-      continue;
-    }
-
-    machineEdges.push(fillEdge);
-  }
-
-  // Water-filling: consumers spread their remaining need over edges whose
-  // sources still have budget; oversubscribed sources grant proportionally.
-  // Unmet need migrates to sources with slack; storage sources then top up
-  // what machines could not cover (drain the machine first), a fed storage
-  // redistributing its measured incoming supply, an unfed one acting as an
-  // external buffer with unbounded patience.
-  const runFill = (
-    asks: Map<string, number>,
-    storageOutgoingTotals: Map<string, number>,
-    slot: "allocatedAvailable" | "allocatedEaten",
-  ): Map<string, number> => {
-    const remainingBudget = new Map(budgets);
-    const remainingNeed = new Map<string, number>();
-    for (const [needKey] of edgesByNeed) {
-      remainingNeed.set(needKey, asks.get(needKey) ?? 0);
-    }
-
-    for (let round = 0; round < 32; round += 1) {
-      const requestsByBudget = new Map<string, number>();
-      const requestByEdge = new Map<FillEdge, number>();
-
-      for (const [needKey, edges] of edgesByNeed) {
-        const need = remainingNeed.get(needKey) ?? 0;
-        if (need <= EPSILON) {
-          continue;
-        }
-        const liveEdges = edges.filter(
-          (entry) =>
-            entry.role === "machine" && (remainingBudget.get(entry.budgetKey) ?? 0) > EPSILON,
-        );
-        if (liveEdges.length === 0) {
-          continue;
-        }
-        const perEdge = need / liveEdges.length;
-        for (const entry of liveEdges) {
-          requestByEdge.set(entry, perEdge);
-          requestsByBudget.set(
-            entry.budgetKey,
-            (requestsByBudget.get(entry.budgetKey) ?? 0) + perEdge,
-          );
-        }
-      }
-
-      if (requestByEdge.size === 0) {
-        break;
-      }
-
-      // The grant factor is frozen per budget BEFORE any grants apply: reading
-      // the budget mid-loop after siblings decremented it would shortchange
-      // whichever edge happens to iterate later.
-      const factorByBudget = new Map<string, number>();
-      for (const [budgetKey, requested] of requestsByBudget) {
-        const budget = remainingBudget.get(budgetKey) ?? 0;
-        factorByBudget.set(budgetKey, requested > EPSILON ? Math.min(1, budget / requested) : 0);
-      }
-
-      let granted = 0;
-      for (const [entry, request] of requestByEdge) {
-        const grant = request * (factorByBudget.get(entry.budgetKey) ?? 0);
-        if (grant <= EPSILON) {
-          continue;
-        }
-        entry[slot] += grant;
-        remainingBudget.set(entry.budgetKey, (remainingBudget.get(entry.budgetKey) ?? 0) - grant);
-        remainingNeed.set(entry.needKey, (remainingNeed.get(entry.needKey) ?? 0) - grant);
-        granted += grant;
-      }
-
-      if (granted <= EPSILON) {
-        break;
-      }
-    }
-
-    for (const entry of storageSourceEdges) {
-      const remaining = Math.max(0, remainingNeed.get(entry.needKey) ?? 0);
-      const storageEdgesForNeed =
-        edgesByNeed.get(entry.needKey)?.filter((candidate) => candidate.role === "storage-source")
-          .length ?? 1;
-      const requested = remaining / Math.max(1, storageEdgesForNeed);
-      const hasIncomingSupply = (storageIncomingCounts.get(entry.key) ?? 0) > 0;
-      const available = hasIncomingSupply
-        ? (() => {
-            const totalDemand = storageOutgoingTotals.get(entry.key) ?? 0;
-            const supply = storageIncomingSupply.get(entry.key) ?? 0;
-            return totalDemand > EPSILON ? supply * (requested / totalDemand) : supply;
-          })()
-        : Number.POSITIVE_INFINITY;
-      const grant = Math.min(requested, available);
-      entry[slot] = Number.isFinite(grant) ? grant : requested;
-      remainingNeed.set(entry.needKey, remaining - entry[slot]);
-    }
-
-    // Storage sinks receive only what is left of the budget after machines.
-    // Budgets are capability-scaled, so a demand-throttled producer still runs
-    // at its capability when a buffer is there to absorb the surplus.
-    const sinkCounts = new Map<string, number>();
-    for (const entry of storageSinkEdges) {
-      sinkCounts.set(entry.budgetKey, (sinkCounts.get(entry.budgetKey) ?? 0) + 1);
-    }
-    for (const entry of storageSinkEdges) {
-      const leftover = Math.max(0, remainingBudget.get(entry.budgetKey) ?? 0);
-      // Sibling sinks each take an equal share of the same leftover.
-      entry[slot] = leftover / (sinkCounts.get(entry.budgetKey) ?? 1);
-    }
-
-    return remainingNeed;
-  };
-
-  runFill(availabilityAsks, storageOutgoingAvailability, "allocatedAvailable");
-  const remainingDesired = runFill(desiredAsks, storageOutgoingDemand, "allocatedEaten");
-
-  // Per-consumer consumption totals, for honest per-line nameplate figures.
-  const eatenByNeed = new Map<string, number>();
-  for (const entry of [...machineEdges, ...storageSourceEdges]) {
-    eatenByNeed.set(entry.needKey, (eatenByNeed.get(entry.needKey) ?? 0) + entry.allocatedEaten);
-  }
-
-  for (const entry of [...machineEdges, ...storageSourceEdges, ...storageSinkEdges]) {
-    const { edge, key, targetDemandKey } = entry;
-    const targetStorage = storagesById.get(edge.target);
+    // A line's honest nameplate ask is what it carries plus its share of
+    // whatever the consumer still lacks at full speed - zero shortfall means
+    // every line reads as doing its job (a trickle source beside a firehose
+    // is not "starving" anyone).
     const targetResult = nodes[edge.target];
-    const targetCount = targetStorage
-      ? (storageIncomingCounts.get(key) ?? 1)
-      : (needEdgeCounts.get(entry.needKey) ?? 1);
+    const targetCount = equilibrium.needEdgeCounts.get(allocation.needKey) ?? 1;
+    const nameplateNeed = targetResult?.inputs[allocation.targetDemandKey]?.amountPerSecond ?? 0;
+    const nameplateShortShare =
+      Math.max(0, nameplateNeed - (equilibrium.eatenByNeed.get(allocation.needKey) ?? 0)) /
+      targetCount;
+    const nameplateDemandPerSecond = !targetResult
+      ? allocation.transferredPerSecond
+      : allocation.transferredPerSecond + nameplateShortShare;
 
-    // Displayed demand: what this edge would need to carry for the consumer's
-    // demand-side pull to be whole - its consumption plus an equal share of
-    // any unmet desire.
-    const deficitShare = targetStorage
-      ? 0
-      : Math.max(0, remainingDesired.get(entry.needKey) ?? 0) / targetCount;
-    const demandPerSecond = targetStorage
-      ? entry.allocatedEaten
-      : entry.allocatedEaten + deficitShare;
-    // The old need-divided-by-edge-count figure is meaningless under pooled
-    // allocation: a trickle source next to a big one would read "starved at
-    // 13%" while the machine is fully fed. A line's honest nameplate ask is
-    // what it carries plus its share of whatever the consumer still lacks at
-    // full speed - zero shortfall means every line reads as doing its job.
-    const nameplateNeed = targetResult?.inputs[targetDemandKey]?.amountPerSecond ?? 0;
-    const nameplateShortShare = targetStorage
-      ? 0
-      : Math.max(0, nameplateNeed - (eatenByNeed.get(entry.needKey) ?? 0)) / targetCount;
-    const nameplateDemandPerSecond =
-      targetStorage || !targetResult
-        ? entry.allocatedEaten
-        : entry.allocatedEaten + nameplateShortShare;
-
-    edgeResults[edge.id] = buildEdgeResult(edge, key, demandPerSecond, entry.allocatedEaten, {
-      nameplateDemandPerSecond,
-      // Total output rather than this edge's share of it. When a producer feeds
-      // several consumers that understates how maxed out it is, so the split
-      // case falls back to "demand" - under-flagging rather than crying wolf.
-      sourceCapacityPerSecond: entry.sourceFullCapacity,
-      availablePerSecond: entry.role === "storage-sink" ? entry.allocatedEaten : entry.allocatedAvailable,
-    });
-  }
-}
-
-/**
- * What each consumer honestly ASKS for per input, per second.
- *
- * ask = nameplate need x min(demand-side desire, what the OTHER connected
- * inputs currently support). Crucially the input's own supply is excluded:
- * allocation is capped by asks, so an ask that tracked the node's converged
- * utilization would make every dip permanent - the machine asks for little
- * because it runs slow because it was granted little. With the self-term
- * removed, a starved machine keeps asking for what it could genuinely use
- * and utilization can climb back to the true fixed point.
- */
-function calculateAskRates(
-  project: FactoryProject,
-  nodes: Record<string, NodeThroughputResult>,
-  edgeResults: Record<string, EdgeThroughput>,
-  storagesById: Map<string, FactoryStorage>,
-  mode: "availability" | "desired",
-): Map<string, number> {
-  // Sibling-ingredient limits must be judged by what those inputs COULD be
-  // supplied (upstream capability), never by what they currently receive:
-  // current receipts are themselves ask-capped, so two co-ingredients of one
-  // machine would hold each other at whatever transient they started from -
-  // the same one-way ratchet as the self-term, one level removed. Optimistic
-  // under contention (a shared producer counts fully for every consumer), but
-  // the actual allocation stays exact and bounded; over-asks merely show as
-  // over-demanded producers.
-  const potentialByNodeInput = new Map<string, number>();
-  const storageIncomingCounts = countIncomingEdgesToStorageResource(
-    project,
-    project.storages ?? [],
-  );
-  const storageIncomingSupply = calculateStorageIncomingSupply(
-    project,
-    project.storages ?? [],
-    edgeResults,
-  );
-  for (const edge of project.edges) {
-    if (storagesById.has(edge.target)) {
-      continue;
-    }
-    const key = makeResourceKey(edge.resourceKind, edge.resourceId);
-    const targetDemandKey = getEdgeTargetDemandKey(project, edge) ?? key;
-    const potentialKey = `${edge.target}|${targetDemandKey}`;
-    const sourceStorage = storagesById.get(edge.source);
-    let potential: number;
-    if (sourceStorage) {
-      potential =
-        (storageIncomingCounts.get(key) ?? 0) > 0
-          ? (storageIncomingSupply.get(key) ?? 0)
-          : Number.POSITIVE_INFINITY;
-    } else {
-      const sourceResult = nodes[edge.source];
-      potential = sourceResult
-        ? getEffectiveFlowRate(
-            getCompatibleOutputFlow(sourceResult, edge),
-            sourceResult.capableUtilization ?? 1,
-          )
-        : Number.POSITIVE_INFINITY;
-    }
-    potentialByNodeInput.set(
-      potentialKey,
-      (potentialByNodeInput.get(potentialKey) ?? 0) + potential,
+    edgeResults[edge.id] = buildEdgeResult(
+      edge,
+      allocation.resourceKey,
+      allocation.demandPerSecond,
+      allocation.transferredPerSecond,
+      {
+        nameplateDemandPerSecond,
+        // Total output rather than this edge's share of it. When a producer
+        // feeds several consumers that understates how maxed out it is, so the
+        // split case falls back to "demand" - under-flagging, not crying wolf.
+        sourceCapacityPerSecond: allocation.sourceCapacityPerSecond,
+        availablePerSecond: allocation.availablePerSecond,
+      },
     );
   }
-
-  const asks = new Map<string, number>();
-  for (const edge of project.edges) {
-    if (storagesById.has(edge.target)) {
-      continue;
-    }
-
-    const targetDemandKey =
-      getEdgeTargetDemandKey(project, edge) ?? makeResourceKey(edge.resourceKind, edge.resourceId);
-    const askKey = `${edge.target}|${targetDemandKey}`;
-    if (asks.has(askKey)) {
-      continue;
-    }
-
-    const targetResult = nodes[edge.target];
-    const nameplate = targetResult?.inputs[targetDemandKey]?.amountPerSecond ?? 0;
-    if (!targetResult || nameplate <= EPSILON) {
-      asks.set(askKey, 0);
-      continue;
-    }
-
-    let limit =
-      mode === "availability" ? 1 : clampUtilization(targetResult.demandUtilization ?? 1);
-    for (const [otherKey, otherFlow] of Object.entries(targetResult.inputs)) {
-      if (otherKey === targetDemandKey || otherFlow.amountPerSecond <= EPSILON) {
-        continue;
-      }
-      const otherPotential = potentialByNodeInput.get(`${edge.target}|${otherKey}`);
-      if (otherPotential === undefined || !Number.isFinite(otherPotential)) {
-        // Unconnected inputs never limit (assumed hand-fed), matching
-        // selectConnectedInputSupplyLimit; unbounded buffers likewise.
-        continue;
-      }
-      limit = Math.min(limit, clampUtilization(otherPotential / otherFlow.amountPerSecond));
-    }
-
-    asks.set(askKey, nameplate * limit);
-  }
-
-  return asks;
 }
 
-function canRunForStorageSurplus(
-  project: FactoryProject,
-  recipesById: Map<string, Recipe>,
-  nodeId: string,
-): boolean {
-  const node = project.nodes.find((entry) => entry.id === nodeId);
-  const recipe = node ? recipesById.get(node.recipeId) : undefined;
-  if (!node || !recipe || !node.enabled) {
-    return false;
-  }
-
-  return applyRecipeInputOverrides(recipe, node).inputs.every(
-    (input) => !isRecipeInputConsumed(input),
-  );
-}
-
-function calculateDirectConsumerDemandBySourceResource(
-  project: FactoryProject,
-  nodes: Record<string, NodeThroughputResult>,
-  incomingEdgeCounts: Map<string, number>,
-  storagesById: Map<string, FactoryStorage>,
-): Map<string, number> {
-  const demand = new Map<string, number>();
-
-  for (const edge of project.edges) {
-    if (storagesById.has(edge.source) || storagesById.has(edge.target)) {
-      continue;
-    }
-
-    const key = makeResourceKey(edge.resourceKind, edge.resourceId);
-    const targetDemandKey = getEdgeTargetDemandKey(project, edge) ?? key;
-    const targetResult = nodes[edge.target];
-    const targetCount = incomingEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1;
-    const edgeDemand =
-      getEffectiveFlowRate(targetResult?.inputs[targetDemandKey], targetResult?.utilization ?? 0) /
-      targetCount;
-    const sourceKey = `${edge.source}|${key}`;
-    demand.set(sourceKey, (demand.get(sourceKey) ?? 0) + edgeDemand);
-  }
-
-  return demand;
-}
-
-function countStorageSinkEdgesBySourceResource(
-  project: FactoryProject,
-  storagesById: Map<string, FactoryStorage>,
-): Map<string, number> {
-  const counts = new Map<string, number>();
-
-  for (const edge of project.edges) {
-    if (storagesById.has(edge.source) || !storagesById.has(edge.target)) {
-      continue;
-    }
-
-    const key = `${edge.source}|${makeResourceKey(edge.resourceKind, edge.resourceId)}`;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-
-  return counts;
-}
 
 function refreshStorageResultsFromEdges(
   projectStorages: FactoryStorage[],
@@ -1238,13 +634,19 @@ function selectConnectedInputSupplyLimit(
   return { limit, resourceKey: limitKey, tiedKeys };
 }
 
-function refreshNodeUtilizationFromEdgeResults(
+/**
+ * Final reporting pass over the converged equilibrium: recomputes each
+ * node's displayed figures (required rate, limiting output, blame) from the
+ * written edge results. At the fixed point these formulas reproduce the
+ * engine's utilizations exactly - this pass only owns the storytelling.
+ */
+function finalizeNodeReports(
   project: FactoryProject,
   recipesById: Map<string, Recipe>,
   nodes: Record<string, NodeThroughputResult>,
   edgeResults: Record<string, EdgeThroughput>,
   storagesById: Map<string, FactoryStorage>,
-): boolean {
+): void {
   const requiredByNodeAndResource = new Map<string, Map<ResourceKey, number>>();
   const inputSupplyByNodeAndResource = calculateConnectedInputSupply(
     project,
@@ -1286,28 +688,11 @@ function refreshNodeUtilizationFromEdgeResults(
     }
     addRequiredRate(honestSupplyByNodeAndResource, edge.target, targetDemandKey, honest);
   }
-  const projectStorages = project.storages ?? [];
-  const storageOutgoingDemand = calculateEffectiveStorageOutgoingDemand(
-    project,
-    projectStorages,
-    calculateAskRates(project, nodes, edgeResults, storagesById, "desired"),
-  );
-  const storageIncomingCounts = countIncomingEdgesToStorageResource(project, projectStorages);
-  let changed = false;
-
+  // Sink edges carry their demand (absorption plus the tank's unmet pull)
+  // in demandPerSecond just like machine edges, so one uniform sum covers
+  // both - the old leftover-echo special case is gone with the engine.
   for (const edge of project.edges) {
     if (storagesById.has(edge.source)) {
-      continue;
-    }
-
-    const key = makeResourceKey(edge.resourceKind, edge.resourceId);
-    if (storagesById.has(edge.target)) {
-      const requiredRate = canRunForStorageSurplus(project, recipesById, edge.source)
-        ? (storageOutgoingDemand.get(key) ?? 0) / (storageIncomingCounts.get(key) ?? 1)
-        : (edgeResults[edge.id]?.transferredPerSecond ?? 0);
-      if (requiredRate > EPSILON) {
-        addRequiredRate(requiredByNodeAndResource, edge.source, key, requiredRate);
-      }
       continue;
     }
 
@@ -1316,6 +701,7 @@ function refreshNodeUtilizationFromEdgeResults(
       continue;
     }
 
+    const key = makeResourceKey(edge.resourceKind, edge.resourceId);
     addRequiredRate(requiredByNodeAndResource, edge.source, key, edgeResult.demandPerSecond);
   }
   applyProjectTarget(project, nodes, requiredByNodeAndResource);
@@ -1441,16 +827,6 @@ function refreshNodeUtilizationFromEdgeResults(
     nodeResult.limitingInputKey = limitingKey;
     nodeResult.limitingInputTiedKeys = limitingTied;
     const demandUtilization = clampUtilization(demandOnlyUtilization);
-    if (
-      Math.abs(nodeResult.utilization - utilizationReport.utilization) > EPSILON ||
-      Math.abs((nodeResult.capableUtilization ?? 1) - capableUtilization) > EPSILON ||
-      Math.abs((nodeResult.demandUtilization ?? 1) - demandUtilization) > EPSILON ||
-      Math.abs(
-        nodeResult.theoreticalMachinesRequired - utilizationReport.theoreticalMachinesRequired,
-      ) > EPSILON
-    ) {
-      changed = true;
-    }
     nodeResult.capableUtilization = capableUtilization;
     nodeResult.demandUtilization = demandUtilization;
 
@@ -1461,228 +837,6 @@ function refreshNodeUtilizationFromEdgeResults(
     nodeResult.limitingResource = utilizationReport.limitingResource;
     nodeResult.status = getNodeStatus(nodeResult.utilization);
   }
-
-  return changed;
-}
-
-function getEffectiveFlowRate(flow: ResourceFlow | undefined, utilization: number): number {
-  return (flow?.amountPerSecond ?? 0) * clampUtilization(utilization);
-}
-
-function getCompatibleOutputFlow(
-  nodeResult: NodeThroughputResult | undefined,
-  resource: Pick<FactoryProject["edges"][number], "resourceKind" | "resourceId">,
-): ResourceFlow | undefined {
-  if (!nodeResult) {
-    return undefined;
-  }
-
-  return getCompatibleOutputFlowForResource(nodeResult, {
-    kind: resource.resourceKind,
-    id: resource.resourceId,
-  });
-}
-
-function getCompatibleOutputFlowForKey(
-  nodeResult: NodeThroughputResult,
-  resourceKey: ResourceKey,
-): ResourceFlow | undefined {
-  return getCompatibleOutputFlowForResource(nodeResult, resourceFromKey(resourceKey));
-}
-
-function getCompatibleOutputFlowForResource(
-  nodeResult: NodeThroughputResult,
-  resource: Pick<ResourceAmount, "kind" | "id">,
-): ResourceFlow | undefined {
-  const exact = nodeResult.outputs[makeResourceKey(resource.kind, resource.id)];
-  if (exact) {
-    return exact;
-  }
-
-  for (const output of Object.values(nodeResult.outputs)) {
-    const outputResource = {
-      kind: output.kind,
-      id: output.resourceId,
-      displayName: output.displayName,
-      alternatives: output.alternatives,
-    };
-    if (!resourceMatchesInput(resource, outputResource)) {
-      continue;
-    }
-
-    if (resource.kind === "fluid" && output.kind === "item") {
-      const fluid = getFilledCellFluidEquivalent({
-        ...outputResource,
-        amount: output.amountPerSecond,
-      });
-      if (fluid?.id === resource.id) {
-        return {
-          key: makeResourceKey("fluid", fluid.id),
-          kind: "fluid",
-          resourceId: fluid.id,
-          displayName: fluid.displayName ?? output.displayName,
-          amountPerSecond: fluid.amount ?? output.amountPerSecond,
-        };
-      }
-    }
-
-    return output;
-  }
-
-  return undefined;
-}
-
-function resourceFromKey(resourceKey: ResourceKey): Pick<ResourceAmount, "kind" | "id"> {
-  const separatorIndex = resourceKey.indexOf(":");
-  return {
-    kind: resourceKey.slice(0, separatorIndex) as ResourceKind,
-    id: resourceKey.slice(separatorIndex + 1),
-  };
-}
-
-function clampUtilization(utilization: number): number {
-  if (!Number.isFinite(utilization)) {
-    return 1;
-  }
-
-  return Math.min(Math.max(utilization, 0), 1);
-}
-
-function calculateStorageOutgoingDemand(
-  project: FactoryProject,
-  nodes: Record<string, NodeThroughputResult>,
-  storages: FactoryStorage[],
-): Map<string, number> {
-  const storageIds = new Set(storages.map((storage) => storage.id));
-  const demand = new Map<string, number>();
-  const incomingEdgeCounts = countIncomingEdgesByTargetResource(project);
-  const feedbackGraph = buildStorageFeedbackGraph(project, storages);
-  const storageResourceKeys = new Map(
-    storages.map((storage) => [storage.id, makeResourceKey(storage.kind, storage.resourceId)]),
-  );
-
-  for (const edge of project.edges) {
-    if (!storageIds.has(edge.source)) {
-      continue;
-    }
-
-    const key = makeResourceKey(edge.resourceKind, edge.resourceId);
-    const targetDemandKey = getEdgeTargetDemandKey(project, edge) ?? key;
-    if (canReachStorageResource(feedbackGraph, storageResourceKeys, edge.target, key)) {
-      continue;
-    }
-
-    const targetResult = nodes[edge.target];
-    const targetCount = incomingEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1;
-    const targetDemand = targetResult?.inputs[targetDemandKey]?.amountPerSecond ?? 0;
-    const demandPerSecond = targetDemand / targetCount;
-    demand.set(key, (demand.get(key) ?? 0) + demandPerSecond);
-  }
-
-  return demand;
-}
-
-function calculateEffectiveStorageOutgoingDemand(
-  project: FactoryProject,
-  storages: FactoryStorage[],
-  askRates: Map<string, number>,
-): Map<string, number> {
-  const storageIds = new Set(storages.map((storage) => storage.id));
-  const demand = new Map<string, number>();
-  const incomingEdgeCounts = countIncomingEdgesByTargetResource(project);
-
-  for (const edge of project.edges) {
-    if (!storageIds.has(edge.source)) {
-      continue;
-    }
-
-    const key = makeResourceKey(edge.resourceKind, edge.resourceId);
-    const targetDemandKey = getEdgeTargetDemandKey(project, edge) ?? key;
-    const targetCount = incomingEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1;
-    const demandPerSecond = (askRates.get(`${edge.target}|${targetDemandKey}`) ?? 0) / targetCount;
-    demand.set(key, (demand.get(key) ?? 0) + demandPerSecond);
-  }
-
-  return demand;
-}
-
-function buildStorageFeedbackGraph(
-  project: FactoryProject,
-  storages: FactoryStorage[],
-): Map<string, string[]> {
-  const adjacency = new Map<string, string[]>();
-  const storageIds = new Set(storages.map((storage) => storage.id));
-  const storagesByResource = new Map<ResourceKey, FactoryStorage[]>();
-  const producerStorageIds = new Set<string>();
-  const consumerStorageIds = new Set<string>();
-
-  for (const node of project.nodes) {
-    adjacency.set(node.id, []);
-  }
-  for (const storage of storages) {
-    adjacency.set(storage.id, []);
-    const key = makeResourceKey(storage.kind, storage.resourceId);
-    storagesByResource.set(key, [...(storagesByResource.get(key) ?? []), storage]);
-  }
-
-  for (const edge of project.edges) {
-    if (!adjacency.has(edge.source) || !adjacency.has(edge.target)) {
-      continue;
-    }
-
-    adjacency.get(edge.source)?.push(edge.target);
-
-    const sourceIsStorage = storageIds.has(edge.source);
-    const targetIsStorage = storageIds.has(edge.target);
-    if (targetIsStorage && !sourceIsStorage) {
-      producerStorageIds.add(edge.target);
-    }
-    if (sourceIsStorage && !targetIsStorage) {
-      consumerStorageIds.add(edge.source);
-    }
-  }
-
-  for (const storagesForResource of storagesByResource.values()) {
-    for (const producer of storagesForResource) {
-      if (!producerStorageIds.has(producer.id)) {
-        continue;
-      }
-
-      for (const consumer of storagesForResource) {
-        if (producer.id !== consumer.id && consumerStorageIds.has(consumer.id)) {
-          adjacency.get(producer.id)?.push(consumer.id);
-        }
-      }
-    }
-  }
-
-  return adjacency;
-}
-
-function canReachStorageResource(
-  adjacency: Map<string, string[]>,
-  storageResourceKeys: Map<string, ResourceKey>,
-  startId: string,
-  resourceKey: ResourceKey,
-): boolean {
-  const visited = new Set<string>();
-  const stack = [...(adjacency.get(startId) ?? [])];
-
-  while (stack.length > 0) {
-    const currentId = stack.pop();
-    if (!currentId || visited.has(currentId)) {
-      continue;
-    }
-
-    visited.add(currentId);
-    if (storageResourceKeys.get(currentId) === resourceKey) {
-      return true;
-    }
-
-    stack.push(...(adjacency.get(currentId) ?? []));
-  }
-
-  return false;
 }
 
 function buildEdgeResult(
@@ -1823,17 +977,6 @@ function finalizeStorageFlow(storage: StorageThroughputResult) {
   } else {
     storage.status = "draining";
   }
-}
-
-function addRequiredRate(
-  requiredByNodeAndResource: Map<string, Map<ResourceKey, number>>,
-  nodeId: string,
-  resourceKey: ResourceKey,
-  amountPerSecond: number,
-): void {
-  const nodeRequirements = requiredByNodeAndResource.get(nodeId) ?? new Map<ResourceKey, number>();
-  nodeRequirements.set(resourceKey, (nodeRequirements.get(resourceKey) ?? 0) + amountPerSecond);
-  requiredByNodeAndResource.set(nodeId, nodeRequirements);
 }
 
 function applyProjectTarget(
