@@ -271,6 +271,20 @@ const directRouteCache = new Map<
     segments: ReturnType<typeof getPolylineSegments>;
   }
 >();
+
+/**
+ * A hidden single-target bundle member draws nothing — the primary draws the
+ * whole bundle. Routing it anyway cached an invisible standalone route that
+ * other edges hopped over (phantom humps) and steered around (phantom walls);
+ * skip the work and drop any entry left from before it joined the bundle.
+ */
+function getHiddenBundleMemberRoute(
+  edgeId: string,
+  source: { x: number; y: number },
+): { path: string; labelX: number; labelY: number; labelHidden?: boolean; points: Array<{ x: number; y: number }> } {
+  directRouteCache.delete(edgeId);
+  return { path: "", labelX: source.x, labelY: source.y, points: [] };
+}
 // Measured geometry is stored in FLOW coordinates, which are invariant under pan
 // and zoom: translating the viewport cannot move a node relative to the graph
 // origin. Keying these caches on the viewport transform (as they once were) threw
@@ -332,6 +346,14 @@ function pruneNodeDataCaches(
   for (const id of edgeObjectCache.keys()) {
     if (!edgeIds.has(id)) {
       edgeObjectCache.delete(id);
+    }
+  }
+
+  // A deleted edge's cached route otherwise lives on as a ghost: hop
+  // rendering bumps over it and nearness scoring steers around it.
+  for (const id of directRouteCache.keys()) {
+    if (!edgeIds.has(id)) {
+      directRouteCache.delete(id);
     }
   }
 
@@ -730,6 +752,16 @@ export function FactoryFlow() {
     for (const edge of project.edges) {
       const key = [edge.source, edge.resourceKind, edge.resourceId].join("|");
       outletCounts.set(key, (outletCounts.get(key) ?? 0) + 1);
+    }
+
+    // Prune ghost routes synchronously (the pruneNodeDataCaches effect runs
+    // after render): edges rendered this pass must not hop over or steer
+    // around routes of edges that were just deleted.
+    const liveEdgeIds = new Set(project.edges.map((edge) => edge.id));
+    for (const id of directRouteCache.keys()) {
+      if (!liveEdgeIds.has(id)) {
+        directRouteCache.delete(id);
+      }
     }
 
     return project.edges.map((edge, edgeIndex) => {
@@ -2272,8 +2304,9 @@ function ResourceEdgeComponent({
   );
   const showArrowHead = isHighlighted || hasEdgeDetail(detailLevel, EDGE_DETAIL_ARROWS);
   const labelOffset = isLabelDragging ? draftLabelOffset : storedLabelOffset;
-  const routedEdge =
-    data?.bundle?.role === "primary"
+  const routedEdge = isHiddenBundleMember
+    ? getHiddenBundleMemberRoute(id, visualSource)
+    : data?.bundle?.role === "primary"
       ? getBundledEdgePath({
           edgeId: id,
           routeIndex: data?.routeIndex ?? 0,
@@ -4942,6 +4975,11 @@ function pointsToHoppedSvgPath(
     const high = horizontal ? Math.max(from.x, to.x) : Math.max(from.y, to.y);
     const radiusFor = (crossAt: number) =>
       Math.min(EDGE_HOP_RADIUS, crossAt - low - 1, high - crossAt - 1);
+    // The other line must properly OVERSHOOT this one on both sides: a
+    // segment that merely ends a pixel or two past the line (T-junctions at
+    // docks, lane-adjacent turns) reads as a touch, not a crossing, and a
+    // hump there looks like it sits over nothing.
+    const OVERSHOOT = 4;
     for (const segment of otherSegments) {
       const segmentHorizontal = Math.abs(segment.start.y - segment.end.y) < 0.01;
       const segmentVertical = Math.abs(segment.start.x - segment.end.x) < 0.01;
@@ -4950,7 +4988,7 @@ function pointsToHoppedSvgPath(
         const otherLow = Math.min(segment.start.y, segment.end.y);
         const otherHigh = Math.max(segment.start.y, segment.end.y);
         const radius = radiusFor(crossAt);
-        if (radius >= 2.5 && from.y > otherLow + 1 && from.y < otherHigh - 1) {
+        if (radius >= 2.5 && from.y > otherLow + OVERSHOOT && from.y < otherHigh - OVERSHOOT) {
           crossings.push({ at: crossAt, radius });
         }
       } else if (vertical && segmentHorizontal) {
@@ -4958,7 +4996,7 @@ function pointsToHoppedSvgPath(
         const otherLow = Math.min(segment.start.x, segment.end.x);
         const otherHigh = Math.max(segment.start.x, segment.end.x);
         const radius = radiusFor(crossAt);
-        if (radius >= 2.5 && from.x > otherLow + 1 && from.x < otherHigh - 1) {
+        if (radius >= 2.5 && from.x > otherLow + OVERSHOOT && from.x < otherHigh - OVERSHOOT) {
           crossings.push({ at: crossAt, radius });
         }
       }
