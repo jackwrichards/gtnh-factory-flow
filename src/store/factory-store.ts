@@ -165,7 +165,7 @@ interface FactoryStore {
   selectedNodeId?: string;
   selectedRecipeId?: string;
   lastResult: ThroughputResult;
-  /** Board-wide display unit for rates: per second / minute / hour. */
+  /** Board-wide display unit for rates: per tick / second / minute / hour. */
   rateUnit: RateUnit;
   setRateUnit: (unit: RateUnit) => void;
   setProject: (project: FactoryProject) => void;
@@ -663,9 +663,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
           };
           const nextNode: FactoryNode = Object.keys(nextRecipeInputOverrides).length
             ? {
-                ...node,
-                recipeInputOverrides: nextRecipeInputOverrides,
-              }
+              ...node,
+              recipeInputOverrides: nextRecipeInputOverrides,
+            }
             : node;
           return nextNode.machineHandlerId && !validMachineHandlerIds.has(nextNode.machineHandlerId)
             ? { ...nextNode, machineHandlerId: undefined }
@@ -1031,8 +1031,8 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       const keptEdges =
         resourceChanged || modeChanged
           ? state.project.edges.filter(
-              (entry) => entry.source !== customNodeId && entry.target !== customNodeId,
-            )
+            (entry) => entry.source !== customNodeId && entry.target !== customNodeId,
+          )
           : state.project.edges;
       // One line per port the card is wired to, like the trash can below. This
       // is the only adopt-on-wire card whose resource can be re-offered
@@ -1127,20 +1127,20 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
           ...state.project,
           recipes: recipeAlreadyInProject
             ? state.project.recipes.map((entry) =>
-                entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
-              )
+              entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
+            )
             : [...state.project.recipes, recipe],
           nodes: state.project.nodes.map((entry) =>
             entry.id === nodeId
               ? {
-                  ...entry,
-                  recipeId: recipe.id,
-                  overclockTier: recipe.minimumTier,
-                  machineConfigTiers: undefined,
-                  machineHandlerId: undefined,
-                  coilTier: undefined,
-                  recipeInputOverrides: undefined,
-                }
+                ...entry,
+                recipeId: recipe.id,
+                overclockTier: recipe.minimumTier,
+                machineConfigTiers: undefined,
+                machineHandlerId: undefined,
+                coilTier: undefined,
+                recipeInputOverrides: undefined,
+              }
               : entry,
           ),
           // The old recipe's resources no longer exist on this node.
@@ -1248,9 +1248,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
           side === "output"
             ? handleId
             : makeResourceHandleId("output", {
-                kind: storageResource.kind,
-                id: storageResource.id,
-              }),
+              kind: storageResource.kind,
+              id: storageResource.id,
+            }),
         targetHandle:
           side === "input"
             ? handleId
@@ -1930,10 +1930,10 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     set((state) =>
       ids && ids.length > 0
         ? {
-            pendingBoardSelectionIds: ids,
-            placedBoardIds: ids,
-            placedBoardToken: state.placedBoardToken + 1,
-          }
+          pendingBoardSelectionIds: ids,
+          placedBoardIds: ids,
+          placedBoardToken: state.placedBoardToken + 1,
+        }
         : { pendingBoardSelectionIds: ids },
     );
   },
@@ -2041,21 +2041,21 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         sourceHandle?.side === "input" && targetHandle?.side === "output";
       const resource =
         sourceHandle &&
-        targetHandle &&
-        sourceHandle.side !== targetHandle.side &&
-        sourceHandle.kind === targetHandle.kind &&
-        sourceHandle.resourceId === targetHandle.resourceId
+          targetHandle &&
+          sourceHandle.side !== targetHandle.side &&
+          sourceHandle.kind === targetHandle.kind &&
+          sourceHandle.resourceId === targetHandle.resourceId
           ? {
-              kind: sourceHandle.kind,
-              id: sourceHandle.resourceId,
-              displayName: oldEdge.label,
-              sourceHandle: isReverseHandleDirection
-                ? (connection.targetHandle ?? undefined)
-                : (connection.sourceHandle ?? undefined),
-              targetHandle: isReverseHandleDirection
-                ? (connection.sourceHandle ?? undefined)
-                : (connection.targetHandle ?? undefined),
-            }
+            kind: sourceHandle.kind,
+            id: sourceHandle.resourceId,
+            displayName: oldEdge.label,
+            sourceHandle: isReverseHandleDirection
+              ? (connection.targetHandle ?? undefined)
+              : (connection.sourceHandle ?? undefined),
+            targetHandle: isReverseHandleDirection
+              ? (connection.sourceHandle ?? undefined)
+              : (connection.targetHandle ?? undefined),
+          }
           : undefined;
       const sourceNodeId = isReverseHandleDirection ? connection.target : connection.source;
       const targetNodeId = isReverseHandleDirection ? connection.source : connection.target;
@@ -2311,7 +2311,7 @@ function restoreProjectState(
     // board showing a dimension that no longer exists.
     activePocketId:
       state.activePocketId &&
-      (project.pockets ?? []).some((pocket) => pocket.id === state.activePocketId)
+        (project.pockets ?? []).some((pocket) => pocket.id === state.activePocketId)
         ? state.activePocketId
         : undefined,
     lastResult: calculateThroughput(project),
@@ -2360,9 +2360,9 @@ function addRecipeNodeToState(
   const index = state.project.nodes.length;
   const viewportPosition = state.flowViewportCenter
     ? snapPositionToGrid({
-        x: state.flowViewportCenter.x - RECIPE_NODE_WIDTH / 2,
-        y: state.flowViewportCenter.y - 160,
-      })
+      x: state.flowViewportCenter.x - RECIPE_NODE_WIDTH / 2,
+      y: state.flowViewportCenter.y - 160,
+    })
     : undefined;
   // A machine picked in the recipe finder spawns the node with that handler
   // selected, at the handler's own minimum tier.
@@ -2397,8 +2397,8 @@ function addRecipeNodeToState(
     ...state.project,
     recipes: recipeAlreadyInProject
       ? state.project.recipes.map((entry) =>
-          entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
-        )
+        entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
+      )
       : [...state.project.recipes, recipe],
     nodes: [...state.project.nodes, node],
   });
@@ -2447,8 +2447,8 @@ function addConnectedRecipeNodeToState(
     ...state.project,
     recipes: recipeAlreadyInProject
       ? state.project.recipes.map((entry) =>
-          entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
-        )
+        entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
+      )
       : [...state.project.recipes, recipe],
     nodes: [...state.project.nodes, nextNode],
   };
@@ -2653,10 +2653,10 @@ function applyEdgeInputOverride(
     targetHandle?.side === "input" && targetHandle.slotIndex !== undefined
       ? targetHandle.slotIndex
       : targetRecipe.inputs.findIndex(
-          (input) =>
-            isRecipeInputConsumed(input) &&
-            resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, input),
-        );
+        (input) =>
+          isRecipeInputConsumed(input) &&
+          resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, input),
+      );
   const input = inputIndex >= 0 ? targetRecipe.inputs[inputIndex] : undefined;
   if (
     !input ||
@@ -2692,12 +2692,12 @@ function applyEdgeInputOverride(
     nodes: project.nodes.map((node) =>
       node.id === targetNode.id
         ? {
-            ...node,
-            recipeInputOverrides: {
-              ...node.recipeInputOverrides,
-              [String(inputIndex)]: override,
-            },
-          }
+          ...node,
+          recipeInputOverrides: {
+            ...node.recipeInputOverrides,
+            [String(inputIndex)]: override,
+          },
+        }
         : node,
     ),
   };
@@ -3107,18 +3107,18 @@ function buildEdgeBetweenNodes(
 
   const matchedOutput = selectedResource
     ? sourceRecipe.outputs.find(
-        (output) =>
-          output.kind === selectedResource.kind &&
-          output.id === selectedResource.id &&
-          targetRecipe.inputs.some(
-            (input) => isRecipeInputConsumed(input) && resourceMatchesInput(output, input),
-          ),
-      )
-    : sourceRecipe.outputs.find((output) =>
+      (output) =>
+        output.kind === selectedResource.kind &&
+        output.id === selectedResource.id &&
         targetRecipe.inputs.some(
           (input) => isRecipeInputConsumed(input) && resourceMatchesInput(output, input),
         ),
-      );
+    )
+    : sourceRecipe.outputs.find((output) =>
+      targetRecipe.inputs.some(
+        (input) => isRecipeInputConsumed(input) && resourceMatchesInput(output, input),
+      ),
+    );
 
   if (!matchedOutput) {
     return undefined;
@@ -3327,11 +3327,11 @@ function makeResourceHandleId(
 
 function parseResourceHandleId(handleId?: string | null):
   | {
-      side: "input" | "output";
-      kind: ResourceKind;
-      resourceId: string;
-      slotIndex?: number;
-    }
+    side: "input" | "output";
+    kind: ResourceKind;
+    resourceId: string;
+    slotIndex?: number;
+  }
   | undefined {
   if (!handleId) {
     return undefined;

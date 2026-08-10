@@ -5,7 +5,7 @@
  * that flips it also recomputes the throughput result, which rebuilds every
  * surface, so nothing renders a stale unit.
  */
-export type RateUnit = "second" | "minute" | "hour";
+export type RateUnit = "tick" | "second" | "minute" | "hour";
 
 const state: { unit: RateUnit } = { unit: "second" };
 
@@ -19,10 +19,22 @@ export function getActiveRateUnit(): RateUnit {
 
 /** Multiply a per-second figure by this before display. */
 export function rateUnitMultiplier(): number {
-  return state.unit === "second" ? 1 : state.unit === "minute" ? 60 : 3600;
+  return state.unit === "tick"
+    ? 1 / 20
+    : state.unit === "second"
+      ? 1
+      : state.unit === "minute"
+        ? 60
+        : 3600;
 }
 
 export function rateUnitSuffix(fluid: boolean): string {
-  const per = state.unit === "second" ? "s" : state.unit === "minute" ? "min" : "hr";
+  const per = state.unit === "tick"
+    ? "t"
+    : state.unit === "second"
+      ? "s"
+      : state.unit === "minute"
+        ? "min"
+        : "hr";
   return fluid ? ` L/${per}` : `/${per}`;
 }

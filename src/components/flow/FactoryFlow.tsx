@@ -1005,14 +1005,14 @@ function ensureGridSolve() {
     const waypointPart =
       input.waypoints && input.waypoints.length > 0
         ? `|wp:${input.waypoints
-            .map((point) => `${Math.round(point.x)},${Math.round(point.y)}`)
-            .join("+")}`
+          .map((point) => `${Math.round(point.x)},${Math.round(point.y)}`)
+          .join("+")}`
         : "";
     const describe = publishedGridFreeDock
       ? waypointPart
       : `${waypointPart}|${sources
-          .map((endpoint) => `${Math.round(endpoint.x)},${Math.round(endpoint.y)}`)
-          .join("+")}|${targets
+        .map((endpoint) => `${Math.round(endpoint.x)},${Math.round(endpoint.y)}`)
+        .join("+")}|${targets
           .map((endpoint) => `${Math.round(endpoint.x)},${Math.round(endpoint.y)}`)
           .join("+")}`;
     parts.push(
@@ -1257,26 +1257,26 @@ function boardGeometryDimsKey(geometry: { width: number; height: number } | unde
 const NODE_BOUNDS_CELL_SIZE = 1024;
 let measuredAvoidanceSweep:
   | {
-      epoch: number;
-      bounds: Array<{ id: string; bounds: MeasuredBounds }>;
-      /** id -> rect, so an edge's own nodes are a lookup, not a scan. */
-      byId: Map<string, MeasuredBounds>;
-      /** Uniform grid over the same rects, for "what is near this route". */
-      grid: Map<number, Array<{ id: string; bounds: MeasuredBounds }>>;
-      hash: string;
-    }
+    epoch: number;
+    bounds: Array<{ id: string; bounds: MeasuredBounds }>;
+    /** id -> rect, so an edge's own nodes are a lookup, not a scan. */
+    byId: Map<string, MeasuredBounds>;
+    /** Uniform grid over the same rects, for "what is near this route". */
+    grid: Map<number, Array<{ id: string; bounds: MeasuredBounds }>>;
+    hash: string;
+  }
   | undefined;
 let measuredLayoutEpoch = 0;
 
 let viewportTransformCache:
   | {
-      rendererLeft: number;
-      rendererTop: number;
-      translateX: number;
-      translateY: number;
-      scaleX: number;
-      scaleY: number;
-    }
+    rendererLeft: number;
+    rendererTop: number;
+    translateX: number;
+    translateY: number;
+    scaleX: number;
+    scaleY: number;
+  }
   | undefined;
 let viewportTransformClearScheduled = false;
 
@@ -1443,81 +1443,81 @@ export function FactoryFlow() {
       ...project.nodes
         .filter((node) => node.pocketId === activePocketId)
         .map((node): BoardFlowNode => {
-        const recipe = recipesById.get(node.recipeId) ?? getMissingRecipePlaceholder(node.recipeId);
-        // Trash cans get their own compact card; a distinct node TYPE (not a
-        // branch inside RecipeNode) so the hook order of the big machine card
-        // never depends on what recipe a node holds.
-        if (isTrashRecipe(recipe)) {
+          const recipe = recipesById.get(node.recipeId) ?? getMissingRecipePlaceholder(node.recipeId);
+          // Trash cans get their own compact card; a distinct node TYPE (not a
+          // branch inside RecipeNode) so the hook order of the big machine card
+          // never depends on what recipe a node holds.
+          if (isTrashRecipe(recipe)) {
+            return {
+              id: node.id,
+              type: "trashNode",
+              position: node.position,
+              data: reuseObjectIdentity(trashNodeDataCache, node.id, {
+                projectNode: node,
+              }),
+            } satisfies TrashFlowNode;
+          }
           return {
             id: node.id,
-            type: "trashNode",
+            type: "recipeNode",
             position: node.position,
-            data: reuseObjectIdentity(trashNodeDataCache, node.id, {
-              projectNode: node,
-            }),
-          } satisfies TrashFlowNode;
-        }
-        return {
-          id: node.id,
-          type: "recipeNode",
-          position: node.position,
-          zIndex:
-            hoveredUsageNodeId === node.id
-              ? 1500
-              : activeNodeBottlenecks && result.nodes[node.id]?.status === "bottleneck"
+            zIndex:
+              hoveredUsageNodeId === node.id
                 ? 1500
-                : activeFlowResourceKey && recipeContainsResourceKey(recipe, activeFlowResourceKey)
+                : activeNodeBottlenecks && result.nodes[node.id]?.status === "bottleneck"
                   ? 1500
-                  : undefined,
-          // Reusing the previous `data` object when nothing in it moved is what
-          // lets RecipeNode's memo actually hold. Rebuilding it â€” which this memo
-          // does whenever a resource is hovered or the solver re-runs â€” otherwise
-          // re-renders every node on the board for a change affecting one.
-          data: reuseObjectIdentity(recipeNodeDataCache, node.id, {
-            projectNode: node,
-            recipe,
-            result: result.nodes[node.id],
-          }),
-        } satisfies RecipeFlowNode;
-      }),
+                  : activeFlowResourceKey && recipeContainsResourceKey(recipe, activeFlowResourceKey)
+                    ? 1500
+                    : undefined,
+            // Reusing the previous `data` object when nothing in it moved is what
+            // lets RecipeNode's memo actually hold. Rebuilding it â€” which this memo
+            // does whenever a resource is hovered or the solver re-runs â€” otherwise
+            // re-renders every node on the board for a change affecting one.
+            data: reuseObjectIdentity(recipeNodeDataCache, node.id, {
+              projectNode: node,
+              recipe,
+              result: result.nodes[node.id],
+            }),
+          } satisfies RecipeFlowNode;
+        }),
       ...(project.storages ?? [])
         .filter((storage) => storage.pocketId === activePocketId)
         .map(
-        (storage) =>
-          ({
-            id: storage.id,
-            type: "storageNode",
-            position: storage.position,
-            zIndex:
-              activeFlowResourceKey === makeResourceKey(storage.kind, storage.resourceId)
-                ? 1500
-                : undefined,
-            data: reuseObjectIdentity(storageNodeDataCache, storage.id, {
-              storage,
-              result: result.storages[storage.id],
-            }),
-          }) satisfies StorageFlowNode,
-      ),
+          (storage) =>
+            ({
+              id: storage.id,
+              type: "storageNode",
+              position: storage.position,
+              zIndex:
+                activeFlowResourceKey === makeResourceKey(storage.kind, storage.resourceId)
+                  ? 1500
+                  : undefined,
+              data: reuseObjectIdentity(storageNodeDataCache, storage.id, {
+                storage,
+                result: result.storages[storage.id],
+              }),
+            }) satisfies StorageFlowNode,
+        ),
       ...(project.annotations ?? [])
         .filter((annotation) => annotation.pocketId === activePocketId)
         .map(
-        (annotation) =>
-          ({
-            id: annotation.id,
-            type: "annotationNode",
-            position: annotation.position,
-            width: annotation.size.width,
-            height: annotation.size.height,
-            // Boxes sit under everything so they read as grouping frames;
-            // arrows and text notes float above the nodes they point at.
-            zIndex: annotation.kind === "box" ? -5 : 1000,
-            // Box/arrow interiors must stay click-through; only their
-            // drag-handle elements take pointer events (see AnnotationNode).
-            dragHandle: annotation.kind === "text" ? undefined : `.${ANNOTATION_DRAG_HANDLE_CLASS}`,
-            style: annotation.kind === "text" ? undefined : { pointerEvents: "none" as const },
-            data: reuseObjectIdentity(annotationNodeDataCache, annotation.id, { annotation }),
-          }) satisfies AnnotationFlowNode,
-      ),
+          (annotation) =>
+            ({
+              id: annotation.id,
+              type: "annotationNode",
+              position: annotation.position,
+              width: annotation.size.width,
+              height: annotation.size.height,
+              // Boxes sit under everything so they read as grouping frames;
+              // arrows and text notes float above the nodes they point at.
+              zIndex: annotation.kind === "box" ? -5 : 1000,
+              // Box/arrow interiors must stay click-through; only their
+              // drag-handle elements take pointer events (see AnnotationNode).
+              dragHandle: annotation.kind === "text" ? undefined : `.${ANNOTATION_DRAG_HANDLE_CLASS}`,
+              style: annotation.kind === "text" ? undefined : { pointerEvents: "none" as const },
+              data: reuseObjectIdentity(annotationNodeDataCache, annotation.id, { annotation }),
+            }) satisfies AnnotationFlowNode,
+        ),
       ...pocketView.visiblePockets.map(
         (pocket) =>
           ({
@@ -2009,7 +2009,7 @@ export function FactoryFlow() {
         directTakenBySourceResource.set(
           key,
           (directTakenBySourceResource.get(key) ?? 0) +
-            (result.edges[edge.id]?.transferredPerSecond ?? 0),
+          (result.edges[edge.id]?.transferredPerSecond ?? 0),
         );
       }
     }
@@ -2085,11 +2085,11 @@ export function FactoryFlow() {
       const isFluidEdge = edge.resourceKind === "fluid";
       const heat = anyLineMode
         ? flowHeatFor(
-            transferredById.get(edge.id) ?? 0,
-            isFluidEdge ? fluidMin : itemMin,
-            isFluidEdge ? fluidMax : itemMax,
-            isFluidEdge ? fluidRanks : itemRanks,
-          )
+          transferredById.get(edge.id) ?? 0,
+          isFluidEdge ? fluidMin : itemMin,
+          isFluidEdge ? fluidMax : itemMax,
+          isFluidEdge ? fluidRanks : itemRanks,
+        )
         : 0;
       flowHeatById.set(edge.id, heat);
       // Widths come off the lane-fraction menu: a full lane (16px) at the
@@ -2263,17 +2263,17 @@ export function FactoryFlow() {
       // was never rendered and disappears.
       const canonicalSourceHandle = sourceIsPocket
         ? (resolvePocketPortHandleId(project, pocketSummaries.get(sourceRep), sourceRep, "output", {
-            kind: sourceHandle?.kind ?? edge.resourceKind,
-            id: sourceHandle?.resourceId ?? edge.resourceId,
-          }) ??
+          kind: sourceHandle?.kind ?? edge.resourceKind,
+          id: sourceHandle?.resourceId ?? edge.resourceId,
+        }) ??
           canonicalizeResourceHandleId(edge.sourceHandle) ??
           makeResourceHandleId("output", { kind: edge.resourceKind, id: edge.resourceId }))
         : canonicalizeResourceHandleId(edge.sourceHandle);
       const canonicalTargetHandle = targetIsPocket
         ? (resolvePocketPortHandleId(project, pocketSummaries.get(targetRep), targetRep, "input", {
-            kind: targetHandle?.kind ?? edge.resourceKind,
-            id: targetHandle?.resourceId ?? edge.resourceId,
-          }) ??
+          kind: targetHandle?.kind ?? edge.resourceKind,
+          id: targetHandle?.resourceId ?? edge.resourceId,
+        }) ??
           canonicalizeResourceHandleId(edge.targetHandle) ??
           makeResourceHandleId("input", { kind: edge.resourceKind, id: edge.resourceId }))
         : canonicalizeResourceHandleId(edge.targetHandle);
@@ -2344,7 +2344,7 @@ export function FactoryFlow() {
           nameplateDemand: targetStorage ? undefined : edgeResult?.nameplateDemandPerSecond,
           sourceCapacity:
             outletCounts.get([edge.source, edge.resourceKind, edge.resourceId].join("|")) === 1 &&
-            edgeResult?.sourceCapacityPerSecond !== undefined
+              edgeResult?.sourceCapacityPerSecond !== undefined
               ? edgeResult.sourceCapacityPerSecond * ceilingFor(edge.source)
               : undefined,
           unit,
@@ -2376,12 +2376,12 @@ export function FactoryFlow() {
           // marching dashes over itself when this is set.
           flowRate: anyLineMode
             ? {
-                heat: flowHeat,
-                kind: flowBucketFor(edge.resourceKind),
-                color: lineHeatMode,
-                thickness: lineThicknessMode,
-                pulse: linePulseMode,
-              }
+              heat: flowHeat,
+              kind: flowBucketFor(edge.resourceKind),
+              color: lineHeatMode,
+              thickness: lineThicknessMode,
+              pulse: linePulseMode,
+            }
             : undefined,
           layoutEpoch: layoutVersion,
         },
@@ -2489,29 +2489,29 @@ export function FactoryFlow() {
       }
       const sourceIdentity = resource
         ? (parseResourceHandleId(resource.sourceHandle) ?? {
-            kind: resource.kind,
-            resourceId: resource.id,
-          })
+          kind: resource.kind,
+          resourceId: resource.id,
+        })
         : undefined;
       const targetIdentity = resource
         ? (parseResourceHandleId(resource.targetHandle) ?? {
-            kind: resource.kind,
-            resourceId: resource.id,
-          })
+          kind: resource.kind,
+          resourceId: resource.id,
+        })
         : undefined;
       const sourceIds =
         sourceIsPocket && sourceIdentity
           ? resolvePocketMemberIds(project, sourceNodeId, "output", {
-              kind: sourceIdentity.kind,
-              id: sourceIdentity.resourceId,
-            })
+            kind: sourceIdentity.kind,
+            id: sourceIdentity.resourceId,
+          })
           : [sourceNodeId];
       const targetIds =
         targetIsPocket && targetIdentity
           ? resolvePocketMemberIds(project, targetNodeId, "input", {
-              kind: targetIdentity.kind,
-              id: targetIdentity.resourceId,
-            })
+            kind: targetIdentity.kind,
+            id: targetIdentity.resourceId,
+          })
           : [targetNodeId];
 
       const pairs: Array<{
@@ -2605,15 +2605,15 @@ export function FactoryFlow() {
             const trashNodeId = sourceIsTrash ? connection.source : connection.target;
             const farEnd = sourceIsTrash
               ? {
-                  nodeId: connection.target,
-                  handleId: connection.targetHandle ?? undefined,
-                  side: targetHandle.side,
-                }
+                nodeId: connection.target,
+                handleId: connection.targetHandle ?? undefined,
+                side: targetHandle.side,
+              }
               : {
-                  nodeId: connection.source,
-                  handleId: connection.sourceHandle ?? undefined,
-                  side: sourceHandle.side,
-                };
+                nodeId: connection.source,
+                handleId: connection.sourceHandle ?? undefined,
+                side: sourceHandle.side,
+              };
             if (farEnd.side !== "output" || !farEnd.handleId) {
               return;
             }
@@ -2777,8 +2777,8 @@ export function FactoryFlow() {
       const eventHandle =
         event.target instanceof Element
           ? readResourceHandleElement(
-              event.target.closest<HTMLElement>("[data-resource-handle='true']"),
-            )
+            event.target.closest<HTMLElement>("[data-resource-handle='true']"),
+          )
           : undefined;
       const nodeId = params.nodeId ?? eventHandle?.nodeId;
       const handleId = params.handleId ?? eventHandle?.handleId;
@@ -2860,23 +2860,23 @@ export function FactoryFlow() {
           const source =
             draggedResource.side === "output"
               ? {
-                  nodeId: draggedResource.nodeId,
-                  handleId: draggedResource.handleId,
-                }
+                nodeId: draggedResource.nodeId,
+                handleId: draggedResource.handleId,
+              }
               : {
-                  nodeId: targetHandle.nodeId,
-                  handleId: targetHandle.handleId,
-                };
+                nodeId: targetHandle.nodeId,
+                handleId: targetHandle.handleId,
+              };
           const target =
             draggedResource.side === "input"
               ? {
-                  nodeId: draggedResource.nodeId,
-                  handleId: draggedResource.handleId,
-                }
+                nodeId: draggedResource.nodeId,
+                handleId: draggedResource.handleId,
+              }
               : {
-                  nodeId: targetHandle.nodeId,
-                  handleId: targetHandle.handleId,
-                };
+                nodeId: targetHandle.nodeId,
+                handleId: targetHandle.handleId,
+              };
           const outputResource =
             draggedResource.side === "output"
               ? draggedResource
@@ -2930,9 +2930,9 @@ export function FactoryFlow() {
       // member behind the port, not the pocket card (which is no node).
       const storageAnchorIds = isPocketId(project, draggedResource.nodeId)
         ? resolvePocketMemberIds(project, draggedResource.nodeId, draggedResource.side, {
-            kind: draggedResource.kind,
-            id: draggedResource.id,
-          })
+          kind: draggedResource.kind,
+          id: draggedResource.id,
+        })
         : draggedResource.nodeId;
       if (Array.isArray(storageAnchorIds) && storageAnchorIds.length === 0) {
         return;
@@ -3138,12 +3138,12 @@ export function FactoryFlow() {
     const handleExportImage = (event: Event) => {
       const detail = (event as CustomEvent).detail as
         | {
-            format?: unknown;
-            requestId?: unknown;
-            fileName?: unknown;
-            projectJson?: unknown;
-            capture?: unknown;
-          }
+          format?: unknown;
+          requestId?: unknown;
+          fileName?: unknown;
+          projectJson?: unknown;
+          capture?: unknown;
+        }
         | undefined;
 
       if (
@@ -3753,9 +3753,9 @@ export function FactoryFlow() {
         size: isClick
           ? ANNOTATION_DEFAULT_TEXT
           : {
-              width: Math.max(width, ANNOTATION_MIN_TEXT.width),
-              height: Math.max(height, ANNOTATION_MIN_TEXT.height),
-            },
+            width: Math.max(width, ANNOTATION_MIN_TEXT.width),
+            height: Math.max(height, ANNOTATION_MIN_TEXT.height),
+          },
       });
     },
     [activeColorTag, addAnnotation],
@@ -3851,8 +3851,8 @@ export function FactoryFlow() {
   const paintCursor =
     nodeColorPaintMode !== undefined
       ? getPaintBrushCursor(
-          nodeColorPaintMode ? GT_NODE_COLORS[nodeColorPaintMode].swatch : undefined,
-        )
+        nodeColorPaintMode ? GT_NODE_COLORS[nodeColorPaintMode].swatch : undefined,
+      )
       : undefined;
 
   return (
@@ -4553,6 +4553,7 @@ const SmartViewToolbar = memo(function SmartViewToolbar({
  * crafting, like crop farms). Lives top-left, mirroring the paint toolbar.
  */
 const RATE_UNIT_CHOICES: Array<{ unit: RateUnit; label: string; title: string }> = [
+  { unit: "tick", label: "/t", title: "Show all rates per tick" },
   { unit: "second", label: "/s", title: "Show all rates per second" },
   { unit: "minute", label: "/m", title: "Show all rates per minute" },
   { unit: "hour", label: "/h", title: "Show all rates per hour" },
@@ -4635,52 +4636,52 @@ const SourceToolbar = memo(function SourceToolbar({
         label="build tools"
         side="left"
       >
-      <button
-        type="button"
-        onClick={addCropFarmNode}
-        className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
-        title="Add crop farm: pick a crop and stats, it produces at the computed rate"
-        aria-label="Add crop farm"
-      >
-        <Sprout className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={addTrashNode}
-        className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
-        title="Add trash can: wire any output into it — whatever flows in is voided and never shows as an output"
-        aria-label="Add trash can"
-      >
-        <Trash className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={addCustomRateNode}
-        className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
-        title="Add custom rate node: wire it to any port, dial a rate — supplies the resource, or flips to a constant request drain"
-        aria-label="Add custom rate node"
-      >
-        <Gauge className="h-4 w-4" />
-      </button>
-      <div className="pointer-events-auto flex">
-        {RATE_UNIT_CHOICES.map((choice) => (
-          <button
-            key={choice.unit}
-            type="button"
-            onClick={() => setRateUnit(choice.unit)}
-            title={choice.title}
-            aria-pressed={rateUnit === choice.unit}
-            className={[
-              "flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] font-mono text-[12px] font-black",
-              rateUnit === choice.unit
-                ? "bg-[var(--mc-85)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100)]"
-                : "bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110",
-            ].join(" ")}
-          >
-            {choice.label}
-          </button>
-        ))}
-      </div>
+        <button
+          type="button"
+          onClick={addCropFarmNode}
+          className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
+          title="Add crop farm: pick a crop and stats, it produces at the computed rate"
+          aria-label="Add crop farm"
+        >
+          <Sprout className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={addTrashNode}
+          className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
+          title="Add trash can: wire any output into it — whatever flows in is voided and never shows as an output"
+          aria-label="Add trash can"
+        >
+          <Trash className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={addCustomRateNode}
+          className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
+          title="Add custom rate node: wire it to any port, dial a rate — supplies the resource, or flips to a constant request drain"
+          aria-label="Add custom rate node"
+        >
+          <Gauge className="h-4 w-4" />
+        </button>
+        <div className="pointer-events-auto flex">
+          {RATE_UNIT_CHOICES.map((choice) => (
+            <button
+              key={choice.unit}
+              type="button"
+              onClick={() => setRateUnit(choice.unit)}
+              title={choice.title}
+              aria-pressed={rateUnit === choice.unit}
+              className={[
+                "flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] font-mono text-[12px] font-black",
+                rateUnit === choice.unit
+                  ? "bg-[var(--mc-85)] text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-100)]"
+                  : "bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110",
+              ].join(" ")}
+            >
+              {choice.label}
+            </button>
+          ))}
+        </div>
       </ToolGroup>
     </div>
   );
@@ -4743,9 +4744,9 @@ const EdgePulseCanvas = memo(function EdgePulseCanvas({
     const observer =
       pane && typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => {
-            width = pane.clientWidth;
-            height = pane.clientHeight;
-          })
+          width = pane.clientWidth;
+          height = pane.clientHeight;
+        })
         : undefined;
     observer?.observe(pane!);
 
@@ -5213,10 +5214,10 @@ const ANNOTATION_TOOLS: Array<{
   label: string;
   Icon: typeof Square;
 }> = [
-  { kind: "box", label: "Draw box", Icon: Square },
-  { kind: "arrow", label: "Draw arrow", Icon: MoveUpRight },
-  { kind: "text", label: "Add text note", Icon: Type },
-];
+    { kind: "box", label: "Draw box", Icon: Square },
+    { kind: "arrow", label: "Draw arrow", Icon: MoveUpRight },
+    { kind: "text", label: "Add text note", Icon: Type },
+  ];
 
 // Memoized because FactoryFlow re-renders every frame of a node drag; with
 // stable callbacks this toolbar renders only when a tool or colour changes.
@@ -5290,119 +5291,119 @@ const BoardViewToolbar = memo(function BoardViewToolbar({
         label="view options"
         side="right"
       >
-      <button
-        type="button"
-        onClick={() =>
-          onChange({
-            canvasPattern:
-              CANVAS_PATTERNS[
+        <button
+          type="button"
+          onClick={() =>
+            onChange({
+              canvasPattern:
+                CANVAS_PATTERNS[
                 (CANVAS_PATTERNS.indexOf(canvasPattern) + 1) % CANVAS_PATTERNS.length
-              ],
-          })
-        }
-        className={buttonClass(false)}
-        title={`${CANVAS_PATTERN_LABEL[canvasPattern]} — click to change`}
-        aria-label={CANVAS_PATTERN_LABEL[canvasPattern]}
-      >
-        <PatternIcon className="h-4 w-4" />
-      </button>
-      {/* No grid-lock button any more. The grid is not a mode: every card is
+                ],
+            })
+          }
+          className={buttonClass(false)}
+          title={`${CANVAS_PATTERN_LABEL[canvasPattern]} — click to change`}
+          aria-label={CANVAS_PATTERN_LABEL[canvasPattern]}
+        >
+          <PatternIcon className="h-4 w-4" />
+        </button>
+        {/* No grid-lock button any more. The grid is not a mode: every card is
           built out of whole cells and every position is a cell corner, so
           there is nothing left for a toggle to mean. */}
-      {/* No heatmap button either: the heat rides the status smart view (the
+        {/* No heatmap button either: the heat rides the status smart view (the
           gauge button, bottom right), so "show me usage" is one mode at
           every zoom rather than two toggles to keep in sync. */}
-      {/* The three line modes, independent and mixable. Volume is always
+        {/* The three line modes, independent and mixable. Volume is always
           ranked within a kind, items against items and fluids against fluids. */}
-      <button
-        type="button"
-        onClick={() => onChange({ lineHeatMode: !lineHeatMode })}
-        className={buttonClass(lineHeatMode)}
-        title={
-          lineHeatMode
-            ? "Line colour: by volume. Click to restore resource colours."
-            : "Colour every line by how much moves through it (red = least, green = most)"
-        }
-        aria-label={lineHeatMode ? "Turn line colour off" : "Colour lines by volume"}
-        aria-pressed={lineHeatMode}
-      >
-        <Palette className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange({ lineThicknessMode: !lineThicknessMode })}
-        className={buttonClass(lineThicknessMode)}
-        title={
-          lineThicknessMode
-            ? "Line thickness: by volume. Click to restore normal widths."
-            : "Thicken every line by how much moves through it"
-        }
-        aria-label={lineThicknessMode ? "Turn line thickness off" : "Thicken lines by volume"}
-        aria-pressed={lineThicknessMode}
-      >
-        <Cable className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange({ linePulseMode: !linePulseMode })}
-        className={buttonClass(linePulseMode)}
-        title={
-          linePulseMode
-            ? "Moving dashes: on. Click to stop them."
-            : "Show which way each line flows, with dashes that march faster on busier lines"
-        }
-        aria-label={linePulseMode ? "Stop the moving dashes" : "Show moving dashes"}
-        aria-pressed={linePulseMode}
-      >
-        <Ellipsis className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange({ lineLabelsMode: !lineLabelsMode })}
-        className={buttonClass(lineLabelsMode)}
-        title={
-          lineLabelsMode
-            ? "Line labels: on. Click to hide the rate pills."
-            : "Show what each line carries and how fast, as a pill on the line"
-        }
-        aria-label={lineLabelsMode ? "Hide line labels" : "Show line labels"}
-        aria-pressed={lineLabelsMode}
-      >
-        <Tag className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          if (dockToggleWarning && !window.confirm(dockToggleWarning)) {
-            return;
+        <button
+          type="button"
+          onClick={() => onChange({ lineHeatMode: !lineHeatMode })}
+          className={buttonClass(lineHeatMode)}
+          title={
+            lineHeatMode
+              ? "Line colour: by volume. Click to restore resource colours."
+              : "Colour every line by how much moves through it (red = least, green = most)"
           }
-          onChange({ freeDockMode: !freeDockMode });
-        }}
-        className={buttonClass(freeDockMode)}
-        title={
-          freeDockMode
-            ? "Free docking: wires attach wherever routes best. Click to pin them to their ports."
-            : "Port docking: wires attach at their ports. Click to let them attach anywhere."
-        }
-        aria-label={freeDockMode ? "Pin wires to their ports" : "Let wires attach anywhere"}
-        aria-pressed={freeDockMode}
-      >
-        <Anchor className="h-4 w-4" />
-      </button>
-      <button
-        type="button"
-        onClick={() => onChange({ calmMode: !calmMode })}
-        className={buttonClass(calmMode)}
-        title={
-          calmMode
-            ? "Calm colours on — the board still names every problem, just without the alarm reds and greens. Click to bring them back."
-            : "Calm the colours: keep every readout but drop the alarm reds, ambers and greens — for showing a plan off"
-        }
-        aria-label={calmMode ? "Turn calm colours off" : "Turn calm colours on"}
-        aria-pressed={calmMode}
-      >
-        <Presentation className="h-4 w-4" />
-      </button>
+          aria-label={lineHeatMode ? "Turn line colour off" : "Colour lines by volume"}
+          aria-pressed={lineHeatMode}
+        >
+          <Palette className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange({ lineThicknessMode: !lineThicknessMode })}
+          className={buttonClass(lineThicknessMode)}
+          title={
+            lineThicknessMode
+              ? "Line thickness: by volume. Click to restore normal widths."
+              : "Thicken every line by how much moves through it"
+          }
+          aria-label={lineThicknessMode ? "Turn line thickness off" : "Thicken lines by volume"}
+          aria-pressed={lineThicknessMode}
+        >
+          <Cable className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange({ linePulseMode: !linePulseMode })}
+          className={buttonClass(linePulseMode)}
+          title={
+            linePulseMode
+              ? "Moving dashes: on. Click to stop them."
+              : "Show which way each line flows, with dashes that march faster on busier lines"
+          }
+          aria-label={linePulseMode ? "Stop the moving dashes" : "Show moving dashes"}
+          aria-pressed={linePulseMode}
+        >
+          <Ellipsis className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange({ lineLabelsMode: !lineLabelsMode })}
+          className={buttonClass(lineLabelsMode)}
+          title={
+            lineLabelsMode
+              ? "Line labels: on. Click to hide the rate pills."
+              : "Show what each line carries and how fast, as a pill on the line"
+          }
+          aria-label={lineLabelsMode ? "Hide line labels" : "Show line labels"}
+          aria-pressed={lineLabelsMode}
+        >
+          <Tag className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            if (dockToggleWarning && !window.confirm(dockToggleWarning)) {
+              return;
+            }
+            onChange({ freeDockMode: !freeDockMode });
+          }}
+          className={buttonClass(freeDockMode)}
+          title={
+            freeDockMode
+              ? "Free docking: wires attach wherever routes best. Click to pin them to their ports."
+              : "Port docking: wires attach at their ports. Click to let them attach anywhere."
+          }
+          aria-label={freeDockMode ? "Pin wires to their ports" : "Let wires attach anywhere"}
+          aria-pressed={freeDockMode}
+        >
+          <Anchor className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange({ calmMode: !calmMode })}
+          className={buttonClass(calmMode)}
+          title={
+            calmMode
+              ? "Calm colours on — the board still names every problem, just without the alarm reds and greens. Click to bring them back."
+              : "Calm the colours: keep every readout but drop the alarm reds, ambers and greens — for showing a plan off"
+          }
+          aria-label={calmMode ? "Turn calm colours off" : "Turn calm colours on"}
+          aria-pressed={calmMode}
+        >
+          <Presentation className="h-4 w-4" />
+        </button>
       </ToolGroup>
     </div>
   );
@@ -5472,120 +5473,120 @@ const PaintToolbar = memo(function PaintToolbar({
         label="paint and annotation tools"
         side="right"
       >
-      <div
-        className="flex items-start"
-        onMouseEnter={openPalette}
-        onMouseLeave={scheduleClosePalette}
-      >
-      <div
-        className={[
-          // Nine across, two down: the whole palette reads in one glance, and
-          // it hangs only one row below the toolbar instead of four — a tall
-          // block of swatches covered the view toolbar and half the board.
-          // It grows LEFT into empty canvas, clear of the undo/rate row.
-          "grid gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)] transition-[opacity,transform] duration-100",
-          // On a phone the row it sits in is barely wider than the palette, so
-          // nine across would push the brush off the board. It drops out of the
-          // row and hangs two lines under the trigger instead — clear of the
-          // unfolded paint row on the line between — six across and three down.
-          compact ? "absolute right-0 top-[5.5rem] grid-cols-6" : "mr-0 w-[296px] grid-cols-9",
-          isPaletteOpen
-            ? "pointer-events-auto translate-x-0 opacity-100"
-            : "pointer-events-none translate-x-2 opacity-0",
-        ].join(" ")}
-      >
-        <button
-          type="button"
-          onClick={() => onPaintModeChange(paintMode === null ? undefined : null)}
-          className={[
-            "flex h-7 w-7 items-center justify-center border-2 bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]",
-            paintMode === null ? "border-white ring-2 ring-cyan-300" : "border-[var(--mc-15)]",
-          ].join(" ")}
-          title="Erase colors"
-          aria-label="Erase colors"
+        <div
+          className="flex items-start"
+          onMouseEnter={openPalette}
+          onMouseLeave={scheduleClosePalette}
         >
-          <X className="h-3.5 w-3.5" />
-        </button>
-        {GT_NODE_COLOR_PALETTE.map((entry) => (
-          <button
-            key={entry.tag}
-            type="button"
-            onClick={() => onColorSelect(entry.tag)}
+          <div
             className={[
-              "h-7 w-7 border-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]",
-              activeColorTag === entry.tag
-                ? "border-white ring-2 ring-cyan-300"
-                : "border-[var(--mc-15)]",
+              // Nine across, two down: the whole palette reads in one glance, and
+              // it hangs only one row below the toolbar instead of four — a tall
+              // block of swatches covered the view toolbar and half the board.
+              // It grows LEFT into empty canvas, clear of the undo/rate row.
+              "grid gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)] transition-[opacity,transform] duration-100",
+              // On a phone the row it sits in is barely wider than the palette, so
+              // nine across would push the brush off the board. It drops out of the
+              // row and hangs two lines under the trigger instead — clear of the
+              // unfolded paint row on the line between — six across and three down.
+              compact ? "absolute right-0 top-[5.5rem] grid-cols-6" : "mr-0 w-[296px] grid-cols-9",
+              isPaletteOpen
+                ? "pointer-events-auto translate-x-0 opacity-100"
+                : "pointer-events-none translate-x-2 opacity-0",
             ].join(" ")}
-            style={{ backgroundColor: entry.color.swatch }}
-            title={entry.tag}
-            aria-label={`Use ${entry.tag}`}
-          />
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={() => setPaletteOpen((open) => !open)}
-        // Help rings this row from the colour button to the bin: the anchor
-        // sits on the visible ends, not the wrapper, so the folded-away
-        // palette's empty layout box stays out of the ring.
-        data-help-anchor="paint"
-        className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]"
-        title={`Color: ${activeColorTag}`}
-        aria-label="Pick color"
-      >
-        <span
-          className="h-5 w-5 border-2 border-[var(--mc-15)] shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]"
-          style={{ backgroundColor: activeColor.swatch }}
-        />
-      </button>
-      </div>
-      <button
-        type="button"
-        onClick={() =>
-          onPaintModeChange(paintMode !== undefined ? undefined : activeColorTag)
-        }
-        className={[
-          "pointer-events-auto relative z-10 ml-1 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
-          paintMode !== undefined ? "ring-2 ring-cyan-300" : "",
-        ].join(" ")}
-        title={
-          paintMode !== undefined
-            ? "Stop painting"
-            : `Paint nodes ${activeColorTag}`
-        }
-        aria-label={paintMode !== undefined ? "Stop painting" : "Paint nodes"}
-      >
-        {paintMode === null ? <X className="h-4 w-4" /> : <Paintbrush className="h-4 w-4" />}
-      </button>
-      {ANNOTATION_TOOLS.map(({ kind, label, Icon }) => (
+          >
+            <button
+              type="button"
+              onClick={() => onPaintModeChange(paintMode === null ? undefined : null)}
+              className={[
+                "flex h-7 w-7 items-center justify-center border-2 bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)]",
+                paintMode === null ? "border-white ring-2 ring-cyan-300" : "border-[var(--mc-15)]",
+              ].join(" ")}
+              title="Erase colors"
+              aria-label="Erase colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+            {GT_NODE_COLOR_PALETTE.map((entry) => (
+              <button
+                key={entry.tag}
+                type="button"
+                onClick={() => onColorSelect(entry.tag)}
+                className={[
+                  "h-7 w-7 border-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]",
+                  activeColorTag === entry.tag
+                    ? "border-white ring-2 ring-cyan-300"
+                    : "border-[var(--mc-15)]",
+                ].join(" ")}
+                style={{ backgroundColor: entry.color.swatch }}
+                title={entry.tag}
+                aria-label={`Use ${entry.tag}`}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setPaletteOpen((open) => !open)}
+            // Help rings this row from the colour button to the bin: the anchor
+            // sits on the visible ends, not the wrapper, so the folded-away
+            // palette's empty layout box stays out of the ring.
+            data-help-anchor="paint"
+            className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]"
+            title={`Color: ${activeColorTag}`}
+            aria-label="Pick color"
+          >
+            <span
+              className="h-5 w-5 border-2 border-[var(--mc-15)] shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]"
+              style={{ backgroundColor: activeColor.swatch }}
+            />
+          </button>
+        </div>
         <button
-          key={kind}
           type="button"
-          onClick={() => onAnnotationToolChange(annotationTool === kind ? undefined : kind)}
+          onClick={() =>
+            onPaintModeChange(paintMode !== undefined ? undefined : activeColorTag)
+          }
           className={[
             "pointer-events-auto relative z-10 ml-1 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
-            annotationTool === kind ? "ring-2 ring-cyan-300" : "",
+            paintMode !== undefined ? "ring-2 ring-cyan-300" : "",
           ].join(" ")}
-          title={annotationTool === kind ? "Cancel" : label}
-          aria-label={annotationTool === kind ? "Cancel" : label}
+          title={
+            paintMode !== undefined
+              ? "Stop painting"
+              : `Paint nodes ${activeColorTag}`
+          }
+          aria-label={paintMode !== undefined ? "Stop painting" : "Paint nodes"}
         >
-          <Icon className="h-4 w-4" />
+          {paintMode === null ? <X className="h-4 w-4" /> : <Paintbrush className="h-4 w-4" />}
         </button>
-      ))}
-      <button
-        type="button"
-        onClick={() => onDeleteModeChange(!isDeleteMode)}
-        data-help-anchor="paint"
-        className={[
-          "pointer-events-auto relative z-10 ml-1 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
-          isDeleteMode ? "ring-2 ring-red-400" : "",
-        ].join(" ")}
-        title={isDeleteMode ? "Stop deleting" : "Delete tool: click anything to remove it"}
-        aria-label={isDeleteMode ? "Stop deleting" : "Delete tool"}
-      >
-        <Trash2 className={isDeleteMode ? "h-4 w-4 text-red-300" : "h-4 w-4"} />
-      </button>
+        {ANNOTATION_TOOLS.map(({ kind, label, Icon }) => (
+          <button
+            key={kind}
+            type="button"
+            onClick={() => onAnnotationToolChange(annotationTool === kind ? undefined : kind)}
+            className={[
+              "pointer-events-auto relative z-10 ml-1 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
+              annotationTool === kind ? "ring-2 ring-cyan-300" : "",
+            ].join(" ")}
+            title={annotationTool === kind ? "Cancel" : label}
+            aria-label={annotationTool === kind ? "Cancel" : label}
+          >
+            <Icon className="h-4 w-4" />
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => onDeleteModeChange(!isDeleteMode)}
+          data-help-anchor="paint"
+          className={[
+            "pointer-events-auto relative z-10 ml-1 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
+            isDeleteMode ? "ring-2 ring-red-400" : "",
+          ].join(" ")}
+          title={isDeleteMode ? "Stop deleting" : "Delete tool: click anything to remove it"}
+          aria-label={isDeleteMode ? "Stop deleting" : "Delete tool"}
+        >
+          <Trash2 className={isDeleteMode ? "h-4 w-4 text-red-300" : "h-4 w-4"} />
+        </button>
       </ToolGroup>
     </div>
   );
@@ -5802,9 +5803,9 @@ function ResourceEdgeComponent({
   // pill with no clear stretch of wire to sit on goes away entirely.
   const showRateLabel = Boolean(
     data?.showLabel &&
-      data.resource &&
-      !routedEdge.labelHidden &&
-      hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS),
+    data.resource &&
+    !routedEdge.labelHidden &&
+    hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS),
   );
   // The pulse canvas paints over the whole board and punches back out what
   // the dashes must stay under (see edge-pulse.ts). The pill publishes its
@@ -6001,30 +6002,30 @@ function ResourceEdgeComponent({
           the stroke on a fat pipe. */}
       {showArrowHead
         ? getRouteChevrons(routedEdge.points, coreStrokeWidth).map((chevron, index) => (
-            <g key={index} style={{ pointerEvents: "none" }}>
-              <polyline
-                points={chevron}
-                stroke="#111827"
-                strokeWidth={Math.min(2 + coreStrokeWidth * 0.12, 4) + 2}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-                opacity={isEdgeStarved(data) ? 0.75 : 0.9}
-              />
-              <polyline
-                points={chevron}
-                stroke={brightenHexColor(edgeColor, 0.35)}
-                strokeWidth={Math.min(2 + coreStrokeWidth * 0.12, 4)}
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-                opacity={isEdgeStarved(data) ? 0.8 : 1}
-                style={{
-                  filter: isHighlighted ? "drop-shadow(0 0 4px var(--glow-halo))" : undefined,
-                }}
-              />
-            </g>
-          ))
+          <g key={index} style={{ pointerEvents: "none" }}>
+            <polyline
+              points={chevron}
+              stroke="#111827"
+              strokeWidth={Math.min(2 + coreStrokeWidth * 0.12, 4) + 2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              opacity={isEdgeStarved(data) ? 0.75 : 0.9}
+            />
+            <polyline
+              points={chevron}
+              stroke={brightenHexColor(edgeColor, 0.35)}
+              strokeWidth={Math.min(2 + coreStrokeWidth * 0.12, 4)}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+              opacity={isEdgeStarved(data) ? 0.8 : 1}
+              style={{
+                filter: isHighlighted ? "drop-shadow(0 0 4px var(--glow-halo))" : undefined,
+              }}
+            />
+          </g>
+        ))
         : null}
       {hoverPathD ? (
         <path
@@ -6084,94 +6085,94 @@ function ResourceEdgeComponent({
       ) : null}
       {activeWaypoints && activeWaypoints.length > 0 && hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS)
         ? activeWaypoints.map((waypoint, index) => (
-            <circle
-              key={index}
-              className="nodrag nopan"
-              cx={waypoint.x}
-              cy={waypoint.y}
-              // A touch wider than the wire it steers, whatever that width is.
-              r={coreStrokeWidth / 2 + 4}
-              fill={brightenHexColor(edgeColor, 0.15)}
-              stroke="#111827"
-              strokeWidth={2}
-              style={{ pointerEvents: "all", cursor: "grab" }}
-              onPointerDown={(event) => {
-                event.stopPropagation();
-                const now = Date.now();
-                const lastPress = waypointPressRef.current;
-                waypointPressRef.current = { index, time: now };
-                if (lastPress && lastPress.index === index && now - lastPress.time < 400) {
-                  // Second press on the same dot: unpin it, no drag.
-                  waypointPressRef.current = undefined;
-                  lastWaypointRemovalAt = now;
-                  const rest = (data?.waypoints ?? []).filter(
-                    (_, pointIndex) => pointIndex !== index,
-                  );
-                  updateEdge(id, { waypoints: rest.length > 0 ? rest : undefined });
-                  return;
-                }
-                event.currentTarget.setPointerCapture(event.pointerId);
-                waypointDragRef.current = { pointerId: event.pointerId, index };
-                setDraftWaypoints((data?.waypoints ?? []).map((point) => ({ ...point })));
-              }}
-              onPointerMove={(event) => {
-                const drag = waypointDragRef.current;
-                if (!drag) {
-                  return;
-                }
-                event.stopPropagation();
-                const flowPoint = screenToFlowPoint(
-                  { x: event.clientX, y: event.clientY },
-                  event.currentTarget as unknown as HTMLElement,
+          <circle
+            key={index}
+            className="nodrag nopan"
+            cx={waypoint.x}
+            cy={waypoint.y}
+            // A touch wider than the wire it steers, whatever that width is.
+            r={coreStrokeWidth / 2 + 4}
+            fill={brightenHexColor(edgeColor, 0.15)}
+            stroke="#111827"
+            strokeWidth={2}
+            style={{ pointerEvents: "all", cursor: "grab" }}
+            onPointerDown={(event) => {
+              event.stopPropagation();
+              const now = Date.now();
+              const lastPress = waypointPressRef.current;
+              waypointPressRef.current = { index, time: now };
+              if (lastPress && lastPress.index === index && now - lastPress.time < 400) {
+                // Second press on the same dot: unpin it, no drag.
+                waypointPressRef.current = undefined;
+                lastWaypointRemovalAt = now;
+                const rest = (data?.waypoints ?? []).filter(
+                  (_, pointIndex) => pointIndex !== index,
                 );
-                if (!flowPoint) {
-                  return;
-                }
-                // Clicky, not smooth: the dot lives on the grid, so it MOVES
-                // on the grid — cell to cell under the pointer, exactly where
-                // it will land, instead of gliding free and snapping late.
-                // And never onto a card or its wire margin: dragged over one,
-                // the dot rides the nearest legal cell instead, which is
-                // exactly where releasing it will put it.
-                const clamped = clampWaypointToClearSpace(flowPoint.x, flowPoint.y);
-                setDraftWaypoints((current) =>
-                  current?.map((point, pointIndex) =>
-                    pointIndex === drag.index ? clamped : point,
+                updateEdge(id, { waypoints: rest.length > 0 ? rest : undefined });
+                return;
+              }
+              event.currentTarget.setPointerCapture(event.pointerId);
+              waypointDragRef.current = { pointerId: event.pointerId, index };
+              setDraftWaypoints((data?.waypoints ?? []).map((point) => ({ ...point })));
+            }}
+            onPointerMove={(event) => {
+              const drag = waypointDragRef.current;
+              if (!drag) {
+                return;
+              }
+              event.stopPropagation();
+              const flowPoint = screenToFlowPoint(
+                { x: event.clientX, y: event.clientY },
+                event.currentTarget as unknown as HTMLElement,
+              );
+              if (!flowPoint) {
+                return;
+              }
+              // Clicky, not smooth: the dot lives on the grid, so it MOVES
+              // on the grid — cell to cell under the pointer, exactly where
+              // it will land, instead of gliding free and snapping late.
+              // And never onto a card or its wire margin: dragged over one,
+              // the dot rides the nearest legal cell instead, which is
+              // exactly where releasing it will put it.
+              const clamped = clampWaypointToClearSpace(flowPoint.x, flowPoint.y);
+              setDraftWaypoints((current) =>
+                current?.map((point, pointIndex) =>
+                  pointIndex === drag.index ? clamped : point,
+                ),
+              );
+            }}
+            onPointerUp={(event) => {
+              const drag = waypointDragRef.current;
+              if (!drag) {
+                return;
+              }
+              event.currentTarget.releasePointerCapture(drag.pointerId);
+              waypointDragRef.current = undefined;
+              if (draftWaypoints) {
+                // On grid and in clear space, always: the dot commits to
+                // the nearest legal corner (plans saved before the clamp
+                // existed can carry dots inside cards — the commit heals
+                // whichever one was touched).
+                // Order is sacred: the first dot made is the first stop,
+                // wherever either gets dragged — the wire doubles back if
+                // it must. Re-sorting by position here silently swapped
+                // the user's itinerary.
+                updateEdge(id, {
+                  waypoints: draftWaypoints.map((point) =>
+                    clampWaypointToClearSpace(point.x, point.y),
                   ),
-                );
-              }}
-              onPointerUp={(event) => {
-                const drag = waypointDragRef.current;
-                if (!drag) {
-                  return;
-                }
-                event.currentTarget.releasePointerCapture(drag.pointerId);
-                waypointDragRef.current = undefined;
-                if (draftWaypoints) {
-                  // On grid and in clear space, always: the dot commits to
-                  // the nearest legal corner (plans saved before the clamp
-                  // existed can carry dots inside cards — the commit heals
-                  // whichever one was touched).
-                  // Order is sacred: the first dot made is the first stop,
-                  // wherever either gets dragged — the wire doubles back if
-                  // it must. Re-sorting by position here silently swapped
-                  // the user's itinerary.
-                  updateEdge(id, {
-                    waypoints: draftWaypoints.map((point) =>
-                      clampWaypointToClearSpace(point.x, point.y),
-                    ),
-                  });
-                }
-                setDraftWaypoints(undefined);
-              }}
-              onPointerCancel={() => {
-                waypointDragRef.current = undefined;
-                setDraftWaypoints(undefined);
-              }}
-            >
-              <title>Drag to steer this wire — double-click to remove the stop</title>
-            </circle>
-          ))
+                });
+              }
+              setDraftWaypoints(undefined);
+            }}
+            onPointerCancel={() => {
+              waypointDragRef.current = undefined;
+              setDraftWaypoints(undefined);
+            }}
+          >
+            <title>Drag to steer this wire — double-click to remove the stop</title>
+          </circle>
+        ))
         : null}
       {showRateLabel && data?.resource ? (
         // The rate pill, back by request as a VIEW mode (the tag button in
@@ -6681,9 +6682,9 @@ function snapRouteCoord(value: number) {
 function buildRoutedEdgePath(points: Array<{ x: number; y: number }>): RoutedEdgePath {
   const labelPoint = getPointAtPolylineRatio(points, 0.5) ??
     points[Math.floor(points.length / 2)] ?? {
-      x: 0,
-      y: 0,
-    };
+    x: 0,
+    y: 0,
+  };
   return {
     path: pointsToSvgPath(points),
     labelX: labelPoint.x,
@@ -7362,14 +7363,14 @@ function getSlotEdgeEndpointCandidates({
   const preferredSide =
     measureEndpoints && counterpartX !== undefined && counterpartY !== undefined
       ? getSlotEdgeSideTowardPoint({
-          nodeId,
-          handleId,
-          estimatedX,
-          estimatedY,
-          counterpartX,
-          counterpartY,
-          estimatedSide,
-        })
+        nodeId,
+        handleId,
+        estimatedX,
+        estimatedY,
+        counterpartX,
+        counterpartY,
+        estimatedSide,
+      })
       : estimatedSide;
   const sides = dedupeEdgeSides([
     preferredSide,
@@ -7417,11 +7418,11 @@ function getSlotEdgeEndpointForSide({
 }): SlotEdgeEndpoint {
   const measuredEndpoint = measureEndpoint
     ? getMeasuredSlotEndpoint({
-        nodeId,
-        handleId,
-        edgeSide,
-        endpointOffset,
-      })
+      nodeId,
+      handleId,
+      edgeSide,
+      endpointOffset,
+    })
     : undefined;
   if (measuredEndpoint) {
     return { ...measuredEndpoint, side: edgeSide };
@@ -7966,9 +7967,9 @@ function getStorageHandleAtPosition(
     ...document.querySelectorAll<HTMLElement>("[data-storage-node-id]"),
     ...(estimatedEvent
       ? document
-          .elementsFromPoint(position.x, position.y)
-          .map((element) => element.closest<HTMLElement>("[data-storage-node-id]"))
-          .filter((element): element is HTMLElement => Boolean(element))
+        .elementsFromPoint(position.x, position.y)
+        .map((element) => element.closest<HTMLElement>("[data-storage-node-id]"))
+        .filter((element): element is HTMLElement => Boolean(element))
       : []),
   ];
 
@@ -8036,9 +8037,9 @@ function getTrashHandleAtPosition(
     ...document.querySelectorAll<HTMLElement>("[data-trash-node-id]"),
     ...(estimatedEvent
       ? document
-          .elementsFromPoint(position.x, position.y)
-          .map((element) => element.closest<HTMLElement>("[data-trash-node-id]"))
-          .filter((element): element is HTMLElement => Boolean(element))
+        .elementsFromPoint(position.x, position.y)
+        .map((element) => element.closest<HTMLElement>("[data-trash-node-id]"))
+        .filter((element): element is HTMLElement => Boolean(element))
       : []),
   ];
 
@@ -8200,12 +8201,12 @@ function findNodeDropTarget(
     // supplier has no business docking on one.
     return draggedResource.side === "output" && !draggingUniversalPort
       ? {
-          nodeId,
-          handleId: makeResourceHandleId("input", { kind: "item", id: TRASH_ANY_RESOURCE_ID }),
-          side: "input",
-          kind: "item",
-          resourceId: TRASH_ANY_RESOURCE_ID,
-        }
+        nodeId,
+        handleId: makeResourceHandleId("input", { kind: "item", id: TRASH_ANY_RESOURCE_ID }),
+        side: "input",
+        kind: "item",
+        resourceId: TRASH_ANY_RESOURCE_ID,
+      }
       : undefined;
   }
 
@@ -8553,8 +8554,8 @@ function isCompatibleResourceConnection(
     const machineHandleId = sourceIsCustom ? connection.targetHandle : connection.sourceHandle;
     return Boolean(
       machineNodeId &&
-        machineHandleId &&
-        getResourceForHandle(project, machineNodeId, machineHandleId),
+      machineHandleId &&
+      getResourceForHandle(project, machineNodeId, machineHandleId),
     );
   }
 
