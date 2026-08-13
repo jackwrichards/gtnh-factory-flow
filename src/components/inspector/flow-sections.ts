@@ -9,7 +9,7 @@ import type { FactoryProject, ResourceBalance } from "@/lib/model/types";
  * figure being the answer. The split lasted one day (13551d6) before the
  * players asked for the total back.
  */
-export type FlowSectionId = "need" | "output" | "internal";
+export type FlowSectionId = "need" | "gather" | "output" | "internal";
 
 export type FlowSectionTone = FlowSectionId;
 
@@ -43,6 +43,10 @@ export function getFlowRowValue(section: FlowSectionId, balance: ResourceBalance
   switch (section) {
     case "need":
       return balance.deficitPerSecond;
+    // What the mining source cards are being asked for: dug by hand, so a
+    // demand on the player even though the books call it production.
+    case "gather":
+      return balance.minedPerSecond;
     // The whole spare figure: product drawers, byproduct drawers and unclaimed
     // surplus are one number, because they are one answer to "how much of this
     // leaves the line".

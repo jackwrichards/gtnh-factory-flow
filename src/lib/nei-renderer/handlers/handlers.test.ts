@@ -115,6 +115,71 @@ describe("NEI recipe handlers", () => {
     expect(result.positionedStacks.map((stack) => stack.side)).toEqual(["input", "output"]);
   });
 
+  it("renders an ore vein as a mining source page", () => {
+    const result = render(
+      recipe({
+        kind: "ore_vein",
+        machineType: "Ore Vein",
+        inputs: [],
+        outputs: [
+          { kind: "item", id: "chalcopyrite_ore", amount: 1 },
+          { kind: "item", id: "iron_ore", amount: 1 },
+        ],
+        metadata: {
+          veinName: "Copper",
+          heightRange: "10-50",
+          veinWeight: 80,
+          veinDensity: 4,
+          veinSize: 24,
+          dimensions: [
+            { name: "Overworld", abbr: "Ow", tier: 0 },
+            { name: "Moon", abbr: "Mo", tier: 1 },
+          ],
+        },
+      }),
+    );
+
+    expect(result.handlerId).toBe("mining-source");
+    // Four layer slots even with two distinct ores: an empty slot is
+    // information, and four is the shape of a vein.
+    expect(result.commands.filter((command) => command.type === "slot")).toHaveLength(4);
+    expect(result.positionedStacks.map((stack) => stack.side)).toEqual(["output", "output"]);
+    expect(
+      result.commands.some(
+        (command) => command.type === "text" && command.text.includes("Copper vein"),
+      ),
+    ).toBe(true);
+    expect(
+      result.commands.some((command) => command.type === "text" && command.text.includes("Mo·T1")),
+    ).toBe(true);
+  });
+
+  it("renders an underground fluid deposit with its fluid output", () => {
+    const result = render(
+      recipe({
+        kind: "underground_fluid",
+        machineType: "Underground Fluid",
+        inputs: [],
+        outputs: [{ kind: "fluid", id: "oil", amount: 1, displayName: "Oil" }],
+        metadata: {
+          deposits: [
+            { dimension: "Overworld", abbr: "Ow", tier: 0, chance: 40, minAmount: 100, maxAmount: 625 },
+          ],
+        },
+      }),
+    );
+
+    expect(result.handlerId).toBe("mining-source");
+    expect(result.positionedStacks.map((stack) => [stack.side, stack.kind])).toEqual([
+      ["output", "fluid"],
+    ]);
+    expect(
+      result.commands.some(
+        (command) => command.type === "text" && command.text.includes("100-625 L/chunk"),
+      ),
+    ).toBe(true);
+  });
+
   it("renders essentia outputs as aspect stacks and readable text", () => {
     const result = render(
       recipe({

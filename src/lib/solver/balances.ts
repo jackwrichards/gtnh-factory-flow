@@ -10,6 +10,7 @@ import type {
 } from "../model/types";
 import { collectTrashNodeIds } from "../model/trash";
 import { getStorageRoles } from "../model/storage-role";
+import { isMiningSourceRecipe } from "../model/mining-source";
 import { clampUtilization } from "./equilibrium";
 
 const EPSILON = 0.000001;
@@ -50,6 +51,7 @@ function ensureBalance(
     productPerSecond: 0,
     byproductPerSecond: 0,
     bufferFillPerSecond: 0,
+    minedPerSecond: 0,
   };
   balances.set(key, balance);
   return balance;
@@ -148,6 +150,9 @@ function settleBalances(balances: Map<ResourceKey, ResourceBalance>): void {
     if (balance.bufferFillPerSecond !== 0 && balance.bufferFillPerSecond <= tolerance) {
       balance.bufferFillPerSecond = 0;
     }
+    if (balance.minedPerSecond !== 0 && balance.minedPerSecond <= tolerance) {
+      balance.minedPerSecond = 0;
+    }
     balance.deficitPerSecond = balance.importedPerSecond;
     balance.surplusPerSecond =
       balance.productPerSecond + balance.byproductPerSecond + balance.bufferFillPerSecond;
@@ -164,6 +169,12 @@ export function calculateEffectiveBalances(
   edgeResults: Record<string, EdgeThroughput>,
 ): Map<ResourceKey, ResourceBalance> {
   const balances = new Map<ResourceKey, ResourceBalance>();
+  const miningRecipeIds = new Set<string>();
+  for (const recipe of project.recipes) {
+    if (isMiningSourceRecipe(recipe)) {
+      miningRecipeIds.add(recipe.id);
+    }
+  }
 
   for (const node of Object.values(nodes)) {
     if (!node.enabled || node.status === "missing-recipe") {
@@ -195,6 +206,18 @@ export function calculateEffectiveBalances(
         },
         output.amountPerSecond * utilization,
       );
+      // The same flow, filed a second time under "a player mined this". Kept
+      // as its own column rather than reclassifying production so every
+      // existing reader of produced/consumed stays balanced.
+      if (miningRecipeIds.has(node.recipeId)) {
+        const balance = ensureBalance(balances, {
+          kind: output.kind,
+          id: output.resourceId,
+          displayName: output.displayName,
+          amount: 0,
+        });
+        balance.minedPerSecond += output.amountPerSecond * utilization;
+      }
     }
   }
 
@@ -376,10 +399,24 @@ export function selectInternalBalances(balances: Iterable<ResourceBalance>): Res
   return [...balances]
     .filter(
       (balance) =>
-        balance.producedPerSecond > 0 &&
+        // Made by MACHINES: a resource whose entire production is mined off
+        // source cards is not internal automation - it is filed under Gather.
+        balance.producedPerSecond - balance.minedPerSecond > EPSILON &&
         balance.consumedPerSecond > 0 &&
         balance.deficitPerSecond <= EPSILON &&
         balance.surplusPerSecond <= EPSILON,
     )
     .sort((left, right) => right.consumedPerSecond - left.consumedPerSecond);
+}
+
+/**
+ * The "go get this" list: everything mining source cards are being asked to
+ * supply, at the rate the plan actually draws. Its own group beside Inputs
+ * because both are demands on the player - one bought at a drawer, one dug
+ * out of the ground.
+ */
+export function selectGatheredBalances(balances: Iterable<ResourceBalance>): ResourceBalance[] {
+  return [...balances]
+    .filter((balance) => balance.minedPerSecond > EPSILON)
+    .sort((left, right) => right.minedPerSecond - left.minedPerSecond);
 }

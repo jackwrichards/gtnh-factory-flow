@@ -30,6 +30,7 @@ function makeBalance(overrides: Partial<ResourceBalance> = {}): ResourceBalance 
     productPerSecond: 0,
     byproductPerSecond: 0,
     bufferFillPerSecond: 0,
+    minedPerSecond: 0,
     ...overrides,
   };
 }
@@ -46,7 +47,7 @@ function makeSection(id: FlowSectionId, items: ResourceBalance[]): FlowSection {
   };
 }
 
-const NONE_COLLAPSED = { need: false, output: false, internal: false };
+const NONE_COLLAPSED = { need: false, gather: false, output: false, internal: false };
 
 describe("buildFlowRows", () => {
   it("emits a header followed by each item", () => {

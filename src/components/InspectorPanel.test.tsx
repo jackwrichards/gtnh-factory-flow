@@ -28,6 +28,7 @@ function makeBalance(index: number, overrides: Partial<ResourceBalance> = {}): R
     productPerSecond: 0,
     byproductPerSecond: 0,
     bufferFillPerSecond: 0,
+    minedPerSecond: 0,
     ...overrides,
   };
 }

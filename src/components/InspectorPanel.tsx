@@ -22,7 +22,7 @@ import type {
   ResourceBalance,
   ResourceKey,
 } from "@/lib/model/types";
-import { calculateSelectionFlow, selectInternalBalances } from "@/lib/solver";
+import { calculateSelectionFlow, selectGatheredBalances, selectInternalBalances } from "@/lib/solver";
 import { selectTrendSeries, useResourceTrends } from "@/lib/resource-trends";
 import { useFactoryStore } from "@/store/factory-store";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
@@ -308,6 +308,7 @@ function FlowIOPanel() {
   // other folds.
   const [collapsed, setCollapsed] = useState<Record<FlowSectionId, boolean>>({
     need: false,
+    gather: false,
     output: false,
     internal: true,
   });
@@ -342,6 +343,12 @@ function FlowIOPanel() {
   );
   const scope = selection ?? result;
   const balanced = selection ? selection.internal : planInternal;
+  // Both scopes derive this from the same balance field, so the board view
+  // and a selection's own solve never disagree about what needs digging.
+  const gathered = useMemo(
+    () => selectGatheredBalances(Object.values(scope.resources)),
+    [scope.resources],
+  );
 
   const workspace = useWorkspaceView();
   const marks = useMemo<ResourceMarks>(
@@ -459,17 +466,29 @@ function FlowIOPanel() {
         outputs: augment(boundary.outputs, boundaryStorageKeys.drains),
       };
     }
-    return [
+    const sectionList = [
       // One line each: the row is a single fixed-height line, so wrapping
       // would clip.
       build("need", "Inputs", "Nothing missing.", "need", -1, boundary.needs),
       build("output", "Outputs", "Nothing coming out yet.", "output", 1, boundary.outputs),
       build("internal", "Internal", "Nothing internal.", "internal", 0, balanced),
     ];
+    // Gather sits under Inputs, and only when a mining source card exists:
+    // most boards have none, and an always-on empty section would be a
+    // permanent line earning nothing.
+    if (gathered.length > 0) {
+      sectionList.splice(
+        1,
+        0,
+        build("gather", "Gather", "Nothing to dig up.", "gather", -1, gathered),
+      );
+    }
+    return sectionList;
   }, [
     balanced,
     boundaryStorageKeys,
     debouncedFilter,
+    gathered,
     marks,
     scope.externalInputs,
     scope.resources,
@@ -1640,6 +1659,15 @@ const TONE_STYLES: Record<
     badge: "bg-red-500/30 text-red-50",
     value: "text-red-300",
     tint: "bg-red-500/5",
+  },
+  // Gather is a demand like Need, but one the player answers with a pickaxe
+  // rather than a drawer - amber, the colour of dug earth, so the two demand
+  // groups read as kin without blurring together.
+  gather: {
+    header: "border-amber-500/40 bg-amber-950/85 text-amber-100 hover:bg-amber-900/60",
+    badge: "bg-amber-500/30 text-amber-50",
+    value: "text-amber-300",
+    tint: "bg-amber-500/5",
   },
   /*
    * One Outputs section, one colour: green, the Output colour this panel has

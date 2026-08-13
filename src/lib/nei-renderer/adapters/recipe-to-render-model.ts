@@ -42,6 +42,10 @@ export function recipeToRenderModel(recipe: Recipe): NeiRecipeRenderModel {
     specialValue: recipe.specialValue,
     programmedCircuit: findProgrammedCircuitResource(recipe),
     metadata: {
+      // The recipe's own metadata rides along first: handlers read
+      // dataset-supplied facts from it (a bee's condition, a vein's planets),
+      // and building this record fresh used to silently drop them all.
+      ...recipe.metadata,
       machineType: recipe.machineType,
       minimumTier: recipe.minimumTier,
       source: recipe.source,

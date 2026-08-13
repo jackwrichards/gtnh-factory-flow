@@ -21,6 +21,7 @@ import {
   cropsNhUpgradeSlots,
   getCropsNhStats,
 } from "@/lib/model/passive-production";
+import { getMiningSourceInfo, type MiningSourceInfo } from "@/lib/model/mining-source";
 
 const BONUS_COLOR = "#4ade80";
 const PENALTY_COLOR = "#f87171";
@@ -333,6 +334,74 @@ function CropSourceStatsContent({
   );
 }
 
+/**
+ * Hover panel for a mining source: the prospector's briefing. Where the vein
+ * generates (every planet with its rocket tier and share of the rolls), how
+ * deep, and how rich - the facts a player needs before committing to go dig.
+ */
+function MiningSourceStatsContent({ recipe, info }: { recipe: Recipe; info: MiningSourceInfo }) {
+  const kindLabel =
+    recipe.kind === "small_ore"
+      ? "Small ore"
+      : recipe.kind === "underground_fluid"
+        ? "Underground fluid"
+        : "Ore vein";
+  return (
+    <div className="w-80">
+      <div className="flex items-baseline gap-2 border-b border-white/15 pb-1.5">
+        <span className="truncate text-[17px] font-semibold text-white">
+          {info.veinName ?? recipe.name}
+        </span>
+        <span className="ml-auto shrink-0 text-[12px] uppercase tracking-wide text-slate-400">
+          {kindLabel}
+        </span>
+      </div>
+
+      <div className="mt-2 space-y-1">
+        {info.heightRange ? <StatRow label="Height">Y {info.heightRange}</StatRow> : null}
+        {info.weight !== undefined ? <StatRow label="Weight">{info.weight}</StatRow> : null}
+        {info.density !== undefined ? <StatRow label="Density">{info.density}</StatRow> : null}
+        {info.size !== undefined ? <StatRow label="Size">{info.size}</StatRow> : null}
+        {info.amountPerChunk !== undefined ? (
+          <StatRow label="Per chunk">{info.amountPerChunk}</StatRow>
+        ) : null}
+        {info.deposits.map((deposit) => (
+          <StatRow key={deposit.dimension} label={deposit.dimension}>
+            {deposit.minAmount !== undefined && deposit.maxAmount !== undefined
+              ? `${deposit.minAmount}-${deposit.maxAmount} L`
+              : ""}
+            {deposit.chance !== undefined ? (
+              <span className="text-slate-400"> at {deposit.chance}%</span>
+            ) : null}
+          </StatRow>
+        ))}
+      </div>
+
+      {info.dimensions.length > 0 && recipe.kind !== "underground_fluid" ? (
+        <div className="mt-2 border-t border-white/15 pt-1.5">
+          {info.dimensions.map((dimension) => (
+            <StatRow key={dimension.name} label={dimension.name}>
+              {dimension.tier !== undefined ? `T${dimension.tier}` : ""}
+              {dimension.chance !== undefined ? (
+                <span className="text-slate-400">
+                  {" "}
+                  {Math.round(dimension.chance * 1000) / 10}% of rolls
+                </span>
+              ) : null}
+            </StatRow>
+          ))}
+        </div>
+      ) : null}
+
+      <p className="mt-2 border-t border-white/15 pt-1.5 text-[13px] leading-snug text-slate-300">
+        Mined by hand or by machine, out in the world. What this card feeds the
+        board shows up under Gather in the flow panel: material somebody still
+        has to go get.
+      </p>
+    </div>
+  );
+}
+
 function StatRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 text-[16px] leading-snug">
@@ -359,6 +428,10 @@ export function MachineStatsContent({
   const cropStats = getCropsNhStats(recipe);
   if (cropStats) {
     return <CropSourceStatsContent recipe={recipe} handler={handler} node={node} />;
+  }
+  const miningSource = getMiningSourceInfo(recipe);
+  if (miningSource) {
+    return <MiningSourceStatsContent recipe={recipe} info={miningSource} />;
   }
 
   const handlers = getRecipeMachineHandlers(recipe);

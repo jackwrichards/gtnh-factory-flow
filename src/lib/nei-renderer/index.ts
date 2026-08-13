@@ -30,5 +30,6 @@ export { defaultNeiRecipeHandlers, selectNeiRecipeHandler } from "./adapters/han
 export { GregTechMachineHandler } from "./handlers/gregtech-machine-handler";
 export { BeeProduceHandler } from "./handlers/bee-produce-handler";
 export { CropProduceHandler } from "./handlers/crop-produce-handler";
+export { MiningSourceHandler } from "./handlers/mining-source-handler";
 export { EssentiaSmeltingHandler } from "./handlers/essentia-smelting-handler";
 export { FallbackHandler } from "./handlers/fallback-handler";

@@ -10,7 +10,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { ChevronDown, Copy, Minus, Plus, Sprout } from "lucide-react";
+import { ChevronDown, Copy, Minus, Pickaxe, Plus, Sprout } from "lucide-react";
 import type {
   FactoryNode,
   MachineConfigTierOption,
@@ -60,6 +60,11 @@ import {
   isCustomRateRecipe,
   type CustomRateMode,
 } from "@/lib/model/custom-rate";
+import {
+  getMiningSourceInfo,
+  type MiningDimension,
+  type MiningSourceInfo,
+} from "@/lib/model/mining-source";
 import { rateUnitMultiplier, rateUnitPrecisionScale, rateUnitSuffix } from "@/lib/model/rate-unit";
 import { BOARD_GRID, CONFIG_PANEL_ROW_HEIGHT, RECIPE_NODE_WIDTH } from "@/lib/board-grid";
 import { CropPickerMenu } from "./CropPickerMenu";
@@ -295,6 +300,14 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         : undefined;
     const isCropFarmNode = isCropFarmRecipe(effectiveRecipe);
     const isCropFarmPlaceholder = isCropFarmNode && effectiveRecipe.outputs.length === 0;
+    // Mining source cards (ore veins, small ores, underground fluids): the
+    // raw recipe carries the worldgen facts in its metadata, and the title
+    // borrows the crop pattern - the vein's own name, not the machine type.
+    const miningSource = getMiningSourceInfo(recipe);
+    const miningTitle =
+      miningSource && recipe.name.includes(": ")
+        ? recipe.name.slice(recipe.name.indexOf(": ") + 2)
+        : undefined;
     // Custom rate nodes: the dialed rate lives on the raw recipe (the panel
     // writes it there), so the slot is read from `recipe`, not the effective
     // pipeline output.
@@ -320,6 +333,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       cropTitle,
       isCropFarmNode,
       isCropFarmPlaceholder,
+      miningSource,
+      miningTitle,
       isCustomRateNode,
       customRateSlot,
       customRateDial,
@@ -352,6 +367,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     cropTitle,
     isCropFarmNode,
     isCropFarmPlaceholder,
+    miningSource,
+    miningTitle,
     isCustomRateNode,
     customRateSlot,
     customRateDial,
@@ -839,6 +856,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                 style={nodeColor ? { backgroundColor: nodeColor.header } : undefined}
                 title={isCropFarmNode ? "Pick a crop" : undefined}
               >
+                {miningSource ? (
+                  /* The card announces itself as dug, not run: absolute like
+                     the crop chevron, so the glyph costs no height. */
+                  <Pickaxe className="absolute left-1.5 top-1/2 h-3.5 w-3.5 shrink-0 -translate-y-1/2 opacity-70" />
+                ) : null}
                 <span className="mx-auto min-w-0 truncate">
                   {isCropFarmPlaceholder
                     ? "Pick a crop..."
@@ -847,7 +869,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                         // with its icon. Repeating its name in the title only
                         // ever made the card wider.
                         "Custom Rate"
-                      : (cropTitle ?? previewHandler.label)}
+                      : (miningTitle ?? cropTitle ?? previewHandler.label)}
                   {isPreviewing ? " ?" : ""}
                 </span>
                 {isCropFarmNode ? (
@@ -973,6 +995,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
           !isCustomRatePlaceholder &&
           (!calmMode || !isCustomRateNode) ? (
             <GridBlock minCells={3} align="end" className="min-w-0">
+              {miningSource ? <MiningSourcePanel info={miningSource} /> : null}
               {calmMode ? null : machineConfigPanel}
               {calmMode ? null : passiveProductionPanel}
               <div
@@ -995,9 +1018,13 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                         ? projectNode.machineCount === 1
                           ? "Seed"
                           : "Seeds"
-                        : projectNode.machineCount === 1
-                          ? "Machine"
-                          : "Machines"}
+                        : miningSource
+                          ? projectNode.machineCount === 1
+                            ? "Miner"
+                            : "Miners"
+                          : projectNode.machineCount === 1
+                            ? "Machine"
+                            : "Machines"}
                     </span>
                   </div>
                 ) : (
@@ -1031,7 +1058,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
                           />
                         ) : null}
                         <MachineCountStat
-                          label={isCropProductionNode ? "Seeds" : "Machines"}
+                          label={
+                            isCropProductionNode ? "Seeds" : miningSource ? "Miners" : "Machines"
+                          }
                           machineCount={projectNode.machineCount}
                           onChange={(machineCount) => updateNode(projectNode.id, { machineCount })}
                         />
@@ -2274,6 +2303,57 @@ function UniversalPortChip({
 
 // Rate dial + Supply/Request flip for an adopted custom rate node. The store
 // keeps the rate per second; the input shows it in the active board unit.
+/**
+ * The prospector's line on a mining card: where the vein lives. One fact line
+ * (height, richness) and a row of planet chips, each chip carrying the full
+ * story in its hover. Static content: chips subscribe to nothing, and a
+ * wrapping chip row changes height only when the recipe itself changes, which
+ * the surrounding GridBlock absorbs.
+ */
+function miningDimensionChipLabel(dimension: MiningDimension): string[] {
+  return [
+    dimension.name,
+    dimension.tier !== undefined ? `Rocket tier ${dimension.tier}` : undefined,
+    dimension.chance !== undefined ? `${Math.round(dimension.chance * 1000) / 10}% of vein rolls` : undefined,
+    dimension.heightRange ? `Y ${dimension.heightRange}` : undefined,
+  ].filter((line): line is string => Boolean(line));
+}
+
+function MiningSourcePanel({ info }: { info: MiningSourceInfo }) {
+  const facts = [
+    info.heightRange ? `Y ${info.heightRange}` : undefined,
+    info.weight !== undefined ? `Weight ${info.weight}` : undefined,
+    info.density !== undefined ? `Density ${info.density}` : undefined,
+    info.size !== undefined ? `Size ${info.size}` : undefined,
+    info.amountPerChunk !== undefined ? `${info.amountPerChunk}/chunk` : undefined,
+  ].filter((fact): fact is string => Boolean(fact));
+
+  return (
+    <div className="min-w-0 pb-[6px] pt-[4px] text-[var(--mc-ink)]">
+      {facts.length > 0 ? (
+        <div className="truncate text-center text-[11px] leading-4 opacity-80">
+          {facts.join(" · ")}
+        </div>
+      ) : null}
+      {info.dimensions.length > 0 ? (
+        <div className="mt-1 flex min-w-0 flex-wrap items-center justify-center gap-1">
+          {info.dimensions.map((dimension) => (
+            <MinecraftTooltip key={dimension.name} label={miningDimensionChipLabel(dimension)}>
+              <span
+                data-tooltip-stop
+                className="border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 text-[10px] font-bold leading-[14px] shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]"
+              >
+                {dimension.abbr ?? dimension.name}
+                {dimension.tier !== undefined && dimension.tier > 0 ? ` T${dimension.tier}` : ""}
+              </span>
+            </MinecraftTooltip>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function CustomRatePanel({
   nodeId,
   mode,

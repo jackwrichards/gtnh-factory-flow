@@ -7,7 +7,7 @@ import {
   type Recipe,
 } from "@/lib/model/types";
 import { calculateThroughput } from "./throughput";
-import { selectInternalBalances } from "./balances";
+import { selectGatheredBalances, selectInternalBalances } from "./balances";
 // These cases are about float dust in the resource books, not about the
 // boundary, so the boundary is stated for them. See close-boundaries.ts.
 import { closeBoundaries } from "./close-boundaries";
@@ -266,5 +266,108 @@ describe("buffer spillover is a boundary positive", () => {
 
     expect(result.resources["item:z"].bufferFillPerSecond).toBe(0);
     expect(result.nodes["m"].clogOutputKey).toBe("item:z");
+  });
+});
+
+/**
+ * A mining source card (an ore vein) stands for a player out digging. Its
+ * production is filed a second time under `minedPerSecond`, which is what the
+ * panel's Gather group reads, and it leaves Internal: ore fed to a macerator
+ * by hand is not internal automation.
+ */
+function veinBoard(): FactoryProject {
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "vein-board",
+    name: "Vein board",
+    recipes: [
+      {
+        id: "vein",
+        name: "Ore Vein: Iron",
+        kind: "ore_vein",
+        machineType: "Ore Vein",
+        minimumTier: "NONE",
+        durationTicks: 1,
+        eut: 0,
+        inputs: [],
+        outputs: [{ kind: "item", id: "iron_ore", amount: 1 }],
+      },
+      {
+        id: "macerate",
+        name: "Macerate",
+        kind: "gregtech_machine",
+        machineType: "Macerator",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 8,
+        inputs: [{ kind: "item", id: "iron_ore", amount: 1 }],
+        outputs: [{ kind: "item", id: "iron_dust", amount: 2 }],
+      },
+    ],
+    nodes: [
+      {
+        id: "n-vein",
+        recipeId: "vein",
+        machineCount: 1,
+        parallel: 1,
+        overclockTier: "NONE",
+        enabled: true,
+        position: { x: 0, y: 0 },
+      },
+      {
+        id: "n-mac",
+        recipeId: "macerate",
+        machineCount: 1,
+        parallel: 1,
+        overclockTier: "LV",
+        enabled: true,
+        position: { x: 400, y: 0 },
+      },
+    ],
+    edges: [
+      {
+        id: "e-ore",
+        source: "n-vein",
+        target: "n-mac",
+        resourceKind: "item",
+        resourceId: "iron_ore",
+      },
+    ],
+    fuelProfiles: gtnhFuelProfiles,
+    selectedFuelProfileId: "biodiesel",
+  };
+}
+
+describe("mined production is a demand on the player", () => {
+  it("files a vein's actual flow under minedPerSecond", () => {
+    const result = calculateThroughput(closeBoundaries(veinBoard()), { generatedAt: "fixed" });
+    const ore = result.resources["item:iron_ore"];
+
+    expect(ore.minedPerSecond).toBeGreaterThan(0);
+    expect(ore.minedPerSecond).toBeCloseTo(ore.producedPerSecond, 6);
+  });
+
+  it("keeps machine-made goods out of the mined column", () => {
+    const result = calculateThroughput(closeBoundaries(veinBoard()), { generatedAt: "fixed" });
+
+    expect(result.resources["item:iron_dust"].minedPerSecond).toBe(0);
+  });
+
+  it("moves a wholly mined resource from Internal to Gather", () => {
+    const result = calculateThroughput(closeBoundaries(veinBoard()), { generatedAt: "fixed" });
+    const balances = Object.values(result.resources);
+
+    expect(selectInternalBalances(balances).map((entry) => entry.key)).not.toContain(
+      "item:iron_ore",
+    );
+    expect(selectGatheredBalances(balances).map((entry) => entry.key)).toContain("item:iron_ore");
+  });
+
+  it("recognises a mining card by its recipe map when the kind is absent", () => {
+    const project = veinBoard();
+    delete project.recipes[0].kind;
+    const result = calculateThroughput(closeBoundaries(project), { generatedAt: "fixed" });
+
+    expect(result.resources["item:iron_ore"].minedPerSecond).toBeGreaterThan(0);
   });
 });

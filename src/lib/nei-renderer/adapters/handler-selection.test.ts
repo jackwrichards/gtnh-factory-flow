@@ -8,6 +8,9 @@ describe("selectNeiRecipeHandler", () => {
     expect(selectNeiRecipeHandler(model("crop_produce")).id).toBe("crop-produce");
     expect(selectNeiRecipeHandler(model("essentia_smelting")).id).toBe("essentia-smelting");
     expect(selectNeiRecipeHandler(model("gregtech_machine")).id).toBe("gregtech-machine");
+    expect(selectNeiRecipeHandler(model("ore_vein")).id).toBe("mining-source");
+    expect(selectNeiRecipeHandler(model("small_ore")).id).toBe("mining-source");
+    expect(selectNeiRecipeHandler(model("underground_fluid")).id).toBe("mining-source");
   });
 
   it("uses the fallback handler for unhandled kinds", () => {

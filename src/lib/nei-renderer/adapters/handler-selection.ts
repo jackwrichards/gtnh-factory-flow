@@ -5,10 +5,12 @@ import { CropProduceHandler } from "../handlers/crop-produce-handler";
 import { EssentiaSmeltingHandler } from "../handlers/essentia-smelting-handler";
 import { FallbackHandler } from "../handlers/fallback-handler";
 import { GregTechMachineHandler } from "../handlers/gregtech-machine-handler";
+import { MiningSourceHandler } from "../handlers/mining-source-handler";
 
 export const defaultNeiRecipeHandlers: NeiRecipeHandler[] = [
   BeeProduceHandler,
   CropProduceHandler,
+  MiningSourceHandler,
   EssentiaSmeltingHandler,
   GregTechMachineHandler,
   FallbackHandler,

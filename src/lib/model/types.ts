@@ -726,6 +726,15 @@ export interface ResourceBalance {
    * quietly swallow it. Sources and drains keep their own columns.
    */
   bufferFillPerSecond: number;
+  /**
+   * Production that comes off MINING SOURCE cards (ore veins, small ores,
+   * underground fluids) rather than machines. Their output is not automation:
+   * it stands for a player out gathering, so the panel files it as a demand
+   * on the inputs side ("go get this") instead of as internal production.
+   * Counted from the cards' actual paced flow, the same figure the machine
+   * books carry, so the two never disagree.
+   */
+  minedPerSecond: number;
 }
 
 export interface BottleneckReport {

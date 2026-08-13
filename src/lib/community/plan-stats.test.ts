@@ -83,6 +83,7 @@ describe("computeCommunityPlanStats", () => {
       productPerSecond: 0,
       byproductPerSecond: 0,
       bufferFillPerSecond: 0,
+      minedPerSecond: 0,
     };
     const result = makeResult({
       externalInputs: [
