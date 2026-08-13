@@ -26,6 +26,8 @@ import type {
 export interface ChainPlacementStep {
   recipe: Recipe;
   depth: number;
+  /** The tier the review pane chose; the recipe's minimum when absent. */
+  overclockTier?: string;
 }
 
 export interface ChainPlacementPayload {
@@ -48,6 +50,7 @@ interface PlacedStep {
   recipe: Recipe;
   column: number;
   position: { x: number; y: number };
+  overclockTier?: string;
   overrides: NonNullable<FactoryNode["recipeInputOverrides"]>;
   consumedOutputKeys: Set<string>;
 }
@@ -73,6 +76,7 @@ export function buildChainPlacementPayload(
       recipe: step.recipe,
       column: maxDepth - step.depth,
       position: { x: 0, y: 0 },
+      overclockTier: step.overclockTier,
       overrides: {},
       consumedOutputKeys: new Set(),
     });
@@ -217,7 +221,7 @@ export function buildChainPlacementPayload(
     recipeId: step.recipe.id,
     machineCount: 1,
     parallel: 1,
-    overclockTier: step.recipe.minimumTier,
+    overclockTier: step.overclockTier ?? step.recipe.minimumTier,
     enabled: true,
     position: step.position,
     recipeInputOverrides: Object.keys(step.overrides).length > 0 ? step.overrides : undefined,

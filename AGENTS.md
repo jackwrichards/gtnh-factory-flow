@@ -129,7 +129,13 @@ gh run watch <run-id> --exit-status
   rooted, or several hundred aspect-input recipes poison the closure.
 - The chain walker picks the TIDIEST fired producer (fewest outputs, earliest
   fired), not the first the flood reached, or a scrap box that technically
-  drops everything becomes every chain's favourite machine.
+  drops everything becomes every chain's favourite machine. Decomposition
+  maps (essentia smelting, arcane crafting) are DEPRIORITIZED, never
+  excluded: they sort last so they cannot win a default, and the review pane
+  still offers them. The review pane is the contract here - every link
+  swappable (preferredProducers rebuilds the walk beneath the choice), every
+  EU-drawing step tierable, so do not "fix" chain quality by deleting
+  recipes from the graph.
 - The wizard (compass button, board toolbar) computes on the server per roots
   config (POST `/api/datasets/[versionId]/reachability`), and placement goes
   through `chain-payload.ts` -> `placePayload`: one undo step, drains on every

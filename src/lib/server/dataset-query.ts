@@ -1097,17 +1097,19 @@ async function loadRecipeLookupIndex(version: DatasetVersion): Promise<LoadedRec
   return promise;
 }
 
+function getLookupRecipeIndexesById(lookup: LoadedRecipeLookupIndex): Map<string, number> {
+  lookup.recipeIndexesById ??= new Map(
+    lookup.recipeIds.map((entry, index) => [entry, index] as const),
+  );
+  return lookup.recipeIndexesById;
+}
+
 async function getRecipeIndexFromLookup(
   version: DatasetVersion,
   recipeId: string,
 ): Promise<number> {
   const lookup = await loadRecipeLookupIndex(version);
-  if (!lookup.recipeIndexesById) {
-    lookup.recipeIndexesById = new Map(
-      lookup.recipeIds.map((entry, index) => [entry, index] as const),
-    );
-  }
-  return lookup.recipeIndexesById.get(recipeId) ?? -1;
+  return getLookupRecipeIndexesById(lookup).get(recipeId) ?? -1;
 }
 
 function buildLookupRecipeMapIdsByRecipeIndex(
@@ -1390,6 +1392,19 @@ const REACHABILITY_SOURCE_MAPS: Record<ReachabilitySource, ReadonlySet<string>> 
   crops: PLANT_RECIPE_MAPS,
 };
 
+/**
+ * Recipe maps that never win a chain by DEFAULT but stay pickable in the
+ * review pane. Essentia smelting is a thing being broken DOWN - a default
+ * chain that builds an item just to melt it back into aspects is not what
+ * anyone meant - and arcane crafting rides on that same aspect economy.
+ * Everything they make stays reachable, and choosing them is one dropdown
+ * away; they just never beat an honest machine unasked.
+ */
+const REACHABILITY_DEPRIORITIZED_MAPS = new Set([
+  "Thaumcraft Essentia Smelting",
+  "Thaumcraft Arcane Crafting",
+]);
+
 const reachabilityGraphs = new WeakMap<LoadedRecipeLookupIndex, ReachabilityGraph>();
 const reachabilityClosures = new Map<string, ClosureResult>();
 const maxReachabilityClosures = 8;
@@ -1425,6 +1440,32 @@ async function ensureReachabilityGraph(versionId: string): Promise<{
     reachabilityGraphs.set(lookup, graph);
   }
   return { catalog, lookup, graph };
+}
+
+const deprioritizedRecipeIdSets = new WeakMap<LoadedRecipeLookupIndex, ReadonlySet<string>>();
+
+function getDeprioritizedRecipeIds(lookup: LoadedRecipeLookupIndex): ReadonlySet<string> {
+  let ids = deprioritizedRecipeIdSets.get(lookup);
+  if (!ids) {
+    const mapIds = new Set<number>();
+    for (const recipeMap of REACHABILITY_DEPRIORITIZED_MAPS) {
+      const mapId = lookup.recipeMapIds.get(recipeMap);
+      if (mapId !== undefined) {
+        mapIds.add(mapId);
+      }
+    }
+    const built = new Set<string>();
+    if (mapIds.size > 0) {
+      for (let index = 0; index < lookup.recipeCount; index++) {
+        if (mapIds.has(lookup.recipeMapIdsByRecipeIndex[index])) {
+          built.add(lookup.recipeIds[index]);
+        }
+      }
+    }
+    ids = built;
+    deprioritizedRecipeIdSets.set(lookup, ids);
+  }
+  return ids;
 }
 
 function reachabilityRootRecipeIds(
@@ -1544,10 +1585,45 @@ export async function computeDatasetReachabilityChain(
   versionId: string,
   roots: ReachabilityRootsConfig,
   target: { kind: string; id: string },
+  preferredProducers?: Record<string, string>,
 ) {
-  const { catalog, graph, closure } = await reachabilityClosureFor(versionId, roots);
+  const { catalog, lookup, graph, closure } = await reachabilityClosureFor(versionId, roots);
   const targetKey = `${target.kind}:${target.id}`;
-  const chain = witnessChain(graph, closure, targetKey);
+  const chain = witnessChain(graph, closure, targetKey, {
+    preferredProducers: preferredProducers ? new Map(Object.entries(preferredProducers)) : undefined,
+    deprioritizedRecipeIds: getDeprioritizedRecipeIds(lookup),
+  });
+
+  // Candidate labels come off the lookup alone (machine map name + output
+  // count) - full recipes would mean shard loads for every alternative of
+  // every step, and the review pane only needs "Macerator, 2 outputs" to let
+  // a player choose between ways of making a thing.
+  const recipeIndexesById = getLookupRecipeIndexesById(lookup);
+  const recipeMapOf = (recipeId: string): string | undefined => {
+    const index = recipeIndexesById.get(recipeId);
+    return index === undefined
+      ? undefined
+      : lookup.recipeMaps[lookup.recipeMapIdsByRecipeIndex[index]];
+  };
+  const outputCountById = new Map(graph.recipes.map((recipe) => [recipe.id, recipe.outputs.length]));
+  const resourcesByKey = getCatalogResourcesByKey(catalog);
+
+  const alternatives = (chain?.steps ?? []).map((step) => {
+    const resourceKey = step.provides[0];
+    const candidates = (chain?.candidatesByResource.get(resourceKey) ?? [])
+      .slice(0, 8)
+      .map((recipeId) => ({
+        recipeId,
+        recipeMap: recipeMapOf(recipeId),
+        outputCount: outputCountById.get(recipeId) ?? 0,
+      }));
+    return {
+      resourceKey,
+      resourceDisplayName: resourcesByKey.get(resourceKey)?.displayName,
+      candidates,
+    };
+  });
+
   return {
     schemaVersion: 1 as const,
     datasetVersionId: catalog.version.id,
@@ -1559,6 +1635,7 @@ export async function computeDatasetReachabilityChain(
       depth: step.depth,
     })),
     rootResourceKeys: chain?.rootResourceIds ?? [],
+    alternatives,
   };
 }
 

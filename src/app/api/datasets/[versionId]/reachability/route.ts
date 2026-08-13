@@ -19,6 +19,8 @@ interface ReachabilityRequestBody {
   offset?: number;
   limit?: number;
   target?: { kind?: string; id?: string };
+  /** resource key -> recipe id: the review pane's chosen producers. */
+  preferredProducers?: Record<string, string>;
 }
 
 function normalizeRoots(roots: Partial<ReachabilityRootsConfig> | undefined): ReachabilityRootsConfig {
@@ -32,6 +34,16 @@ function normalizeRoots(roots: Partial<ReachabilityRootsConfig> | undefined): Re
     disabledResourceKeys: stringList(roots?.disabledResourceKeys),
     disabledRecipeIds: stringList(roots?.disabledRecipeIds),
   };
+}
+
+function normalizePreferences(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter((entry): entry is [string, string] => typeof entry[1] === "string")
+    .slice(0, 500);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 function stringList(value: unknown): string[] | undefined {
@@ -58,10 +70,12 @@ export async function POST(
         return NextResponse.json({ error: "A chain request needs a target." }, { status: 400 });
       }
       return NextResponse.json(
-        await computeDatasetReachabilityChain(versionId, roots, {
-          kind: body.target.kind,
-          id: body.target.id,
-        }),
+        await computeDatasetReachabilityChain(
+          versionId,
+          roots,
+          { kind: body.target.kind, id: body.target.id },
+          normalizePreferences(body.preferredProducers),
+        ),
         { headers: { "Cache-Control": "no-store" } },
       );
     }

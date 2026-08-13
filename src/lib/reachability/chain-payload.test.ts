@@ -104,6 +104,19 @@ describe("buildChainPlacementPayload", () => {
     expect(logEdge).toMatchObject({ source: "chain-node-0", target: "chain-node-1" });
   });
 
+  it("carries a reviewed tier onto the placed node", () => {
+    const payload = buildChainPlacementPayload(
+      [
+        { recipe: macerate, depth: 1, overclockTier: "HV" },
+        { recipe: smelt, depth: 0 },
+      ],
+      ["item:iron_ore"],
+    );
+
+    expect(payload.nodes[0].overclockTier).toBe("HV");
+    expect(payload.nodes[1].overclockTier).toBe("LV");
+  });
+
   it("leaves an ungranted, unproduced input honestly unwired", () => {
     const payload = buildChainPlacementPayload([{ recipe: macerate, depth: 0 }], []);
 

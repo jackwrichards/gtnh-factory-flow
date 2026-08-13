@@ -51,6 +51,19 @@ export interface ReachabilityChainStep {
   depth: number;
 }
 
+/** One way of making a step's resource, labeled off the lookup index alone. */
+export interface ReachabilityChainCandidate {
+  recipeId: string;
+  recipeMap?: string;
+  outputCount: number;
+}
+
+export interface ReachabilityChainAlternatives {
+  resourceKey: string;
+  resourceDisplayName?: string;
+  candidates: ReachabilityChainCandidate[];
+}
+
 export interface ReachabilityChainResult {
   schemaVersion: 1;
   datasetVersionId: string;
@@ -58,4 +71,6 @@ export interface ReachabilityChainResult {
   reachable: boolean;
   steps: ReachabilityChainStep[];
   rootResourceKeys: string[];
+  /** Parallel to steps: the other fired producers of each step's resource. */
+  alternatives: ReachabilityChainAlternatives[];
 }

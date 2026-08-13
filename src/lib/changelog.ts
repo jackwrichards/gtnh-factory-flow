@@ -78,7 +78,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "Tell the board what you have, and it builds what you want",
     notes: [
       "A compass on the build toolbar asks what you can make from your veins, bees, crops, and anything else you have.",
-      "Pick a thing from the answer and its whole production chain lands on the board, prewired.",
+      "Pick a thing, choose how each link is made and at what tier, and the whole chain lands prewired.",
       "Ore veins, small ores, and underground fluids are now cards: planets, depths, and odds included.",
       "What your plan mines by hand shows in its own Gather list beside Inputs.",
     ],

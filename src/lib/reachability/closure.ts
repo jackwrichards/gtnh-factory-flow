@@ -173,6 +173,23 @@ export interface WitnessStep {
   depth: number;
 }
 
+export interface WitnessChainOptions {
+  /**
+   * resource id -> recipe id the caller wants producing it. Honoured when
+   * that recipe really fired and really produces the resource; otherwise the
+   * tidiest-producer rule stands. This is how a player swaps one link of a
+   * chain and has the walk rebuild beneath their choice.
+   */
+  preferredProducers?: ReadonlyMap<string, string>;
+  /**
+   * Recipes that never win by DEFAULT but stay pickable: decomposition
+   * recipes (essentia smelting) technically produce their outputs, and a
+   * chain that builds a thing just to break it down is not the plan anyone
+   * meant - unless they chose it, which the preference above lets them do.
+   */
+  deprioritizedRecipeIds?: ReadonlySet<string>;
+}
+
 /**
  * Walk backwards from a target to the roots, choosing at every resource the
  * TIDIEST fired producer rather than the first one the flood happened to
@@ -190,7 +207,18 @@ export function witnessChain(
   graph: ReachabilityGraph,
   closure: ClosureResult,
   targetResourceId: string,
-): { steps: WitnessStep[]; rootResourceIds: string[] } | undefined {
+  options: WitnessChainOptions = {},
+):
+  | {
+      steps: WitnessStep[];
+      rootResourceIds: string[];
+      /**
+       * Every fired producer of each walked resource, best-first: what the
+       * chain-review dropdowns offer. Present for walked resources only.
+       */
+      candidatesByResource: Map<string, string[]>;
+    }
+  | undefined {
   if (!closure.reachableSet.has(targetResourceId)) {
     return undefined;
   }
@@ -211,29 +239,35 @@ export function witnessChain(
     }
   }
 
-  const chooseProducer = (resourceId: string): ReachabilityRecipe | undefined => {
+  const deprioritized = options.deprioritizedRecipeIds;
+  const tidiness = (left: ReachabilityRecipe, right: ReachabilityRecipe) =>
+    Number(deprioritized?.has(left.id) ?? false) - Number(deprioritized?.has(right.id) ?? false) ||
+    left.outputs.length - right.outputs.length ||
+    (closure.fireOrderByRecipe.get(left.id) ?? Number.POSITIVE_INFINITY) -
+      (closure.fireOrderByRecipe.get(right.id) ?? Number.POSITIVE_INFINITY);
+
+  const rankedProducers = (resourceId: string): ReachabilityRecipe[] => {
     const producers = producersByResource.get(resourceId);
-    if (!producers || producers.length === 0) {
-      return undefined;
-    }
-    let best = producers[0];
-    for (const candidate of producers) {
-      const byOutputs = candidate.outputs.length - best.outputs.length;
-      if (
-        byOutputs < 0 ||
-        (byOutputs === 0 &&
-          (closure.fireOrderByRecipe.get(candidate.id) ?? Number.POSITIVE_INFINITY) <
-            (closure.fireOrderByRecipe.get(best.id) ?? Number.POSITIVE_INFINITY))
-      ) {
-        best = candidate;
+    return producers && producers.length > 0 ? [...producers].sort(tidiness) : [];
+  };
+
+  const chooseProducer = (resourceId: string): ReachabilityRecipe | undefined => {
+    const preferred = options.preferredProducers?.get(resourceId);
+    if (preferred !== undefined) {
+      const match = producersByResource
+        .get(resourceId)
+        ?.find((candidate) => candidate.id === preferred);
+      if (match) {
+        return match;
       }
     }
-    return best;
+    return rankedProducers(resourceId)[0];
   };
 
   const stepByRecipe = new Map<string, WitnessStep>();
   const rootResourceIds = new Set<string>();
   const visitedResources = new Set<string>();
+  const candidatesByResource = new Map<string, string[]>();
   const pending: Array<{ resourceId: string; depth: number }> = [
     { resourceId: targetResourceId, depth: 0 },
   ];
@@ -241,6 +275,12 @@ export function witnessChain(
 
   for (let head = 0; head < pending.length; head++) {
     const { resourceId, depth } = pending[head];
+    if (!candidatesByResource.has(resourceId)) {
+      candidatesByResource.set(
+        resourceId,
+        rankedProducers(resourceId).map((candidate) => candidate.id),
+      );
+    }
     const producer = chooseProducer(resourceId);
     if (producer === undefined) {
       rootResourceIds.add(resourceId);
@@ -271,5 +311,5 @@ export function witnessChain(
   }
 
   const steps = [...stepByRecipe.values()].sort((left, right) => right.depth - left.depth);
-  return { steps, rootResourceIds: [...rootResourceIds] };
+  return { steps, rootResourceIds: [...rootResourceIds], candidatesByResource };
 }

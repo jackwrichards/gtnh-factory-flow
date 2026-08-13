@@ -178,6 +178,7 @@ export async function queryRecipeDatasetReachability(
     offset?: number;
     limit?: number;
     target?: { kind: string; id: string };
+    preferredProducers?: Record<string, string>;
   },
   options: { signal?: AbortSignal } = {},
 ): Promise<ReachabilitySummaryResult | ReachabilityChainResult> {

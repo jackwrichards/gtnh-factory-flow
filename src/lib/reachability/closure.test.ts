@@ -133,6 +133,79 @@ describe("witnessChain", () => {
     expect(witnessChain(graph, closure, "crown")).toBeUndefined();
   });
 
+  it("honours a preferred producer and rebuilds beneath it", () => {
+    const world: ReachabilityGraph = {
+      recipes: [
+        { id: "vein", inputSlots: [], outputs: ["ore"] },
+        { id: "smelt-direct", inputSlots: [["ore"]], outputs: ["ingot"] },
+        { id: "macerate", inputSlots: [["ore"]], outputs: ["dust"] },
+        { id: "smelt-dust", inputSlots: [["dust"]], outputs: ["ingot"] },
+      ],
+    };
+    const closure = computeClosure(world, { rootRecipeIds: ["vein"] });
+
+    const tidy = witnessChain(world, closure, "ingot");
+    expect(tidy?.steps.map((step) => step.recipeId)).toEqual(["vein", "smelt-direct"]);
+
+    const viaDust = witnessChain(world, closure, "ingot", {
+      preferredProducers: new Map([["ingot", "smelt-dust"]]),
+    });
+    expect(viaDust?.steps.map((step) => step.recipeId)).toEqual([
+      "vein",
+      "macerate",
+      "smelt-dust",
+    ]);
+  });
+
+  it("lists every fired producer of a walked resource, best first", () => {
+    const world: ReachabilityGraph = {
+      recipes: [
+        { id: "vein", inputSlots: [], outputs: ["ore"] },
+        { id: "smelt-direct", inputSlots: [["ore"]], outputs: ["ingot"] },
+        { id: "lucky-dip", inputSlots: [["ore"]], outputs: ["ingot", "junk-a", "junk-b"] },
+      ],
+    };
+    const closure = computeClosure(world, { rootRecipeIds: ["vein"] });
+    const chain = witnessChain(world, closure, "ingot");
+
+    expect(chain?.candidatesByResource.get("ingot")).toEqual(["smelt-direct", "lucky-dip"]);
+  });
+
+  it("ignores a preference for a recipe that never fired or does not produce it", () => {
+    const closure = computeClosure(graph, { rootRecipeIds: ["vein-iron"] });
+    const chain = witnessChain(graph, closure, "dust-iron", {
+      preferredProducers: new Map([["dust-iron", "luxury"]]),
+    });
+
+    expect(chain?.steps.map((step) => step.recipeId)).toEqual(["vein-iron", "macerate"]);
+  });
+
+  it("never defaults to a deprioritized recipe, but honours picking one", () => {
+    // The essentia smelter has the fewest outputs and would win on tidiness;
+    // deprioritized, the honest machine takes the default and the smelter
+    // stays one explicit preference away.
+    const world: ReachabilityGraph = {
+      recipes: [
+        { id: "vein", inputSlots: [], outputs: ["ore"] },
+        { id: "melt-down", inputSlots: [["ore"]], outputs: ["essence"] },
+        { id: "machine-way", inputSlots: [["ore"]], outputs: ["essence", "slag"] },
+      ],
+    };
+    const closure = computeClosure(world, { rootRecipeIds: ["vein"] });
+    const options = { deprioritizedRecipeIds: new Set(["melt-down"]) };
+
+    const byDefault = witnessChain(world, closure, "essence", options);
+    expect(byDefault?.steps.map((step) => step.recipeId)).toEqual(["vein", "machine-way"]);
+    // Still listed - last, not gone.
+    expect(byDefault?.candidatesByResource.get("essence")).toEqual(["machine-way", "melt-down"]);
+
+    const chosen = witnessChain(world, closure, "essence", {
+      ...options,
+      preferredProducers: new Map([["essence", "melt-down"]]),
+    });
+    expect(chosen?.steps.map((step) => step.recipeId)).toEqual(["vein", "melt-down"]);
+  });
+
   it("prefers a tidy producer over a lucky-dip one that fired first", () => {
     // The scrap box fires first and technically drops an ingot among forty
     // other things; the smelter is the recipe a plan should actually use.
