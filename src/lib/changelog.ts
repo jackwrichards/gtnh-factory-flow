@@ -73,6 +73,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.12.0",
+    date: "2026-08-13",
+    headline: "Tell the board what you have, and it builds what you want",
+    notes: [
+      "A compass on the build toolbar asks what you can make from your veins, bees, crops, and anything else you have.",
+      "Pick a thing from the answer and its whole production chain lands on the board, prewired.",
+      "Ore veins, small ores, and underground fluids are now cards: planets, depths, and odds included.",
+      "What your plan mines by hand shows in its own Gather list beside Inputs.",
+    ],
+  },
+  {
     version: "2.11.7",
     date: "2026-08-13",
     headline: "The recipe book stops keeping you waiting",

@@ -101,6 +101,40 @@ gh run watch <run-id> --exit-status
   every published dataset. It was removed as dead code, not as a behaviour
   change.
 
+## Mining Sources And Reachability
+
+- The oracle exports GregTech worldgen as the `mining` domain: ore veins,
+  small ores, underground fluids, and a dimensions table (name, abbreviation,
+  rocket tier). It reads the NEI ore plugin helpers bundled inside
+  GT5-Unofficial (`gtneioreplugin.util.*`); their caches self-init when empty
+  because the autorun path never opens an NEI handler. The vein helper's
+  `init()` rebuilds, the small-ore helper's APPENDS - only call the latter
+  when its maps are empty.
+- The normalizer turns each vein/small ore/fluid into a SOURCE recipe in the
+  bee/crop mould: kinds `ore_vein`/`small_ore`/`underground_fluid`, maps
+  "Ore Vein"/"Small Ore"/"Underground Fluid", zero inputs, instant, with
+  planets/height/weight/chances riding in `metadata`. `mining-source.ts`
+  (`isMiningSourceRecipe`, `getMiningSourceInfo`) is the one reader; match by
+  kind with the recipe-map fallback, like bees and crops do.
+- A mining card's production is a DEMAND ON THE PLAYER, not automation: it is
+  double-booked into `ResourceBalance.minedPerSecond` and the flow panel files
+  it under Gather (amber, beside Inputs) instead of Internal. Bees and crops
+  stay internal - they run themselves once built.
+- Reachability ("what can I make from these roots") lives in
+  `src/lib/reachability/` (pure closure + witness chains, tested) and derives
+  its graph on the server from the recipe lookup index with ZERO shard loads
+  (`reachability-graph.ts`); slot OR-groups are reconstructed from catalog
+  alternatives because the lookup flattens them. A recipe the lookup shows no
+  inputs for is NOT free - it gets an unsatisfiable slot and only fires when
+  rooted, or several hundred aspect-input recipes poison the closure.
+- The chain walker picks the TIDIEST fired producer (fewest outputs, earliest
+  fired), not the first the flood reached, or a scrap box that technically
+  drops everything becomes every chain's favourite machine.
+- The wizard (compass button, board toolbar) computes on the server per roots
+  config (POST `/api/datasets/[versionId]/reachability`), and placement goes
+  through `chain-payload.ts` -> `placePayload`: one undo step, drains on every
+  unconsumed output row because a bare output row stops its machine.
+
 ## NEI Layout And Slots
 
 - Prefer NEI-exported slot positions and progress bars over reconstructed layouts.
