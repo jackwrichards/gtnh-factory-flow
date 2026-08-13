@@ -52,6 +52,8 @@ export interface ClosureResult {
   witnessByResource: Map<string, string>;
   /** Every recipe that fired. */
   firedRecipeIds: Set<string>;
+  /** recipe id -> position in the firing sequence, for tie-breaks. */
+  fireOrderByRecipe: Map<string, number>;
 }
 
 export function computeClosure(graph: ReachabilityGraph, options: ClosureOptions): ClosureResult {
@@ -103,6 +105,7 @@ export function computeClosure(graph: ReachabilityGraph, options: ClosureOptions
   const reached = new Set<string>();
   const witnessByResource = new Map<string, string>();
   const firedRecipeIds = new Set<string>();
+  const fireOrderByRecipe = new Map<string, number>();
   const queue: string[] = [];
 
   const reach = (resourceId: string, witnessRecipeId?: string) => {
@@ -123,6 +126,7 @@ export function computeClosure(graph: ReachabilityGraph, options: ClosureOptions
       return;
     }
     firedRecipeIds.add(recipe.id);
+    fireOrderByRecipe.set(recipe.id, fireOrderByRecipe.size);
     for (const output of recipe.outputs) {
       reach(output, recipe.id);
     }
@@ -158,7 +162,7 @@ export function computeClosure(graph: ReachabilityGraph, options: ClosureOptions
     }
   }
 
-  return { reachable, reachableSet: reached, witnessByResource, firedRecipeIds };
+  return { reachable, reachableSet: reached, witnessByResource, firedRecipeIds, fireOrderByRecipe };
 }
 
 export interface WitnessStep {
@@ -170,38 +174,79 @@ export interface WitnessStep {
 }
 
 /**
- * Walk witnesses backwards from a target to the roots. Returns the recipe
- * steps deepest-first (roots before consumers), so placing them in order
- * lays producers to the left of what consumes them. Root resources (no
- * witness) terminate the walk and are reported separately.
+ * Walk backwards from a target to the roots, choosing at every resource the
+ * TIDIEST fired producer rather than the first one the flood happened to
+ * reach: fewest outputs first (a smelter over a scrap box whose forty chance
+ * drops technically include the thing), earliest fired as the tie-break, so
+ * the choice is deterministic and biased toward the shallow end.
+ *
+ * Steps return deepest-first (producers before consumers), so placing them
+ * in order lays a chain left to right. Resources no fired recipe produces
+ * (the player's granted roots) terminate the walk and are reported apart.
+ * Termination is by the visited sets - each resource and recipe is expanded
+ * once - so even a pathological producer choice cannot loop.
  */
 export function witnessChain(
   graph: ReachabilityGraph,
   closure: ClosureResult,
   targetResourceId: string,
 ): { steps: WitnessStep[]; rootResourceIds: string[] } | undefined {
-  if (!closure.witnessByResource.has(targetResourceId)) {
-    return closure.reachableSet.has(targetResourceId)
-      ? { steps: [], rootResourceIds: [targetResourceId] }
-      : undefined;
+  if (!closure.reachableSet.has(targetResourceId)) {
+    return undefined;
   }
 
   const recipesById = new Map(graph.recipes.map((recipe) => [recipe.id, recipe]));
+  const producersByResource = new Map<string, ReachabilityRecipe[]>();
+  for (const recipe of graph.recipes) {
+    if (!closure.firedRecipeIds.has(recipe.id)) {
+      continue;
+    }
+    for (const output of recipe.outputs) {
+      let producers = producersByResource.get(output);
+      if (!producers) {
+        producers = [];
+        producersByResource.set(output, producers);
+      }
+      producers.push(recipe);
+    }
+  }
+
+  const chooseProducer = (resourceId: string): ReachabilityRecipe | undefined => {
+    const producers = producersByResource.get(resourceId);
+    if (!producers || producers.length === 0) {
+      return undefined;
+    }
+    let best = producers[0];
+    for (const candidate of producers) {
+      const byOutputs = candidate.outputs.length - best.outputs.length;
+      if (
+        byOutputs < 0 ||
+        (byOutputs === 0 &&
+          (closure.fireOrderByRecipe.get(candidate.id) ?? Number.POSITIVE_INFINITY) <
+            (closure.fireOrderByRecipe.get(best.id) ?? Number.POSITIVE_INFINITY))
+      ) {
+        best = candidate;
+      }
+    }
+    return best;
+  };
+
   const stepByRecipe = new Map<string, WitnessStep>();
   const rootResourceIds = new Set<string>();
   const visitedResources = new Set<string>();
   const pending: Array<{ resourceId: string; depth: number }> = [
     { resourceId: targetResourceId, depth: 0 },
   ];
+  visitedResources.add(targetResourceId);
 
   for (let head = 0; head < pending.length; head++) {
     const { resourceId, depth } = pending[head];
-    const witness = closure.witnessByResource.get(resourceId);
-    if (witness === undefined) {
+    const producer = chooseProducer(resourceId);
+    if (producer === undefined) {
       rootResourceIds.add(resourceId);
       continue;
     }
-    const existing = stepByRecipe.get(witness);
+    const existing = stepByRecipe.get(producer.id);
     if (existing) {
       if (!existing.provides.includes(resourceId)) {
         existing.provides.push(resourceId);
@@ -209,9 +254,9 @@ export function witnessChain(
       existing.depth = Math.max(existing.depth, depth);
       continue;
     }
-    const step: WitnessStep = { recipeId: witness, provides: [resourceId], depth };
-    stepByRecipe.set(witness, step);
-    const recipe = recipesById.get(witness);
+    const step: WitnessStep = { recipeId: producer.id, provides: [resourceId], depth };
+    stepByRecipe.set(producer.id, step);
+    const recipe = recipesById.get(producer.id);
     for (const slot of recipe?.inputSlots ?? []) {
       // Follow the accepted id that is actually reachable; prefer one already
       // visited so shared intermediates converge on one producer.

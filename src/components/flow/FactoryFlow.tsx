@@ -37,6 +37,7 @@ import {
   Ellipsis,
   Anchor,
   Eye,
+  Compass,
   Focus,
   Tag,
   Gauge,
@@ -182,6 +183,7 @@ import {
 } from "./edge-labels";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { RecipeAddChips } from "@/components/RecipeAddChip";
+import { ReachabilityWizard } from "@/components/ReachabilityWizard";
 import {
   LANE_CAPACITY,
   laneWidthForHeat,
@@ -5091,6 +5093,7 @@ const SourceToolbar = memo(function SourceToolbar({
   const redo = useFactoryStore((state) => state.redo);
   const canUndo = useFactoryStore((state) => state.undoHistory.length > 0);
   const canRedo = useFactoryStore((state) => state.redoHistory.length > 0);
+  const [isWizardOpen, setWizardOpen] = useState(false);
   const historyButtonClass = (enabled: boolean) =>
     [
       "pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)]",
@@ -5209,8 +5212,18 @@ const SourceToolbar = memo(function SourceToolbar({
         >
           <Gauge className="h-4 w-4" />
         </button>
+        <button
+          type="button"
+          onClick={() => setWizardOpen(true)}
+          className="pointer-events-auto relative z-10 flex h-9 w-9 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
+          title="What can I make? Pick your roots (veins, bees, crops, anything you have) and place a whole production chain, prewired"
+          aria-label="What can I make?"
+        >
+          <Compass className="h-4 w-4" />
+        </button>
       </ToolTray>
       </ToolGroup>
+      <ReachabilityWizard open={isWizardOpen} onClose={() => setWizardOpen(false)} />
     </div>
   );
 });

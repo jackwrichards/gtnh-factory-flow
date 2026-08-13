@@ -133,6 +133,26 @@ describe("witnessChain", () => {
     expect(witnessChain(graph, closure, "crown")).toBeUndefined();
   });
 
+  it("prefers a tidy producer over a lucky-dip one that fired first", () => {
+    // The scrap box fires first and technically drops an ingot among forty
+    // other things; the smelter is the recipe a plan should actually use.
+    const world: ReachabilityGraph = {
+      recipes: [
+        { id: "vein", inputSlots: [], outputs: ["ore"] },
+        {
+          id: "scrap-box",
+          inputSlots: [["ore"]],
+          outputs: Array.from({ length: 40 }, (_, index) => `junk-${index}`).concat(["ingot"]),
+        },
+        { id: "smelt", inputSlots: [["ore"]], outputs: ["ingot"] },
+      ],
+    };
+    const closure = computeClosure(world, { rootRecipeIds: ["vein"] });
+    const chain = witnessChain(world, closure, "ingot");
+
+    expect(chain?.steps.map((step) => step.recipeId)).toEqual(["vein", "smelt"]);
+  });
+
   it("shares one producer for a shared intermediate", () => {
     const closure = computeClosure(graph, { rootRecipeIds: ["vein-iron"] });
     const chain = witnessChain(graph, closure, "machine");
