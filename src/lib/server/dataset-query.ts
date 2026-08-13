@@ -28,6 +28,19 @@ import {
   isVirtualChoiceResource,
 } from "@/lib/model";
 import {
+  computeClosure,
+  witnessChain,
+  type ClosureResult,
+  type ReachabilityGraph,
+} from "@/lib/reachability/closure";
+import {
+  ALL_REACHABILITY_SOURCES,
+  type ReachabilityRootsConfig,
+  type ReachabilitySource,
+  type ReachableResourceSummary,
+} from "@/lib/reachability/api-types";
+import { buildServerReachabilityGraph } from "./reachability-graph";
+import {
   buildSearchVocabulary,
   buildTextSearchIndex,
   buildTokenSearchIndex,
@@ -1356,6 +1369,197 @@ async function getPassiveSourceResourceKeys(
 
   catalog.passiveSourceKeys = { ...catalog.passiveSourceKeys, [source]: keys };
   return keys;
+}
+
+/**
+ * Reachability: given a set of roots (the world's own sources - veins, bees,
+ * crops - plus anything the player says they have), everything craftable.
+ *
+ * The graph derives from the recipe lookup index with zero shard loads (see
+ * reachability-graph.ts) and is cached per loaded lookup. Closures are ~40 ms
+ * over the full dataset, cached in a small LRU so paging one roots config is
+ * free. Root selection is by recipe MAP, not recipe kind: the lookup index
+ * does not carry kinds, and the map names are the same contract the plants
+ * and bees browser filters already rely on.
+ */
+const REACHABILITY_SOURCE_MAPS: Record<ReachabilitySource, ReadonlySet<string>> = {
+  ores: new Set(["Ore Vein"]),
+  smallOres: new Set(["Small Ore"]),
+  undergroundFluids: new Set(["Underground Fluid"]),
+  bees: BEE_RECIPE_MAPS,
+  crops: PLANT_RECIPE_MAPS,
+};
+
+const reachabilityGraphs = new WeakMap<LoadedRecipeLookupIndex, ReachabilityGraph>();
+const reachabilityClosures = new Map<string, ClosureResult>();
+const maxReachabilityClosures = 8;
+
+async function ensureReachabilityGraph(versionId: string): Promise<{
+  catalog: LoadedRecipeIndex;
+  lookup: LoadedRecipeLookupIndex;
+  graph: ReachabilityGraph;
+}> {
+  const catalog = await loadCatalog(versionId);
+  if (!catalog.version.recipeLookupIndexPath) {
+    throw new Error(
+      `Dataset version "${versionId}" predates the recipe lookup index; reachability needs a republished dataset.`,
+    );
+  }
+  const lookup = await loadRecipeLookupIndex(catalog.version);
+  let graph = reachabilityGraphs.get(lookup);
+  if (!graph) {
+    const resourcesByKey = getCatalogResourcesByKey(catalog);
+    const choiceAlternatives = getChoiceAlternativesByKey(catalog);
+    graph = buildServerReachabilityGraph({
+      recipeCount: lookup.recipeCount,
+      recipeIds: lookup.recipeIds,
+      entries: lookup.entries,
+      alternativesByKey: (key) => {
+        const alternatives = resourcesByKey.get(key)?.alternatives ?? choiceAlternatives.get(key);
+        if (!alternatives || alternatives.length === 0) {
+          return undefined;
+        }
+        return alternatives.map((alternative) => `${alternative.kind}:${alternative.id}`);
+      },
+    });
+    reachabilityGraphs.set(lookup, graph);
+  }
+  return { catalog, lookup, graph };
+}
+
+function reachabilityRootRecipeIds(
+  lookup: LoadedRecipeLookupIndex,
+  sources: ReachabilitySource[],
+): { rootRecipeIds: string[]; disabledRecipeIds: string[] } {
+  const enabledMapIds = new Set<number>();
+  const disabledMapIds = new Set<number>();
+  const enabled = new Set(sources);
+  for (const source of ALL_REACHABILITY_SOURCES) {
+    for (const recipeMap of REACHABILITY_SOURCE_MAPS[source]) {
+      const mapId = lookup.recipeMapIds.get(recipeMap);
+      if (mapId === undefined) {
+        continue;
+      }
+      (enabled.has(source) ? enabledMapIds : disabledMapIds).add(mapId);
+    }
+  }
+  const rootRecipeIds: string[] = [];
+  // A source toggled OFF must be disabled outright: a vein recipe has no
+  // inputs, so without this it would fire on its own anyway.
+  const disabledRecipeIds: string[] = [];
+  for (let index = 0; index < lookup.recipeCount; index++) {
+    const mapId = lookup.recipeMapIdsByRecipeIndex[index];
+    if (enabledMapIds.has(mapId)) {
+      rootRecipeIds.push(lookup.recipeIds[index]);
+    } else if (disabledMapIds.has(mapId)) {
+      disabledRecipeIds.push(lookup.recipeIds[index]);
+    }
+  }
+  return { rootRecipeIds, disabledRecipeIds };
+}
+
+function canonicalRootsKey(versionKey: string, roots: ReachabilityRootsConfig): string {
+  return JSON.stringify({
+    v: versionKey,
+    s: [...new Set(roots.sources)].sort(),
+    e: [...new Set(roots.extraResourceKeys ?? [])].sort(),
+    d: [...new Set(roots.disabledResourceKeys ?? [])].sort(),
+    r: [...new Set(roots.disabledRecipeIds ?? [])].sort(),
+  });
+}
+
+async function reachabilityClosureFor(versionId: string, roots: ReachabilityRootsConfig) {
+  const { catalog, lookup, graph } = await ensureReachabilityGraph(versionId);
+  const cacheKey = canonicalRootsKey(datasetVersionCacheKey(catalog.version), roots);
+  let closure = reachabilityClosures.get(cacheKey);
+  if (!closure) {
+    const { rootRecipeIds, disabledRecipeIds } = reachabilityRootRecipeIds(lookup, roots.sources);
+    closure = computeClosure(graph, {
+      rootResources: roots.extraResourceKeys ?? [],
+      rootRecipeIds,
+      disabledRecipeIds: [...disabledRecipeIds, ...(roots.disabledRecipeIds ?? [])],
+      disabledResourceIds: roots.disabledResourceKeys ?? [],
+    });
+    reachabilityClosures.set(cacheKey, closure);
+    while (reachabilityClosures.size > maxReachabilityClosures) {
+      const oldest = reachabilityClosures.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      reachabilityClosures.delete(oldest);
+    }
+  }
+  return { catalog, lookup, graph, closure };
+}
+
+export async function computeDatasetReachability(
+  versionId: string,
+  roots: ReachabilityRootsConfig,
+  page: { query?: string; offset?: number; limit?: number } = {},
+) {
+  const { catalog, closure } = await reachabilityClosureFor(versionId, roots);
+  const resourcesByKey = getCatalogResourcesByKey(catalog);
+  const query = page.query?.trim().toLowerCase() ?? "";
+  const offset = Math.max(0, page.offset ?? 0);
+  const limit = Math.max(1, Math.min(page.limit ?? 48, 120));
+
+  const matching: ReachableResourceSummary[] = [];
+  let totalMatching = 0;
+  for (const key of closure.reachable) {
+    const resource = resourcesByKey.get(key);
+    const displayName = resource?.displayName ?? key;
+    if (query && !displayName.toLowerCase().includes(query) && !key.toLowerCase().includes(query)) {
+      continue;
+    }
+    totalMatching++;
+    if (totalMatching <= offset || matching.length >= limit) {
+      continue;
+    }
+    const separator = key.indexOf(":");
+    matching.push({
+      kind: resource?.kind ?? key.slice(0, separator),
+      id: resource?.id ?? key.slice(separator + 1),
+      displayName: resource?.displayName,
+      iconPath: resource?.iconPath,
+      iconAtlas: resource?.iconAtlas,
+      dominantColor:
+        resource?.dominantColor ??
+        (resource && "iconAtlas" in resource ? resource.iconAtlas?.dominantColor : undefined),
+    });
+  }
+
+  return {
+    schemaVersion: 1 as const,
+    datasetVersionId: catalog.version.id,
+    reachableCount: closure.reachable.length,
+    firedRecipeCount: closure.firedRecipeIds.size,
+    totalMatching,
+    offset,
+    limit,
+    resources: matching,
+  };
+}
+
+export async function computeDatasetReachabilityChain(
+  versionId: string,
+  roots: ReachabilityRootsConfig,
+  target: { kind: string; id: string },
+) {
+  const { catalog, graph, closure } = await reachabilityClosureFor(versionId, roots);
+  const targetKey = `${target.kind}:${target.id}`;
+  const chain = witnessChain(graph, closure, targetKey);
+  return {
+    schemaVersion: 1 as const,
+    datasetVersionId: catalog.version.id,
+    target,
+    reachable: chain !== undefined,
+    steps: (chain?.steps ?? []).map((step) => ({
+      recipeId: step.recipeId,
+      provides: step.provides,
+      depth: step.depth,
+    })),
+    rootResourceKeys: chain?.rootResourceIds ?? [],
+  };
 }
 
 function ensureLookupSearchIndex(lookup: LoadedRecipeLookupIndex): TextSearchIndex {

@@ -1,6 +1,11 @@
 "use client";
 
 import type { MachineTier, Recipe, RecipeOutput, ResourceAmount } from "@/lib/model/types";
+import type {
+  ReachabilityChainResult,
+  ReachabilityRootsConfig,
+  ReachabilitySummaryResult,
+} from "@/lib/reachability/api-types";
 import type { SearchCorrection, SearchPhase } from "@/lib/search";
 import type {
   DatasetResourceIndexEntry,
@@ -160,6 +165,31 @@ export async function resolveRecipeDatasetRecipes(
   return fetchJson<RecipeDatasetResolveResult>(url.toString(), {
     method: "POST",
     body: JSON.stringify({ recipes }),
+  });
+}
+
+export async function queryRecipeDatasetReachability(
+  _manifestUrl: string,
+  version: DatasetVersion,
+  body: {
+    action?: "summary" | "chain";
+    roots: ReachabilityRootsConfig;
+    query?: string;
+    offset?: number;
+    limit?: number;
+    target?: { kind: string; id: string };
+  },
+  options: { signal?: AbortSignal } = {},
+): Promise<ReachabilitySummaryResult | ReachabilityChainResult> {
+  const url = new URL(
+    `/api/datasets/${encodeURIComponent(version.id)}/reachability`,
+    window.location.origin,
+  );
+  addDatasetCacheKey(url, version);
+  return fetchJson<ReachabilitySummaryResult | ReachabilityChainResult>(url.toString(), {
+    method: "POST",
+    body: JSON.stringify(body),
+    signal: options.signal,
   });
 }
 
