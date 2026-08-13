@@ -52,8 +52,21 @@ export interface ClosureResult {
   witnessByResource: Map<string, string>;
   /** Every recipe that fired. */
   firedRecipeIds: Set<string>;
-  /** recipe id -> position in the firing sequence, for tie-breaks. */
-  fireOrderByRecipe: Map<string, number>;
+  /**
+   * One monotone clock over the whole flood: every first-reach of a resource
+   * ticks it. `reachOrderByResource` is the tick a resource first existed;
+   * `unlockOrderByRecipe` is the tick a recipe's LAST input arrived (0 for
+   * roots and zero-input recipes) - the moment it became fully fed.
+   *
+   * Together they answer the question chains stand on: a recipe with
+   * unlockOrder < reachOrder(R) was fully fed before R existed anywhere, so
+   * using it to produce R can never smuggle R into its own supply chain.
+   */
+  reachOrderByResource: Map<string, number>;
+  unlockOrderByRecipe: Map<string, number>;
+  /** The options this closure ran with, so chain walks can re-run the flood
+   *  with extra bans against the same world. */
+  options: ClosureOptions;
 }
 
 export function computeClosure(graph: ReachabilityGraph, options: ClosureOptions): ClosureResult {
@@ -105,8 +118,10 @@ export function computeClosure(graph: ReachabilityGraph, options: ClosureOptions
   const reached = new Set<string>();
   const witnessByResource = new Map<string, string>();
   const firedRecipeIds = new Set<string>();
-  const fireOrderByRecipe = new Map<string, number>();
+  const reachOrderByResource = new Map<string, number>();
+  const unlockOrderByRecipe = new Map<string, number>();
   const queue: string[] = [];
+  let clock = 0;
 
   const reach = (resourceId: string, witnessRecipeId?: string) => {
     if (reached.has(resourceId) || disabledResources.has(resourceId)) {
@@ -114,19 +129,20 @@ export function computeClosure(graph: ReachabilityGraph, options: ClosureOptions
     }
     reached.add(resourceId);
     reachable.push(resourceId);
+    reachOrderByResource.set(resourceId, ++clock);
     if (witnessRecipeId !== undefined) {
       witnessByResource.set(resourceId, witnessRecipeId);
     }
     queue.push(resourceId);
   };
 
-  const fire = (index: number) => {
+  const fire = (index: number, unlockOrder: number) => {
     const recipe = recipes[index];
     if (firedRecipeIds.has(recipe.id)) {
       return;
     }
     firedRecipeIds.add(recipe.id);
-    fireOrderByRecipe.set(recipe.id, fireOrderByRecipe.size);
+    unlockOrderByRecipe.set(recipe.id, unlockOrder);
     for (const output of recipe.outputs) {
       reach(output, recipe.id);
     }
@@ -137,14 +153,19 @@ export function computeClosure(graph: ReachabilityGraph, options: ClosureOptions
   }
   for (let index = 0; index < recipes.length; index++) {
     if (missingSlots[index] === 0) {
-      fire(index);
+      // Roots and zero-input recipes were fed before anything existed.
+      fire(index, 0);
     }
   }
 
   // Recipes fire in breadth-first waves: the queue holds resources in the
-  // order reached, and a recipe fires the moment its last slot fills.
+  // order reached, and a recipe fires the moment its last slot fills - which
+  // stamps its unlock order as that resource's reach tick, NOT its position
+  // in the firing sequence, so every recipe unlocked by the same arrival is
+  // ordered the same however the queue happened to serialise them.
   for (let head = 0; head < queue.length; head++) {
     const resourceId = queue[head];
+    const arrivalOrder = reachOrderByResource.get(resourceId) ?? 0;
     const waiters = slotWaiters.get(resourceId);
     if (!waiters) {
       continue;
@@ -157,12 +178,20 @@ export function computeClosure(graph: ReachabilityGraph, options: ClosureOptions
       satisfied[waiter.slot] = true;
       missingSlots[waiter.recipe] -= 1;
       if (missingSlots[waiter.recipe] === 0) {
-        fire(waiter.recipe);
+        fire(waiter.recipe, arrivalOrder);
       }
     }
   }
 
-  return { reachable, reachableSet: reached, witnessByResource, firedRecipeIds, fireOrderByRecipe };
+  return {
+    reachable,
+    reachableSet: reached,
+    witnessByResource,
+    firedRecipeIds,
+    reachOrderByResource,
+    unlockOrderByRecipe,
+    options,
+  };
 }
 
 export interface WitnessStep {
@@ -176,9 +205,9 @@ export interface WitnessStep {
 export interface WitnessChainOptions {
   /**
    * resource id -> recipe id the caller wants producing it. Honoured when
-   * that recipe really fired and really produces the resource; otherwise the
-   * tidiest-producer rule stands. This is how a player swaps one link of a
-   * chain and has the walk rebuild beneath their choice.
+   * that recipe is a legitimate producer at that point in the chain;
+   * otherwise the tidiest-producer rule stands. This is how a player swaps
+   * one link of a chain and has the walk rebuild beneath their choice.
    */
   preferredProducers?: ReadonlyMap<string, string>;
   /**
@@ -188,20 +217,37 @@ export interface WitnessChainOptions {
    * meant - unless they chose it, which the preference above lets them do.
    */
   deprioritizedRecipeIds?: ReadonlySet<string>;
+  /**
+   * Everything a resource is interchangeable with (its ore dictionary
+   * family), banned alongside it in sub-closures. Banning GT's steel ingot
+   * alone leaves Railcraft's alive, and through it every oredict recipe -
+   * so the walk would still "prove" steel makeable from steel, just via a
+   * cousin. Absent = each resource stands alone.
+   */
+  familyOf?: (resourceId: string) => readonly string[];
 }
 
 /**
  * Walk backwards from a target to the roots, choosing at every resource the
- * TIDIEST fired producer rather than the first one the flood happened to
- * reach: fewest outputs first (a smelter over a scrap box whose forty chance
- * drops technically include the thing), earliest fired as the tie-break, so
- * the choice is deterministic and biased toward the shallow end.
+ * TIDIEST legitimate producer: fewest outputs first (a smelter over a scrap
+ * box whose forty chance drops technically include the thing), earliest
+ * unlocked as the tie-break, so the choice is deterministic and biased
+ * toward the shallow end.
+ *
+ * "Legitimate" is decided by a SUB-CLOSURE, and this is the load-bearing
+ * idea: for each link, the flood is re-run with that resource and its chain
+ * ancestors banned, and only recipes that still fire qualify. Demagnetizing
+ * a magnetic steel ingot is steel's tidiest producer by output count, but in
+ * a world where steel is banned no polarizer ever runs, so it does not
+ * qualify and the walk falls through to the blast furnace. This is exact -
+ * honest long routes (ore to dust to ingot) survive, because they fire fine
+ * without the ingot - and costs one linear flood per chain link.
  *
  * Steps return deepest-first (producers before consumers), so placing them
- * in order lays a chain left to right. Resources no fired recipe produces
- * (the player's granted roots) terminate the walk and are reported apart.
- * Termination is by the visited sets - each resource and recipe is expanded
- * once - so even a pathological producer choice cannot loop.
+ * in order lays a chain left to right. Resources no qualifying recipe
+ * produces (the player's granted roots) terminate the walk and are reported
+ * apart. Each resource commits to one producer, so termination is by the
+ * committed set.
  */
 export function witnessChain(
   graph: ReachabilityGraph,
@@ -239,76 +285,107 @@ export function witnessChain(
     }
   }
 
+  // Correctness is the sub-closure's job, so ranking is pure taste - and the
+  // taste is EARLIEST TECH FIRST: the recipe that became makeable soonest
+  // out from the roots is the one a production line reaches for (a blast
+  // furnace over a late-game force-bee detour). Output count breaks ties
+  // (a smelter over a lucky-dip of forty chance drops).
   const deprioritized = options.deprioritizedRecipeIds;
   const tidiness = (left: ReachabilityRecipe, right: ReachabilityRecipe) =>
     Number(deprioritized?.has(left.id) ?? false) - Number(deprioritized?.has(right.id) ?? false) ||
-    left.outputs.length - right.outputs.length ||
-    (closure.fireOrderByRecipe.get(left.id) ?? Number.POSITIVE_INFINITY) -
-      (closure.fireOrderByRecipe.get(right.id) ?? Number.POSITIVE_INFINITY);
+    (closure.unlockOrderByRecipe.get(left.id) ?? Number.POSITIVE_INFINITY) -
+      (closure.unlockOrderByRecipe.get(right.id) ?? Number.POSITIVE_INFINITY) ||
+    left.outputs.length - right.outputs.length;
 
-  const rankedProducers = (resourceId: string): ReachabilityRecipe[] => {
-    const producers = producersByResource.get(resourceId);
-    return producers && producers.length > 0 ? [...producers].sort(tidiness) : [];
-  };
-
-  const chooseProducer = (resourceId: string): ReachabilityRecipe | undefined => {
-    const preferred = options.preferredProducers?.get(resourceId);
-    if (preferred !== undefined) {
-      const match = producersByResource
-        .get(resourceId)
-        ?.find((candidate) => candidate.id === preferred);
-      if (match) {
-        return match;
-      }
-    }
-    return rankedProducers(resourceId)[0];
-  };
+  const baseDisabledResources = [...(closure.options.disabledResourceIds ?? [])];
+  const subClosureFor = (banned: readonly string[]): ClosureResult =>
+    computeClosure(graph, {
+      ...closure.options,
+      disabledResourceIds: [...baseDisabledResources, ...banned],
+    });
 
   const stepByRecipe = new Map<string, WitnessStep>();
   const rootResourceIds = new Set<string>();
-  const visitedResources = new Set<string>();
   const candidatesByResource = new Map<string, string[]>();
-  const pending: Array<{ resourceId: string; depth: number }> = [
-    { resourceId: targetResourceId, depth: 0 },
-  ];
-  visitedResources.add(targetResourceId);
+  /** resource -> the recipe committed to produce it; null = player supplies. */
+  const committed = new Map<string, string | null>();
 
-  for (let head = 0; head < pending.length; head++) {
-    const { resourceId, depth } = pending[head];
-    if (!candidatesByResource.has(resourceId)) {
-      candidatesByResource.set(
-        resourceId,
-        rankedProducers(resourceId).map((candidate) => candidate.id),
-      );
+  const commit = (resourceId: string, depth: number, ancestors: readonly string[]): void => {
+    const existing = committed.get(resourceId);
+    if (existing !== undefined) {
+      if (existing !== null) {
+        const step = stepByRecipe.get(existing);
+        if (step) {
+          step.depth = Math.max(step.depth, depth);
+        }
+      }
+      return;
     }
-    const producer = chooseProducer(resourceId);
-    if (producer === undefined) {
+
+    // The world without this link or anything above it - nor anything those
+    // are interchangeable with: what still fires there is what may
+    // legitimately produce it here.
+    const banned = [...ancestors, resourceId, ...(options.familyOf?.(resourceId) ?? [])];
+    const sub = subClosureFor(banned);
+    const qualified = (producersByResource.get(resourceId) ?? [])
+      .filter((producer) => sub.firedRecipeIds.has(producer.id))
+      .sort(tidiness);
+    candidatesByResource.set(
+      resourceId,
+      qualified.map((candidate) => candidate.id),
+    );
+
+    const preferredId = options.preferredProducers?.get(resourceId);
+    const chosen =
+      (preferredId !== undefined
+        ? qualified.find((candidate) => candidate.id === preferredId)
+        : undefined) ?? qualified[0];
+
+    if (!chosen) {
+      committed.set(resourceId, null);
       rootResourceIds.add(resourceId);
-      continue;
+      return;
     }
-    const existing = stepByRecipe.get(producer.id);
-    if (existing) {
-      if (!existing.provides.includes(resourceId)) {
-        existing.provides.push(resourceId);
+
+    committed.set(resourceId, chosen.id);
+    const existingStep = stepByRecipe.get(chosen.id);
+    if (existingStep) {
+      if (!existingStep.provides.includes(resourceId)) {
+        existingStep.provides.push(resourceId);
       }
-      existing.depth = Math.max(existing.depth, depth);
-      continue;
+      existingStep.depth = Math.max(existingStep.depth, depth);
+    } else {
+      stepByRecipe.set(chosen.id, { recipeId: chosen.id, provides: [resourceId], depth });
     }
-    const step: WitnessStep = { recipeId: producer.id, provides: [resourceId], depth };
-    stepByRecipe.set(producer.id, step);
-    const recipe = recipesById.get(producer.id);
-    for (const slot of recipe?.inputSlots ?? []) {
-      // Follow the accepted id that is actually reachable; prefer one already
-      // visited so shared intermediates converge on one producer.
-      const chosen =
-        slot.find((id) => visitedResources.has(id)) ??
-        slot.find((id) => closure.reachableSet.has(id));
-      if (chosen !== undefined && !visitedResources.has(chosen)) {
-        visitedResources.add(chosen);
-        pending.push({ resourceId: chosen, depth: depth + 1 });
+
+    const bannedSet = new Set(banned);
+    for (const slot of chosen.inputSlots) {
+      // Prefer an id already committed, so shared intermediates converge on
+      // one producer; otherwise the EARLIEST-REACHED accepted id alive in
+      // the banned world - the most primitive form of the thing, not
+      // whichever exotic cousin happened to sort first.
+      const alreadyCommitted = slot.find((id) => committed.has(id) && !bannedSet.has(id));
+      let chosenInput = alreadyCommitted;
+      if (chosenInput === undefined) {
+        let bestOrder = Number.POSITIVE_INFINITY;
+        for (const id of slot) {
+          if (!sub.reachableSet.has(id)) {
+            continue;
+          }
+          const order = closure.reachOrderByResource.get(id) ?? Number.POSITIVE_INFINITY;
+          if (order < bestOrder) {
+            bestOrder = order;
+            chosenInput = id;
+          }
+        }
+      }
+      if (chosenInput !== undefined) {
+        commit(chosenInput, depth + 1, banned);
       }
     }
-  }
+  };
+
+  commit(targetResourceId, 0, []);
 
   const steps = [...stepByRecipe.values()].sort((left, right) => right.depth - left.depth);
   return { steps, rootResourceIds: [...rootResourceIds], candidatesByResource };

@@ -1394,13 +1394,19 @@ const REACHABILITY_SOURCE_MAPS: Record<ReachabilitySource, ReadonlySet<string>> 
 
 /**
  * Recipe maps that never win a chain by DEFAULT but stay pickable in the
- * review pane. Essentia smelting is a thing being broken DOWN - a default
- * chain that builds an item just to melt it back into aspects is not what
- * anyone meant - and arcane crafting rides on that same aspect economy.
- * Everything they make stays reachable, and choosing them is one dropdown
- * away; they just never beat an honest machine unasked.
+ * review pane. A production line is MACHINES: hand crafting is what you do
+ * before you have one, so a default chain must never build a file to cut
+ * sticks to craft a hammer when a Forge Hammer exists (a real steel line is
+ * arc furnace, macerator, blast furnace - not a toolbox). Essentia smelting
+ * is a thing being broken DOWN, and arcane crafting rides that same aspect
+ * economy. Everything these maps make stays reachable - craft-only items
+ * still get their crafting step, because it is the only producer - and
+ * choosing them is one dropdown away; they just never beat a machine
+ * unasked.
  */
 const REACHABILITY_DEPRIORITIZED_MAPS = new Set([
+  "Shaped Crafting",
+  "Shapeless Crafting",
   "Thaumcraft Essentia Smelting",
   "Thaumcraft Arcane Crafting",
 ]);
@@ -1440,6 +1446,44 @@ async function ensureReachabilityGraph(versionId: string): Promise<{
     reachabilityGraphs.set(lookup, graph);
   }
   return { catalog, lookup, graph };
+}
+
+const oredictFamilies = new WeakMap<LoadedRecipeIndex, Map<string, string[]>>();
+
+/**
+ * resource key -> every key sharing an ore dictionary group with it. What the
+ * chain walk bans ALONGSIDE a resource: without this, banning GT's steel
+ * ingot leaves Railcraft's steel alive, and the walk happily "proves" steel
+ * producible from steel via a cousin and an oredict crafting recipe.
+ */
+function getOredictFamilies(catalog: LoadedRecipeIndex): Map<string, string[]> {
+  let families = oredictFamilies.get(catalog);
+  if (!families) {
+    const memberSets = new Map<string, Set<string>>();
+    for (const resource of getCatalogResourcesByKey(catalog).values()) {
+      if (resource.kind !== "item" || !isOreDictionaryResource(resource)) {
+        continue;
+      }
+      const members = (resource.alternatives ?? [])
+        .filter((member) => member.kind === "item")
+        .map((member) => `${member.kind}:${member.id}`);
+      for (const member of members) {
+        let set = memberSets.get(member);
+        if (!set) {
+          set = new Set();
+          memberSets.set(member, set);
+        }
+        for (const sibling of members) {
+          if (sibling !== member) {
+            set.add(sibling);
+          }
+        }
+      }
+    }
+    families = new Map([...memberSets].map(([key, set]) => [key, [...set]]));
+    oredictFamilies.set(catalog, families);
+  }
+  return families;
 }
 
 const deprioritizedRecipeIdSets = new WeakMap<LoadedRecipeLookupIndex, ReadonlySet<string>>();
@@ -1589,9 +1633,11 @@ export async function computeDatasetReachabilityChain(
 ) {
   const { catalog, lookup, graph, closure } = await reachabilityClosureFor(versionId, roots);
   const targetKey = `${target.kind}:${target.id}`;
+  const families = getOredictFamilies(catalog);
   const chain = witnessChain(graph, closure, targetKey, {
     preferredProducers: preferredProducers ? new Map(Object.entries(preferredProducers)) : undefined,
     deprioritizedRecipeIds: getDeprioritizedRecipeIds(lookup),
+    familyOf: (resourceId) => families.get(resourceId) ?? [],
   });
 
   // Candidate labels come off the lookup alone (machine map name + output
@@ -1605,18 +1651,59 @@ export async function computeDatasetReachabilityChain(
       ? undefined
       : lookup.recipeMaps[lookup.recipeMapIdsByRecipeIndex[index]];
   };
-  const outputCountById = new Map(graph.recipes.map((recipe) => [recipe.id, recipe.outputs.length]));
+  const graphRecipesById = new Map(graph.recipes.map((recipe) => [recipe.id, recipe]));
   const resourcesByKey = getCatalogResourcesByKey(catalog);
+  // "via Furnace" four times over tells a player nothing; what separates
+  // recipes on one machine is what they EAT. The first slot's first accepted
+  // resource is a concrete, cheap label for that.
+  const primaryInputOf = (recipeId: string): string | undefined => {
+    const firstAccepted = graphRecipesById.get(recipeId)?.inputSlots[0]?.[0];
+    if (!firstAccepted) {
+      return undefined;
+    }
+    return (
+      resourcesByKey.get(firstAccepted)?.displayName ??
+      firstAccepted.slice(firstAccepted.indexOf(":") + 1)
+    );
+  };
 
   const alternatives = (chain?.steps ?? []).map((step) => {
     const resourceKey = step.provides[0];
-    const candidates = (chain?.candidatesByResource.get(resourceKey) ?? [])
-      .slice(0, 8)
-      .map((recipeId) => ({
+    const candidates: Array<{
+      recipeId: string;
+      recipeMap?: string;
+      outputCount: number;
+      primaryInput?: string;
+    }> = [];
+    const seenLabels = new Set<string>();
+    for (const recipeId of chain?.candidatesByResource.get(resourceKey) ?? []) {
+      const recipeMap = recipeMapOf(recipeId);
+      const primaryInput = primaryInputOf(recipeId);
+      // Same machine, same feedstock: the same choice twice. The chosen
+      // step always keeps its seat so the dropdown can display it.
+      const label = `${recipeMap} ${primaryInput}`;
+      if (recipeId !== step.recipeId && seenLabels.has(label)) {
+        continue;
+      }
+      seenLabels.add(label);
+      candidates.push({
         recipeId,
-        recipeMap: recipeMapOf(recipeId),
-        outputCount: outputCountById.get(recipeId) ?? 0,
-      }));
+        recipeMap,
+        outputCount: graphRecipesById.get(recipeId)?.outputs.length ?? 0,
+        primaryInput,
+      });
+      if (candidates.length >= 8) {
+        break;
+      }
+    }
+    if (!candidates.some((candidate) => candidate.recipeId === step.recipeId)) {
+      candidates.push({
+        recipeId: step.recipeId,
+        recipeMap: recipeMapOf(step.recipeId),
+        outputCount: graphRecipesById.get(step.recipeId)?.outputs.length ?? 0,
+        primaryInput: primaryInputOf(step.recipeId),
+      });
+    }
     return {
       resourceKey,
       resourceDisplayName: resourcesByKey.get(resourceKey)?.displayName,

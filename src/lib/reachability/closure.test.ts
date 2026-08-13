@@ -180,6 +180,82 @@ describe("witnessChain", () => {
     expect(chain?.steps.map((step) => step.recipeId)).toEqual(["vein-iron", "macerate"]);
   });
 
+  it("refuses a chain that manufactures a resource out of itself", () => {
+    // Steel's tidiest producer is demagnetizing a magnetic steel ingot - one
+    // output, very tidy - but every road to a magnetic ingot starts from
+    // steel. The walk must reject that whole branch and fall through to the
+    // blast furnace, not place a loop seeded by an unwired slot.
+    const world: ReachabilityGraph = {
+      recipes: [
+        { id: "iron-vein", inputSlots: [], outputs: ["iron-ore"] },
+        { id: "demagnetize", inputSlots: [["magnetic-steel"]], outputs: ["steel"] },
+        { id: "polarize", inputSlots: [["steel-rod"]], outputs: ["magnetic-steel"] },
+        { id: "lathe", inputSlots: [["steel"]], outputs: ["steel-rod"] },
+        { id: "blast-furnace", inputSlots: [["iron-ore"]], outputs: ["steel", "slag"] },
+      ],
+    };
+    const closure = computeClosure(world, { rootRecipeIds: ["iron-vein"] });
+    const chain = witnessChain(world, closure, "steel");
+
+    expect(chain?.steps.map((step) => step.recipeId)).toEqual(["iron-vein", "blast-furnace"]);
+    expect(chain?.rootResourceIds).toEqual([]);
+  });
+
+  it("still walks THROUGH a loop-shaped world when a real feed exists", () => {
+    // Magnetic steel itself: the only producer eats steel, and steel has an
+    // honest source. The chain must thread polarize -> blast furnace rather
+    // than declaring magnetic steel a root.
+    const world: ReachabilityGraph = {
+      recipes: [
+        { id: "iron-vein", inputSlots: [], outputs: ["iron-ore"] },
+        { id: "blast-furnace", inputSlots: [["iron-ore"]], outputs: ["steel"] },
+        { id: "demagnetize", inputSlots: [["magnetic-steel"]], outputs: ["steel"] },
+        { id: "polarize", inputSlots: [["steel"]], outputs: ["magnetic-steel"] },
+      ],
+    };
+    const closure = computeClosure(world, { rootRecipeIds: ["iron-vein"] });
+    const chain = witnessChain(world, closure, "magnetic-steel");
+
+    expect(chain?.steps.map((step) => step.recipeId)).toEqual([
+      "iron-vein",
+      "blast-furnace",
+      "polarize",
+    ]);
+  });
+
+  it("bans a resource's oredict family with it, closing the cousin loophole", () => {
+    // Two interchangeable steels. Banning only GT's would leave Railcraft's
+    // alive, and the polarize/demagnetize pair would "prove" steel makeable
+    // from steel via the cousin. With the family banned together, the only
+    // qualifying producer is the honest furnace from iron.
+    const world: ReachabilityGraph = {
+      recipes: [
+        { id: "iron-vein", inputSlots: [], outputs: ["iron-ore"] },
+        { id: "smelt-iron", inputSlots: [["iron-ore"]], outputs: ["gt-steel"] },
+        { id: "rc-blast", inputSlots: [["iron-ore"]], outputs: ["rc-steel"] },
+        // The oredict crafting recipe: accepts either steel.
+        { id: "polarize", inputSlots: [["gt-steel", "rc-steel"]], outputs: ["magnetic-steel"] },
+        { id: "demagnetize", inputSlots: [["magnetic-steel"]], outputs: ["gt-steel"] },
+      ],
+    };
+    const closure = computeClosure(world, { rootRecipeIds: ["iron-vein"] });
+    const family = new Map([
+      ["gt-steel", ["rc-steel"]],
+      ["rc-steel", ["gt-steel"]],
+    ]);
+
+    const withoutFamilies = witnessChain(world, closure, "gt-steel");
+    // The cousin loophole, demonstrated: demagnetize qualifies because
+    // rc-steel feeds the polarizer in a world where only gt-steel is banned.
+    expect(withoutFamilies?.candidatesByResource.get("gt-steel")).toContain("demagnetize");
+
+    const withFamilies = witnessChain(world, closure, "gt-steel", {
+      familyOf: (id) => family.get(id) ?? [],
+    });
+    expect(withFamilies?.candidatesByResource.get("gt-steel")).toEqual(["smelt-iron"]);
+    expect(withFamilies?.steps.map((step) => step.recipeId)).toEqual(["iron-vein", "smelt-iron"]);
+  });
+
   it("never defaults to a deprioritized recipe, but honours picking one", () => {
     // The essentia smelter has the fewest outputs and would win on tidiness;
     // deprioritized, the honest machine takes the default and the smelter

@@ -127,14 +127,25 @@ gh run watch <run-id> --exit-status
   alternatives because the lookup flattens them. A recipe the lookup shows no
   inputs for is NOT free - it gets an unsatisfiable slot and only fires when
   rooted, or several hundred aspect-input recipes poison the closure.
-- The chain walker picks the TIDIEST fired producer (fewest outputs, earliest
-  fired), not the first the flood reached, or a scrap box that technically
-  drops everything becomes every chain's favourite machine. Decomposition
-  maps (essentia smelting, arcane crafting) are DEPRIORITIZED, never
-  excluded: they sort last so they cannot win a default, and the review pane
-  still offers them. The review pane is the contract here - every link
-  swappable (preferredProducers rebuilds the walk beneath the choice), every
-  EU-drawing step tierable, so do not "fix" chain quality by deleting
+- The chain walker proves every link with a SUB-CLOSURE: the flood re-runs
+  with that resource, its chain ancestors, and their whole oredict families
+  banned, and only recipes that still fire qualify. All three parts are
+  load-bearing: without the ban, demagnetizing a magnetic ingot "produces"
+  steel from steel; without the FAMILY ban, the walk proves it via
+  Railcraft's cousin steel and an oredict crafting recipe; and exactness is
+  what lets honest long routes (ore to dust to ingot) survive. Do not
+  replace this with a path-guard DFS - it was tried, and the real dataset's
+  producer fan-out makes it either wrong or unbounded.
+- Ranking among QUALIFIED producers is earliest-tech-first (the closure's
+  unlock order), then fewest outputs; slot inputs resolve to the
+  earliest-reached accepted form. Outputs-first ranking sent steel chains
+  through force bees and essentia. Hand crafting and decomposition maps
+  (Shaped/Shapeless Crafting, essentia smelting, arcane crafting) are
+  DEPRIORITIZED, never excluded: a production line is machines, but
+  craft-only items still get their only producer, and the review pane still
+  offers everything. The review pane is the contract - every link swappable
+  (preferredProducers rebuilds the walk beneath the choice), every
+  EU-drawing step tierable - so do not "fix" chain quality by deleting
   recipes from the graph.
 - The wizard (compass button, board toolbar) computes on the server per roots
   config (POST `/api/datasets/[versionId]/reachability`), and placement goes

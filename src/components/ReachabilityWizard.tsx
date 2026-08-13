@@ -612,8 +612,9 @@ function ChainReview({
                 >
                   {candidates.map((candidate) => (
                     <option key={candidate.recipeId} value={candidate.recipeId}>
-                      via {candidate.recipeMap ?? "?"}
-                      {candidate.outputCount > 1 ? ` (+${candidate.outputCount - 1} more)` : ""}
+                      {candidate.recipeMap ?? "?"}
+                      {candidate.primaryInput ? ` · ${candidate.primaryInput}` : ""}
+                      {candidate.outputCount > 1 ? ` (+${candidate.outputCount - 1})` : ""}
                     </option>
                   ))}
                 </select>

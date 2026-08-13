@@ -56,6 +56,8 @@ export interface ReachabilityChainCandidate {
   recipeId: string;
   recipeMap?: string;
   outputCount: number;
+  /** What the recipe eats: the thing that tells four furnaces apart. */
+  primaryInput?: string;
 }
 
 export interface ReachabilityChainAlternatives {
