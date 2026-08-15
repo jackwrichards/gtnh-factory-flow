@@ -267,6 +267,11 @@ const UPGRADE_CHIP_CONTROL = choiceControl(UPGRADE_CHIP, "Upgrade Chip", [
   "Maceration Upgrade Chip",
 ]);
 
+const ELASTIC_SINGULARITY_CONTROL = choiceControl(ELASTIC_SINGULARITY, "Elastic Singularity", [
+  "No Singularity",
+  "Elastic Singularity",
+]);
+
 /** Industrial Arc Furnace electrodes: speed, parallels, EU/t and overclock factor. */
 const ELECTRODES = [
   { name: "Graphite", speed: 2, parallels: 4, oc: 2, power: 1 },
@@ -503,7 +508,7 @@ const MACHINES: Record<string, MachineBehaviour> = {
   },
   "Bricked Blast Furnace": { overclock: OVERCLOCK.normal() },
   "COMET - Compact Cyclotron": { overclock: OVERCLOCK.normal() },
-  "Cryogenic Freezer": { overclock: OVERCLOCK.normal(), speed: 2.2, power: 0.9, parallels: 8 },
+  "Cryogenic Freezer": { overclock: OVERCLOCK.normal(), speed: 3, power: 0.9, parallels: 16 },
   "Density^2": {
     overclock: OVERCLOCK.normal(),
     speed: 2,
@@ -629,6 +634,14 @@ const MACHINES: Record<string, MachineBehaviour> = {
     // scraper gave it the fluid pipe casings. This machine takes item ones.
     aliases: ["Multiblock Mixer"],
     hidesControls: [PIPE],
+  },
+    "L.A.T.E.X.": {
+    overclock: OVERCLOCK.normal(),
+    speed: 2,
+    power: 0.85,
+    parallels: (c) => (c.tier(ELASTIC_SINGULARITY) === 1 ? 16 : 8) * c.voltageTier,
+    controls: [ELASTIC_SINGULARITY_CONTROL],
+    aliases: ["Cable Coating"]
   },
   /**
    * The Utupu-Tanuri, which our dataset lists under its recipe map. Its coils
