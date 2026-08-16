@@ -1458,7 +1458,7 @@ export function FactoryFlow() {
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
   const hoveredNodeBottlenecks = useFactoryStore((state) => state.hoveredNodeBottlenecks);
   const selectedNodeBottlenecks = useFactoryStore((state) => state.selectedNodeBottlenecks);
-  const hoveredUsageNodeId = useFactoryStore((state) => state.hoveredUsageNodeId);
+  const hoveredUsageNodeIds = useFactoryStore((state) => state.hoveredUsageNodeIds);
   const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
   // The side panel's question: hover or click a resource row and every wire and
@@ -1564,7 +1564,7 @@ export function FactoryFlow() {
           type: "recipeNode",
           position: node.position,
           zIndex:
-            hoveredUsageNodeId === node.id
+            hoveredUsageNodeIds?.has(node.id)
               ? 1500
               : activeNodeBottlenecks && result.nodes[node.id]?.status === "bottleneck"
                 ? 1500
@@ -1653,7 +1653,7 @@ export function FactoryFlow() {
       activeFlowResourceKey,
       activeNodeBottlenecks,
       activePocketId,
-      hoveredUsageNodeId,
+      hoveredUsageNodeIds,
       pocketRails,
       pocketSummaries,
       pocketView.visiblePockets,

@@ -218,6 +218,7 @@ const CALLOUTS: Array<{
       { chip: "INPUTS", tone: "need", text: "Bring this in yourself" },
       { chip: "OUTPUTS", tone: "output", text: "Leaves the plan" },
       { chip: "INTERNAL", tone: "internal", text: "Made and used here" },
+      { text: "Machines adds up every machine the plan needs" },
       { text: "Hover a row to light up the board" },
     ],
   },

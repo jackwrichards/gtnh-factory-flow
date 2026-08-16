@@ -27,6 +27,7 @@ import {
   User,
 } from "lucide-react";
 import type { GlanceRow } from "@/components/tour/card-parts";
+import { openInspectorTab } from "@/lib/inspector-tab";
 import { openSidebarTab } from "@/lib/sidebar-tab";
 import { writeWorkspaceView } from "@/lib/workspace-view";
 import {
@@ -155,6 +156,14 @@ function showSidebarTab(tab: "items" | "blueprints" | "setups") {
   };
 }
 
+/** Open the right column AND land it on one tab: Resources, then Machines. */
+function showInspectorTab(tab: "resources" | "machines") {
+  return () => {
+    showColumn("right");
+    openInspectorTab(tab);
+  };
+}
+
 const LOOK_AROUND: TourLesson = {
   id: "look-around",
   title: "A look around the planner",
@@ -223,7 +232,7 @@ const LOOK_AROUND: TourLesson = {
     {
       anchor: "inspector",
       side: "left",
-      before: () => showColumn("right"),
+      before: showInspectorTab("resources"),
       title: "What the plan needs",
       rows: [
         { text: "Fills with three lists once machines are on the board." },
@@ -231,6 +240,17 @@ const LOOK_AROUND: TourLesson = {
         { chip: "OUTPUTS", tone: "output", text: "This leaves the plan." },
         { chip: "INTERNAL", tone: "internal", text: "Made and used right here." },
         { text: "Hover a row and every card carrying it *lights up*." },
+      ],
+    },
+    {
+      anchor: "inspector",
+      side: "left",
+      before: showInspectorTab("machines"),
+      title: "A list of all machines used",
+      rows: [
+        { text: "One row per *machine at a voltage*. Same ones stack." },
+        { text: "Hover a row and those cards *light up*." },
+        { mouse: "left", text: "Double click *flies the board* to them." },
       ],
     },
     {

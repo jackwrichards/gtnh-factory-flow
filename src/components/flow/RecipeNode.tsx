@@ -183,7 +183,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const isNodeBottleneckHighlighted =
     (hoveredNodeBottlenecks || selectedNodeBottlenecks) && result?.status === "bottleneck";
   const isUsageHighlighted = useFactoryStore(
-    (state) => state.hoveredUsageNodeId === projectNode.id,
+    (state) => state.hoveredUsageNodeIds?.has(projectNode.id) === true,
   );
   const isInspectorHighlighted =
     isFlowResourceHighlighted || isNodeBottleneckHighlighted || isUsageHighlighted;

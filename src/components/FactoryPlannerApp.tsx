@@ -393,7 +393,7 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
         {workspace.rightPanelOpen ? (
           <InspectorPanel />
         ) : (
-          <PanelRail side="right" label="Resources" />
+          <PanelRail side="right" label="Resources and machines" />
         )}
       </main>
     </>
@@ -424,7 +424,7 @@ function CompactWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
       </PanelDrawer>
       <PanelDrawer
         side="right"
-        label="resources"
+        label="resources and machines"
         open={workspace.rightPanelOpen}
         onOpen={openRight}
         onClose={() => writeWorkspaceView({ rightPanelOpen: false })}

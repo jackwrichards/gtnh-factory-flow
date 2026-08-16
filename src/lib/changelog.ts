@@ -73,6 +73,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.15.0",
+    date: "2026-08-16",
+    headline: "A Machines tab that totals what machines are needed",
+    notes: [
+      "Changed Resources to Resources and Machines, which adds a summary of all required machines in a new tab.",
+      "Hover a row to light those machines; double-click goes to that machine, if multiple cycles through.",
+    ],
+  },
+  {
     version: "2.14.1",
     date: "2026-08-14",
     headline: "The site introduces itself to AI assistants",

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { gtnhFuelProfiles } from "@/lib/model/fuels";
 import {
@@ -8,6 +8,7 @@ import {
   type FactoryProject,
   type ResourceBalance,
 } from "@/lib/model/types";
+import { openInspectorTab, takePendingInspectorTab } from "@/lib/inspector-tab";
 import { calculateThroughput } from "@/lib/solver";
 import { closeBoundaries } from "@/lib/solver/close-boundaries";
 import { useFactoryStore } from "@/store/factory-store";
@@ -118,9 +119,12 @@ describe("InspectorPanel", () => {
   // This project's vitest config sets neither `globals` nor a setup file, so
   // testing-library's automatic cleanup never registers and renders would
   // otherwise pile up in the same document.
-  afterEach(cleanup);
+  afterEach(() => {
+    takePendingInspectorTab();
+    cleanup();
+  });
 
-  it("shows all four groups at once, without tab switching", () => {
+  it("shows the three flow groups on Resources without another switch", () => {
     seedResult({
       externalInputs: [makeBalance(1, { deficitPerSecond: 240 })],
       unconsumedOutputs: [makeBalance(2, { producedPerSecond: 64, surplusPerSecond: 64 })],
@@ -130,27 +134,24 @@ describe("InspectorPanel", () => {
     render(<InspectorPanel />);
 
     expect(screen.getByText("Inputs")).toBeDefined();
-    expect(screen.getByText("Products")).toBeDefined();
-    expect(screen.getByText("Byproducts")).toBeDefined();
+    expect(screen.getByText("Outputs")).toBeDefined();
     expect(screen.getByText("Internal")).toBeDefined();
     expect(screen.getByText("Resource 1")).toBeDefined();
     expect(screen.getByText("Resource 2")).toBeDefined();
+    // Internal starts folded: the header is there, the long tail is not.
+    expect(screen.queryByText("Internal 3")).toBeNull();
+    fireEvent.click(screen.getByText("Internal").closest("button")!);
     expect(screen.getByText("Internal 3")).toBeDefined();
   });
 
-  // Nothing left over is a byproduct: it is coming out and no product drawer
-  // claimed it. Calling it a product because a drawer has not been placed yet
-  // would decide what the factory is for on the reader's behalf.
-  it("files unclaimed spare output under byproducts", () => {
+  it("files unclaimed spare output under Outputs", () => {
     seedResult({
       unconsumedOutputs: [makeBalance(2, { producedPerSecond: 64, surplusPerSecond: 64 })],
     });
 
     render(<InspectorPanel />);
 
-    const headers = screen.getAllByText(/^(Products|Byproducts)$/).map((el) => el.textContent);
-    expect(headers).toEqual(["Products", "Byproducts"]);
-    expect(screen.getByText("Nothing asked for yet.")).toBeDefined();
+    expect(screen.getByText("Outputs")).toBeDefined();
     expect(screen.getByText("Resource 2")).toBeDefined();
   });
 
@@ -173,6 +174,7 @@ describe("InspectorPanel", () => {
       seedResult({ internal: Array.from({ length: 400 }, (_, index) => makeInternal(index, 100)) });
 
       const { container } = render(<InspectorPanel />);
+      fireEvent.click(screen.getByText("Internal").closest("button")!);
       const rowCount = container.querySelectorAll("[data-resource-row]").length;
 
       // 600px of viewport over 30px rows is ~20 visible, plus overscan at each end.
@@ -195,15 +197,18 @@ describe("InspectorPanel", () => {
     });
   });
 
-  it("collapses a section to its header", () => {
-    seedResult({ internal: [makeInternal(1, 100), makeInternal(2, 200)] });
+  it("collapses a section to its header", async () => {
+    seedResult({
+      externalInputs: [makeBalance(1, { deficitPerSecond: 100 }), makeBalance(2, { deficitPerSecond: 50 })],
+    });
 
     render(<InspectorPanel />);
-    expect(screen.getByText("Internal 1")).toBeDefined();
+    expect(screen.getByText("Resource 1")).toBeDefined();
 
-    fireEvent.click(screen.getByText("Internal").closest("button")!);
-    expect(screen.queryByText("Internal 1")).toBeNull();
-    expect(screen.getByText("Internal")).toBeDefined();
+    fireEvent.click(screen.getByText("Inputs").closest("button")!);
+    // Rows fold out on the presence clock instead of vanishing on the click.
+    await waitFor(() => expect(screen.queryByText("Resource 1")).toBeNull());
+    expect(screen.getByText("Inputs")).toBeDefined();
   });
 
   it("keeps section counts on the header while filtering", () => {
@@ -222,7 +227,7 @@ describe("InspectorPanel", () => {
   it("explains an empty group rather than showing a blank area", () => {
     render(<InspectorPanel />);
     expect(screen.getByText(/Nothing missing/)).toBeDefined();
-    expect(screen.getByText(/Nothing left over/)).toBeDefined();
+    expect(screen.getByText(/Nothing coming out yet/)).toBeDefined();
   });
 
   it("lights a resource on the canvas while it is pointed at", () => {
@@ -326,8 +331,9 @@ describe("InspectorPanel", () => {
       render(<InspectorPanel />);
 
       expect(screen.queryByText("Selection")).toBeNull();
-      // Made and eaten in-plan, so it sits under Internal, not Need.
       expect(screen.getByText("Ore")).toBeDefined();
+      // Made and eaten in-plan, so it sits under Internal, which starts folded.
+      fireEvent.click(screen.getByText("Internal").closest("button")!);
       expect(screen.getByText("Ingot")).toBeDefined();
     });
 
@@ -354,6 +360,100 @@ describe("InspectorPanel", () => {
       // The mode has to be readable from anywhere in the list, so the ring
       // belongs to the panel that wraps every group.
       expect(container.querySelector("section.ring-purple-500\\/60")).not.toBeNull();
+    });
+  });
+
+  describe("Machines tab", () => {
+    function seedMachines() {
+      const project: FactoryProject = {
+        schemaVersion: PROJECT_SCHEMA_VERSION,
+        id: "panel-machines-project",
+        name: "Panel machines",
+        recipes: [
+          {
+            id: "mac",
+            name: "Macerate",
+            machineType: "Macerator",
+            minimumTier: "LV",
+            durationTicks: 20,
+            eut: 30,
+            inputs: [{ kind: "item", id: "cobble", amount: 1, displayName: "Cobble" }],
+            outputs: [{ kind: "item", id: "gravel", amount: 1, displayName: "Gravel" }],
+          },
+        ],
+        nodes: [
+          {
+            id: "one",
+            recipeId: "mac",
+            machineCount: 2,
+            parallel: 1,
+            overclockTier: "LV",
+            enabled: true,
+            position: { x: 0, y: 0 },
+          },
+          {
+            id: "two",
+            recipeId: "mac",
+            machineCount: 4,
+            parallel: 1,
+            overclockTier: "LV",
+            enabled: true,
+            position: { x: 200, y: 0 },
+          },
+        ],
+        edges: [],
+        fuelProfiles: gtnhFuelProfiles,
+        selectedFuelProfileId: "biodiesel",
+      };
+
+      useFactoryStore.setState({
+        project,
+        lastResult: calculateThroughput(project, { generatedAt: "fixed" }),
+        selectedBoardIds: [],
+        hoveredUsageNodeIds: undefined,
+      });
+    }
+
+    it("starts on Resources and opens a stacked machine list from Machines", () => {
+      seedMachines();
+      render(<InspectorPanel />);
+
+      expect(screen.getByText("Inputs")).toBeDefined();
+      expect(screen.queryByText("LV Macerator")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: "Machines" }));
+
+      expect(screen.getByText("LV Macerator")).toBeDefined();
+      expect(screen.getByText("6×")).toBeDefined();
+      expect(screen.queryByText("Inputs")).toBeNull();
+    });
+
+    it("opens Machines when asked from outside, including before mount", async () => {
+      seedMachines();
+      openInspectorTab("machines");
+      render(<InspectorPanel />);
+
+      expect(screen.getByText("LV Macerator")).toBeDefined();
+      expect(screen.queryByText("Inputs")).toBeNull();
+
+      openInspectorTab("resources");
+      await waitFor(() => {
+        expect(screen.getByText("Inputs")).toBeDefined();
+      });
+      expect(screen.queryByText("LV Macerator")).toBeNull();
+    });
+
+    it("lights every card in a stack while the row is pointed at", () => {
+      seedMachines();
+      render(<InspectorPanel />);
+      fireEvent.click(screen.getByRole("button", { name: "Machines" }));
+
+      const row = screen.getByText("LV Macerator").closest("[data-machine-row]")!;
+      fireEvent.mouseEnter(row);
+
+      const hovered = useFactoryStore.getState().hoveredUsageNodeIds;
+      expect(hovered?.has("one")).toBe(true);
+      expect(hovered?.has("two")).toBe(true);
     });
   });
 });
