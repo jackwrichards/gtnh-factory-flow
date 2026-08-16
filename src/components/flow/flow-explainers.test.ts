@@ -201,7 +201,7 @@ describe("explainPort — inputs", () => {
     );
   });
 
-  it("still names the feeder when that maker is starving too", () => {
+  it("points one step further up when the maker is starving too", () => {
     const proj = project({
       recipes: [
         { id: "r", name: "M", machineType: "M", minimumTier: "ULV", durationTicks: 20, eut: 1, inputs: [], outputs: [] },
