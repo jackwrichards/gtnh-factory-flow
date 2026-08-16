@@ -27,6 +27,11 @@ import { selectTrendSeries, useResourceTrends } from "@/lib/resource-trends";
 import { useFactoryStore } from "@/store/factory-store";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
+  OPEN_INSPECTOR_TAB_EVENT,
+  takePendingInspectorTab,
+  type InspectorTab,
+} from "@/lib/inspector-tab";
+import {
   toggleResourceFavourite,
   toggleResourceHidden,
   useWorkspaceView,
@@ -49,7 +54,16 @@ import {
 } from "./inspector/flow-sections";
 import { TrendSparkline } from "./inspector/TrendSparkline";
 import { MotionNumberText, runMotionTween, useBoardMotion } from "./flow/board-motion";
+import { useMachineHandlerIcons } from "./flow/machine-icons";
 import { ResourceIcon } from "./nei/ResourceIcon";
+import {
+  buildMachineRoster,
+  filterMachineRoster,
+  resolveMachineRosterNodeIds,
+  totalMachineCount,
+  type MachineRosterIcon,
+  type MachineRosterRow,
+} from "./inspector/machine-roster";
 
 const FLOW_FILTER_DEBOUNCE_MS = 120;
 const SELECTION_DEBOUNCE_MS = 100;
@@ -282,15 +296,121 @@ function useRowPresence(targetRows: FlowRow[], enabled: boolean): RowPresence {
 }
 
 export function InspectorPanel() {
+  // A request that arrived before this column was mounted (a phone's drawer is
+  // unmounted while closed) is waiting in module state, so the tab it asked for
+  // is collected here as well as by the listener below.
+  const [tab, setTab] = useState<InspectorTab>(() => takePendingInspectorTab() ?? "resources");
+  const setHoveredUsageNodeIds = useFactoryStore((state) => state.setHoveredUsageNodeIds);
+
+  useEffect(() => {
+    if (tab !== "machines") {
+      setHoveredUsageNodeIds(undefined);
+    }
+  }, [setHoveredUsageNodeIds, tab]);
+
+  useEffect(() => {
+    const openTab = () => {
+      const next = takePendingInspectorTab();
+      if (next) {
+        setTab(next);
+      }
+    };
+    window.addEventListener(OPEN_INSPECTOR_TAB_EVENT, openTab);
+    return () => window.removeEventListener(OPEN_INSPECTOR_TAB_EVENT, openTab);
+  }, []);
+
   return (
     <aside
       data-help-anchor="inspector"
       className="flex h-full min-h-[360px] compact:min-h-0 flex-col bg-surface"
     >
+      {/*
+        Same column chrome as the left sidebar: a head row so the tabs sit
+        level with the board toolbar, then a flat strip that swaps the whole
+        panel. The hide button lives here so Machines has a way out too.
+      */}
+      <div className="flex h-8 shrink-0 items-center border-b border-line px-2 compact:hidden">
+        <HideColumnButton className="ml-auto" />
+      </div>
+      <div className="flex shrink-0 border-b border-line">
+        <InspectorTabButton
+          current={tab}
+          value="resources"
+          label="Resources"
+          onSelect={setTab}
+        />
+        <InspectorTabButton
+          current={tab}
+          value="machines"
+          label="Machines"
+          onSelect={setTab}
+        />
+        <HideColumnButton className="hidden h-7 w-8 shrink-0 items-center justify-center border-b-2 border-transparent text-fg-muted compact:flex" />
+      </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-2">
-        <FlowIOPanel />
+        {tab === "machines" ? <MachineRosterPanel /> : <FlowIOPanel />}
       </div>
     </aside>
+  );
+}
+
+function InspectorTabButton({
+  current,
+  value,
+  label,
+  onSelect,
+}: {
+  current: InspectorTab;
+  value: InspectorTab;
+  label: string;
+  onSelect: (tab: InspectorTab) => void;
+}) {
+  const selected = current === value;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(value)}
+      data-tour-anchor={value === "machines" ? "machines-tab" : "resources-tab"}
+      aria-pressed={selected}
+      className={[
+        "flex h-7 flex-1 items-center justify-center gap-1 border-b-2 text-[11px] font-medium",
+        selected
+          ? "border-cyan-400 text-cyan-300"
+          : "border-transparent text-fg-muted hover:text-fg",
+      ].join(" ")}
+    >
+      {value === "machines" ? <CogGlyph /> : <PackageGlyph />}
+      {label}
+    </button>
+  );
+}
+
+function HideColumnButton({ className }: { className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => writeWorkspaceView({ rightPanelOpen: false })}
+      title="Hide this column"
+      aria-label="Hide the resources and machines column"
+      className={[
+        "flex h-6 w-6 shrink-0 items-center justify-center rounded border border-line-strong text-fg-muted hover:border-cyan-600 hover:text-cyan-400",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <svg
+        viewBox="0 0 16 16"
+        className="h-3.5 w-3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M6 3l5 5-5 5" />
+      </svg>
+    </button>
   );
 }
 
@@ -641,29 +761,6 @@ function FlowIOPanel() {
               {hiddenCount} hidden
             </span>
           ) : null}
-
-          <button
-            type="button"
-            onClick={() => writeWorkspaceView({ rightPanelOpen: false })}
-            title="Hide this column"
-            aria-label="Hide the resources column"
-            className={[
-              "flex h-6 w-6 shrink-0 items-center justify-center rounded border border-line-strong text-fg-muted hover:border-cyan-600 hover:text-cyan-400",
-              hiddenCount > 0 ? "" : "ml-auto",
-            ].join(" ")}
-          >
-            <svg
-              viewBox="0 0 16 16"
-              className="h-3.5 w-3.5"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M6 3l5 5-5 5" />
-            </svg>
-          </button>
         </div>
 
         <div className="relative">
@@ -1696,4 +1793,202 @@ function buildProjectResourceLookup(project: FactoryProject): Map<string, FlowRe
   }
 
   return resources;
+}
+
+/**
+ * The Machines tab: one stacked row per placed machine at a voltage, same
+ * card and selection ring the resource lists wear. Resource-only chrome
+ * (stars, hide, RAW/NET, charts) stays on that tab.
+ */
+function MachineRosterPanel() {
+  const project = useFactoryStore((state) => state.project);
+  const selectedBoardIds = useFactoryStore((state) => state.selectedBoardIds);
+  const focusBoardNode = useFactoryStore((state) => state.focusBoardNode);
+  const hoveredUsageNodeIds = useFactoryStore((state) => state.hoveredUsageNodeIds);
+  const setHoveredUsageNodeIds = useFactoryStore((state) => state.setHoveredUsageNodeIds);
+  const handlerIcons = useMachineHandlerIcons();
+  const [filter, setFilter] = useState("");
+  const debouncedFilter = useDebouncedValue(filter, FLOW_FILTER_DEBOUNCE_MS);
+
+  const scopedIds = useMemo(
+    () => resolveMachineRosterNodeIds(project, selectedBoardIds),
+    [project, selectedBoardIds],
+  );
+  const icons = useMemo(() => {
+    const map = new Map<string, MachineRosterIcon>();
+    for (const [id, resource] of handlerIcons) {
+      map.set(id, { ...resource, amount: resource.amount ?? 1 });
+    }
+    return map;
+  }, [handlerIcons]);
+  const rows = useMemo(
+    () => buildMachineRoster(project, { nodeIds: scopedIds, icons }),
+    [icons, project, scopedIds],
+  );
+  const visible = useMemo(
+    () => filterMachineRoster(rows, debouncedFilter),
+    [debouncedFilter, rows],
+  );
+  const isFiltered = debouncedFilter.trim().length > 0;
+  const total = totalMachineCount(rows);
+  const matchCount = visible.length;
+
+  const focusStepRef = useRef(new Map<string, number>());
+  const focusBoardOnRow = useCallback(
+    (row: MachineRosterRow) => {
+      if (row.nodeIds.length === 0) {
+        return;
+      }
+      const step = focusStepRef.current.get(row.key) ?? 0;
+      focusStepRef.current.set(row.key, step + 1);
+      focusBoardNode(row.nodeIds[step % row.nodeIds.length]!);
+    },
+    [focusBoardNode],
+  );
+
+  useEffect(
+    () => () => {
+      setHoveredUsageNodeIds(undefined);
+    },
+    [setHoveredUsageNodeIds],
+  );
+
+  const selection =
+    scopedIds === undefined
+      ? undefined
+      : {
+          machineCount: project.nodes.filter((node) => scopedIds.has(node.id)).length,
+          storageCount: (project.storages ?? []).filter((storage) => scopedIds.has(storage.id))
+            .length,
+        };
+
+  return (
+    <section
+      className={[
+        "flex min-h-0 flex-1 flex-col rounded border bg-surface-raised",
+        selection ? "border-purple-500 ring-1 ring-purple-500/60" : "border-line",
+      ].join(" ")}
+    >
+      {selection ? (
+        <ScopeStrip
+          machineCount={selection.machineCount}
+          storageCount={selection.storageCount}
+        />
+      ) : null}
+
+      <div className="shrink-0 border-b border-line p-1">
+        <div className="relative">
+          <input
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            placeholder="Filter machines…"
+            aria-label="Filter machines"
+            className="h-9 w-full rounded border border-line-strong bg-surface pl-2 pr-14 text-base text-fg outline-none placeholder:text-fg-muted focus:border-cyan-600 focus:ring-1 focus:ring-cyan-300"
+          />
+          {filter ? (
+            <button
+              type="button"
+              onClick={() => setFilter("")}
+              aria-label="Clear filter"
+              className="absolute right-1 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-fg-muted hover:bg-surface-sunken hover:text-fg"
+            >
+              {matchCount} ✕
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <div
+          style={{ height: ROW_HEIGHTS.header }}
+          className="sticky top-0 z-10 flex w-full items-center gap-2 border-y border-line bg-surface-sunken/90 px-2 text-left text-fg-subtle backdrop-blur-sm"
+        >
+          <span className="text-sm font-bold uppercase tracking-wider">Machines</span>
+          <span className="rounded bg-fg-muted/20 px-1.5 py-0.5 text-xs font-bold tabular-nums text-fg-subtle">
+            {isFiltered ? `${totalMachineCount(visible)} / ${total}` : total}
+          </span>
+        </div>
+
+        {visible.length === 0 ? (
+          <p
+            style={{ height: ROW_HEIGHTS.empty }}
+            className="flex items-center px-3 text-xs text-fg-muted"
+          >
+            <span className="truncate">
+              {isFiltered ? "No matches." : "No machines on the board."}
+            </span>
+          </p>
+        ) : (
+          visible.map((row) => {
+            const isActive = row.nodeIds.some((id) => hoveredUsageNodeIds?.has(id));
+            return (
+              <div
+                key={row.key}
+                data-machine-row={row.key}
+                style={{ height: ROW_HEIGHTS.item }}
+                className="px-1"
+                onMouseEnter={() => setHoveredUsageNodeIds(row.nodeIds)}
+                onMouseLeave={() => setHoveredUsageNodeIds(undefined)}
+              >
+                <button
+                  type="button"
+                  onFocus={() => setHoveredUsageNodeIds(row.nodeIds)}
+                  onBlur={() => setHoveredUsageNodeIds(undefined)}
+                  onDoubleClick={() => focusBoardOnRow(row)}
+                  style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) auto` }}
+                  className={[
+                    "grid h-full w-full items-center rounded pr-1 text-left",
+                    isActive
+                      ? "bg-cyan-500/10 ring-1 ring-cyan-500/60"
+                      : "hover:bg-cyan-500/10 hover:ring-1 hover:ring-cyan-500/60",
+                  ].join(" ")}
+                >
+                  <span
+                    style={{ height: ROW_HEIGHTS.item, width: ROW_HEIGHTS.item }}
+                    className="flex shrink-0 items-center justify-center overflow-hidden"
+                  >
+                    {row.icon ? (
+                      <ResourceIcon
+                        resource={row.icon}
+                        size="sm"
+                        showAmount={false}
+                        bare
+                        tooltip={false}
+                        className="!h-full !w-full"
+                      />
+                    ) : null}
+                  </span>
+                  <span className="ml-2 min-w-0 truncate text-base font-medium text-fg">
+                    {row.label}
+                  </span>
+                  <span className="shrink-0 pl-2 text-sm font-bold tabular-nums text-fg">
+                    {row.machineCount}×
+                  </span>
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PackageGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M2.5 5.5 8 3l5.5 2.5L8 8 2.5 5.5Z" />
+      <path d="M2.5 5.5V11L8 13.5V8" />
+      <path d="M13.5 5.5V11L8 13.5" />
+    </svg>
+  );
+}
+
+function CogGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <circle cx="8" cy="8" r="2" />
+      <path d="M8 2.5v1.5M8 12v1.5M2.5 8H4M12 8h1.5M4.1 4.1l1.1 1.1M10.8 10.8l1.1 1.1M11.9 4.1l-1.1 1.1M5.2 10.8l-1.1 1.1" />
+    </svg>
+  );
 }
