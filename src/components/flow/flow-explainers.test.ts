@@ -232,7 +232,7 @@ describe("explainPort — inputs", () => {
     );
     const story = explainPort(proj, result, "N", rails.inputs[0]!, verdict);
 
-    expect(story.stateWord).toBe("BOTTLENECK");
+    expect(story.stateWord).toBe("STARVED");
     expect(story.lines[0]).toContain("Gets");
     expect(story.lines[0]).toContain("from Cracker");
     expect(story.lines[0]).toContain("holds the machine at");

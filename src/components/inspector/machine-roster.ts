@@ -114,10 +114,14 @@ export function buildMachineRoster(
   }
 
   return [...groups.values()].sort((left, right) => {
+    const tierDelta = rosterTierIndex(left.tier) - rosterTierIndex(right.tier);
+    if (tierDelta !== 0) {
+      return tierDelta;
+    }
     if (right.machineCount !== left.machineCount) {
       return right.machineCount - left.machineCount;
     }
-    return left.label.localeCompare(right.label);
+    return left.machineName.localeCompare(right.machineName);
   });
 }
 
@@ -147,6 +151,15 @@ export function totalMachineCount(rows: Iterable<MachineRosterRow>): number {
     total += row.machineCount;
   }
   return total;
+}
+
+/** MAX…ULV, then steam/crafting/untimed (no voltage) after the last real tier. */
+function rosterTierIndex(tier: string | undefined): number {
+  if (!tier) {
+    return GT_VOLTAGE_TIERS.length;
+  }
+  const index = GT_VOLTAGE_TIERS.findIndex((entry) => entry.tier === tier);
+  return index === -1 ? GT_VOLTAGE_TIERS.length : GT_VOLTAGE_TIERS.length - 1 - index;
 }
 
 function rosterVoltageTier(

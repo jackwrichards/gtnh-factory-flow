@@ -71,8 +71,8 @@ describe("buildMachineRoster", () => {
       recipes: [makeRecipe("mac", "Macerator")],
     });
 
-    expect(rows.map((row) => row.label)).toEqual(["LV Macerator", "HV Macerator"]);
-    expect(rows.map((row) => row.machineCount)).toEqual([3, 1]);
+    expect(rows.map((row) => row.label)).toEqual(["HV Macerator", "LV Macerator"]);
+    expect(rows.map((row) => row.machineCount)).toEqual([1, 3]);
   });
 
   it("does not merge distinct machine families", () => {
@@ -189,24 +189,40 @@ describe("buildMachineRoster", () => {
     expect(rows.find((row) => row.label.includes("Chemical"))?.icon?.id).toBe("chem-out");
   });
 
-  it("sorts the busiest stack first and names as a tie break", () => {
+  it("sorts highest voltage first, then the busiest stack, then the machine name", () => {
     const rows = buildMachineRoster({
       nodes: [
-        makeNode("few", "bender", { machineCount: 1 }),
-        makeNode("many", "mac", { machineCount: 8 }),
-        makeNode("also-one", "lathe", { machineCount: 1 }),
+        makeNode("hv-many", "chem", { overclockTier: "HV", machineCount: 8 }),
+        makeNode("lv-few", "bender", { overclockTier: "LV", machineCount: 1 }),
+        makeNode("lv-many", "mac", { overclockTier: "LV", machineCount: 8 }),
+        makeNode("lv-also-one", "lathe", { overclockTier: "LV", machineCount: 1 }),
+        makeNode("steam", "steam-mac", { overclockTier: "LV", machineCount: 20 }),
       ],
       recipes: [
+        makeRecipe("chem", "Chemical Reactor"),
         makeRecipe("mac", "Macerator"),
         makeRecipe("bender", "Bending Machine"),
         makeRecipe("lathe", "Lathe"),
+        makeRecipe("steam-mac", "Steam Macerator", {
+          eut: 0,
+          machineHandlers: [
+            {
+              id: "steam-macerator",
+              label: "Steam Macerator",
+              machineType: "Steam Macerator",
+              minimumTier: "LV",
+            },
+          ],
+        }),
       ],
     });
 
-    expect(rows.map((row) => row.machineName)).toEqual([
-      "Macerator",
-      "Bending Machine",
-      "Lathe",
+    expect(rows.map((row) => row.label)).toEqual([
+      "HV Chemical Reactor",
+      "LV Macerator",
+      "LV Bending Machine",
+      "LV Lathe",
+      "Steam Macerator",
     ]);
   });
 
