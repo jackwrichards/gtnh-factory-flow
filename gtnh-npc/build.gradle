@@ -1,0 +1,53 @@
+// GTNH NPC — a thin, SERVER-SIDE-ONLY Forge 1.7.10 mod (Java 8, Forge 10.13.4.1614).
+//
+// This is the "hands and eyes" half of the GTNH AI NPC. It has no intelligence of
+// its own: it holds a visible vanilla entity, reads local state, POSTs the player's
+// task to the gtnh-agent over HTTP, and carries out the ordered actions the agent
+// returns. All the GTNH knowledge and planning lives in the Node agent.
+//
+// Build with the ForgeGradle 2.x toolchain (Java 8):
+//   gradle setupDecompWorkspace
+//   gradle build
+// The jar lands in build/libs.
+buildscript {
+    repositories {
+        mavenCentral()
+        // 1.7.10-era Forge maven. Some environments still serve it over http; if
+        // the https mirror 404s on your box, flip the scheme here.
+        maven { url = "https://maven.minecraftforge.net/" }
+    }
+    dependencies {
+        classpath 'net.minecraftforge.gradle:ForgeGradle:2.1-SNAPSHOT'
+    }
+}
+
+apply plugin: 'net.minecraftforge.gradle.forge'
+
+version = "0.1.0"
+group = "com.gtnhnpc"
+archivesBaseName = "gtnh-npc"
+
+minecraft {
+    version = "1.7.10-forge10.13.4.1614-1.7.10"
+    runDir = "run"
+    mappings = "stable_12"
+}
+
+dependencies {
+    // Gson is the standard JSON lib for MC mods; it keeps the bridge code clean
+    // instead of a hand-rolled parser.
+    compile 'com.google.code.gson:gson:2.8.9'
+}
+
+processResources {
+    inputs.property "version", project.version
+    inputs.property "mcversion", project.minecraft.version
+
+    from(sourceSets.main.resources.srcDirs) {
+        include 'mcmod.info'
+        expand 'version': project.version, 'mcversion': project.minecraft.version
+    }
+    from(sourceSets.main.resources.srcDirs) {
+        exclude 'mcmod.info'
+    }
+}
