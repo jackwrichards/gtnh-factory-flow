@@ -27,7 +27,7 @@ fuel chains.
 
 | Decision | Choice |
 |---|---|
-| Scope | GregTech core machines: Gas Turbine, Steam Turbine, Semifluid / Combustion / "Thermal" / Plasma generators, Fission Reactor, Fusion Reactor, Solar, RTG. Reactor mods (Naquadah, HTGR, LTFR, Solar Tower, Magic Energy Absorber) excluded. |
+| Scope | All GregTech-core power machines: the tiered single-block generators (Gas Turbine, Steam Turbine, Semifluid / Combustion / "Thermal" / Plasma generators, Fission Reactor, Solar, RTG), the tiered fusion computers, **plus the Large and XL Turbines (all five fuel variants each) and the GoodGenerator power machines** (Universal Chemical Fuel Engine, Supercritical Fluid Turbine, Large Fusion Computers 1–5). Reactor mods (Naquadah incl. MTEMultiNqGenerator, HTGR, LTFR, Solar Tower, Magic Energy Absorber) excluded. |
 | Data source | **Fix the oracle export.** The dataset pipeline (live GTNH client) is the source of truth; no curated in-app table. |
 | Power model | **Wireable EU resource** — energy is a first-class resource on the board, not a per-node attribute. |
 | Optimizer | Proposes generators to close a board's power deficit, with their fuel added to the required inputs. |
@@ -70,7 +70,11 @@ by hand.
 | Plasma Generator | `MTEPlasmaGenerator` | `RecipeMaps.plasmaFuels` ("Plasma Generator Fuels") | base generator formula |
 | RTG | `MTERTGenerator` (gtPlusPlus) | `RecipeMaps.rtgFuels` ("RTG") | day-based burn (`mDayTick < 24000`), base generator formula |
 | Solar Generator | `MTESolarGenerator` | **no fuel** | `maxEUOutput() = V[tier]` flat, always on |
-| Fusion Reactor | `MTEFusionComputer` (1–5) | `RecipeMaps.fusionRecipes` — **already exported, 205 real entries** (mEUt, duration, `FUSION_THRESHOLD`) | the game negates `mEUt` (`if (mEUt > 0) mEUt = -mEUt`); per-computer facts from the live computer |
+| Fusion Reactor | `MTEFusionComputer` (1–5) + the GoodGenerator `MTELargeFusionComputer` (1–5), the top of the fusion line | `RecipeMaps.fusionRecipes` — **already exported, 205 real entries** (mEUt, duration, `FUSION_THRESHOLD`) | the game negates `mEUt` (`if (mEUt > 0) mEUt = -mEUt`); per-computer facts from the live computer |
+| Large Turbine | `MTELargeTurbine` variants: Gas, Steam, HP Steam, Supercritical Steam, Plasma | the same maps per variant (Gas → `gasTurbineFuels`, Plasma → `plasmaFuels`, steam variants take the steam fluid) | multiblock; output via hatches, bounded by the machine's own `maxEUOutput` |
+| XL Turbine | `MTEXLTurbine` variants: the same five | same as Large Turbine | same, bigger |
+| Universal Chemical Fuel Engine (Legacy) | `MTEUniversalChemicalFuelEngineLegacy` (GoodGenerator) | **three** maps: `dieselFuels` + `gasTurbineFuels` + `rocketFuels`, each with its own efficiency coefficient, plus a "combustion promoter" fluid input | `FuelAmount × mSpecialValue × bonus / 20`, through the live `processFuel` |
+| Supercritical Fluid Turbine (Legacy) | `MTESupercriticalFluidTurbineLegacy` (GoodGenerator) | supercritical steam fluid | live machine methods |
 | Fission Reactor | `MTENuclearReactor` (gtPlusPlus, multiblock) | `RecipeMaps.fissionFuelProcessingRecipes` (`gt.recipe.fissionfuel`, "Nuclear Fission") | live reactor methods; flagged fallback to the map's `mSpecialValue` if the multiblock cannot be instantiated for a call |
 | Boilers (steam source) | `MTEBoiler` family (Bronze/Steel/Lava/Solar variants) + the Large Boiler multiblock | `denseLiquidFuels` ("Semifluid Boiler Fuels") / `thermalBoilerRecipes` — value definitions | fuel + water (1:1) in, `getProductionPerSecond()` L/s of steam out — a production machine, not a generator |
 
@@ -103,6 +107,14 @@ lists), it instantiates the machine and calls its own methods:
   the reactor's live methods, with a **flagged** fallback to
   `mSpecialValue` if instantiation for the call fails (the export records
   which values came from the fallback).
+- **Large / XL Turbines, Universal Chemical Fuel Engine, Supercritical
+  Fluid Turbine**: one entry per fuel variant. These are multiblocks whose
+  output grid is not fixed by the meta item — the oracle reads the output
+  grids the machine supports (hatch-based), bounded by the machine's own
+  `maxEUOutput`, and exports one entry per (variant, supported output grid,
+  fuel). For the UCFE the oracle calls the live `processFuel` per fuel map
+  (three maps, each with its own efficiency coefficient) and records the
+  combustion promoter as an additional fluid input.
 - **Boilers**: for each boiler variant, per fuel in its fuel map, the live
   `getProductionPerSecond()` (steam out), the water consumption (1:1 with
   steam), and the steam kind (steam vs. superheated, per the variant).
@@ -141,8 +153,11 @@ Per machine family:
 ```
 
 - `tier` uses the app's voltage ordinal convention (ULV = 0, LV = 1, …
-  MAX = 11); the oracle maps from the game's `mTier` with the documented
-  off-by-one.
+  MAX = 11). For the tiered single-block machines the oracle maps from the
+  game's `mTier` with the documented off-by-one; for the Large / XL Turbines
+  and UCFE it is the ordinal of the machine's supported output grid.
+- For the Large / XL Turbines, each fuel variant is its own machine entry
+  (distinct meta items in the live game) — the shape is unchanged.
 - Solar entries have `fuels: []` and a per-tier `euPerSecond`.
 - Fusion entries reference the existing exported fusion recipe ids plus the
   per-computer rate facts.
