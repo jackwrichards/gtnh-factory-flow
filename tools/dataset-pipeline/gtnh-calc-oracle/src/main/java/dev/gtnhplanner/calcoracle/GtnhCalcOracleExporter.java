@@ -3178,6 +3178,9 @@ public final class GtnhCalcOracleExporter {
         families.add(new SteamTurbineFamily());
         families.add(new SolarFamily());
         families.add(new RtgFamily());
+        families.add(new FusionFamily("fusion_computer", "Fusion Computer", "MTEFusionComputer"));
+        families.add(new FusionFamily("large_fusion_computer", "Large Fusion Computer", "MTELargeFusionComputer"));
+        families.add(new FissionFamily());
         return families;
     }
 
@@ -3951,6 +3954,193 @@ public final class GtnhCalcOracleExporter {
                 fuelEntry.put("consumedPerOperation", Double.valueOf(1.0));
                 fuelEntry.put("euPerOperation", Double.valueOf(total.doubleValue()));
                 fuelEntry.put("maxEuT", Double.valueOf(rate));
+                fuels.add(fuelEntry);
+                entry.put("fuels", fuels);
+                entries.add(entry);
+            }
+        }
+    }
+
+    /**
+     * The fusion computers (MTEFusionComputer and
+     * MTELargeFusionComputer) burn the fusionRecipes book (205 entries:
+     * deuterium + tritium cells) and the book's mEUt is negated in the
+     * export, so -mEUt x mDuration is the energy one burn produces.
+     * Each machine class is one machine map carrying one catalyst per
+     * live MK instance — the normalizer turns those catalysts into the
+     * MK variant list — and a computer only powers when it can store its
+     * own threshold, so the live FUSION_THRESHOLD and maxEUStore() gate
+     * each instance. The byproduct (the plasma cell) rides out in
+     * extraOutputs.
+     */
+    private class FusionFamily extends GeneratorFamily {
+        FusionFamily(String id, String name, String sourceClass) {
+            super(id, name, sourceClass);
+        }
+
+        @Override
+        void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes) {
+            Object threshold;
+            try {
+                threshold = readStaticField(mte.getClass(), "FUSION_THRESHOLD");
+            } catch (Exception e) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live FUSION_THRESHOLD: " + e);
+                return;
+            }
+            Number thresholdEu = asNumber(threshold);
+            if (thresholdEu == null) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " FUSION_THRESHOLD is null");
+                return;
+            }
+            Number store = asNumber(invokeBest(mte, "maxEUStore", new Object[0]));
+            if (store == null || store.doubleValue() < thresholdEu.doubleValue()) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName()
+                    + " maxEUStore() below FUSION_THRESHOLD; the computer outputs nothing");
+                return;
+            }
+            Number maxEuT = maxEuOutput(mte, notes);
+            if (maxEuT == null) {
+                return;
+            }
+            List<Object> book = fuelBook("fusionRecipes", notes);
+            if (book.isEmpty()) {
+                return;
+            }
+            int tier = readIntField(mte, "mTier");
+            for (Object recipeObj : book) {
+                if (!(recipeObj instanceof GTRecipe)) {
+                    continue;
+                }
+                GTRecipe recipe = (GTRecipe) recipeObj;
+                if (recipe.mInputs == null) {
+                    skip(machine, notes, id + ": fusionRecipes entry without item inputs");
+                    continue;
+                }
+                List<Object> fuels = new ArrayList<Object>();
+                boolean unreadableInput = false;
+                for (ItemStack stack : recipe.mInputs) {
+                    if (stack == null) {
+                        continue;
+                    }
+                    Map<String, Object> fuelResource = itemStack(stack);
+                    if (fuelResource == null) {
+                        unreadableInput = true;
+                        break;
+                    }
+                    Map<String, Object> fuelEntry = fuelResource;
+                    fuelEntry.put("amount", Double.valueOf(stack.stackSize));
+                    fuels.add(fuelEntry);
+                }
+                if (fuels.isEmpty() || unreadableInput) {
+                    skip(machine, notes, id + ": fusionRecipes entry without readable item inputs");
+                    continue;
+                }
+                double energy = -recipe.mEUt * (double) recipe.mDuration;
+                if (energy <= 0) {
+                    skip(machine, notes, id + ": fusionRecipes entry with a non-negative mEUt; no energy to export");
+                    continue;
+                }
+                Map<String, Object> entry = map();
+                entry.put("tier", Integer.valueOf(tier < 0 ? 0 : tier));
+                entry.put("periodTicks", Integer.valueOf(recipe.mDuration));
+                entry.put("maxEuT", Double.valueOf(maxEuT.doubleValue()));
+                entry.put("euPerOperation", Double.valueOf(energy));
+                entry.put("fuels", fuels);
+                if (recipe.mOutputs != null) {
+                    List<Object> extras = new ArrayList<Object>();
+                    for (ItemStack stack : recipe.mOutputs) {
+                        if (stack == null) {
+                            continue;
+                        }
+                        Map<String, Object> extra = itemStack(stack);
+                        if (extra != null) {
+                            extras.add(extra);
+                        }
+                    }
+                    if (!extras.isEmpty()) {
+                        entry.put("extraOutputs", extras);
+                    }
+                }
+                entries.add(entry);
+            }
+        }
+    }
+
+    /**
+     * The fission reactor (a gtplusplus multiblock). The per-fuel burn
+     * duration is the live getFuelDuration(fuel) — a fuel whose duration
+     * cannot be read is skipped, never given an invented duration. The
+     * per-fuel value is the live getFuelValue(fuel) where it resolves,
+     * otherwise the book's mSpecialValue — the one flagged fallback the
+     * spec allows, stamped source "fission-fallback" so the report can
+     * surface it.
+     */
+    private class FissionFamily extends GeneratorFamily {
+        FissionFamily() {
+            super("nuclear_reactor", "Nuclear Reactor", "MTENuclearReactor");
+        }
+
+        @Override
+        void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes) {
+            Number maxEuT = maxEuOutput(mte, notes);
+            if (maxEuT == null) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live maxEUOutput()");
+                return;
+            }
+            List<Object> book = fuelBook("fissionFuelProcessingRecipes", notes);
+            if (book.isEmpty()) {
+                return;
+            }
+            int tier = readIntField(mte, "mTier");
+            for (Object recipeObj : book) {
+                if (!(recipeObj instanceof GTRecipe)) {
+                    continue;
+                }
+                GTRecipe recipe = (GTRecipe) recipeObj;
+                Object fuel = fuelOf(recipe);
+                if (fuel == null) {
+                    skip(machine, notes, id + ": fission fuel book entry without a first input");
+                    continue;
+                }
+                Number burnTicks = asNumber(invokeTyped(mte, "getFuelDuration", fuel));
+                if (burnTicks == null || burnTicks.doubleValue() <= 0) {
+                    skip(machine, notes, id + ": no live getFuelDuration(" + displayNameOf(fuel)
+                        + "); the duration is not exported and the fuel is skipped");
+                    continue;
+                }
+                Number liveValue = asNumber(invokeTyped(mte, "getFuelValue", fuel));
+                double energy;
+                String source;
+                if (liveValue != null && liveValue.doubleValue() > 0) {
+                    energy = liveValue.doubleValue() * burnTicks.doubleValue();
+                    source = "oracle";
+                } else {
+                    Number special = asNumber(recipe.mSpecialValue);
+                    if (special == null || special.doubleValue() <= 0) {
+                        skip(machine, notes, id + ": " + displayNameOf(fuel)
+                            + " has no live value and no book special value");
+                        continue;
+                    }
+                    energy = special.doubleValue();
+                    source = "fission-fallback";
+                }
+                Map<String, Object> fuelResource = fuel instanceof FluidStack
+                    ? fluidStack((FluidStack) fuel)
+                    : itemStack((ItemStack) fuel);
+                if (fuelResource == null) {
+                    skip(machine, notes, id + ": " + displayNameOf(fuel) + " has no readable resource form");
+                    continue;
+                }
+                Map<String, Object> entry = map();
+                entry.put("tier", Integer.valueOf(tier < 0 ? 0 : tier));
+                entry.put("source", source);
+                List<Object> fuels = new ArrayList<Object>();
+                Map<String, Object> fuelEntry = fuelResource;
+                fuelEntry.put("amount", Double.valueOf(1.0));
+                fuelEntry.put("periodTicks", Double.valueOf(burnTicks.doubleValue()));
+                fuelEntry.put("consumedPerOperation", Double.valueOf(1.0));
+                fuelEntry.put("euPerOperation", Double.valueOf(energy));
+                fuelEntry.put("maxEuT", Double.valueOf(maxEuT.doubleValue()));
                 fuels.add(fuelEntry);
                 entry.put("fuels", fuels);
                 entries.add(entry);
