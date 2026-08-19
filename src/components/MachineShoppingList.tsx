@@ -3,6 +3,7 @@
 import { useMemo, useRef } from "react";
 import { Cloud, Zap } from "lucide-react";
 import { MotionNumberText } from "./flow/board-motion";
+import { PowerBalanceBlock } from "./PowerBalanceBlock";
 import { GT_TIER_COLORS } from "./flow/tier-colors";
 import { useMachineHandlerIcons, type MachineHandlerIcon } from "./flow/machine-icons";
 import { machineArtPixels } from "./flow/MachinePicker";
@@ -300,6 +301,7 @@ export function MachineShoppingList() {
           </span>
         ) : null}
       </div>
+      <PowerBalanceBlock />
       {/* overflow-x hidden outright: Windows overlay scrollbars float over
           content, so a row even a pixel wide of the column summons a
           horizontal bar across the list. Nothing here is allowed to scroll
