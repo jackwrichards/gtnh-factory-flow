@@ -101,6 +101,7 @@ public final class GtnhCalcOracleExporter {
         domains.add(exportIc2Crops(adapters));
         domains.add(exportCropsNhCrops(adapters));
         domains.add(exportMining(adapters));
+        domains.add(exportGenerators(adapters));
 
         Map<String, Object> root = map();
         root.put("schemaVersion", Integer.valueOf(1));
@@ -3127,6 +3128,164 @@ public final class GtnhCalcOracleExporter {
         return value instanceof Number ? (Number) value : null;
     }
 
+    // ---------------------------------------------------------------------
+    // Generators domain. The fuel books behind the power machines
+    // (gasTurbineFuels and friends) are value definitions — mDuration 0 —
+    // so they can never pass the gregtech domain's recipe guard. This
+    // domain reads each machine's own live numbers instead: maxEUOutput(),
+    // getFuelValue(fuel), the fuel book's mSpecialValue. Every figure in
+    // the export is what the running game computes; a figure that cannot
+    // be read is a skipped entry or a warning, never a default.
+    // ---------------------------------------------------------------------
+
+    private Map<String, Object> exportGenerators(List<Map<String, Object>> adapters) {
+        long started = System.currentTimeMillis();
+        List<String> notes = new ArrayList<String>();
+        List<Object> machines = new ArrayList<Object>();
+        for (GeneratorFamily family : generatorFamilies()) {
+            machines.addAll(family.export(notes));
+        }
+
+        String warning = null;
+        if (!notes.isEmpty()) {
+            StringBuilder joined = new StringBuilder();
+            for (String note : notes) {
+                if (joined.length() > 0) {
+                    joined.append("; ");
+                }
+                joined.append(note);
+            }
+            warning = joined.toString();
+        }
+        Map<String, Object> generatorsDomain = domain("generators");
+        generatorsDomain.put("machines", machines);
+        adapters.add(adapter("generators", machines.isEmpty() ? "empty" : "ok", true,
+            machines.size(), 0, started, warning));
+        return generatorsDomain;
+    }
+
+    /**
+     * One family per in-scope power machine, in spec §2 order. A machine
+     * missing from the pack is a warning, not an error.
+     */
+    private List<GeneratorFamily> generatorFamilies() {
+        List<GeneratorFamily> families = new ArrayList<GeneratorFamily>();
+        families.add(new BasicGeneratorFamily("gas_turbine", "Gas Turbine", "MTEGasTurbine", "gasTurbineFuels"));
+        families.add(new BasicGeneratorFamily("semi_fluid_generator", "Semi Fluid Generator", "MTESemiFluidGenerator", "semiFluidFuels"));
+        families.add(new BasicGeneratorFamily("combustion_generator", "Combustion Generator", "MTEDieselGenerator", "dieselFuels"));
+        families.add(new BasicGeneratorFamily("thermal_generator", "Thermal Generator", "MTEGeothermalGenerator", "hotFuels"));
+        families.add(new BasicGeneratorFamily("plasma_generator", "Plasma Generator", "MTEPlasmaGenerator", "plasmaFuels"));
+        return families;
+    }
+
+    /**
+     * Same as invokeBest, but the candidate method must also accept the
+     * static type of the argument. GT5's fuel machines overload
+     * getFuelValue for ItemStack and FluidStack — identical arity, so
+     * name+arity alone is ambiguous and invokeBest would pick at random.
+     */
+    private Object invokeTyped(Object target, String methodName, Object arg) {
+        if (target == null || arg == null) {
+            return null;
+        }
+        try {
+            for (Method method : target.getClass().getMethods()) {
+                if (method.getName().equals(methodName)
+                    && method.getParameterTypes().length == 1
+                    && method.getParameterTypes()[0].isAssignableFrom(arg.getClass())) {
+                    method.setAccessible(true);
+                    return method.invoke(target, arg);
+                }
+            }
+        } catch (Exception ignored) {
+            // The caller treats null as "not readable".
+        }
+        return null;
+    }
+
+    /**
+     * A fresh MTE instance. The registry instances in
+     * GregTechAPI.METATILEENTITIES are live machine objects, and per-fuel
+     * reads can mutate them, so family code works on fresh instances and
+     * never on registry objects.
+     */
+    private Object newInstance(Class<?> clazz, List<String> notes) {
+        try {
+            return clazz.getConstructor(int.class, String.class, String.class)
+                .newInstance(0, "gtnh-oracle", "gtnh-oracle");
+        } catch (Exception e) {
+            notes.add(clazz.getSimpleName() + " could not be instantiated for live reads: " + e);
+            return null;
+        }
+    }
+
+    /**
+     * The mirror of readField: set a private field somewhere in the
+     * superclass chain. The boiler measurement uses it to supply a fresh
+     * machine's tanks.
+     */
+    private boolean writeField(Object target, String fieldName, Object value) {
+        if (target == null) {
+            return false;
+        }
+        for (Class<?> clazz = target.getClass(); clazz != null; clazz = clazz.getSuperclass()) {
+            try {
+                Field field = clazz.getDeclaredField(fieldName);
+                field.setAccessible(true);
+                field.set(target, value);
+                return true;
+            } catch (NoSuchFieldException ignored) {
+                // try the next superclass
+            } catch (Exception e) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /** A FluidStack somewhere in the superclass chain, or null. */
+    private FluidStack fluidField(Object target, String fieldName) {
+        Object value = readField(target, fieldName);
+        return value instanceof FluidStack ? (FluidStack) value : null;
+    }
+
+    /** The first input of a fuel book recipe: the book's fuel. */
+    private Object fuelOf(GTRecipe recipe) {
+        if (recipe.mFluidInputs != null && recipe.mFluidInputs.length > 0 && recipe.mFluidInputs[0] != null) {
+            return recipe.mFluidInputs[0];
+        }
+        if (recipe.mInputs != null && recipe.mInputs.length > 0 && recipe.mInputs[0] != null) {
+            return recipe.mInputs[0];
+        }
+        return null;
+    }
+
+    private String displayNameOf(Object value) {
+        if (value instanceof FluidStack) {
+            return ((FluidStack) value).getName();
+        }
+        if (value instanceof ItemStack) {
+            return ((ItemStack) value).getDisplayName();
+        }
+        return String.valueOf(value);
+    }
+
+    /**
+     * The smallest grid tier that can carry `eu` EU/t, without truncating:
+     * a 8.5 EU/t output needs an MV grid, so the fractional part counts.
+     * The long overload voltageTierForEu() truncates and serves recipes,
+     * whose EU/t are integral. Used for per-fuel entries whose output
+     * voltage follows the fuel (RTG, UCFE) rather than the machine.
+     */
+    private int voltageOrdinalForEu(double eu) {
+        for (int i = 0; i < GT_VOLTAGES.length; i++) {
+            if (eu <= GT_VOLTAGES[i]) {
+                return i;
+            }
+        }
+        return GT_VOLTAGES.length - 1;
+    }
+
     private double round(double value, int decimals) {
         double factor = Math.pow(10.0D, Math.max(0, decimals));
         return Math.round(value * factor) / factor;
@@ -3401,6 +3560,250 @@ public final class GtnhCalcOracleExporter {
             this.outputFile = outputFile;
             this.recipeCount = recipeCount;
             this.adapterCount = adapterCount;
+        }
+    }
+
+    /**
+     * Base class for the generators domain's machine families. Each family
+     * knows one source class (or a contains()-match, for the boilers) and
+     * where the machine's numbers come from. A missing machine is a
+     * warning, never a silent default.
+     */
+    private abstract class GeneratorFamily {
+        final String id;
+        final String name;
+        final String sourceClass;
+
+        GeneratorFamily(String id, String name, String sourceClass) {
+            this.id = id;
+            this.name = name;
+            this.sourceClass = sourceClass;
+        }
+
+        List<Map<String, Object>> export(List<String> notes) {
+            List<Map<String, Object>> machines = new ArrayList<Map<String, Object>>();
+            Object registry;
+            try {
+                registry = readStaticField(Class.forName("gregtech.api.GregTechAPI"), "METATILEENTITIES");
+            } catch (Exception e) {
+                notes.add(id + ": GregTechAPI.METATILEENTITIES not readable: " + e);
+                return machines;
+            }
+            if (registry == null) {
+                notes.add(id + ": GregTechAPI.METATILEENTITIES is null");
+                return machines;
+            }
+            boolean any = false;
+            for (Object mte : iterable(registry)) {
+                if (mte == null || !matches(mte.getClass().getSimpleName())) {
+                    continue;
+                }
+                any = true;
+                Map<String, Object> machine = exportOne(mte, notes);
+                if (machine != null) {
+                    machines.add(machine);
+                }
+            }
+            if (!any) {
+                notes.add(id + ": no " + sourceClass + " machines in GregTechAPI.METATILEENTITIES");
+            }
+            return machines;
+        }
+
+        /** BoilerFamily matches by contains(); every other family by equals. */
+        boolean matches(String simpleName) {
+            return simpleName.equals(sourceClass);
+        }
+
+        String machineId(Object mte) {
+            return id;
+        }
+
+        String machineName(Object mte) {
+            return name;
+        }
+
+        Map<String, Object> exportOne(Object mte, List<String> notes) {
+            Map<String, Object> catalyst = catalyst(mte, notes);
+            if (catalyst == null) {
+                return null;
+            }
+            Map<String, Object> machine = map();
+            machine.put("id", machineId(mte));
+            machine.put("name", machineName(mte));
+            machine.put("sourceClass", mte.getClass().getName());
+            List<Object> catalysts = new ArrayList<Object>();
+            catalysts.add(catalyst);
+            machine.put("catalysts", catalysts);
+            List<Object> entries = new ArrayList<Object>();
+            machine.put("entries", entries);
+            fillEntries(mte, machine, entries, notes);
+            return machine;
+        }
+
+        /**
+         * The machine's item form plus its live mTier. A missing or
+         * out-of-range tier is omitted — the normalizer treats a tiered
+         * catalyst as a variant-list entry, and a machine with no tiers
+         * (UCFE, the turbines) contributes no variants.
+         */
+        Map<String, Object> catalyst(Object mte, List<String> notes) {
+            Object stack = invokeBest(mte, "getStackForm", new Object[] { Long.valueOf(1L) });
+            if (!(stack instanceof ItemStack)) {
+                notes.add(id + ": " + mte.getClass().getSimpleName() + " has no getStackForm(1L) item form");
+                return null;
+            }
+            Map<String, Object> resource = itemStack((ItemStack) stack);
+            if (resource == null) {
+                notes.add(id + ": " + mte.getClass().getSimpleName() + " item form is not readable");
+                return null;
+            }
+            Map<String, Object> catalyst = map();
+            catalyst.put("resource", resource);
+            catalyst.put("sourceClass", mte.getClass().getName());
+            int tier = readIntField(mte, "mTier");
+            if (tier >= 0 && tier < GT_VOLTAGE_NAMES.length) {
+                catalyst.put("tier", Integer.valueOf(tier));
+            }
+            return catalyst;
+        }
+
+        /**
+         * The machine's fuel book as a live list of GTRecipe, sorted by
+         * the fuel's display name so the export is deterministic. The
+         * books are value definitions (mDuration 0) — read here precisely
+         * because they can never be recipes.
+         */
+        List<Object> fuelBook(String mapField, List<String> notes) {
+            List<Object> recipes = new ArrayList<Object>();
+            Object backend;
+            try {
+                backend = readStaticField(Class.forName("gregtech.api.util.GT_Recipe_Map"), mapField);
+            } catch (Exception e) {
+                notes.add(id + ": fuel book " + mapField + " not readable: " + e);
+                return recipes;
+            }
+            if (backend == null) {
+                notes.add(id + ": fuel book " + mapField + " is null");
+                return recipes;
+            }
+            Object list = invokeBest(backend, "getAllRecipes", new Object[0]);
+            if (list == null) {
+                notes.add(id + ": fuel book " + mapField + " exposes no getAllRecipes()");
+                return recipes;
+            }
+            for (Object recipe : iterable(list)) {
+                recipes.add(recipe);
+            }
+            java.util.Collections.sort(recipes, new java.util.Comparator<Object>() {
+                @Override
+                public int compare(Object a, Object b) {
+                    Object fuelA = a instanceof GTRecipe ? fuelOf((GTRecipe) a) : null;
+                    Object fuelB = b instanceof GTRecipe ? fuelOf((GTRecipe) b) : null;
+                    return displayNameOf(fuelA).compareTo(displayNameOf(fuelB));
+                }
+            });
+            return recipes;
+        }
+
+        Number maxEuOutput(Object mte, List<String> notes) {
+            return asNumber(invokeBest(mte, "maxEUOutput", new Object[0]));
+        }
+
+        /**
+         * Record a skip on the machine (the normalizer lists it) and in
+         * the family notes (the report carries them).
+         */
+        void skip(Map<String, Object> machine, List<String> notes, String reason) {
+            notes.add(reason);
+            @SuppressWarnings("unchecked")
+            List<Object> skipped = (List<Object>) machine.get("skipped");
+            if (skipped == null) {
+                skipped = new ArrayList<Object>();
+                machine.put("skipped", skipped);
+            }
+            Map<String, Object> entry = map();
+            entry.put("reason", reason);
+            skipped.add(entry);
+        }
+
+        abstract void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes);
+    }
+
+    /**
+     * The five basic fuel-burning machines (gas / semi fluid /
+     * combustion / thermal / plasma) share MTEBasicGenerator semantics:
+     * every 10 ticks they burn 1 unit of fuel from their book at the
+     * value the machine's own getFuelValue computes — the family
+     * modifiers (the combustion x3 vanilla-fuel fallback, the thermal
+     * 5000-by-tier cap and 100-minus-7-by-tier efficiency) are already
+     * in that number — and output up to maxEUOutput(). The export is
+     * the machine's uncapped potential, one entry per machine instance
+     * carrying every fuel; the normalizer clamps the burn to what the
+     * grid carries and splits the entry into one recipe per fuel.
+     */
+    private class BasicGeneratorFamily extends GeneratorFamily {
+        private final String mapField;
+
+        BasicGeneratorFamily(String id, String name, String sourceClass, String mapField) {
+            super(id, name, sourceClass);
+            this.mapField = mapField;
+        }
+
+        @Override
+        void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes) {
+            List<Object> book = fuelBook(mapField, notes);
+            if (book.isEmpty()) {
+                return;
+            }
+            Number maxEuT = maxEuOutput(mte, notes);
+            if (maxEuT == null) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live maxEUOutput()");
+                return;
+            }
+            Map<String, Object> entry = map();
+            int tier = readIntField(mte, "mTier");
+            entry.put("tier", Integer.valueOf(tier < 0 ? 0 : tier));
+            List<Object> fuels = new ArrayList<Object>();
+            for (Object recipeObj : book) {
+                if (!(recipeObj instanceof GTRecipe)) {
+                    continue;
+                }
+                GTRecipe recipe = (GTRecipe) recipeObj;
+                Object fuel = fuelOf(recipe);
+                if (fuel == null) {
+                    skip(machine, notes, id + ": " + mapField + " recipe without a first input");
+                    continue;
+                }
+                Number value = asNumber(invokeTyped(mte, "getFuelValue", fuel));
+                if (value == null || value.doubleValue() <= 0) {
+                    skip(machine, notes,
+                        id + ": " + displayNameOf(fuel) + " burns for 0 on " + mte.getClass().getSimpleName());
+                    continue;
+                }
+                Map<String, Object> fuelResource = fuel instanceof FluidStack
+                    ? fluidStack((FluidStack) fuel)
+                    : itemStack((ItemStack) fuel);
+                if (fuelResource == null) {
+                    skip(machine, notes, id + ": " + displayNameOf(fuel) + " has no readable resource form");
+                    continue;
+                }
+                Map<String, Object> fuelEntry = fuelResource;
+                fuelEntry.put("amount", Double.valueOf(1.0));
+                fuelEntry.put("periodTicks", Integer.valueOf(10));
+                fuelEntry.put("consumedPerOperation", Double.valueOf(10.0));
+                fuelEntry.put("euPerOperation", Double.valueOf(value.doubleValue() * 10.0));
+                fuelEntry.put("maxEuT", Double.valueOf(maxEuT.doubleValue()));
+                if (recipe.mOutputs != null && recipe.mOutputs.length > 0 && recipe.mOutputs[0] != null) {
+                    Map<String, Object> containerOut = itemStack(recipe.mOutputs[0]);
+                    if (containerOut != null) {
+                        fuelEntry.put("containerOut", containerOut);
+                    }
+                }
+                fuels.add(fuelEntry);
+            }
+            entry.put("fuels", fuels);
+            entries.add(entry);
         }
     }
 }
