@@ -164,14 +164,17 @@ function toRecipeDetail(recipe: Recipe): DatasetRecipeDetail {
     minimumTier: recipe.minimumTier,
     durationTicks: recipe.durationTicks,
     eut: recipe.eut,
+    // Same agent-boundary cast as dataset-adapter.ts: an energy row (a
+    // generator's output) reaches the LLM as data; the agent's types stay
+    // their own item/fluid/aspect vocabulary.
     inputs: recipe.inputs.map((input) => ({
-      kind: input.kind,
+      kind: input.kind as ResourceKind,
       id: input.id,
       name: input.displayName,
       amount: input.amount,
     })),
     outputs: recipe.outputs.map((output) => ({
-      kind: output.kind,
+      kind: output.kind as ResourceKind,
       id: output.id,
       name: output.displayName,
       amount: output.amount,
@@ -464,11 +467,15 @@ export function createBrain(deps: BrainDeps): Brain {
         };
         for (const node of Object.values(result.nodes)) {
           if (node.status === "missing-recipe") continue;
+          // The solver's flows now carry energy rows (one per machine's grid).
+          // They reach the LLM as data - an "energy:lv" row in mustSupply is
+          // exactly the "add a generator" signal - via the same boundary cast
+          // dataset-adapter.ts uses; the agent's types stay their own.
           for (const flow of Object.values(node.inputs)) {
-            touch(flow.kind, flow.resourceId, flow.displayName, -flow.amountPerSecond);
+            touch(flow.kind as ResourceKind, flow.resourceId, flow.displayName, -flow.amountPerSecond);
           }
           for (const flow of Object.values(node.outputs)) {
-            touch(flow.kind, flow.resourceId, flow.displayName, flow.amountPerSecond);
+            touch(flow.kind as ResourceKind, flow.resourceId, flow.displayName, flow.amountPerSecond);
           }
         }
         const mustSupply = [...net.values()]

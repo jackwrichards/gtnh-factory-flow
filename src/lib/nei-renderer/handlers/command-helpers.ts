@@ -160,7 +160,10 @@ export function resourceToPositionedStack({
   return {
     resource,
     side,
-    kind: resource.kind,
+    // A positioned stack is a real in-game slot; energy is not one (the
+    // layout never places an energy slot - it is a port row, not a NEI
+    // stack), so the only kinds that arrive are the slot kinds.
+    kind: resource.kind as Exclude<ResourceKind, "energy">,
     x,
     y,
     width: NEI_ITEM_SLOT_SIZE,

@@ -11,7 +11,7 @@ export const datasetSourceInfoSchema = z.object({
 
 export const datasetResourceSchema = z.object({
   id: z.string().min(1),
-  kind: z.enum(["item", "fluid", "aspect"]),
+  kind: z.enum(["item", "fluid", "aspect", "energy"]),
   displayName: z.string().min(1),
   iconPath: z.string().optional(),
   iconAtlas: resourceIconAtlasRefSchema.optional(),
@@ -38,7 +38,7 @@ export const datasetResourceSchema = z.object({
 
 export const datasetResourceIndexEntrySchema = z.object({
   id: z.string().min(1),
-  kind: z.enum(["item", "fluid", "aspect"]),
+  kind: z.enum(["item", "fluid", "aspect", "energy"]),
   displayName: z.string().optional(),
   iconPath: z.string().optional(),
   iconAtlas: resourceIconAtlasRefSchema.optional(),

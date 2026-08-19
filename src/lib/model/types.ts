@@ -5,7 +5,7 @@ export type ItemId = string;
 export type FluidId = string;
 export type AspectId = string;
 export type ResourceId = ItemId | FluidId | AspectId;
-export type ResourceKind = "item" | "fluid" | "aspect";
+export type ResourceKind = "item" | "fluid" | "aspect" | "energy";
 export type ResourceKey = `${ResourceKind}:${string}`;
 
 export interface ResourceIconAtlasRef {

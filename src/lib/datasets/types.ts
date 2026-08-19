@@ -16,7 +16,7 @@ export interface DatasetSourceInfo {
 
 export interface DatasetResource {
   id: string;
-  kind: "item" | "fluid" | "aspect";
+  kind: "item" | "fluid" | "aspect" | "energy";
   displayName: string;
   iconPath?: string;
   iconAtlas?: ResourceIconAtlasRef;
@@ -29,7 +29,7 @@ export interface DatasetResource {
 
 export interface DatasetResourceIndexEntry {
   id: string;
-  kind: "item" | "fluid" | "aspect";
+  kind: "item" | "fluid" | "aspect" | "energy";
   displayName?: string;
   iconPath?: string;
   iconAtlas?: ResourceIconAtlasRef;

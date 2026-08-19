@@ -30,14 +30,18 @@ function toRecipeHit(summary: RecipeSummary): DatasetRecipeHit {
     minimumTier: summary.minimumTier,
     durationTicks: summary.durationTicks,
     eut: summary.eut,
+    // The agent's ResourceKind (./types) keeps its own item/fluid/aspect
+    // vocabulary; the data passes through as-is (an "energy" row reaches the
+    // LLM as data even though the agent's types don't name it) - the same
+    // boundary cast this file already uses in searchResources.
     inputs: summary.inputs.map((input) => ({
-      kind: input.kind,
+      kind: input.kind as ResourceKind,
       id: input.id,
       name: input.displayName,
       amount: input.amount,
     })),
     outputs: summary.outputs.map((output) => ({
-      kind: output.kind,
+      kind: output.kind as ResourceKind,
       id: output.id,
       name: output.displayName,
       amount: output.amount,

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { PROJECT_SCHEMA_VERSION } from "./types";
 
-export const resourceKindSchema = z.enum(["item", "fluid", "aspect"]);
+export const resourceKindSchema = z.enum(["item", "fluid", "aspect", "energy"]);
 export const resourceIconAtlasRefSchema = z.object({
   imagePath: z.string().min(1),
   atlasWidth: z.number().int().positive(),
