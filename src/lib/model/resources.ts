@@ -183,7 +183,7 @@ export function formatResourceRate(flow: ResourceFlow | undefined): string {
 
   return `${resourceLabel({ id: flow.resourceId, displayName: flow.displayName })} ${formatRate(
     flow.amountPerSecond * rateUnitMultiplier(),
-  )}${rateUnitSuffix(flow.kind === "fluid").trimStart()}`;
+  )}${rateUnitSuffix(flow.kind).trimStart()}`;
 }
 
 export function primaryOutput(recipe: Recipe): RecipeOutput | undefined {

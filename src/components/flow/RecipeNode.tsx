@@ -10,7 +10,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { ChevronDown, Copy, Cpu, Minus, Plus, Sprout } from "lucide-react";
+import { ChevronDown, Copy, Cpu, Minus, Plus, Sprout, Zap } from "lucide-react";
 import type {
   FactoryNode,
   MachineConfigTierOption,
@@ -1592,6 +1592,10 @@ function GlanceIoRow({ port }: { port: RailPort }) {
             }
             className={port.kind === "fluid" ? "!h-9 !w-9" : "!h-9 !w-9 origin-center scale-150"}
           />
+        ) : port.kind === "energy" ? (
+          // Energy is not an atlas image: the grid's bolt, in the card's
+          // energy colour, is its icon.
+          <Zap className="h-6 w-6 text-amber-400" />
         ) : null}
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
@@ -2604,6 +2608,8 @@ export function PortChip({
             }
             className={port.kind === "fluid" ? "" : "!h-7 !w-7 origin-center scale-150"}
           />
+        ) : port.kind === "energy" ? (
+          <Zap className="h-5 w-5 text-amber-400" />
         ) : (
           <span className="block h-7 w-7 border border-[var(--mc-47)] bg-[var(--mc-55)]" />
         )}
@@ -2847,7 +2853,7 @@ function CustomRatePanel({
         className="nodrag h-6 shrink-0 border border-[var(--mc-33)] bg-[var(--mc-93)] px-1 text-right text-[13px] text-[var(--mc-ink)]"
       />
       <span className="shrink-0 pr-1 text-[11px] font-bold text-[var(--mc-ink-muted)]">
-        {rateUnitSuffix(kind === "fluid").trim() || "/s"}
+        {rateUnitSuffix(kind).trim() || "/s"}
       </span>
     </div>
     </GridBlock>

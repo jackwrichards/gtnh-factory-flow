@@ -67,7 +67,7 @@ const TOL = 0.005;
  * to stay visible instead of rounding to a flat 0.00.
  */
 export function formatSlotRate(value: number, kind: string): string {
-  return `${formatSlotRateBare(value)}${rateUnitSuffix(kind === "fluid")}`;
+  return `${formatSlotRateBare(value)}${rateUnitSuffix(kind)}`;
 }
 
 export function formatSlotRateBare(value: number): string {
