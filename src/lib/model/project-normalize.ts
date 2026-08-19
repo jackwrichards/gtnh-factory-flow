@@ -1,5 +1,4 @@
 import type { FactoryProject } from "./types";
-import { normalizeProjectFuelProfiles } from "./fuels";
 import { isCustomRateRecipe, releaseCustomRates } from "./custom-rate";
 import { dedupeEdgeWires } from "./edge-identity";
 import { isTrashRecipe } from "./trash";
@@ -18,11 +17,34 @@ export function normalizeLoadedProject(project: FactoryProject): FactoryProject 
     repairPocketReferences(
       unpaintCustomRateCards(
         releaseCustomRates(
-          dropDuplicateEdges(dropCrossFormConnections(normalizeProjectFuelProfiles(project))),
+          dropDuplicateEdges(dropCrossFormConnections(dropLegacyFuelSettings(project))),
         ),
       ),
     ),
   );
+}
+
+/**
+ * Plans saved while the app estimated power from a fuel guess carry `fuelProfiles`
+ * and `selectedFuelProfileId` - a per-project fuel table and a selection in it.
+ * Power is a resource on the board now, and no code reads the fields; they are
+ * gone from the type, but a plan loaded from storage or shared as a blueprint
+ * still carries them, and a plain spread would ride them into the next save and
+ * export. The funnel drops them like every other dead setting.
+ */
+function dropLegacyFuelSettings(project: FactoryProject): FactoryProject {
+  const {
+    fuelProfiles,
+    selectedFuelProfileId,
+    ...rest
+  } = project as typeof project & {
+    fuelProfiles?: unknown;
+    selectedFuelProfileId?: string;
+  };
+  if (fuelProfiles === undefined && selectedFuelProfileId === undefined) {
+    return project;
+  }
+  return rest as FactoryProject;
 }
 
 /**

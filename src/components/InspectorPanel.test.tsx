@@ -2,7 +2,6 @@
 
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { gtnhFuelProfiles } from "@/lib/model/fuels";
 import {
   PROJECT_SCHEMA_VERSION,
   type FactoryProject,
@@ -322,8 +321,6 @@ describe("InspectorPanel", () => {
             resourceId: "ingot",
           },
         ],
-        fuelProfiles: gtnhFuelProfiles,
-        selectedFuelProfileId: "biodiesel",
       };
 
       // Boundary closed: this is about how the panel GROUPS a plan's books,

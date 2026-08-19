@@ -68,7 +68,6 @@ function board(assume: boolean): FactoryProject {
         resourceId: "ingot",
       },
     ],
-    fuelProfiles: [],
   } as FactoryProject;
 }
 

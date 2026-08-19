@@ -54,7 +54,6 @@ function project(partial: Partial<FactoryProject>): FactoryProject {
     schemaVersion: 1,
     id: "verdict-test",
     name: "verdict-test",
-    fuelProfiles: [],
     storages: [],
     recipes: [],
     nodes: [],

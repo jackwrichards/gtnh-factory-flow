@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { gtnhFuelProfiles } from "@/lib/model/fuels";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
 import { calculateThroughput } from "@/lib/solver/throughput";
 import { buildBoardDump, formatBoardDump } from "./board-dump";
@@ -97,8 +96,6 @@ function makeStarvedProject(): FactoryProject {
         resourceId: "plate",
       },
     ],
-    fuelProfiles: gtnhFuelProfiles,
-    selectedFuelProfileId: "biodiesel",
   };
 }
 

@@ -434,7 +434,6 @@ interface FactoryStore {
   optimizeMachineCounts: () => void;
   deleteEdge: (edgeId: string) => void;
   setTargetRate: (targetRate?: TargetRate) => void;
-  selectFuelProfile: (fuelProfileId: string) => void;
   renameProject: (name: string) => void;
 }
 
@@ -2326,18 +2325,6 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       const project = touchProject({
         ...state.project,
         assumeBoundaries: assumeBoundaries || undefined,
-      });
-      return withProjectHistory(state, {
-        project,
-        lastResult: calculateThroughput(project),
-      });
-    });
-  },
-  selectFuelProfile: (fuelProfileId) => {
-    set((state) => {
-      const project = touchProject({
-        ...state.project,
-        selectedFuelProfileId: fuelProfileId,
       });
       return withProjectHistory(state, {
         project,

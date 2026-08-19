@@ -28,7 +28,6 @@ function project(partial: Pick<FactoryProject, "recipes" | "nodes" | "edges">): 
     schemaVersion: 1,
     id: "allocation-test",
     name: "allocation-test",
-    fuelProfiles: [],
     storages: [],
     ...partial,
   } as FactoryProject);

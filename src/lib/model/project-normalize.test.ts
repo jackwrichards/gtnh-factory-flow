@@ -80,7 +80,6 @@ function createCrossFormProject(): FactoryProject {
         resourceId: "oxygen_cell",
       },
     ],
-    fuelProfiles: [],
   } as unknown as FactoryProject;
 }
 
@@ -161,7 +160,6 @@ describe("wires into a trash can survive a reload", () => {
       edges: [
         { id: "to-can", source: "maker", target: "can", resourceKind: kind, resourceId: "waste" },
       ],
-      fuelProfiles: [],
     } as unknown as FactoryProject;
   }
 
@@ -207,5 +205,30 @@ describe("dropping doubled wires on load", () => {
 
     const normalized = normalizeLoadedProject(doubled);
     expect(normalized.edges.map((edge) => edge.id)).toEqual(["auto-connected"]);
+  });
+});
+
+describe("dropping pre-generator fuel settings on load", () => {
+  // The fuel estimate is gone: power is a resource on the board, not a
+  // per-project guess. Plans saved with the old fields still load - the
+  // fields are simply not there anymore.
+  it("drops a pre-generator plan's fuel setting on load", () => {
+    const raw = {
+      ...createCrossFormProject(),
+      fuelProfiles: [
+        {
+          id: "biodiesel",
+          name: "Biodiesel",
+          fuelFluidId: "biodiesel",
+          euPerLiter: 12800,
+          notes: "GTNH generator fuel value.",
+        },
+      ],
+      selectedFuelProfileId: "biodiesel",
+    };
+
+    const loaded = normalizeLoadedProject(raw as never);
+    expect("fuelProfiles" in loaded).toBe(false);
+    expect("selectedFuelProfileId" in loaded).toBe(false);
   });
 });

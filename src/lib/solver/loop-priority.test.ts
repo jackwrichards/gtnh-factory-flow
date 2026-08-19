@@ -64,7 +64,6 @@ function project(over: Partial<FactoryProject>): FactoryProject {
     recipes: [],
     nodes: [],
     edges: [],
-    fuelProfiles: [],
     ...over,
   } as FactoryProject;
 }

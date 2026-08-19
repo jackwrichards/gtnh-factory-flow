@@ -57,7 +57,6 @@ describe("factory resource links", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "connected-oredict-override-test",
       name: "Connected oredict override test",
-      fuelProfiles: [],
       recipes: [
         {
           id: "tgs",
@@ -156,7 +155,6 @@ describe("factory resource links", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "contextual-output-link-test",
       name: "Contextual output link test",
-      fuelProfiles: [],
       recipes: [
         {
           id: "tgs",
@@ -544,7 +542,6 @@ describe("factory resource links", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "filled-cell-storage-test",
       name: "Filled cell storage test",
-      fuelProfiles: [],
       recipes: [
         {
           id: "cell-consumer",
@@ -630,7 +627,6 @@ describe("factory resource links", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "overridden-input-storage-link",
       name: "Overridden input storage link",
-      fuelProfiles: [],
       recipes: [
         {
           id: "pyro",
@@ -805,7 +801,6 @@ describe("factory resource links", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "repeated-slot-test",
       name: "Repeated slot test",
-      fuelProfiles: [],
       recipes: [
         {
           id: "double-out-recipe",
@@ -1082,7 +1077,6 @@ describe("project recipe refresh", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "refresh-test",
       name: "Refresh test",
-      fuelProfiles: [],
       recipes: [
         {
           id: "fluid-extractor-recipe",
@@ -1141,7 +1135,6 @@ describe("project recipe refresh", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "refresh-context-test",
       name: "Refresh context test",
-      fuelProfiles: [],
       recipes: [
         {
           id: "coke-oven-log",
@@ -1216,7 +1209,6 @@ describe("project recipe refresh", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "add-context-test",
       name: "Add context test",
-      fuelProfiles: [],
       recipes: [],
       nodes: [],
       edges: [],
@@ -1267,7 +1259,6 @@ describe("project recipe refresh", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "add-context-mode-test",
       name: "Add context mode test",
-      fuelProfiles: [],
       recipes: [],
       nodes: [],
       edges: [],
@@ -1312,7 +1303,6 @@ describe("project recipe refresh", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "connected-context-test",
       name: "Connected context test",
-      fuelProfiles: [],
       recipes: [
         {
           id: "drawer-source",
@@ -1379,7 +1369,6 @@ describe("project recipe refresh", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "connected-oredict-context-test",
       name: "Connected oredict context test",
-      fuelProfiles: [],
       recipes: [
         {
           id: "drawer-source",
@@ -2087,7 +2076,6 @@ function createLinkTestProject(): FactoryProject {
       },
     ],
     edges: [],
-    fuelProfiles: [],
   };
 }
 
@@ -2141,7 +2129,6 @@ function createRatioOptimizationProject(): FactoryProject {
         resourceId: "dust",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -2204,7 +2191,6 @@ function createCyclicRatioProject(): FactoryProject {
         resourceId: "y",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -2256,7 +2242,6 @@ function createStableDirectCycleOptimizationProject(): FactoryProject {
         resourceId: "ingot",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -2381,7 +2366,6 @@ function createSmallCyclicBottleneckProject(): FactoryProject {
         resourceId: "seed",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -2497,7 +2481,6 @@ function createCatalystLoopOptimizationProject(): FactoryProject {
         resourceId: "empty_cell",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -2556,7 +2539,6 @@ function createAmplifyingCycleProject(): FactoryProject {
         resourceId: "b",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -2716,7 +2698,6 @@ function createSplitStorageInputOptimizationProject(): FactoryProject {
         resourceId: "dust",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -2810,7 +2791,6 @@ function createMultiOutputSplitInputOptimizationProject(): FactoryProject {
         resourceId: "oil",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -2900,7 +2880,6 @@ function createSurplusStorageConsumerInputProject(): FactoryProject {
         resourceId: "woodtar",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -2954,7 +2933,6 @@ function createImplicitTerminalStorageDemandProject(): FactoryProject {
         resourceId: "oil",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -3008,7 +2986,6 @@ function createImplicitRoundedStorageProducerProject(): FactoryProject {
         resourceId: "product",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -3092,7 +3069,6 @@ function createImplicitParallelTerminalStorageDemandProject(): FactoryProject {
         resourceId: "oil",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -3192,7 +3168,6 @@ function createImplicitRoundedSourceProject(): FactoryProject {
         resourceId: "product",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -3282,7 +3257,6 @@ function createImplicitDirectAndIndirectStorageOutputProject(): FactoryProject {
         resourceId: "woodtar",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -3371,7 +3345,6 @@ function createDirectAndIndirectStorageOutputProject(): FactoryProject {
         resourceId: "woodtar",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -3437,7 +3410,6 @@ function createNakCoolantProject(): FactoryProject {
     ],
     storages: [],
     edges: [],
-    fuelProfiles: [],
   };
 }
 
@@ -3601,7 +3573,6 @@ describe("board selection editing", () => {
       recipes: [],
       nodes: [],
       edges: [],
-      fuelProfiles: [],
     });
     const pastedIds = useFactoryStore.getState().pasteBoardItems(payload, { x: 0, y: 0 });
 
@@ -3673,7 +3644,6 @@ function createSelectionEditingProject(): FactoryProject {
         resourceId: "dust",
       },
     ],
-    fuelProfiles: [],
   };
 }
 
@@ -3744,7 +3714,6 @@ describe("pocket dimensions", () => {
       edges: [
         { id: "s2a", source: "source", target: "melt-a", resourceKind: "item", resourceId: "cobblestone" },
       ],
-      fuelProfiles: [],
     });
 
     useFactoryStore.getState().compactSelectionIntoPocket(["melt-a", "melt-b"], "Lava works");
@@ -3788,7 +3757,6 @@ describe("pocket dimensions", () => {
         makeNode("melt-a", "melt", 300, 0),
         makeNode("melt-b", "melt", 300, 300),
       ],
-      fuelProfiles: [],
     };
 
     // Two different sources, one each: compacting pools them - warn.
@@ -3879,7 +3847,6 @@ describe("pocket dimensions", () => {
       edges: [
         { id: "s2a", source: "source", target: "melt-a", resourceKind: "item", resourceId: "cobblestone" },
       ],
-      fuelProfiles: [],
     });
 
     useFactoryStore.getState().dissolvePocket("pocket-x");
@@ -4068,7 +4035,6 @@ describe("cycled input picks", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "input-picks-test",
       name: "Input picks test",
-      fuelProfiles: [],
       recipes: [],
       nodes: [],
       edges: [],

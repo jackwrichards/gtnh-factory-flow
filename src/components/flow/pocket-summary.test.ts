@@ -71,7 +71,6 @@ function makeChainPocketProject(): FactoryProject {
     storages: [],
     annotations: [],
     pockets: [{ id: "pocket-1", name: "Plates", position: { x: 0, y: 0 } }],
-    fuelProfiles: [],
   };
 }
 

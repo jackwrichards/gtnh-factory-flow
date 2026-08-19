@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { gtnhFuelProfiles } from "@/lib/model/fuels";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
 import { calculateThroughput } from "./throughput";
 import { closeBoundaries } from "./close-boundaries";
@@ -53,8 +52,6 @@ describe("calculateThroughput", () => {
         },
       ],
       edges: [],
-      fuelProfiles: gtnhFuelProfiles,
-      selectedFuelProfileId: "biodiesel",
     };
 
     const result = solveClosed(project);
@@ -69,7 +66,6 @@ describe("calculateThroughput", () => {
     expect(node.utilization).toBeCloseTo(2);
     expect(node.theoreticalMachinesRequired).toBeCloseTo(6);
     expect(result.externalInputs[0]?.resourceId).toBe("ore");
-    expect(result.fuelEstimate?.fuelPerSecond).toBeCloseTo(0.28125);
   });
 
   it("prefers GTNH runtime calculation variants over local overclock formulas", () => {
@@ -118,7 +114,6 @@ describe("calculateThroughput", () => {
         },
       ],
       edges: [],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -187,7 +182,6 @@ describe("calculateThroughput", () => {
           label: "Water",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -268,7 +262,6 @@ describe("calculateThroughput", () => {
           label: "Powder",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -345,7 +338,6 @@ describe("calculateThroughput", () => {
           label: "Stick",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -402,7 +394,6 @@ describe("calculateThroughput", () => {
           label: "Dust",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -464,7 +455,6 @@ describe("calculateThroughput", () => {
           resourceId: "nitrobenzene",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -524,7 +514,6 @@ describe("calculateThroughput", () => {
           ratePerSecond: 0.03,
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -616,7 +605,6 @@ describe("calculateThroughput", () => {
           resourceId: "dust",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -738,7 +726,6 @@ describe("calculateThroughput", () => {
           resourceId: "woodtar",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -839,7 +826,6 @@ describe("calculateThroughput", () => {
           resourceId: "dust",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -921,7 +907,6 @@ describe("calculateThroughput", () => {
           resourceId: "woodtar",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1017,7 +1002,6 @@ describe("calculateThroughput", () => {
           resourceId: "woodtar",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1103,7 +1087,6 @@ describe("calculateThroughput", () => {
           resourceId: "log",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1170,7 +1153,6 @@ describe("calculateThroughput", () => {
           label: "Dust",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1235,7 +1217,6 @@ describe("calculateThroughput", () => {
           label: "Dust",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1329,7 +1310,6 @@ describe("calculateThroughput", () => {
           label: "Dust",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1382,7 +1362,6 @@ describe("calculateThroughput", () => {
         },
       ],
       edges: [],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1426,7 +1405,6 @@ describe("calculateThroughput", () => {
         },
       ],
       edges: [],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1480,7 +1458,6 @@ describe("calculateThroughput", () => {
         },
       ],
       edges: [],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1521,7 +1498,6 @@ describe("calculateThroughput", () => {
         },
       ],
       edges: [],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1623,7 +1599,6 @@ describe("calculateThroughput", () => {
         },
       ],
       edges: [],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1712,7 +1687,6 @@ describe("calculateThroughput", () => {
         },
       ],
       edges: [],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1779,7 +1753,6 @@ describe("calculateThroughput", () => {
         },
       ],
       edges: [],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1845,7 +1818,6 @@ describe("calculateThroughput", () => {
           resourceId: "cog",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);
@@ -1922,7 +1894,6 @@ describe("calculateThroughput", () => {
           resourceId: "cog",
         },
       ],
-      fuelProfiles: [],
     };
 
     const result = solveClosed(project);

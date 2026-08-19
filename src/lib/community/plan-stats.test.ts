@@ -25,7 +25,6 @@ function makeProject(nodes: FactoryNode[]): FactoryProject {
     nodes,
     storages: [],
     edges: [],
-    fuelProfiles: [],
   };
 }
 

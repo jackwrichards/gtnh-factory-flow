@@ -10,7 +10,6 @@ import type {
   EdgeThroughput,
   FactoryProject,
   FactoryStorage,
-  FuelEstimate,
   NodeThroughputResult,
   Recipe,
   ResourceAmount,
@@ -260,7 +259,6 @@ export function calculateThroughput(
     edges: edgeResults,
     totalEuT,
     totalEuPerSecond: totalEuT * TICKS_PER_SECOND,
-    fuelEstimate: calculateFuelEstimate(project, totalEuT),
     bottlenecks,
     externalInputs,
     unconsumedOutputs,
@@ -1028,41 +1026,6 @@ function getNodeStatus(utilization: number): NodeThroughputResult["status"] {
   }
 
   return "underutilized";
-}
-
-function calculateFuelEstimate(
-  project: FactoryProject,
-  totalEuT: number,
-): FuelEstimate | undefined {
-  const selectedFuel = project.fuelProfiles.find(
-    (fuel) => fuel.id === project.selectedFuelProfileId,
-  );
-
-  if (!selectedFuel) {
-    return undefined;
-  }
-
-  const totalEuPerSecond = totalEuT * TICKS_PER_SECOND;
-
-  if (selectedFuel.euPerLiter) {
-    return {
-      fuelProfile: selectedFuel,
-      totalEuPerSecond,
-      fuelPerSecond: totalEuPerSecond / selectedFuel.euPerLiter,
-      unit: "L/s",
-    };
-  }
-
-  if (selectedFuel.euPerBucket) {
-    return {
-      fuelProfile: selectedFuel,
-      totalEuPerSecond,
-      fuelPerSecond: totalEuPerSecond / selectedFuel.euPerBucket,
-      unit: "buckets/s",
-    };
-  }
-
-  return undefined;
 }
 
 export function getResourceDisplayName(

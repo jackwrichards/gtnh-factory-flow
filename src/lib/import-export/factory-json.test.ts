@@ -26,7 +26,6 @@ describe("factory JSON import/export", () => {
           recipes: [],
           nodes: [],
           edges: [],
-          fuelProfiles: [],
         }),
       ),
     ).toThrow(/Invalid factory project/);
@@ -62,7 +61,6 @@ describe("factory JSON import/export", () => {
           },
         ],
         edges: [],
-        fuelProfiles: [],
       }),
     );
 
@@ -88,7 +86,6 @@ describe("factory JSON import/export", () => {
           },
         ],
         edges: [],
-        fuelProfiles: [],
       }),
     );
 
@@ -135,7 +132,6 @@ describe("factory JSON import/export", () => {
         ],
         nodes: [],
         edges: [],
-        fuelProfiles: [],
       }),
     );
 

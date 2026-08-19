@@ -293,7 +293,6 @@ async function buildProject(dataset: DatasetQuery, spec: {
     recipes,
     nodes: nodeObjs,
     edges: edgeObjs,
-    fuelProfiles: [],
     targetRate: spec.target
       ? {
           kind: spec.target.kind,

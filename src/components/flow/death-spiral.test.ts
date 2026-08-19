@@ -26,7 +26,6 @@ function project(partial: Partial<FactoryProject>): FactoryProject {
     schemaVersion: 1,
     id: "spiral-test",
     name: "spiral-test",
-    fuelProfiles: [],
     storages: [],
     recipes: [],
     nodes: [],

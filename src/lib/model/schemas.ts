@@ -413,21 +413,6 @@ export const factoryEdgeSchema = z.object({
   waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
 });
 
-export const fuelProfileSchema = z
-  .object({
-    id: z.string().min(1),
-    name: z.string().min(1),
-    fuelFluidId: z.string().min(1),
-    euPerLiter: z.number().positive().optional(),
-    euPerBucket: z.number().positive().optional(),
-    isDemo: z.boolean().optional(),
-    notes: z.string().optional(),
-  })
-  .refine((fuel) => fuel.euPerLiter !== undefined || fuel.euPerBucket !== undefined, {
-    message: "Fuel profile needs euPerLiter or euPerBucket",
-    path: ["euPerLiter"],
-  });
-
 /**
  * The author's workspace arrangement, carried by shared setups only.
  *
@@ -476,8 +461,6 @@ export const factoryProjectSchema = z.object({
   annotations: z.array(factoryAnnotationSchema).optional().default([]),
   pockets: z.array(factoryPocketSchema).optional().default([]),
   edges: z.array(factoryEdgeSchema),
-  fuelProfiles: z.array(fuelProfileSchema),
-  selectedFuelProfileId: z.string().optional(),
   notes: z.string().optional(),
   metadata: z
     .object({
