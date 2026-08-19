@@ -301,7 +301,7 @@ export function MachineShoppingList() {
           </span>
         ) : null}
       </div>
-      <PowerBalanceBlock />
+      <PowerBalanceBlock onAddPower={(tier) => void useFactoryStore.getState().addPowerForTier(tier)} />
       {/* overflow-x hidden outright: Windows overlay scrollbars float over
           content, so a row even a pixel wide of the column summons a
           horizontal bar across the list. Nothing here is allowed to scroll

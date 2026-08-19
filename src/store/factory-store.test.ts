@@ -1,13 +1,20 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import type { DatasetManifest } from "@/lib/datasets";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { DatasetManifest, RecipeSummary } from "@/lib/datasets";
+import { getRecipeDatasetRecipe, queryRecipeDatasetRecipes } from "@/lib/datasets/browser-loader";
 import { PROJECT_SCHEMA_VERSION, type FactoryNode, type FactoryProject, type Recipe } from "@/lib/model/types";
 import { makeResourceHandleId } from "@/components/flow/resource-handles";
 import { calculateThroughput } from "@/lib/solver";
 import {
   captureBoardSelection,
   collectPocketConvergenceWarnings,
+  pickPowerRecipe,
   useFactoryStore,
 } from "./factory-store";
+
+vi.mock("@/lib/datasets/browser-loader", () => ({
+  getRecipeDatasetRecipe: vi.fn(),
+  queryRecipeDatasetRecipes: vi.fn(),
+}));
 
 describe("factory resource links", () => {
   beforeEach(() => {
@@ -4184,22 +4191,22 @@ function testDataset() {
   };
 }
 
-describe("wiring energy", () => {
-  function seedPowerProject(consumerTier: "LV" | "MV" = "LV", consumerEut = 10) {
-    const project: FactoryProject = {
-      schemaVersion: PROJECT_SCHEMA_VERSION,
-      id: "power-wire-project",
-      name: "Power wire",
-      recipes: [genRecipe, smelterRecipe(consumerEut, consumerTier)],
-      nodes: [
-        machineNode("G", "gen"),
-        machineNode("M", "smelt", { overclockTier: consumerTier }),
-      ],
-      edges: [],
-    };
-    useFactoryStore.setState({ project, lastResult: calculateThroughput(project) });
-  }
+function seedPowerProject(consumerTier: "LV" | "MV" = "LV", consumerEut = 10) {
+  const project: FactoryProject = {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "power-wire-project",
+    name: "Power wire",
+    recipes: [genRecipe, smelterRecipe(consumerEut, consumerTier)],
+    nodes: [
+      machineNode("G", "gen"),
+      machineNode("M", "smelt", { overclockTier: consumerTier }),
+    ],
+    edges: [],
+  };
+  useFactoryStore.setState({ project, lastResult: calculateThroughput(project) });
+}
 
+describe("wiring energy", () => {
   it("wires a generator to a machine on the same grid, with canonical handles", () => {
     seedPowerProject("LV");
     useFactoryStore.getState().connectNodes("G", "M", { kind: "energy", id: "lv" });
@@ -4242,5 +4249,146 @@ describe("wiring energy", () => {
     useFactoryStore.getState().connectNodes("G", "M", { kind: "energy", id: "lv" });
 
     expect(useFactoryStore.getState().project.edges).toHaveLength(0);
+  });
+});
+
+function powerSummary(overrides: { id: string; name: string; amount: number; durationTicks: number }): RecipeSummary {
+  return {
+    id: overrides.id,
+    name: overrides.name,
+    recipeMap: "Generator",
+    machineType: "Generator",
+    minimumTier: "LV",
+    durationTicks: overrides.durationTicks,
+    eut: 0,
+    inputs: [{ kind: "fluid", id: "benzene", amount: 1, displayName: "Benzene" }],
+    outputs: [{ kind: "energy", id: "lv", amount: overrides.amount, displayName: "Energy (LV)" }],
+    slots: [],
+  } as unknown as RecipeSummary;
+}
+
+describe("pickPowerRecipe", () => {
+  it("picks the highest EU per second", () => {
+    const slow = powerSummary({ id: "slow", name: "Slow", amount: 2048, durationTicks: 80 }); // 512/s
+    const fast = powerSummary({ id: "fast", name: "Fast", amount: 2048, durationTicks: 20 }); // 2048/s
+    expect(pickPowerRecipe([slow, fast], "lv")?.id).toBe("fast");
+  });
+
+  it("breaks ties by the smaller name, whatever the order", () => {
+    const gamma = powerSummary({ id: "gamma", name: "Gamma", amount: 4096, durationTicks: 40 }); // 2048/s
+    const alpha = powerSummary({ id: "alpha", name: "Alpha", amount: 8192, durationTicks: 80 }); // 2048/s
+    expect(pickPowerRecipe([gamma, alpha], "lv")?.id).toBe("alpha");
+    expect(pickPowerRecipe([alpha, gamma], "lv")?.id).toBe("alpha");
+  });
+
+  it("skips recipes that emit no energy on that grid or have no duration", () => {
+    const otherGrid = powerSummary({ id: "other", name: "Other", amount: 4096, durationTicks: 20 });
+    otherGrid.outputs[0] = { kind: "energy", id: "mv", amount: 4096, displayName: "Energy (MV)" };
+    const instant = powerSummary({ id: "instant", name: "Instant", amount: 4096, durationTicks: 0 });
+    const good = powerSummary({ id: "good", name: "Good", amount: 2048, durationTicks: 20 });
+    expect(pickPowerRecipe([otherGrid, instant, good], "lv")?.id).toBe("good");
+  });
+});
+
+describe("addPowerForTier", () => {
+  beforeEach(() => {
+    vi.mocked(queryRecipeDatasetRecipes).mockReset();
+    vi.mocked(getRecipeDatasetRecipe).mockReset();
+  });
+
+  it("places the best generator, sized to the nameplate gap, wired to the biggest draw", async () => {
+    const generator: Recipe = {
+      ...genRecipe,
+      id: "gas-st-lv",
+      name: "Gas Turbine",
+      minimumTier: "LV",
+      durationTicks: 10,
+      machineHandlers: [{ id: "lv", label: "LV Gas Turbine", machineType: "Gas Turbine", minimumTier: "LV", kind: "single" }],
+      outputs: [{ kind: "energy", id: "lv", amount: 12800, displayName: "Energy (LV)" }],
+    } as unknown as Recipe;
+    vi.mocked(queryRecipeDatasetRecipes).mockResolvedValue({
+      recipes: [
+        powerSummary({ id: "gas-st-lv", name: "Gas Turbine", amount: 12800, durationTicks: 10 }),
+        powerSummary({ id: "solar-lv", name: "Solar", amount: 2048, durationTicks: 20 }),
+      ],
+      total: 2,
+      recipeMaps: ["Generator"],
+      offset: 0,
+      limit: 120,
+      hasMore: false,
+    });
+    vi.mocked(getRecipeDatasetRecipe).mockResolvedValue(generator);
+
+    // A SMELTER-ONLY board: the nameplate gap is 10 EU/t x 20 = 200 EU/s and
+    // nothing covers it. (seedPowerProject carries the 12800 EU/s generator,
+    // so its grid is already covered — the OTHER no-op, asserted in the
+    // "already covered" test below.) The store's initial datasetManifest is
+    // undefined, so the action would no-op at the version check before the
+    // deficit is read: seed one version too.
+    const seed: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "power-add",
+      name: "Add power",
+      recipes: [smelterRecipe(10, "LV")],
+      nodes: [machineNode("M", "smelt")],
+      edges: [],
+    };
+    useFactoryStore.setState({
+      project: seed,
+      lastResult: calculateThroughput(seed),
+      ...testDataset(),
+    });
+    await useFactoryStore.getState().addPowerForTier("LV");
+
+    const project = useFactoryStore.getState().project;
+    expect(project.nodes).toHaveLength(2);
+    const placed = project.nodes.find((node) => node.recipeId === "gas-st-lv");
+    expect(placed).toBeDefined();
+    expect(placed!.machineCount).toBe(1); // ceil(200 / 25600 per machine)
+    expect(placed!.overclockTier).toBe("LV");
+    const edge = project.edges.find((entry) => entry.resourceKind === "energy");
+    expect(edge).toBeDefined();
+    expect(edge!.source).toBe(placed!.id);
+    expect(edge!.target).toBe("M");
+    // The new card is the selection, and the solve ran on the new project.
+    expect(useFactoryStore.getState().selectedNodeId).toBe(placed!.id);
+    expect(useFactoryStore.getState().lastResult.nodes[placed!.id]).toBeDefined();
+  });
+
+  it("does nothing when the grid is already covered", async () => {
+    vi.mocked(queryRecipeDatasetRecipes).mockResolvedValue({
+      recipes: [powerSummary({ id: "gas-st-lv", name: "Gas Turbine", amount: 12800, durationTicks: 10 })],
+      total: 1,
+      recipeMaps: ["Generator"],
+      offset: 0,
+      limit: 120,
+      hasMore: false,
+    });
+    vi.mocked(getRecipeDatasetRecipe).mockResolvedValue(genRecipe);
+
+    // A generator already on the board: supply covers the 200/s draw. The
+    // testDataset spread is what carries this PAST the version check, so the
+    // no-op asserted here is the deficit check, not the missing-manifest one.
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "covered",
+      name: "Covered",
+      recipes: [genRecipe, smelterRecipe(10, "LV")],
+      nodes: [machineNode("G", "gen"), machineNode("M", "smelt")],
+      edges: [],
+    };
+    useFactoryStore.setState({ project, lastResult: calculateThroughput(project), ...testDataset() });
+
+    await useFactoryStore.getState().addPowerForTier("LV");
+    expect(useFactoryStore.getState().project.nodes).toHaveLength(2);
+    expect(queryRecipeDatasetRecipes).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when the dataset is not loaded", async () => {
+    seedPowerProject("LV");
+    useFactoryStore.setState({ datasetManifest: undefined });
+    await useFactoryStore.getState().addPowerForTier("LV");
+    expect(useFactoryStore.getState().project.nodes).toHaveLength(2);
+    expect(queryRecipeDatasetRecipes).not.toHaveBeenCalled();
   });
 });
