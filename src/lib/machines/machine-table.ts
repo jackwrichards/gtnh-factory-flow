@@ -198,6 +198,11 @@ export function resolveCoefficient(
 }
 
 const COIL = "heatingCoil";
+/**
+ * The steam multiblocks' build tier control. Shared with power-report.ts,
+ * which reads the selection to bill steam.
+ */
+export const STEAM_PRESSURE = "steamPressure";
 const PIPE = "pipeCasing";
 const SOLENOID = "solenoidCoil";
 const ITEM_PIPE = "itemPipeCasing";
@@ -451,6 +456,62 @@ const TURBINE_TIER_CONTROL = countControl(
   "Sum Turbine Tier",
   [1, 2, 3, 4, 6, 8, 12, 16, 24, 32],
 );
+
+/**
+ * Bronze or steel build, for the steam multiblocks. The dataset scrapes a
+ * control with this same id (and its own x0.5 duration effect) off the
+ * "High-Pressure Doubles Speed and Steam Usage" tooltip line; declaring the
+ * control here replaces that copy, so the scraped effect can never stack on
+ * the table's coefficients. Keys and icon ids match the dataset's, so a saved
+ * selection carries over unchanged.
+ */
+const STEAM_PRESSURE_CONTROL: MachineConfigControl = {
+  id: STEAM_PRESSURE,
+  label: "Pressure",
+  minimumKey: "normal",
+  defaultKey: "normal",
+  tiers: [
+    {
+      key: "normal",
+      label: "Normal Pressure",
+      resource: {
+        kind: "item",
+        id: "factoryflow:machine_config/steam_pressure_normal",
+        amount: 1,
+        displayName: "Normal Pressure",
+        tooltip: ["Bronze build", "Runs at 62.5% of the recipe's speed"],
+      },
+    },
+    {
+      key: "high",
+      label: "High Pressure",
+      resource: {
+        kind: "item",
+        id: "factoryflow:machine_config/steam_pressure_high",
+        amount: 1,
+        displayName: "High Pressure",
+        tooltip: ["Steel build", "Twice the speed and twice the steam of bronze"],
+      },
+    },
+  ],
+};
+
+/**
+ * The eight bronze/steel steam multiblocks, transcribed from MTESteamMacerator
+ * and its siblings in gregtech.common.tileentities.machines.multi.steam. One
+ * ProcessingLogic serves all of them: no overclocking, 8 fixed parallels, and
+ * `OverclockCalculator.ofNoOverclock(recipe).setEUtDiscount(1.25 * tierMachine)
+ * .setDurationModifier(1.6 / tierMachine)` where tierMachine is 1 for a bronze
+ * build and 2 for high pressure. As throughput that is 0.625x basic and 1.25x
+ * high pressure. EU stays zeroed on these cards (they burn steam); the litres
+ * are billed by getNodeSteamReport, not by a power coefficient here.
+ */
+const STEAM_MULTIBLOCK: MachineBehaviour = {
+  overclock: OVERCLOCK.none(),
+  parallels: 8,
+  speed: (c) => 0.625 * (c.tier(STEAM_PRESSURE) + 1),
+  controls: [STEAM_PRESSURE_CONTROL],
+};
 
 /** The reference's speeding pipe casing count starts at 4. */
 const NEUTRON_PIPE_CONTROL = countControl(
@@ -899,6 +960,32 @@ const MACHINES: Record<string, MachineBehaviour> = {
     amperage: 3,
   },
 
+  // -- Steam multiblocks -----------------------------------------------------
+  // All eight share STEAM_MULTIBLOCK's logic; see its comment. The dataset
+  // bakes the tooltip's "125% Speed" into these handlers' durationTicks, which
+  // is the HIGH PRESSURE build's throughput (the tooltip states it against the
+  // 2x-slower bronze singleblock, 2 / 1.6 = 1.25), so every steam multiblock
+  // showed twice its real speed. machineTableSeedsFromBase drops that bake and
+  // these coefficients state the true physics against the recipe's own base.
+  "Steam Grinder": STEAM_MULTIBLOCK,
+  "Steam Squasher": STEAM_MULTIBLOCK,
+  "Steam Separator": STEAM_MULTIBLOCK,
+  "Steam Purifier": STEAM_MULTIBLOCK,
+  "Steam Presser": STEAM_MULTIBLOCK,
+  "Steam Blender": STEAM_MULTIBLOCK,
+  "Steam Fuser": STEAM_MULTIBLOCK,
+  "Steam Hearth": {
+    // MTESteamFurnaceMulti, same logic as its seven siblings, but its map is
+    // vanilla smelting: the dataset's base is the 200-tick vanilla smelt while
+    // the machine runs GT's fixed 128t/4EU furnace recipe. 200 / (128 x 1.6)
+    // = 0.9765625, so the shown duration lands on the game's own 204 ticks
+    // basic and 102 high pressure.
+    overclock: OVERCLOCK.none(),
+    parallels: 8,
+    speed: (c) => 0.9765625 * (c.tier(STEAM_PRESSURE) + 1),
+    controls: [STEAM_PRESSURE_CONTROL],
+  },
+
   "Spinmatron-2737": {
     overclock: OVERCLOCK.normal(),
     // MTESpinmatron: light mode runs at 4x (and demands hatches three tiers
@@ -928,6 +1015,23 @@ for (const [name, behaviour] of Object.entries(MACHINES)) {
 
 export function getMachineBehaviour(machineType: string | undefined): MachineBehaviour | undefined {
   return machineType ? BY_NAME.get(normalizeMachineName(machineType)) : undefined;
+}
+
+/**
+ * True when the table states this machine's speed or power itself. The dataset
+ * pipeline bakes its scraped multipliers into each handler's own
+ * durationTicks/eut (a Volcanus handler carries the EBF recipe pre-multiplied
+ * by x0.8 duration and x0.9 EU), so for machines the table covers those baked
+ * stats must be ignored or the bonus applies twice: the table's coefficients
+ * are stated against the recipe map's base numbers. Entries without speed or
+ * power (the Multi Smelter, whose handler carries GT's ABSOLUTE 128t/4EU
+ * furnace recipe) keep their handler stats.
+ */
+export function machineTableSeedsFromBase(machineType: string | undefined): boolean {
+  const behaviour = getMachineBehaviour(machineType);
+  return (
+    behaviour !== undefined && (behaviour.speed !== undefined || behaviour.power !== undefined)
+  );
 }
 
 /** Config knobs this machine contributes on top of whatever the dataset carries. */

@@ -73,6 +73,43 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.17.1",
+    date: "2026-08-18",
+    headline: "Side panel fixes",
+    notes: [
+      "The resource list scrolls while a row is popped out wide.",
+      "The popped out row stays clear of the scroll bar.",
+      "The power list lost its stray sideways scroll bar.",
+      "Power lines no longer show hover popups.",
+    ],
+  },
+  {
+    version: "2.17.0",
+    date: "2026-08-18",
+    headline: "Steam machines run at steam speed",
+    notes: [
+      "Steam machines now show their real speed: bronze builds run slower than LV, high pressure builds twice as fast as bronze.",
+      "Every steam card shows the litres of steam it burns per second.",
+      "The power list totals your steam and EU, and can switch between peak and average draw.",
+      "Machines like the Volcanus no longer look faster and cheaper than they run in game.",
+    ],
+    warning:
+      "Steam plans read slower now. The old numbers showed every steam machine at twice its real speed.",
+  },
+  {
+    version: "2.16.3",
+    date: "2026-08-18",
+    headline: "Machines only run on what actually arrives",
+    notes: [
+      "A machine fed by a clogged supplier now runs at what its wire delivers, not at full speed.",
+      "A slowed machine draws less of its other ingredients too, so drawers drain at the true rate.",
+      "The card names the input that holds it back.",
+      "A card's inputs and outputs no longer disagree about its speed.",
+    ],
+    warning:
+      "Some saved plans read lower now. The old numbers counted material that never actually arrived, so the new ones match what the machines build in game.",
+  },
+  {
     version: "2.16.2",
     date: "2026-08-18",
     headline: "Pocket cards work again",

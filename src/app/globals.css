@@ -722,6 +722,16 @@ textarea {
   opacity: 0;
 }
 
+/* A tooltip wrapper is `display: contents`, and opacity cannot dim a box the
+   element does not have — a drawer's whole face sat inside one, held at full
+   strength through the fade, and blinked out when the delayed visibility
+   landed. So where a glance root's direct child is a tooltip root, the fade
+   lands one level down, on the wrapper's children, which are real boxes. */
+.factory-flow-board[data-detail-level="glance"] [data-node-glance-root] > [data-tooltip-root] > * {
+  visibility: hidden;
+  opacity: 0;
+}
+
 /* The machine tab zone protrudes ABOVE the recipe card's window, outside its
    glance root, so the rule above cannot reach it — hide it here. Zoomed out
    the tabs are a few pixels of noise over the glance figure. */
@@ -756,6 +766,7 @@ textarea {
 }
 
 .factory-flow-board--value-motion [data-node-glance-root] > *:not([data-node-detail="glance"]),
+.factory-flow-board--value-motion [data-node-glance-root] > [data-tooltip-root] > *,
 .factory-flow-board--value-motion .machine-tab-zone {
   transition: opacity 220ms ease, visibility 0s;
 }
@@ -780,7 +791,32 @@ textarea {
 .factory-flow-board--value-motion[data-detail-level="glance"]
   [data-node-glance-root]
   > *:not([data-node-detail="glance"]),
+.factory-flow-board--value-motion[data-detail-level="glance"]
+  [data-node-glance-root]
+  > [data-tooltip-root]
+  > *,
 .factory-flow-board--value-motion[data-detail-level="glance"] .machine-tab-zone {
+  transition: opacity 560ms ease, visibility 0s 560ms;
+}
+
+/* The paper's ruling — the stock dot/line pattern and the ruled/graph
+   rulings — sinks out with the rest of the near view: the glance step is lit
+   tiles on dark ground, and a grid under them is close-up furniture the far
+   view has no use for. Same clock as the cards, slow out and quick back, and
+   only the motion rules below animate it so an export capture stays clean. */
+.factory-flow-board[data-detail-level="glance"] .react-flow__background,
+.factory-flow-board[data-detail-level="glance"] .board-ruling {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.factory-flow-board--value-motion .react-flow__background,
+.factory-flow-board--value-motion .board-ruling {
+  transition: opacity 220ms ease, visibility 0s;
+}
+
+.factory-flow-board--value-motion[data-detail-level="glance"] .react-flow__background,
+.factory-flow-board--value-motion[data-detail-level="glance"] .board-ruling {
   transition: opacity 560ms ease, visibility 0s 560ms;
 }
 

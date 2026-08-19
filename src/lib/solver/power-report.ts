@@ -1,4 +1,12 @@
-import { applyMachineHandlerToRecipe } from "@/lib/model/recipe-rules";
+import {
+  applyMachineHandlerToRecipe,
+  getSelectedMachineHandler,
+  GT_FURNACE_RECIPE_EUT,
+  isHighPressureSteamHandler,
+  isSmeltingRecipeMap,
+  isSteamMachineHandler,
+} from "@/lib/model/recipe-rules";
+import { STEAM_PRESSURE } from "@/lib/machines/machine-table";
 import {
   getRecipeMinimumVoltageTier,
   getVoltageTierForEuT,
@@ -9,6 +17,7 @@ import {
 import type { FactoryNode, MachineTier, Recipe } from "@/lib/model/types";
 import { getHeatDiscountMultiplier } from "./heat";
 import {
+  buildMachineContext,
   getMachineEutMultiplier,
   getMachineParallelMultiplier,
 } from "./machine-effects";
@@ -166,6 +175,78 @@ function getPowerState(
     return "over-tier";
   }
   return "ok";
+}
+
+export interface NodeSteamReport {
+  /** L/t one machine burns at full speed, parallels included. */
+  drawSteamPerTick: number;
+  /** One parallel's L/t. */
+  singleDrawSteamPerTick: number;
+  parallels: number;
+  isMultiblock: boolean;
+  highPressure: boolean;
+}
+
+/**
+ * What a steam machine burns. Steam never reaches the EU model (the handler
+ * zeroes eut so no phantom power is billed); the litres follow each machine's
+ * own rule, from the GT5-Unofficial source:
+ *
+ * - A singleblock converts 2 L per EU: a bronze machine runs the recipe's EU
+ *   as written at twice the duration, a high pressure one at twice the EU and
+ *   the recipe's own duration (SteamOverclockDescriber, (1,2) and (2,1)).
+ * - A steam multiblock consumes 1 L per EU of its calculated draw
+ *   (MTESteamMultiBlockBase.onRunningTick at full efficiency), and the draw is
+ *   recipe EU x 1.25 x tierMachine per parallel, tierMachine 2 on a high
+ *   pressure build.
+ *
+ * Smelting bills GT's fixed 4 EU/t furnace recipe; the dataset's vanilla map
+ * says 0 EU (see GT_FURNACE_RECIPE_EUT).
+ */
+export function getNodeSteamReport(
+  recipe: Recipe,
+  node: PowerReportNode,
+): NodeSteamReport | undefined {
+  if (!recipe.machineType) {
+    return undefined;
+  }
+  const handler = getSelectedMachineHandler(recipe, node);
+  if (!isSteamMachineHandler(handler)) {
+    return undefined;
+  }
+  const baseEut =
+    Math.abs(recipe.eut) > 0
+      ? Math.abs(recipe.eut)
+      : isSmeltingRecipeMap(recipe)
+        ? GT_FURNACE_RECIPE_EUT
+        : 0;
+  if (!(baseEut > 0) || recipe.durationTicks <= 0) {
+    return undefined;
+  }
+
+  const effectiveRecipe = applyMachineHandlerToRecipe(recipe, node);
+  if (effectiveRecipe.machineProfile?.kind === "multiblock") {
+    const pressureTier = buildMachineContext(effectiveRecipe, node).tier(STEAM_PRESSURE) + 1;
+    const parallels = getMachineParallelMultiplier(effectiveRecipe, node);
+    const single = baseEut * 1.25 * pressureTier;
+    return {
+      drawSteamPerTick: Math.ceil(single * parallels),
+      singleDrawSteamPerTick: single,
+      parallels,
+      isMultiblock: true,
+      highPressure: pressureTier === 2,
+    };
+  }
+
+  const highPressure = isHighPressureSteamHandler(handler);
+  const single = baseEut * (highPressure ? 2 : 1) * 2;
+  return {
+    drawSteamPerTick: Math.ceil(single),
+    singleDrawSteamPerTick: single,
+    parallels: 1,
+    isMultiblock: false,
+    highPressure,
+  };
 }
 
 /** True when the report says the machine cannot start at all. */

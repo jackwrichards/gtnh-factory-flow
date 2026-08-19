@@ -655,3 +655,160 @@ describe("conservation: drawers", () => {
     expect(result.storages["src-b"].consumedPerSecond).toBeCloseTo(10);
   });
 });
+
+describe("conservation: the settled flows never outrun the wires", () => {
+  // THE SETTLEMENT (see equilibrium.ts). Capability is clog-blind on purpose,
+  // so a consumer downstream of a merely-CLOGGED supplier used to converge at
+  // "100%", eating material its wire never carried and minting output from
+  // it. The settlement bounds every node's actual level by what really
+  // arrived, without touching the verdict layer's diagnosis.
+
+  it("a consumer downstream of a clog runs at what actually arrives", () => {
+    // Same board as the first clog test above, but asserting the TAKER's
+    // books: dual is pinned at 50% by its redstone surplus, so the gold taker
+    // receives 2.5/s of the 5/s it wants. It used to read 100% anyway and
+    // bank a full goldblock per second off half the gold.
+    const result = calculateThroughput(
+      project({
+        recipes: DUAL,
+        nodes: [node("dual", "dual"), node("rs", "eat-redstone"), node("au", "eat-gold")],
+        storages: TAKER_DRAINS.storages,
+        edges: [
+          wire("r1", "dual", "rs", "redstone"),
+          wire("g1", "dual", "au", "gold"),
+          ...TAKER_DRAINS.edges,
+        ],
+      }),
+      { generatedAt: "fixed" },
+    );
+
+    const au = result.nodes["au"];
+    expect(au.utilization).toBeCloseTo(0.5);
+    // The diagnosis is untouched: its inputs COULD cover full blast if the
+    // clog upstream were cleared, and its product drawer wants everything.
+    expect(au.capableUtilization).toBeCloseTo(1);
+    expect(au.demandUtilization).toBeCloseTo(1);
+    // The drawer banks what was really made, not the nameplate.
+    expect(result.storages["d-au"].producedPerSecond).toBeCloseTo(0.5);
+    expect(result.edges["d2"].transferredPerSecond).toBeCloseTo(0.5);
+  });
+
+  it("a starved machine releases its OTHER ingredients' unclaimed shares", () => {
+    // The taker needs gold AND a catalyst from a source drawer. Starved to
+    // 50% on gold, it must draw 50% of the catalyst too - a machine at half
+    // speed eats half of every ingredient - instead of draining the source at
+    // the full rate it can never use.
+    const result = calculateThroughput(
+      project({
+        recipes: [
+          ...DUAL.slice(0, 2),
+          recipe("eat-gold-cat", [["gold", 5], ["catalyst", 2]], [["goldblock", 1]]),
+        ],
+        nodes: [node("dual", "dual"), node("rs", "eat-redstone"), node("au", "eat-gold-cat")],
+        storages: [...TAKER_DRAINS.storages, drawer("src-cat", "catalyst")],
+        edges: [
+          wire("r1", "dual", "rs", "redstone"),
+          wire("g1", "dual", "au", "gold"),
+          wire("c1", "src-cat", "au", "catalyst"),
+          ...TAKER_DRAINS.edges,
+        ],
+      }),
+      { generatedAt: "fixed" },
+    );
+
+    expect(result.nodes["au"].utilization).toBeCloseTo(0.5);
+    expect(result.edges["c1"].transferredPerSecond).toBeCloseTo(1);
+    expect(result.storages["src-cat"].consumedPerSecond).toBeCloseTo(1);
+    // The starved input is named even though capability says "fine".
+    expect(result.nodes["au"].limitingInputKey).toBe("item:gold");
+  });
+
+  it("settles the silicone rubber board without minting anything", () => {
+    // The bug-report board (2026-08-18), distilled to per-second rates: an
+    // LCR whose HCl only one small electrolyzer can drink, so the LCR is held
+    // at 6.25% - and the chem reactor downstream must settle at the PDMS that
+    // actually arrives (0.031/s of the 0.3/s it wants), not claim the full
+    // 43.2 L/s of product. Every recipe here is one op per second, amounts
+    // are the live board's per-second rates.
+    const boardEdges = [
+      wire("e-si", "src-si", "lcr", "si"),
+      wire("e-methane", "src-methane", "lcr", "methane"),
+      wire("e-cl-src", "src-cl", "lcr", "cl"),
+      wire("e-water-src", "src-water", "lcr", "water"),
+      wire("e-hcl", "lcr", "elec", "hcl"),
+      wire("e-dhcl", "lcr", "dt", "dhcl"),
+      wire("e-dt-hcl", "dt", "elec", "hcl"),
+      wire("e-dt-water", "dt", "lcr", "water"),
+      wire("e-cl", "elec", "lcr", "cl"),
+      wire("e-pdms", "lcr", "chem", "pdms"),
+      wire("e-sulfur", "src-sulfur", "chem", "sulfur"),
+      wire("e-cell", "src-cell", "elec", "cell"),
+      wire("e-silicone", "chem", "d-silicone", "silicone"),
+      wire("e-hcell", "elec", "d-hcell", "hcell"),
+    ];
+    const result = calculateThroughput(
+      project({
+        recipes: [
+          recipe(
+            "lcr",
+            [["si", 1 / 6], ["methane", 1000 / 3], ["cl", 2000 / 3], ["water", 500 / 3]],
+            [["pdms", 0.5], ["hcl", 1000 / 3], ["dhcl", 1000 / 3]],
+          ),
+          recipe("chem", [["pdms", 0.3], ["sulfur", 1 / 30]], [["silicone", 43.2]]),
+          recipe("dt", [["dhcl", 200 / 3]], [["water", 100 / 3], ["hcl", 100 / 3]]),
+          recipe("elec", [["cell", 1 / 36], ["hcl", 250 / 9]], [["hcell", 1 / 36], ["cl", 250 / 9]]),
+        ],
+        nodes: [node("lcr", "lcr"), node("chem", "chem"), node("dt", "dt"), node("elec", "elec")],
+        storages: [
+          drawer("src-si", "si"),
+          drawer("src-methane", "methane"),
+          drawer("src-cl", "cl"),
+          drawer("src-water", "water"),
+          drawer("src-sulfur", "sulfur"),
+          drawer("src-cell", "cell"),
+          drawer("d-silicone", "silicone"),
+          { ...drawer("d-hcell", "hcell"), drainMode: "byproduct" as const },
+        ],
+        edges: boardEdges,
+      }),
+      { generatedAt: "fixed" },
+    );
+
+    // The LCR is clogged by HCl at 6.25% - and BOTH its sides say so at once.
+    // Before the convergence fix the loop stopped while the priority tranches
+    // were still moving, and one report mixed 4.17% inputs with 6.25% outputs.
+    const lcr = result.nodes["lcr"];
+    expect(lcr.utilization).toBeCloseTo(0.0625, 3);
+    expect(lcr.clogOutputKey).toBe("item:hcl");
+    expect(result.edges["e-methane"].transferredPerSecond).toBeCloseTo((1000 / 3) * 0.0625, 3);
+    expect(result.edges["e-hcl"].transferredPerSecond).toBeCloseTo((1000 / 3) * 0.0625, 3);
+
+    // The chem reactor runs at the PDMS that arrives: 0.03125/s of a 0.3/s
+    // appetite is 10.4%, and the product drawer banks 4.5 L/s - not 43.2.
+    const chem = result.nodes["chem"];
+    expect(chem.utilization).toBeCloseTo(0.104, 2);
+    expect(chem.limitingInputKey).toBe("item:pdms");
+    expect(result.storages["d-silicone"].producedPerSecond).toBeCloseTo(4.5, 2);
+    // The want survives for the striped bar: the wire still says 0.3/s asked.
+    expect(result.edges["e-pdms"].nameplateDemandPerSecond).toBeCloseTo(0.3, 3);
+    expect(result.edges["e-pdms"].transferredPerSecond).toBeCloseTo(0.03125, 3);
+    // And its sulfur drawer drains at the settled level, not the nameplate.
+    expect(result.edges["e-sulfur"].transferredPerSecond).toBeCloseTo((1 / 30) * 0.104, 3);
+
+    // Nothing anywhere eats more than its wires deliver, and (everything here
+    // being fully wired with no banked stock) nothing arrives uneaten either.
+    for (const [nodeId, nodeResult] of Object.entries(result.nodes)) {
+      const actual = Math.min(1, nodeResult.utilization);
+      for (const [key, flow] of Object.entries(nodeResult.inputs)) {
+        const consumed = flow.amountPerSecond * actual;
+        let delivered = 0;
+        for (const boardEdge of boardEdges) {
+          if (boardEdge.target === nodeId && `item:${boardEdge.resourceId}` === key) {
+            delivered += result.edges[boardEdge.id]?.transferredPerSecond ?? 0;
+          }
+        }
+        expect(Math.abs(consumed - delivered)).toBeLessThan(0.001);
+      }
+    }
+  });
+});

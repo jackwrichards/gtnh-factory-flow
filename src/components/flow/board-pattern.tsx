@@ -33,7 +33,10 @@ export function RuledBackground({
     // NOT the stock react-flow__background class: that class carries the
     // library's own dark background-color, the very layer the themed board
     // has to show through. Bare absolute positioning is all it needed.
+    // board-ruling is the glance fade's handle: zoomed out the ruling sinks
+    // away with the rest of the near view (globals.css, the LOD rules).
     <svg
+      className="board-ruling"
       style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
       aria-hidden
     >

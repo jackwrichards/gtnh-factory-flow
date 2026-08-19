@@ -8,6 +8,7 @@ import type {
 import {
   getMachineHiddenControlIds,
   getMachineTableControls,
+  machineTableSeedsFromBase,
 } from "@/lib/machines/machine-table";
 
 export interface MachineConfigTierControl {
@@ -66,6 +67,43 @@ export function isSteamMachineHandler(handler: Pick<MachineHandler, "label">): b
   return /\bsteam\b/i.test(handler.label) || /\bhigh pressure\b/i.test(handler.label);
 }
 
+/** The steel-cased half of the steam line: twice the speed, twice the steam. */
+export function isHighPressureSteamHandler(handler: Pick<MachineHandler, "label">): boolean {
+  return /\bhigh pressure\b/i.test(handler.label);
+}
+
+/**
+ * GT's fixed furnace recipe. The dataset exports smelting off the vanilla map
+ * (200 ticks, 0 EU), but every GT furnace actually runs this instead - the
+ * Electric Furnace handler carries these numbers as absolute stats, and the
+ * steam furnaces' math below seeds from them too.
+ */
+export const GT_FURNACE_RECIPE_TICKS = 128;
+export const GT_FURNACE_RECIPE_EUT = 4;
+
+/** Whether this recipe is vanilla-map smelting (see GT_FURNACE_RECIPE_TICKS). */
+export function isSmeltingRecipeMap(recipe: Pick<Recipe, "machineType" | "source">): boolean {
+  return /^(?:smelting|furnace)$/i.test(recipeMapName(recipe).trim());
+}
+
+/**
+ * Steam singleblocks run the LV recipe on borrowed math the dataset does not
+ * carry: SteamOverclockDescriber gives a bronze machine (x1 EU, x2 duration)
+ * and a high pressure one (x2 EU, x1 duration). Their handlers export no
+ * durationTicks of their own, so without this every steam machine showed the
+ * LV duration - twice its real speed.
+ */
+function steamSingleblockDurationTicks(
+  recipe: Pick<Recipe, "machineType" | "source" | "durationTicks">,
+  handler: MachineHandler,
+): number | undefined {
+  if (handler.kind === "multiblock" || !isSteamMachineHandler(handler)) {
+    return undefined;
+  }
+  const base = isSmeltingRecipeMap(recipe) ? GT_FURNACE_RECIPE_TICKS : recipe.durationTicks;
+  return isHighPressureSteamHandler(handler) ? base : base * 2;
+}
+
 export function getSelectedMachineHandler(
   recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers">,
   node: Pick<FactoryNode, "machineHandlerId">,
@@ -99,24 +137,36 @@ export function applyMachineHandlerToRecipe(
   // default machine; a different selected machine must fall back to the
   // static overclock math seeded with the handler's own duration/EU.
   const runtimeCalculation = handler.id === handlers[0].id ? recipe.runtimeCalculation : undefined;
+  // The curated table states speed and power against the recipe map's base
+  // numbers, while the dataset bakes its scraped multipliers into each
+  // handler's own durationTicks/eut (a Volcanus handler carries the EBF
+  // recipe pre-multiplied by x0.8 duration and x0.9 EU). Keeping both applies
+  // the bonus twice, so a handler whose machine the table covers seeds from
+  // the base recipe instead.
+  const seedsFromBase = machineTableSeedsFromBase(handler.machineType);
+  const handlerDurationTicks = seedsFromBase
+    ? steamSingleblockDurationTicks(recipe, handler)
+    : (handler.durationTicks ?? steamSingleblockDurationTicks(recipe, handler));
+  const handlerEut = seedsFromBase ? undefined : handler.eut;
   // Steam machines burn steam, not EU. Their handlers carry no EU override,
   // so without this they would inherit the electric recipe's EU draw and the
-  // planner would bill phantom power for them.
-  const eut = isSteamMachineHandler(handler) ? 0 : (handler.eut ?? recipe.eut);
+  // planner would bill phantom power for them. The litres they do burn are
+  // billed by getNodeSteamReport in power-report.ts.
+  const eut = isSteamMachineHandler(handler) ? 0 : (handlerEut ?? recipe.eut);
   return {
     ...recipe,
     runtimeCalculation,
     machineType: handler.machineType,
     minimumTier: handler.minimumTier,
-    durationTicks: handler.durationTicks ?? recipe.durationTicks,
+    durationTicks: handlerDurationTicks ?? recipe.durationTicks,
     eut,
     machineConfigControls,
     machineProfile: {
       ...recipe.machineProfile,
       machineType: handler.machineType,
       minimumTier: handler.minimumTier,
-      durationTicks: handler.durationTicks ?? recipe.machineProfile?.durationTicks,
-      eut: handler.eut ?? recipe.machineProfile?.eut,
+      durationTicks: handlerDurationTicks ?? recipe.machineProfile?.durationTicks,
+      eut: handlerEut ?? recipe.machineProfile?.eut,
       maxParallel: handler.maxParallel ?? recipe.machineProfile?.maxParallel,
       eutLimit: handler.eutLimit ?? recipe.machineProfile?.eutLimit,
       perfectOverclock: handler.perfectOverclock ?? recipe.machineProfile?.perfectOverclock,

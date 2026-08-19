@@ -31,6 +31,12 @@ export interface WorkspaceView {
    * shows as one signed figure instead of both. Display arithmetic only.
    */
   netFlowRates: boolean;
+  /**
+   * The build list's power figures, weighted by how hard each machine
+   * actually runs instead of every machine at full draw at once. Display
+   * arithmetic only.
+   */
+  averageMachineDraw: boolean;
   /** The trend graphs at the foot of the resource panel. */
   trendsOpen: boolean;
   /** Resources the user has hidden, by ResourceKey. */
@@ -47,6 +53,7 @@ export const DEFAULT_WORKSPACE_VIEW: WorkspaceView = {
   showHiddenResources: false,
   favouritesOnly: false,
   netFlowRates: false,
+  averageMachineDraw: false,
   trendsOpen: true,
   hiddenResourceKeys: [],
   favouriteResourceKeys: [],
@@ -108,6 +115,10 @@ function readWorkspaceView(): WorkspaceView {
       ),
       favouritesOnly: flag(parsed.favouritesOnly, DEFAULT_WORKSPACE_VIEW.favouritesOnly),
       netFlowRates: flag(parsed.netFlowRates, DEFAULT_WORKSPACE_VIEW.netFlowRates),
+      averageMachineDraw: flag(
+        parsed.averageMachineDraw,
+        DEFAULT_WORKSPACE_VIEW.averageMachineDraw,
+      ),
       trendsOpen: flag(parsed.trendsOpen, DEFAULT_WORKSPACE_VIEW.trendsOpen),
     };
   } catch {

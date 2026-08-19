@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject, type Recipe } from "@/lib/model/types";
-import { getNodePowerReport } from "./power-report";
+import { getNodePowerReport, getNodeSteamReport } from "./power-report";
 import { getOverclockedRecipeStats } from "./overclock";
 import { calculateThroughput } from "./throughput";
 
@@ -178,5 +178,147 @@ describe("energy hatches", () => {
     expect(report.tier).toBe("LV");
     expect(report.amps).toBe(1);
     expect(report.state).toBe("ok");
+  });
+});
+
+/**
+ * The steam line, shaped exactly like the 2.9.0-beta-2 dataset ships it: the
+ * macerator map's 300-tick, 2 EU/t recipe with the singleblock steam handlers
+ * (which export no stats of their own) and the Steam Grinder multiblock
+ * (whose exported durationTicks bakes the tooltip's wrong "125% Speed").
+ */
+function maceratorRecipe(): Recipe {
+  return {
+    id: "macerate-test",
+    name: "Macerate test",
+    machineType: "Macerator",
+    minimumTier: "ULV",
+    durationTicks: 300,
+    eut: 2,
+    inputs: [],
+    outputs: [],
+    machineHandlers: [
+      { id: "macerator", label: "Macerator", kind: "single", machineType: "Macerator", minimumTier: "ULV" },
+      { id: "steam-macerator", label: "Steam Macerator", kind: "single", machineType: "Steam Macerator", minimumTier: "ULV" },
+      { id: "high-pressure-steam-macerator", label: "High Pressure Steam Macerator", kind: "single", machineType: "High Pressure Steam Macerator", minimumTier: "ULV" },
+      { id: "steam-grinder", label: "Steam Grinder", kind: "multiblock", machineType: "Steam Grinder", minimumTier: "ULV", durationTicks: 240 },
+    ],
+  } as unknown as Recipe;
+}
+
+describe("steam machines", () => {
+  it("runs the bronze steam multiblock at 1.6x the recipe and bills its steam", () => {
+    // MTESteamMacerator: duration x 1.6 / tierMachine, 8 parallels, and the
+    // draw is recipe EU x 1.25 x tierMachine at 1 L per EU. The dataset's
+    // baked 240-tick handler duration (the high pressure figure) must not
+    // leak through - that bake is what showed every steam multi at twice its
+    // real speed.
+    const recipe = maceratorRecipe();
+    const node = { overclockTier: "LV", machineHandlerId: "steam-grinder", machineConfigTiers: {} };
+
+    expect(getOverclockedRecipeStats(recipe, node).durationTicks).toBe(480);
+    const steam = getNodeSteamReport(recipe, node);
+    expect(steam?.drawSteamPerTick).toBe(20); // 2 EU x 1.25 x 8 parallels
+    expect(steam?.parallels).toBe(8);
+    expect(steam?.isMultiblock).toBe(true);
+    expect(steam?.highPressure).toBe(false);
+  });
+
+  it("doubles the multiblock's speed and steam on a high pressure build", () => {
+    const recipe = maceratorRecipe();
+    const node = {
+      overclockTier: "LV",
+      machineHandlerId: "steam-grinder",
+      machineConfigTiers: { steamPressure: "high" },
+    };
+
+    expect(getOverclockedRecipeStats(recipe, node).durationTicks).toBe(240);
+    const steam = getNodeSteamReport(recipe, node);
+    expect(steam?.drawSteamPerTick).toBe(40);
+    expect(steam?.highPressure).toBe(true);
+  });
+
+  it("runs steam singleblocks at bronze 2x / high pressure 1x with 2 L per EU", () => {
+    // SteamOverclockDescriber: bronze is (x1 EU, x2 duration), steel is
+    // (x2 EU, x1 duration), both converting 2 L per EU. Their handlers export
+    // no durations, which is why they used to show the LV recipe's speed.
+    const recipe = maceratorRecipe();
+    const bronze = { overclockTier: "LV", machineHandlerId: "steam-macerator", machineConfigTiers: {} };
+    const high = { overclockTier: "LV", machineHandlerId: "high-pressure-steam-macerator", machineConfigTiers: {} };
+
+    expect(getOverclockedRecipeStats(recipe, bronze).durationTicks).toBe(600);
+    expect(getOverclockedRecipeStats(recipe, high).durationTicks).toBe(300);
+    expect(getNodeSteamReport(recipe, bronze)?.drawSteamPerTick).toBe(4);
+    expect(getNodeSteamReport(recipe, high)?.drawSteamPerTick).toBe(8);
+  });
+
+  it("seeds smelting from GT's fixed 128t/4EU furnace recipe", () => {
+    // The dataset exports smelting off the vanilla map (200 ticks, 0 EU); the
+    // steam furnaces and the Steam Hearth actually run GT's furnace recipe.
+    const recipe = {
+      id: "smelt-test",
+      name: "Smelt test",
+      machineType: "Furnace",
+      minimumTier: "NONE",
+      durationTicks: 200,
+      eut: 0,
+      inputs: [],
+      outputs: [],
+      machineHandlers: [
+        { id: "furnace", label: "Furnace", kind: "single", machineType: "Furnace", minimumTier: "NONE" },
+        { id: "steam-furnace", label: "Steam Furnace", kind: "single", machineType: "Steam Furnace", minimumTier: "NONE" },
+        { id: "steam-hearth", label: "Steam Hearth", kind: "multiblock", machineType: "Steam Hearth", minimumTier: "NONE", durationTicks: 160 },
+      ],
+    } as unknown as Recipe;
+
+    // Bronze steam furnace: 128 x 2 = 256 ticks, 4 EU x 2 L = 8 L/t.
+    const single = { overclockTier: "LV", machineHandlerId: "steam-furnace", machineConfigTiers: {} };
+    expect(getOverclockedRecipeStats(recipe, single).durationTicks).toBe(256);
+    expect(getNodeSteamReport(recipe, single)?.drawSteamPerTick).toBe(8);
+
+    // Steam Hearth: 128 x 1.6 = 204.8 -> 204 whole ticks; 4 EU x 1.25 x 8.
+    const hearth = { overclockTier: "LV", machineHandlerId: "steam-hearth", machineConfigTiers: {} };
+    expect(getOverclockedRecipeStats(recipe, hearth).durationTicks).toBe(204);
+    expect(getNodeSteamReport(recipe, hearth)?.drawSteamPerTick).toBe(40);
+  });
+
+  it("gives no steam report to the electric handler on the same recipe", () => {
+    expect(
+      getNodeSteamReport(maceratorRecipe(), { overclockTier: "LV", machineHandlerId: "macerator", machineConfigTiers: {} }),
+    ).toBeUndefined();
+  });
+});
+
+describe("curated table vs baked handler stats", () => {
+  it("seeds table-covered handlers from the base recipe, not the baked one", () => {
+    // The dataset bakes scraped multipliers into handler stats: the Volcanus
+    // handler on a 3000t/120EU blast recipe carries 1364t/108EU (x0.8 / x0.9
+    // pre-applied). The table also states speed 2.2 and power 0.9, so reading
+    // both applied the bonus twice - 620 ticks instead of the game's 1363.
+    const recipe = {
+      id: "blast-test",
+      name: "Blast test",
+      machineType: "Blast Furnace",
+      minimumTier: "MV",
+      durationTicks: 3000,
+      eut: 120,
+      inputs: [],
+      outputs: [],
+      machineHandlers: [
+        { id: "blast-furnace", label: "Blast Furnace", kind: "multiblock", machineType: "Blast Furnace", minimumTier: "MV" },
+        { id: "volcanus", label: "Volcanus", kind: "multiblock", machineType: "Volcanus", minimumTier: "MV", durationTicks: 1364, eut: 108 },
+      ],
+    } as unknown as Recipe;
+
+    const stats = getOverclockedRecipeStats(recipe, {
+      overclockTier: "MV",
+      machineHandlerId: "volcanus",
+      machineConfigTiers: {},
+    });
+
+    // 3000 / 2.2 truncated to whole ticks, once.
+    expect(stats.durationTicks).toBe(1363);
+    // 120 x 0.9, once.
+    expect(Math.round(stats.eut)).toBe(108);
   });
 });

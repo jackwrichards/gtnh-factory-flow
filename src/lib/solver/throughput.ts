@@ -699,6 +699,28 @@ function finalizeNodeReports(
       }
     }
 
+    // THE SETTLEMENT's bound (see equilibrium.ts): what the wires really
+    // delivered. The clamps above read wants and clog-blind capability, so a
+    // consumer of a merely-CLOGGED (not small) supplier passed them at 100%
+    // while its wire carried a trickle, and every book multiplied off that.
+    // Applied against the CLAMPED reading so an over-asked node keeps its
+    // >100% bottleneck figure when it really does run flat out.
+    const actualLimit = equilibrium.actualByNode.get(node.id);
+    const actualBound =
+      actualLimit !== undefined &&
+      actualLimit < Math.min(1, utilizationReport.utilization) - EPSILON;
+    if (actualBound) {
+      utilizationReport.utilization = actualLimit;
+      utilizationReport.requiredRatePerSecond = utilizationReport.maxRatePerSecond * actualLimit;
+      utilizationReport.theoreticalMachinesRequired = node.machineCount * actualLimit;
+      if (utilizationReport.limitingResource) {
+        utilizationReport.limitingResource = {
+          ...utilizationReport.limitingResource,
+          amountPerSecond: utilizationReport.requiredRatePerSecond,
+        };
+      }
+    }
+
     const capableUtilization = clampUtilization(inputSupplyLimit ?? 1);
     // THE bottleneck, reported from the HONEST book: rank every connected
     // input by honest deliverability ÷ full-blast need, sorted keys for
@@ -754,6 +776,12 @@ function finalizeNodeReports(
         limitingKey = inputSupply.resourceKey;
         limitingTied = inputSupply.tiedKeys.length > 0 ? inputSupply.tiedKeys : undefined;
       }
+    }
+    // A node the settlement throttled below every ranking above still needs
+    // its binder named: the honest book sees clog-blind capability, so the
+    // input that really pulled it down comes from the delivered book.
+    if (limitingKey === undefined && actualBound) {
+      limitingKey = equilibrium.actualLimitingInputByNode.get(node.id);
     }
     nodeResult.limitingInputKey = limitingKey;
     nodeResult.limitingInputTiedKeys = limitingTied;

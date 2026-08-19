@@ -199,6 +199,17 @@ describe("curated machine table", () => {
       "Spinmatron-2737",
       "Source Chamber",
       "Target Chamber",
+      // The steam multiblocks were rewritten (single controller, casing-tier
+      // pressure, flat 1.6 / tierMachine); the reference still models the old
+      // upgrade ladder. Transcribed from MTESteamMacerator and siblings.
+      "Steam Grinder",
+      "Steam Squasher",
+      "Steam Separator",
+      "Steam Purifier",
+      "Steam Presser",
+      "Steam Blender",
+      "Steam Fuser",
+      "Steam Hearth",
     ]);
 
     for (const [name, entry] of Object.entries(reference)) {
@@ -276,7 +287,21 @@ describe("curated machine table", () => {
     // Entries transcribed straight from the GT5-Unofficial source rather than
     // the reference calculator; each one's table comment cites its class.
     const SOURCE_VERIFIED = new Set(
-      ["Mega Blast Furnace", "Arc Furnace", "Short Circuit Heater"].map(normalizeMachineName),
+      [
+        "Mega Blast Furnace",
+        "Arc Furnace",
+        "Short Circuit Heater",
+        // The steam multiblocks, from MTESteamMacerator and its siblings in
+        // gregtech.common.tileentities.machines.multi.steam.
+        "Steam Grinder",
+        "Steam Squasher",
+        "Steam Separator",
+        "Steam Purifier",
+        "Steam Presser",
+        "Steam Blender",
+        "Steam Fuser",
+        "Steam Hearth",
+      ].map(normalizeMachineName),
     );
     // Every entry must trace back to a reference definition or a direct source
     // transcription, under its own name or an alias - nothing is invented.
@@ -289,6 +314,41 @@ describe("curated machine table", () => {
     });
 
     expect(untraceable).toEqual([]);
+  });
+
+  it("runs the steam multiblocks at 62.5% basic and 125% high pressure", () => {
+    // MTESteamMacerator and siblings: duration x 1.6 / tierMachine, 8 fixed
+    // parallels, no overclocking. The macerator's 300-tick recipe runs in 480
+    // ticks on a bronze build and 240 on high pressure.
+    // eut 0, as every steam recipe reads by the time effects run: the handler
+    // zeroes EU (they burn steam), which is also what frees all 8 parallels
+    // from the powered-parallel cap.
+    const grinder = {
+      machineType: "Steam Grinder",
+      minimumTier: "ULV",
+      eut: 0,
+      machineConfigControls: [],
+    } as unknown as Recipe;
+    const bronze = { machineConfigTiers: {} };
+    const highPressure = { machineConfigTiers: { steamPressure: "high" } };
+
+    expect(getMachineDurationMultiplier(grinder, bronze)).toBeCloseTo(1.6, 10);
+    expect(getMachineDurationMultiplier(grinder, highPressure)).toBeCloseTo(0.8, 10);
+    expect(getMachineParallelMultiplier(grinder, bronze)).toBe(8);
+    const spec = resolveOverclockSpec(getMachineBehaviour("Steam Grinder"), {
+      tier: () => 0,
+      value: () => 0,
+      voltageTier: 1,
+    });
+    expect(spec).toEqual(OVERCLOCK.none());
+
+    // The Steam Hearth's map is vanilla smelting: the machine runs GT's fixed
+    // 128-tick furnace recipe while the dataset's base is the 200-tick vanilla
+    // smelt, so its multiplier lands the shown duration on the game's own 204
+    // ticks basic and 102 high pressure.
+    const hearth = { ...grinder, machineType: "Steam Hearth" } as Recipe;
+    expect(200 * getMachineDurationMultiplier(hearth, bronze)).toBeCloseTo(204.8, 10);
+    expect(200 * getMachineDurationMultiplier(hearth, highPressure)).toBeCloseTo(102.4, 10);
   });
 
   it("leaves machines it does not cover on the dataset's own values", () => {

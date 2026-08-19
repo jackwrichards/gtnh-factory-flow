@@ -953,7 +953,10 @@ function FlowVirtualList({
     // clientWidth, not innerWidth: innerWidth counts the width of a classic
     // scrollbar and the `right` of a fixed element is measured from the initial
     // containing block, which does not. That difference is what let the row
-    // underneath peek out down one side of its own copy.
+    // underneath peek out down one side of its own copy. Flush with the row on
+    // purpose: an inset "for the scrollbar" left the row's lit edge showing
+    // beside its own copy, which read as a second row. The scrollbar problem
+    // is solved by the copy being a pointer GHOST instead — see the wrapper.
     overlay.style.right = `${document.documentElement.clientWidth - box.right}px`;
   }, [expandedKey, findExpandedRow]);
 
@@ -982,7 +985,10 @@ function FlowVirtualList({
     // arriving, and it has not been painted yet.
     overlay.classList.add("resource-row-measuring");
     overlay.style.width = "max-content";
-    const natural = overlay.offsetWidth;
+    // Fractional measurement plus slack, never offsetWidth: that rounds to
+    // whole pixels, and a round-down of a fractional max-content re-trims
+    // the name to "…" — the whole point of the copy is that it never does.
+    const natural = Math.ceil(overlay.getBoundingClientRect().width) + 2;
     overlay.style.width = `${Math.round(
       Math.min(Math.max(natural, box.width), Math.max(box.right - 12, box.width)),
     )}px`;
@@ -1005,6 +1011,48 @@ function FlowVirtualList({
       window.removeEventListener("resize", positionExpanded);
     };
   }, [expandedKey, positionExpanded, sizeExpanded]);
+
+  /**
+   * Dismissal, watched from the document: the copy is pointer-transparent,
+   * so it cannot see the pointer leave it. While one is up, the pointer is
+   * either on a list row (rows keep or replace the copy themselves), on the
+   * copy's own box (reading the overhang, or on its mark buttons), or it has
+   * moved on — board, headers, filter box — and the copy folds. There is
+   * deliberately NO carve-out near the scrollbar: the ghost already lets the
+   * bar be grabbed through it, and an early fold there dropped the copy
+   * exactly while the pointer travelled toward the star and eye.
+   */
+  useEffect(() => {
+    if (!expandedKey) {
+      return undefined;
+    }
+    const onMove = (event: globalThis.MouseEvent) => {
+      const overlay = overlayRef.current;
+      const target = event.target;
+      if (target instanceof Element && overlay?.contains(target)) {
+        return;
+      }
+      if (
+        target instanceof Element &&
+        target.closest("[data-resource-row], [data-resource-chart]")
+      ) {
+        return;
+      }
+      const copy = overlay?.getBoundingClientRect();
+      if (
+        copy &&
+        event.clientX >= copy.left &&
+        event.clientX <= copy.right &&
+        event.clientY >= copy.top &&
+        event.clientY <= copy.bottom
+      ) {
+        return;
+      }
+      setExpandedState(undefined);
+    };
+    document.addEventListener("mousemove", onMove, { capture: true, passive: true });
+    return () => document.removeEventListener("mousemove", onMove, { capture: true });
+  }, [expandedKey]);
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -1181,11 +1229,14 @@ function FlowVirtualList({
           }
           // One ring around the pair, so the row and its chart read as a
           // single lit block instead of two separately outlined things.
-          className="resource-row-expand fixed z-[60] overflow-hidden rounded bg-surface-raised shadow-xl ring-1 ring-cyan-500/60"
-          onMouseLeave={() => {
-            setExpandedState(undefined);
-            onHover(undefined);
-          }}
+          // A pointer GHOST: every event falls through to the real list
+          // underneath, so the wheel scrolls it, the scrollbar stays
+          // grabbable through the copy, and a double-click still flies the
+          // board — while the copy itself just SHOWS the full name. Only the
+          // mark buttons opt back into the pointer (pointer-events-auto on
+          // themselves). Hover and dismissal are the underlying rows' and the
+          // document watcher's job now, not this element's.
+          className="resource-row-expand pointer-events-none fixed z-[60] overflow-hidden rounded bg-surface-raised shadow-xl ring-1 ring-cyan-500/60"
         >
           <FlowResourceRow
             balance={expandedRow.balance}
@@ -1392,8 +1443,8 @@ const FlowResourceRow = memo(function FlowResourceRow({
         // worst case at all times. It has to be a separate fixed-position
         // layer: this row lives in an `overflow-y: auto` box, which clips
         // anything reaching past its left edge, so widening in place would
-        // just truncate somewhere else. The wide copy re-raises itself on
-        // enter, which is what keeps it up while the pointer is on it.
+        // just truncate somewhere else. The copy is pointer-transparent, so
+        // this enter keeps firing through it and keeps the expansion fresh.
         const box = event.currentTarget.getBoundingClientRect();
         onExpand(
           balance.key,

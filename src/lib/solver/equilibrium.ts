@@ -90,6 +90,16 @@ const EPSILON = 0.000001;
  * its internal needs allowed to borrow against the ring's own capability
  * (the solver priming the loop), and that answer is adopted only if the
  * borrowing idles out - see the balanced-ring rescue below.
+ *
+ * THE SETTLEMENT closes the books last. Because capability is clog-blind on
+ * purpose, a consumer downstream of a clogged supplier converges wanting and
+ * "capable of" full blast while its wire carries a trickle - and every
+ * figure multiplied off that level mints material from nowhere. After the
+ * verdicts converge (and any rescue is judged), a separate fixed point
+ * bounds each node's ACTUAL level by what its wires really delivered and
+ * re-settles the actual flows at it, without ever feeding back into
+ * capability, demand or disposal: the card still diagnoses the clog, the
+ * books stop paying out on it.
  */
 
 export interface EdgeAllocationResult {
@@ -119,6 +129,15 @@ export interface EquilibriumSolution {
   disposalByNode: Map<string, number>;
   /** The output resource whose surplus sets `disposalByNode`, when one does. */
   clogOutputByNode: Map<string, ResourceKey>;
+  /**
+   * The settled ACTUAL run level: min(capable, demand, disposal) further
+   * bounded by what each node's wires really delivered (see THE SETTLEMENT).
+   * This is the one figure the books may multiply nameplate rates by.
+   */
+  actualByNode: Map<string, number>;
+  /** The input whose real arrivals pulled `actualByNode` below the verdict
+   * level, for nodes the settlement throttled. */
+  actualLimitingInputByNode: Map<string, ResourceKey>;
   edgeAllocations: Map<string, EdgeAllocationResult>;
   eatenByNeed: Map<string, number>;
   unmetDesireByNeed: Map<string, number>;
@@ -295,6 +314,10 @@ const CONVERGENCE_EPS = 1e-9;
 const ZERO_SNAP = 1e-7;
 const MACHINE_FILL_ROUNDS = 32;
 const STORAGE_FILL_ROUNDS = 8;
+/** Passes of the post-convergence settlement (see THE SETTLEMENT below): each
+ * pass propagates a delivered-input bound one hop, so this caps how deep a
+ * starved chain settles in one solve. */
+const SETTLE_ROUNDS = 32;
 
 export function solveEquilibrium(
   project: FactoryProject,
@@ -631,6 +654,11 @@ export function solveEquilibrium(
   // own supply of that resource, which is all the anchor may redistribute.
   // Empty except during the balanced-ring rescue's second descent (see below).
   let activeAnchors: RingAnchorPlan | undefined;
+  // Set only during the settlement (see THE SETTLEMENT below): each node's
+  // actual run level, bounded by what its wires really delivered. While set,
+  // runRound throttles the ACTUAL-flow side - desire asks, actual offers,
+  // sink absorption - by it, and the verdict-side fills stand down.
+  let settleAct: Map<string, number> | undefined;
   // The priority tranche starts empty: round one splits fairly, and from the
   // second round on each output's must-ship rate is served first (see the
   // priority map in runRound).
@@ -732,13 +760,22 @@ export function solveEquilibrium(
         budgetKey,
         stoppedByBareSlot.has(budget.ownerId)
           ? 0
-          : Math.max(
-              budget.makePerSecond * clampUtilization(Math.min(capable, disposal)),
-              Math.min(
-                unconditionalByBudget.get(budgetKey) ?? 0,
-                budget.makePerSecond * capable,
+          : settleAct
+            ? // Settling: a machine ships exactly what it makes at its
+              // delivered-input level. The tranche floor is deliberately gone
+              // - it exists to break latches DURING the descent, and material
+              // above the settled level is exactly what the settlement is
+              // here to stop shipping. runFill still serves the (capped)
+              // priority tranche first, so the allocation ORDER between
+              // competing consumers stays the converged one.
+              budget.makePerSecond * clampUtilization(settleAct.get(budget.ownerId) ?? 0)
+            : Math.max(
+                budget.makePerSecond * clampUtilization(Math.min(capable, disposal)),
+                Math.min(
+                  unconditionalByBudget.get(budgetKey) ?? 0,
+                  budget.makePerSecond * capable,
+                ),
               ),
-            ),
       );
     }
     // TWO offers again, for the same reason the budgets have two.
@@ -865,17 +902,31 @@ export function solveEquilibrium(
         continue;
       }
       const ceiling = sibCeil(info, needKey);
-      askAvailability.set(needKey, need.nameplatePerSecond * ceiling);
+      // Settling: consumption follows the recipe at the node's actual level -
+      // a machine at 10% eats 10% of EVERY ingredient, so a starved input
+      // releases its siblings' unclaimed shares back to the board. The
+      // availability and shadow asks stand down (their fills answer verdict
+      // questions the settlement leaves frozen).
+      askAvailability.set(needKey, settleAct ? 0 : need.nameplatePerSecond * ceiling);
       askDesire.set(
         needKey,
-        need.nameplatePerSecond * Math.min(clampUtilization(dem.get(need.targetId) ?? 1), ceiling),
+        need.nameplatePerSecond *
+          Math.min(
+            settleAct
+              ? clampUtilization(settleAct.get(need.targetId) ?? 0)
+              : clampUtilization(dem.get(need.targetId) ?? 1),
+            ceiling,
+          ),
       );
       // The same ask, throttled by demWANT instead of dem: what this consumer
       // would take if no clog anywhere were holding it back. See the shadow
       // fill below for why disposal has to be judged on this and not on dem.
       askShadow.set(
         needKey,
-        need.nameplatePerSecond * Math.min(clampUtilization(demW.get(need.targetId) ?? 1), ceiling),
+        settleAct
+          ? 0
+          : need.nameplatePerSecond *
+              Math.min(clampUtilization(demW.get(need.targetId) ?? 1), ceiling),
       );
     }
 
@@ -956,11 +1007,13 @@ export function solveEquilibrium(
       // bank the full nameplate off a machine idling at a fifth of it, which
       // is exactly the conservation break the drawer exists to prevent.
       const runs = clampUtilization(
-        Math.min(
-          cap.get(budget.ownerId) ?? 1,
-          disp.get(budget.ownerId) ?? 1,
-          clampUtilization(dem.get(budget.ownerId) ?? 1),
-        ),
+        settleAct
+          ? (settleAct.get(budget.ownerId) ?? 0)
+          : Math.min(
+              cap.get(budget.ownerId) ?? 1,
+              disp.get(budget.ownerId) ?? 1,
+              clampUtilization(dem.get(budget.ownerId) ?? 1),
+            ),
       );
       const offered = budgetOfferActual.get(budgetKey) ?? 0;
       const takenByMachines = Math.max(
@@ -1539,6 +1592,26 @@ export function solveEquilibrium(
       );
     }
 
+    // The lagged auxiliary state is part of the fixed point too. Watching
+    // only the four vectors, a board could repeat them exactly for one round
+    // while the priority tranches were still moving, stop, and report a
+    // round computed from mid-flight tranches - the silicone board read its
+    // LCR's inputs at one level and its outputs at another. Both figures are
+    // normalized onto the same utilization scale the vector deltas use.
+    for (const [budgetKey, budget] of budgets) {
+      if (budget.makePerSecond <= EPSILON) {
+        continue;
+      }
+      const prev = unconditionalByBudget.get(budgetKey) ?? 0;
+      const next = output.unconditionalNext.get(budgetKey) ?? 0;
+      maxDelta = Math.max(maxDelta, Math.abs(next - prev) / budget.makePerSecond);
+    }
+    for (const poolKey of pools.keys()) {
+      const prev = poolInflow.get(poolKey) ?? 0;
+      const next = output.poolInflowNext.get(poolKey) ?? 0;
+      maxDelta = Math.max(maxDelta, Math.abs(next - prev) / Math.max(1, prev, next));
+    }
+
     for (const info of machineNodes) {
       // The power-stalled machines stay pinned at zero across rounds;
       // everything else follows the fill.
@@ -1825,6 +1898,116 @@ export function solveEquilibrium(
     }
   }
 
+  // ---- THE SETTLEMENT. -------------------------------------------------------
+  // The converged answer can still CLAIM more than the wires deliver.
+  // Capability is deliberately clog-blind (see the two offers in runRound),
+  // so a consumer downstream of a clogged supplier converges wanting full
+  // blast, reads capable of it, and eats material that never arrives - the
+  // silicone board's chem reactor sat at "100%", minting 43.2 L/s of product
+  // from a 0.03/s trickle of PDMS. The verdict layer is RIGHT to keep the
+  // clog-blind reading - it is what says "one wire clears it" instead of
+  // cascading one clog into a board of phantom shortages - but the settled
+  // flows must conserve.
+  //
+  // So one last, separate fixed point, AFTER the verdicts are done: each
+  // node's actual level is bounded by what its wires really delivered, and
+  // the actual-flow side (desire asks, actual offers, sink absorption) is
+  // re-run at that level - a starved machine releases its other ingredients'
+  // unclaimed shares, its own output offer shrinks, and the bound chases
+  // down its consumers hop by hop. None of it feeds back into cap/dem/disp,
+  // so the diagnosis keeps naming the clog while the books keep the truth.
+  // Boards whose deliveries already cover every claim - almost all of them -
+  // skip this entirely and keep their figures bit for bit.
+  const act = new Map<string, number>();
+  const actBinders = new Map<string, ResourceKey>();
+  {
+    for (const info of machineNodes) {
+      act.set(
+        info.id,
+        clampUtilization(
+          Math.min(
+            clampUtilization(cap.get(info.id) ?? 1),
+            clampUtilization(dem.get(info.id) ?? 1),
+            clampUtilization(disp.get(info.id) ?? 1),
+          ),
+        ),
+      );
+    }
+    const deliveredBound = (
+      round: RoundOutput,
+      info: MachineNodeInfo,
+    ): { bound: number; binder?: ResourceKey } => {
+      let bound = 1;
+      let binder: ResourceKey | undefined;
+      for (const input of info.wiredInputs) {
+        const need = needs.get(input.needKey);
+        if (!need) {
+          continue;
+        }
+        let delivered = 0;
+        for (const edge of [...need.machineEdges, ...need.storageEdges]) {
+          delivered += round.eatenByEdge.get(edge.id) ?? 0;
+        }
+        const ratio = clampUtilization(delivered / input.nameplatePerSecond);
+        if (ratio < bound) {
+          bound = ratio;
+          binder = need.demandKey;
+        }
+      }
+      return { bound, binder };
+    };
+    let needsSettling = false;
+    for (const info of machineNodes) {
+      const { bound, binder } = deliveredBound(lastRound, info);
+      if (bound < (act.get(info.id) ?? 0) - CONVERGENCE_EPS) {
+        needsSettling = true;
+        if (binder !== undefined) {
+          actBinders.set(info.id, binder);
+        }
+      }
+    }
+    if (needsSettling) {
+      // The converged verdict levels are a hard ceiling: settlement only ever
+      // removes flow the desire fill could not back, never invents any.
+      const actCeiling = new Map(act);
+      poolInflow = lastRound.poolInflowNext;
+      unconditionalByBudget = lastRound.unconditionalNext;
+      for (let pass = 0; pass < SETTLE_ROUNDS; pass += 1) {
+        settleAct = act;
+        const settled = runRound();
+        rounds += 1;
+        let maxDelta = 0;
+        for (const info of machineNodes) {
+          const { bound, binder } = deliveredBound(settled, info);
+          const next = Math.min(actCeiling.get(info.id) ?? 0, bound);
+          const previous = act.get(info.id) ?? 0;
+          maxDelta = Math.max(maxDelta, Math.abs(next - previous));
+          // The binder is only visible while the bound is DROPPING: at the
+          // settled point every input of a throttled node ties at its level
+          // (a machine at 10% eats 10% of everything), so the name is taken
+          // from the pass that pulled it down.
+          if (next < previous - CONVERGENCE_EPS && binder !== undefined) {
+            actBinders.set(info.id, binder);
+          }
+          act.set(info.id, next);
+        }
+        poolInflow = settled.poolInflowNext;
+        // Adopt the settled physical flows; demand, availability and the
+        // unmet-desire book keep the last verdict round's story - what is
+        // WANTED and what COULD arrive are diagnosis, not delivery.
+        lastRound = {
+          ...lastRound,
+          eatenByEdge: settled.eatenByEdge,
+          poolInflowNext: settled.poolInflowNext,
+        };
+        if (maxDelta < CONVERGENCE_EPS) {
+          break;
+        }
+      }
+      settleAct = undefined;
+    }
+  }
+
   const edgeAllocations = new Map<string, EdgeAllocationResult>();
   for (const edge of edges) {
     edgeAllocations.set(edge.id, {
@@ -1858,6 +2041,8 @@ export function solveEquilibrium(
     demandByNode: dem,
     disposalByNode: lastRound.disposalNext,
     clogOutputByNode: lastRound.clogOutputNext,
+    actualByNode: act,
+    actualLimitingInputByNode: actBinders,
     edgeAllocations,
     eatenByNeed,
     unmetDesireByNeed: lastRound.unmetDesireByNeed,

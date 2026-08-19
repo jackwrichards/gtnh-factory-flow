@@ -136,13 +136,31 @@ gh run watch <run-id> --exit-status
     behind a count knob (laser amperage, parallels). The reference states some
     choices as raw counts with a minimum, and its formulas read the count, so
     those must use `value`.
-  - Still on scraped data, deliberately: the 18 steam machines (some of our
-    steam handlers already bake their speed into `durationTicks`, so applying
-    the reference's `speed` too would double-count), the 11 fusion reactors
-    (need `fixedVoltageTier` and their own overclock), and the machines whose
+  - Still on scraped data, deliberately: the 11 fusion reactors (need
+    `fixedVoltageTier` and their own overclock), and the machines whose
     coefficients read recipe metadata or the recipe type (Nano Forge, PCB
     Factory, Naquadah Fuel Refinery, Component Assembly Line, Dangote
     Distillus, Precise Auto-Assembler, QFT, Eye of Harmony).
+  - Steam machines are handled in code, not scraped. The 8 steam multiblocks
+    (Steam Grinder/Squasher/Separator/Purifier/Presser/Blender/Fuser/Hearth)
+    are table entries: `1.6 / tierMachine` duration, 8 parallels, no
+    overclock, a shared `steamPressure` control (bronze/high pressure).
+    Steam SINGLEBLOCK handlers export no stats, so `recipe-rules.ts`
+    synthesizes bronze x2 / high pressure x1 duration. Smelting seeds from
+    GT's fixed 128t/4EU furnace recipe, not the exported 200t/0EU vanilla
+    smelt (the Hearth's odd 0.9765625 speed constant is that, pre-divided).
+    Steam LITRES are `getNodeSteamReport` in power-report.ts: singles pay
+    2 L/EU at (x1 bronze / x2 HP) EU, multis pay 1 L/EU on
+    `recipe EU x 1.25 x tierMachine` per parallel. EU stays zeroed on steam
+    cards; do not bill both.
+  - The dataset pipeline BAKES its scraped multipliers into each handler's
+    own `durationTicks`/`eut` (a Volcanus handler carries the EBF recipe
+    pre-multiplied by x0.8/x0.9; the steam multis' bake was outright wrong,
+    the tooltip's HP figure). `machineTableSeedsFromBase` therefore makes
+    every table machine that declares `speed` or `power` ignore baked handler
+    stats and seed from the recipe's base. Entries WITHOUT speed/power (Multi
+    Smelter) keep handler stats - the Electric Furnace family's are ABSOLUTE
+    (128t/4EU) and correct.
   - Tooltip scraping in `tools/dataset-pipeline/scripts/machine-configs.mjs`
     still supplies the control DEFINITIONS (which knobs exist, their icons and
     tier lists). It should no longer be trusted for effect VALUES: it once
