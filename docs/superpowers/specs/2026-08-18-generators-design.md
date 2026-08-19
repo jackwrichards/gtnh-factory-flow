@@ -115,9 +115,18 @@ lists), it instantiates the machine and calls its own methods:
   fuel). For the UCFE the oracle calls the live `processFuel` per fuel map
   (three maps, each with its own efficiency coefficient) and records the
   combustion promoter as an additional fluid input.
-- **Boilers**: for each boiler variant, per fuel in its fuel map, the live
-  `getProductionPerSecond()` (steam out), the water consumption (1:1 with
-  steam), and the steam kind (steam vs. superheated, per the variant).
+- **Boilers**: for each boiler variant (the single-block boiler family,
+  enumerated from the live meta items), per fuel in its fuel map: the live
+  `getProductionPerSecond()` (steam out — the game produces
+  `getProductionPerSecond() / 2` per 10-tick operation), the water
+  consumption (1:1 with steam in the game), the steam kind (steam vs.
+  superheated, per the variant — the live `mSteam` fluid id), and the fuel
+  consumption **measured by ticking** a live, fully-supplied machine to
+  steady state (2000-tick window; the boiler's fuel bookkeeping is the
+  per-variant `mProcessingEnergy`/`updateFuel` dance, so a measurement is the
+  honest source; the measurement window and the recorded L/s go into the
+  entry). A variant that cannot be measured (e.g. a multiblock that will not
+  run standalone) is recorded as a `skipped` warning, not silently dropped.
   Exported with the same shape; the normalizer turns it into an ordinary
   production recipe, not a generator entry.
 
@@ -152,17 +161,34 @@ Per machine family:
 }
 ```
 
-- `tier` uses the app's voltage ordinal convention (ULV = 0, LV = 1, …
-  MAX = 11). For the tiered single-block machines the oracle maps from the
-  game's `mTier` with the documented off-by-one; for the Large / XL Turbines
-  and UCFE it is the ordinal of the machine's supported output grid.
+- `tier` uses the app's 15-tier voltage ordinal convention — the same
+  `GT_VOLTAGE_NAMES` / `GT_VOLTAGES` table the rest of the exporter and
+  `voltageTierForEu` in the normalizer already use (ordinal 0 = 8 EU/t …
+  ordinal 13 = OpV, ordinal 14 = MAX). For the tiered single-block machines
+  the oracle maps the game's `mTier` directly onto that ordinal. For the
+  Large / XL Turbines and UCFE it is the ordinal of the machine's supported
+  output grid (one entry per grid the machine can push to). For the RTG it is
+  the ordinal of the fuel's output voltage, because the RTG's own tier and
+  output voltage are both set by the fuel.
 - For the Large / XL Turbines, each fuel variant is its own machine entry
   (distinct meta items in the live game) — the shape is unchanged.
-- Solar entries have `fuels: []` and a per-tier `euPerSecond`.
-- Fusion entries reference the existing exported fusion recipe ids plus the
-  per-computer rate facts.
+- Fuelless entries (solar) have `fuels: []` with `periodTicks` and
+  `euPerOperation` at the entry level: solar adds `maxEUOutput() * 20` EU to
+  its own buffer every 20 ticks (live: `aTick % 20 == 0` in
+  `MTESolarGenerator.onPostTick`), and `maxEUOutput()` is overridden to 1 for
+  the tier-0 (LV) unit in the game code.
+- Combined-burn entries (fusion) have `euPerOperation` at the entry level
+  (one burn, several fuels, e.g. deuterium + tritium) and the byproducts
+  (plasma) in `extraOutputs`.
 - `containerOut` is present only when the fuel map's recipe has an output(0)
-  (cell fuels → empty cell; fluid fuels → absent).
+  (cell/solid fuels → empty container; fluid fuels → absent).
+- Boiler entries (`"kind": "boiler"`) carry `periodTicks`,
+  `steamPerOperation`, `waterPerOperation`, the live steam fluid id, and
+  `fuels` with the measured `consumedPerOperation` — and no `maxEuT` /
+  `euPerOperation` (they are not generators).
+- Fission entries carry `source: "fission-fallback"` when the reactor
+  instantiation for the call failed and the fuel's `mSpecialValue` was used
+  instead; the export records which values came from the fallback.
 
 ### 3.3 The `mDuration <= 0` guard
 
@@ -179,29 +205,60 @@ resolves to: a new live-methods domain, not a guard tweak.
 
 `normalize-oracle-export.mjs` gains the `generators` domain:
 
-- Each (machine, tier, fuel) becomes a recipe-shaped entry:
-  - `durationTicks: 20` (normalized 1-second cycle),
-  - fuel amount = per-second consumption (`consumedPerOperation × 20 / periodTicks`),
-  - `eut` = per-second EU, **clamped to `maxEuT`** (the steady-state output a
-    generator can actually push to its grid),
+- Each (machine, tier, fuel) becomes a recipe-shaped entry, keeping the game's
+  own per-operation values (no re-basing to a 1-second cycle — the solver
+  already converts `amount / durationTicks × 20` to per-second rates):
+  - `durationTicks: periodTicks` (the machine's real burn period: 10 for the
+    10-tick cycle machines, 20 for UCFE/solar, 24000 for the RTG, the
+    fusion recipe's own duration for fusion),
+  - `eut: 0` — the dataset's `eut` is the machine's DRAW in EU/tick, and a
+    generator draws nothing. This also keeps `hasPowerReport` (which requires
+    `eut > 0`) from treating a generator as a consumer.
+  - fuel input `amount = consumedPerOperation × min(1, (maxEuT × periodTicks) /
+    euPerOperation)` — the machine burns only what it can deliver: the burn
+    is gated by its own buffer (`MTEBasicGenerator.onPostTick` consumes
+    `(maxEUStore() − stored) / tFuelValue` of the fuel), so an over-cap fuel
+    burns at the reduced rate that matches the grid; an under-cap fuel (ratio
+    ≥ 1) burns at full `consumedPerOperation`.
+  - **energy output** — one output resource per entry:
+    `{ kind: "energy", id: lower(voltageTierForEu(maxEuT)),
+    amount: min(euPerOperation, maxEuT × periodTicks) }`. The `id` is the
+    lowercased app tier name of the output grid (`energy:lv` … `energy:max`,
+    15 resources, ordinals 0–14); the amount is the steady-state EU per
+    operation, clamped to what the grid accepts.
+  - `containerOut` (where present) becomes an ordinary item output.
+  - `extraOutputs` (fusion plasma, the supercritical turbine's
+    superheated-steam byproduct) become ordinary item/fluid outputs.
+  - the UCFE `promoter` becomes an additional fluid input,
+    `amount = litersPerLiterFuel × fuel input amount`.
   - `generator` metadata: `{ machine, tier, maxEuT, periodTicks,
-    euPerOperation, source: "oracle" | "fission-fallback" }`.
+    euPerOperation, source: "oracle" | "fission-fallback" }` — it rides in
+    the recipe's existing free-form `metadata` (no schema change).
 - Each such entry is a **machine handler option** for that machine family at
-  that tier: the machine picker shows the family, the tier choice picks the
+  that tier, emitted the same way `normalizeGregtech` emits its handler
+  options: the machine picker shows the family, the tier choice picks the
   grid, the fuel choice picks the entry (the node selecting its recipe —
   existing mechanism).
-- **Boilers**: same 1-second shaping, but the result is an ordinary
-  production recipe — fuel + water inputs, steam output, **no** `generator`
-  metadata, no energy. It appears in the machine picker and recipe book like
-  any other machine.
+- **Boilers**: same `periodTicks` shaping (`durationTicks: periodTicks`,
+  `eut: 0`), but the result is an ordinary production recipe — fuel + water
+  inputs (water at `waterPerOperation`, 1:1 with steam in the game), steam
+  output at `steamPerOperation` (the game produces
+  `getProductionPerSecond() / 2` per 10-tick operation), the steam fluid id
+  taken from the live machine (steam vs superheated, per variant), fuel
+  `consumedPerOperation` as measured by the oracle's steady-state tick
+  measurement (a boiler's fuel is a production cost, not a grid-clamped burn —
+  no clamping applied). **No** `generator` metadata, no energy. It appears in
+  the machine picker and recipe book like any other machine.
 
 **Validation (no silent fallbacks, per the dataset doctrine):**
 
 - unknown machine id (not in the machine catalog) → warning, entry dropped;
-- per-second EU above `V[tier]` after clamping would still be possible only
-  from a bad `maxEuT` → warning (an oracle bug, not a real value);
+- a generator entry with `maxEuT <= 0` or `euPerOperation < 1` → warning
+  (an oracle bug, not a real value), entry dropped;
 - empty `fuels` on a fuel-burning machine (non-solar) → warning;
-- a boiler entry with no water input or zero steam output → warning;
+- a boiler entry with no water input, zero steam output, or a zero measured
+  fuel rate → warning (a zero-fuel boiler variant, e.g. a solar boiler, is
+  legitimate — the warning fires only when the entry cannot be explained);
 - fission fallback values are recorded and surfaced in the export, not
   silently mixed.
 
@@ -221,9 +278,10 @@ After `gh workflow run "GTNH dataset pipeline" --ref develop -f channel=both
 ## 4. Model
 
 - `ResourceKind` (`src/lib/model/types.ts:8`) gains `"energy"`.
-- Resources: `energy:lv` … `energy:max` — one per grid, keyed by the app's
-  voltage ordinal (LV = 1). Single identity: no alternatives, no oredict, no
-  cell equivalents.
+- Resources: `energy:ulv` … `energy:max` — one per grid, the 15 tier names of
+  the app's voltage table lowercased (ordinals 0–14; an in-game LV solar unit
+  outputs 1 EU/t and feeds `energy:ulv`). Single identity: no alternatives, no
+  oredict, no cell equivalents.
 - `resourceMatchesInput` (`src/lib/model/resources.ts:264`) already compares
   kinds strictly — energy can never satisfy a fluid or item slot, and they
   can never satisfy energy. The cells-are-items doctrine extends to power
