@@ -62,6 +62,11 @@ let furnaceCatalysts = [];
 // tabs without guessing items from names. First registration wins.
 const machineHandlerIcons = new Map();
 
+// The generators domain's own bookkeeping: one row per machine for
+// dataset.generators, and every validation note for the oracle report.
+const generatorNotes = [];
+const generatorMachines = [];
+
 function registerMachineHandlerIcons(templates) {
   for (const template of templates ?? []) {
     if (!template.catalystResource || machineHandlerIcons.has(template.id)) {
@@ -87,6 +92,7 @@ normalizeForestryBees(findDomain("forestryBees"));
 normalizeIc2Crops(findDomain("ic2Crops"));
 normalizeCropsNhCrops(findDomain("cropsNhCrops"));
 normalizeMining(findDomain("mining"));
+normalizeGenerators(findDomain("generators"));
 overrideFurnaceRecipeMapIcon();
 
 const dataset = {
@@ -110,6 +116,13 @@ const dataset = {
   machineHandlerIcons: [...machineHandlerIcons.entries()]
     .map(([familyId, resource]) => ({ familyId, resource: compactRecipeResource(resource) }))
     .sort((left, right) => left.familyId.localeCompare(right.familyId)),
+  // The generators domain's per-machine tally and every validation note. The
+  // oracle report carries the same notes under generatorWarnings. The key is
+  // omitted (not undefined) when the domain is absent: the dataset writer
+  // streams top-level keys individually and would choke on an undefined one.
+  ...(findDomain("generators") !== undefined
+    ? { generators: { machines: generatorMachines, warnings: [...generatorNotes] } }
+    : {}),
   generatedAt,
 };
 
@@ -1048,6 +1061,347 @@ function normalizeMining(domain) {
   normalizeUndergroundFluids(domain, dimensionsByKey);
 }
 
+// ---------------------------------------------------------------------------
+// Generators domain. The fuel books behind the power machines
+// (gasTurbineFuels and friends) are value definitions, not timed recipes:
+// they never pass the gregtech domain's `mDuration <= 0` guard, so the
+// oracle ships the live per-machine burn facts in this domain instead. Each
+// (machine, tier, fuel) entry becomes a recipe here: `eut: 0` (a generator
+// draws nothing, which also keeps `hasPowerReport` off it), the fuel clamped
+// to what the grid accepts, one `energy` output, and free-form
+// `metadata.generator` for the card. Boilers are production machines, not
+// generators: their entries become ordinary fuel + water -> steam recipes
+// with no energy and no metadata.
+// ---------------------------------------------------------------------------
+
+// A non-negative integer ordinal, or undefined. `positiveInt` cannot serve
+// this: 0 (ULV) is a real grid tier, and rejecting it would silently drop
+// any entry that feeds it.
+function tierOrdinal(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 ? number : undefined;
+}
+
+/**
+ * The oracle ships one machine map per live machine instance (one catalyst
+ * each), so a tiered family (gas turbine: one map per LV..UXV instance)
+ * arrives as N same-id maps. The variant list is a fact about the FAMILY,
+ * so the same-id maps merge into one machine carrying the full catalyst
+ * list and one entry per instance before any shaping.
+ */
+function mergeGeneratorMachines(domain) {
+  const byId = new Map();
+  for (const rawMachine of domain?.machines ?? []) {
+    const machineId = text(rawMachine?.id, "");
+    const existing = byId.get(machineId);
+    if (existing) {
+      existing.catalysts = [...(existing.catalysts ?? []), ...(rawMachine?.catalysts ?? [])];
+      existing.entries = [...(existing.entries ?? []), ...(rawMachine?.entries ?? [])];
+      existing.skipped = [...(existing.skipped ?? []), ...(rawMachine?.skipped ?? [])];
+      continue;
+    }
+    byId.set(machineId, { ...(rawMachine ?? {}), id: machineId });
+  }
+  return [...byId.values()];
+}
+
+function normalizeGenerators(domain) {
+  for (const rawMachine of mergeGeneratorMachines(domain)) {
+    const machineId = text(rawMachine.id, "");
+    const machineName = text(rawMachine.name, machineId);
+    if (!machineId || !machineName) {
+      generatorNotes.push("generators: machine without an id or name dropped");
+      continue;
+    }
+    const catalysts = (rawMachine.catalysts ?? [])
+      .map((catalyst) => ({
+        raw: catalyst?.resource,
+        normalized: resourceAmount(catalyst?.resource),
+        tier: tierOrdinal(catalyst?.tier),
+      }))
+      .filter((catalyst) => catalyst.normalized !== undefined);
+    if (catalysts.length === 0) {
+      generatorNotes.push(`generators: ${machineName} exported no usable catalysts; machine dropped`);
+      continue;
+    }
+
+    // The variant list comes from each catalyst's live mTier, not its name:
+    // generator machines are prefix-tiered ("LV Gas Turbine"), which the
+    // parenthesized-suffix family folding in buildMachineHandlerTemplates
+    // does not parse, so the templates are built by hand here. A catalyst
+    // without a tier (the single-machine families: UCFE, the turbines)
+    // contributes no variant.
+    const templates = catalysts
+      .filter((catalyst) => catalyst.tier !== undefined && catalyst.tier < GT_VOLTAGE_NAMES.length)
+      .map((catalyst) => ({
+        id: slug(`${machineName} ${GT_VOLTAGE_NAMES[catalyst.tier]}`),
+        label: text(catalyst.raw.displayName, machineName),
+        kind: "single",
+        machineType: machineName,
+        minimumTier: GT_VOLTAGE_NAMES[catalyst.tier],
+        catalystResource: catalyst.raw,
+        isPrimary: false,
+      }));
+    if (templates.length > 1) {
+      // The family's face is its lowest-tier variant, as in
+      // buildMachineHandlerTemplates.
+      templates
+        .slice()
+        .sort(
+          (a, b) =>
+            GT_VOLTAGE_NAMES.indexOf(a.minimumTier) - GT_VOLTAGE_NAMES.indexOf(b.minimumTier),
+        )[0].isPrimary = true;
+    }
+    registerMachineHandlerIcons(templates);
+
+    let entryCount = 0;
+    for (const rawEntry of rawMachine.entries ?? []) {
+      const shaped =
+        rawEntry?.kind === "boiler"
+          ? shapeBoilerEntry(machineId, machineName, rawEntry)
+          : shapeGeneratorEntry(machineId, machineName, rawEntry, templates);
+      for (const recipe of shaped) {
+        addRecipe(recipe);
+        entryCount += 1;
+      }
+    }
+
+    recipeMaps.add(machineName);
+    setRecipeMapIcon(machineName, catalysts[0].raw);
+    generatorMachines.push({
+      id: machineId,
+      name: machineName,
+      entryCount,
+      skipped: (rawMachine.skipped ?? []).map((entry) => text(entry?.reason, "unspecified")),
+    });
+  }
+}
+
+// resourceAmount is kind-gated (item/fluid/aspect), so the energy output gets
+// its own builder: id is the lowercased grid tier, no icon (the app draws a
+// bolt for kind "energy").
+function energyAmount(tierName, amount) {
+  const value = positiveNumber(amount, undefined);
+  if (value === undefined) {
+    return undefined;
+  }
+  return {
+    kind: "energy",
+    id: tierName.toLowerCase(),
+    amount: value,
+    displayName: `Energy (${tierName})`,
+  };
+}
+
+function shapeGeneratorEntry(machineId, machineName, rawEntry, templates) {
+  if (!rawEntry || typeof rawEntry !== "object") {
+    generatorNotes.push(`generators: ${machineName} entry is not an object; entry dropped`);
+    return [];
+  }
+  const tier = tierOrdinal(rawEntry.tier);
+  if (tier === undefined || tier >= GT_VOLTAGE_NAMES.length) {
+    generatorNotes.push(`generators: ${machineName} entry without a usable tier ordinal dropped`);
+    return [];
+  }
+  const tierName = GT_VOLTAGE_NAMES[tier];
+  const isFuelless = rawEntry.fuelless === true;
+  const rawFuels = (rawEntry.fuels ?? []).map((fuel) => ({
+    raw: fuel,
+    normalized: resourceAmount(fuel),
+  }));
+  if (rawFuels.some((entry) => entry.normalized === undefined)) {
+    generatorNotes.push(`generators: ${machineName} ${tierName} entry has an unreadable fuel; entry dropped`);
+    return [];
+  }
+  if (!isFuelless && rawFuels.length === 0) {
+    generatorNotes.push(`generators: ${machineName} ${tierName} entry lists no fuels; entry dropped`);
+    return [];
+  }
+
+  // periodTicks / maxEuT / euPerOperation live on the fuel for the
+  // one-fuel-per-burn machines and on the entry for fuelless (solar) and
+  // combined-burn (fusion) entries; the export ships either, so the entry
+  // level is read first.
+  const entryFacts = {
+    periodTicks: positiveInt(rawEntry.periodTicks, undefined),
+    maxEuT: positiveNumber(rawEntry.maxEuT, undefined),
+    euPerOperation: positiveNumber(rawEntry.euPerOperation, undefined),
+  };
+  const combined = !isFuelless && entryFacts.euPerOperation !== undefined;
+
+  const recipes = [];
+  // A fuelless machine still has its one operation: an empty burn.
+  const burns = combined ? [rawFuels] : isFuelless ? [[]] : rawFuels.map((entry) => [entry]);
+  for (const entryFuels of burns) {
+    const facts = entryFuels.map((entry) => ({
+      periodTicks: positiveInt(entryFacts.periodTicks ?? entry.raw.periodTicks, undefined),
+      maxEuT: positiveNumber(entryFacts.maxEuT ?? entry.raw.maxEuT, undefined),
+      euPerOperation: positiveNumber(entryFacts.euPerOperation ?? entry.raw.euPerOperation, undefined),
+      // The fusion book carries the count in `amount` and no
+      // consumedPerOperation of its own.
+      consumed: positiveNumber(entry.raw.consumedPerOperation ?? entry.raw.amount, undefined),
+    }));
+    // euPerOperation < 1 is an oracle bug, not a value: no machine produces
+    // a fraction of an EU per operation.
+    if (
+      facts.some(
+        (f) =>
+          f.periodTicks === undefined ||
+          f.maxEuT === undefined ||
+          f.euPerOperation === undefined ||
+          f.consumed === undefined ||
+          f.euPerOperation < 1,
+      )
+    ) {
+      generatorNotes.push(
+        `generators: ${machineName} ${tierName} entry carries unusable burn facts; entry dropped`,
+      );
+      return [];
+    }
+
+    // The machine burns only what it can deliver: the burn is gated by its
+    // own buffer, so an over-cap fuel burns at the reduced rate that matches
+    // the grid, fuel and energy clamped together. A combined burn's buffer
+    // is orders of magnitude above its output, so the fraction stays 1 in
+    // practice; the uniform rule keeps this one code path.
+    const fuelInputs = facts.map((f, index) => ({
+      ...entryFuels[index].normalized,
+      amount: f.consumed * Math.min(1, (f.maxEuT * f.periodTicks) / f.euPerOperation),
+    }));
+    const primary = combined || entryFuels.length === 0 ? entryFacts : facts[0];
+    const energy = energyAmount(
+      voltageTierForEu(primary.maxEuT),
+      Math.min(primary.euPerOperation, primary.maxEuT * primary.periodTicks),
+    );
+    if (!energy) {
+      generatorNotes.push(`generators: ${machineName} ${tierName} entry produced no energy output; entry dropped`);
+      return [];
+    }
+    const outputs = [
+      energy,
+      // containerOut (the empty cell a cell fuel returns) belongs to a
+      // single-fuel burn only.
+      ...(!combined && entryFuels.length === 1 && entryFuels[0].raw.containerOut
+        ? [resourceAmount(entryFuels[0].raw.containerOut)].filter(Boolean)
+        : []),
+      ...(rawEntry.extraOutputs ?? []).map((extra) => resourceAmount(extra)).filter(Boolean),
+    ];
+
+    let inputs = fuelInputs;
+    if (rawEntry.promoter) {
+      const promoter = resourceAmount(rawEntry.promoter);
+      const litersPerLiterFuel = positiveNumber(rawEntry.promoter.litersPerLiterFuel, 0);
+      if (promoter && litersPerLiterFuel > 0 && fuelInputs.length > 0) {
+        inputs = [...fuelInputs, { ...promoter, amount: litersPerLiterFuel * fuelInputs[0].amount }];
+      } else {
+        generatorNotes.push(
+          `generators: ${machineName} ${tierName} entry names a promoter without a usable fluid or ratio; promoter dropped`,
+        );
+      }
+    }
+
+    const fuelKey = entryFuels.map((entry) => entry.normalized.id).join("+") || "none";
+    const name =
+      entryFuels.length > 0
+        ? `${machineName}: ${entryFuels.map((entry) => entry.normalized.displayName).join(" + ")}`
+        : machineName;
+
+    recipes.push({
+      id: recipeId("generators", machineId, `${tierName.toLowerCase()}:${slug(fuelKey)}`),
+      name,
+      kind: "gregtech_machine",
+      category: "gregtech",
+      machineType: machineName,
+      minimumTier: tierName,
+      durationTicks: primary.periodTicks,
+      eut: 0,
+      inputs,
+      outputs,
+      machineHandlers:
+        templates.length >= 2
+          ? instantiateRecipeMachineHandlers(templates, {
+              minimumTier: tierName,
+              durationTicks: primary.periodTicks,
+              eut: 0,
+              machineConfigControls: [],
+            })
+          : undefined,
+      notes: "Exported by the GTNH calculation oracle from live generator machine methods.",
+      source: {
+        datasetVersionId,
+        recipeMap: machineName,
+        exporter: "gtnh-oracle",
+        rawRecipeId: `generators:${machineId}:${tierName.toLowerCase()}:${slug(fuelKey)}`,
+      },
+      metadata: {
+        generator: {
+          machine: machineName,
+          tier: tierName,
+          maxEuT: primary.maxEuT,
+          periodTicks: primary.periodTicks,
+          euPerOperation: primary.euPerOperation,
+          source: text(rawEntry.source, "oracle"),
+        },
+      },
+    });
+  }
+  return recipes;
+}
+
+function shapeBoilerEntry(machineId, machineName, rawEntry) {
+  const periodTicks = positiveInt(rawEntry?.periodTicks, undefined);
+  const steamPerOperation = positiveNumber(rawEntry?.steamPerOperation, undefined);
+  const steam = resourceAmount(rawEntry?.steam);
+  const water = resourceAmount(rawEntry?.water);
+  if (periodTicks === undefined || steamPerOperation === undefined || !steam || !water) {
+    // A boiler entry that cannot be explained (no water, no steam, no
+    // period) is a measurement failure, not a real value.
+    generatorNotes.push(`generators: ${machineName} boiler entry is malformed; entry dropped`);
+    return [];
+  }
+  const waterPerOperation = positiveNumber(rawEntry.waterPerOperation, steamPerOperation);
+  const inputs = [{ ...water, amount: waterPerOperation }];
+  const outputs = [{ ...steam, amount: steamPerOperation }];
+  const fuelNames = [];
+  for (const rawFuel of rawEntry.fuels ?? []) {
+    const consumed = positiveNumber(rawFuel.consumedPerOperation, undefined);
+    const fuel = resourceAmount(rawFuel);
+    if (!fuel || consumed === undefined || consumed <= 0) {
+      // A zero-fuel variant (the solar boiler) is legitimate with an empty
+      // fuel list; a LISTED fuel that measures zero is a measurement
+      // failure.
+      generatorNotes.push(
+        `generators: ${machineName} boiler fuel ${resourceLabel(rawFuel)} measured no consumption; entry dropped`,
+      );
+      return [];
+    }
+    inputs.push({ ...fuel, amount: consumed });
+    fuelNames.push(fuel.displayName);
+  }
+  const fuelKey = fuelNames.length > 0 ? fuelNames[0] : "no-fuel";
+  return [
+    {
+      id: recipeId("generators", machineId, `boiler:${slug(fuelKey)}`),
+      name: fuelNames.length > 0 ? `${machineName}: ${fuelNames[0]}` : machineName,
+      kind: "gregtech_machine",
+      category: "gregtech",
+      machineType: machineName,
+      minimumTier: "ULV",
+      durationTicks: periodTicks,
+      eut: 0,
+      inputs,
+      outputs,
+      notes: "Exported by the GTNH calculation oracle from live boiler machine methods.",
+      source: {
+        datasetVersionId,
+        recipeMap: machineName,
+        exporter: "gtnh-oracle",
+        rawRecipeId: `generators:${machineId}:boiler:${slug(fuelKey)}`,
+      },
+    },
+  ];
+}
+
 function normalizeOreVeins(domain, dimensionsByKey) {
   const machineType = "Ore Vein";
   for (const vein of domain?.veins ?? []) {
@@ -1840,6 +2194,9 @@ async function writeOracleReport(dataset) {
       detected: adapter.detected,
       warnings: adapter.warnings,
     }));
+  const generatorRecipes = dataset.recipes.filter((recipe) =>
+    String(recipe.source?.rawRecipeId ?? "").startsWith("generators:"),
+  );
   const report = {
     schemaVersion: 1,
     datasetVersionId,
@@ -1848,6 +2205,8 @@ async function writeOracleReport(dataset) {
     adapterCount: raw.adapters?.length ?? 0,
     adapters: raw.adapters ?? [],
     recipeCount: dataset.recipes.length,
+    generatorRecipeCount: generatorRecipes.length,
+    generatorWarnings: [...generatorNotes],
     runtimeEligibleRecipeCount: runtimeRecipes.length,
     runtimeComputedRecipeCount: computedRuntimeRecipes.length,
     runtimeMissingRecipeCount: failures.length,
