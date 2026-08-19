@@ -73,6 +73,16 @@ export function isHighPressureSteamHandler(handler: Pick<MachineHandler, "label"
 }
 
 /**
+ * A generator feeds the grid instead of drawing from it: it has an energy
+ * OUTPUT, and it is the one recipe shape the steam-singleblock syntheses
+ * must not touch — a "Steam Turbine" is a machine name, not a steam machine
+ * in the singleblock sense, and its 10-tick burn is real, not a bronze x2.
+ */
+export function isGeneratorRecipe(recipe: Pick<Recipe, "outputs">): boolean {
+  return recipe.outputs.some((output) => output.kind === "energy");
+}
+
+/**
  * GT's fixed furnace recipe. The dataset exports smelting off the vanilla map
  * (200 ticks, 0 EU), but every GT furnace actually runs this instead - the
  * Electric Furnace handler carries these numbers as absolute stats, and the
@@ -94,10 +104,10 @@ export function isSmeltingRecipeMap(recipe: Pick<Recipe, "machineType" | "source
  * LV duration - twice its real speed.
  */
 function steamSingleblockDurationTicks(
-  recipe: Pick<Recipe, "machineType" | "source" | "durationTicks">,
+  recipe: Pick<Recipe, "machineType" | "source" | "durationTicks" | "outputs">,
   handler: MachineHandler,
 ): number | undefined {
-  if (handler.kind === "multiblock" || !isSteamMachineHandler(handler)) {
+  if (handler.kind === "multiblock" || !isSteamMachineHandler(handler) || isGeneratorRecipe(recipe)) {
     return undefined;
   }
   const base = isSmeltingRecipeMap(recipe) ? GT_FURNACE_RECIPE_TICKS : recipe.durationTicks;

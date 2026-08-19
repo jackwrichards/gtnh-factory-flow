@@ -5,7 +5,9 @@ import {
   getRecipeMachineConfigTierControls,
   getRecipeMachineHandlers,
   getSelectedMachineHandler,
+  isGeneratorRecipe,
 } from "./recipe-rules";
+import { getNodeSteamReport } from "@/lib/solver/power-report";
 import type { Recipe } from "./types";
 
 describe("recipe machine handlers", () => {
@@ -452,3 +454,44 @@ function testRecipe(machineType: string, minimumTier = "LV"): Recipe {
     source: { recipeMap: machineType },
   };
 }
+
+describe("generator recipes", () => {
+  // A steam turbine generator as the pipeline exports it: eut 0, a 10-tick
+  // burn, an energy output, and a handler named after the steam form. The
+  // handler carries NO durationTicks: the normalizer's template does not,
+  // which is exactly what makes the steam-singleblock math reachable.
+  const turbine: Recipe = {
+    id: "gas-st-lv",
+    name: "Gas Turbine",
+    machineType: "Gas Turbine",
+    minimumTier: "LV",
+    durationTicks: 10,
+    eut: 0,
+    machineHandlers: [
+      { id: "lv", label: "LV Steam Turbine", machineType: "Gas Turbine", minimumTier: "LV", kind: "single" },
+    ],
+    inputs: [{ kind: "fluid", id: "benzene", amount: 1, displayName: "Benzene" }],
+    outputs: [{ kind: "energy", id: "lv", amount: 6400, displayName: "Energy (LV)" }],
+  } as unknown as Recipe;
+
+  it("flags a recipe by its energy output", () => {
+    expect(isGeneratorRecipe(turbine)).toBe(true);
+    expect(isGeneratorRecipe({ outputs: [{ kind: "item", id: "x", amount: 1 }] })).toBe(false);
+  });
+
+  it("keeps the real burn period of a steam turbine generator", () => {
+    // Without the gate: "LV Steam Turbine" is a steam handler, the handler
+    // has no duration, and steamSingleblockDurationTicks doubles the 10-tick
+    // base to 20 — halving the EU/s.
+    const applied = applyMachineHandlerToRecipe(turbine, { machineHandlerId: "lv" });
+    expect(applied.durationTicks).toBe(10);
+  });
+
+  it("does not hand a steam turbine generator a steam line", () => {
+    // Pins the contract: today an eut-0 guard already returns undefined, but
+    // a generator that ever exported a non-zero eut must not show a steam
+    // bill — the machine list is what keeps a mechanic off machines without
+    // it (AGENTS.md, heat doctrine).
+    expect(getNodeSteamReport(turbine, { machineHandlerId: "lv", overclockTier: "LV" })).toBeUndefined();
+  });
+});
