@@ -715,6 +715,9 @@ export function solveEquilibrium(
     poolInflowNext: Map<string, number>;
     availableByEdge: Map<string, number>;
     eatenByEdge: Map<string, number>;
+    /** The shadow fill's grants. In the settle world these are consumption-
+     * level asks over capability offers - the sustained bound's book. */
+    shadowEatenByEdge: Map<string, number>;
     demandByEdge: Map<string, number>;
     unmetDesireByNeed: Map<string, number>;
     /** What each anchored need really drew from the rescue anchor (desire
@@ -1641,6 +1644,7 @@ export function solveEquilibrium(
       poolInflowNext,
       availableByEdge,
       eatenByEdge,
+      shadowEatenByEdge: shadowFill.grants,
       demandByEdge,
       unmetDesireByNeed: desireFill.remainingNeed,
       anchorGrantByNeed: desireFill.anchorGrants,
@@ -2074,26 +2078,24 @@ export function solveEquilibrium(
     // scale per need turns granted flow into consumed flow, so a producer is
     // bounded by what its takers really drink, never by what they were merely
     // handed.
-    const buildTakeScale = (
-      round: RoundOutput,
-      levels: Map<string, number>,
-    ): Map<string, number> => {
-      const scale = new Map<string, number>();
-      for (const [needKey, need] of needs) {
-        let granted = 0;
-        for (const edge of [...need.machineEdges, ...need.storageEdges]) {
-          granted += round.eatenByEdge.get(edge.id) ?? 0;
-        }
-        const consumed =
-          clampUtilization(levels.get(need.targetId) ?? 0) * need.nameplatePerSecond;
-        scale.set(needKey, granted > consumed + EPSILON && granted > 0 ? consumed / granted : 1);
-      }
-      return scale;
-    };
+    // "Would my output be taken if I made it?" - answered with room to
+    // RECOVER. A producer's credit at each consumer is that consumer's actual
+    // consumption MINUS what the consumer's other machine suppliers ship
+    // unavoidably at their own current levels; drawers and sources never
+    // crowd a machine out (drain priority: machines are eaten first). This
+    // is deliberately not read off the fill's grants: a grant rides the
+    // producer's own throttled offer, so grant-based credit can never exceed
+    // the current level, the bound could only ever descend, and one
+    // transient under-grant walked whole boards to zero. Nor is it a
+    // pro-rata or even split across suppliers: pro-rata let a new source
+    // drawer dilute a working machine's credit, and even-split under-credits
+    // the makeup line standing next to an unavoidable byproduct (the calcite
+    // farm beside the alumina LCR). Consumption-minus-the-others is the
+    // remainder rule the fills already live by, stated as arithmetic.
     const sustainedBound = (
       round: RoundOutput,
+      levels: Map<string, number>,
       info: MachineNodeInfo,
-      takeScale: Map<string, number>,
     ): { bound: number; binder?: ResourceKey } => {
       let bound = 1;
       let binder: ResourceKey | undefined;
@@ -2108,10 +2110,44 @@ export function solveEquilibrium(
         }
         let taken = 0;
         for (const edge of budget.edges) {
-          const eaten = round.eatenByEdge.get(edge.id) ?? 0;
-          // Machine consumers eat at their actual level; tank sinks already
-          // absorb at the producer's actual level (their fill runs on it).
-          taken += edge.needKey ? eaten * (takeScale.get(edge.needKey) ?? 1) : eaten;
+          if (!edge.needKey) {
+            // Tank sinks absorb at the producer's actual level already.
+            taken += round.eatenByEdge.get(edge.id) ?? 0;
+            continue;
+          }
+          const need = needs.get(edge.needKey);
+          if (!need) {
+            continue;
+          }
+          const consumption =
+            clampUtilization(levels.get(need.targetId) ?? 0) * need.nameplatePerSecond;
+          // My credit is the LARGER of two honest readings: my fair share of
+          // the consumption water-filled across every supplier's current
+          // production (co-suppliers throttling together each keep a share),
+          // and the remainder the others' shipping leaves uncovered (a
+          // makeup line beside an unavoidable byproduct is credited the gap,
+          // and a dipped supplier can recover instead of being capped by its
+          // own dip forever). Fair share alone zeroes co-suppliers at the
+          // full-blast start; remainder alone under-credits nobody but
+          // over-punishes shared markets. The max is right in both worlds.
+          const shipping = need.machineEdges.map((other) => {
+            const otherBudget = budgets.get(other.budgetKey);
+            return otherBudget
+              ? otherBudget.makePerSecond *
+                  clampUtilization(levels.get(otherBudget.ownerId) ?? 0)
+              : 0;
+          });
+          const shares = waterFillShares(consumption, shipping);
+          let others = 0;
+          let share = 0;
+          need.machineEdges.forEach((other, index) => {
+            if (other.id === edge.id) {
+              share = shares[index]!;
+            } else {
+              others += shipping[index]!;
+            }
+          });
+          taken += Math.max(share, Math.max(0, consumption - others));
         }
         const ratio = clampUtilization(taken / budget.makePerSecond);
         if (ratio < bound) {
@@ -2123,10 +2159,9 @@ export function solveEquilibrium(
     };
     let needsSettling = false;
     {
-      const takeScale = buildTakeScale(lastRound, act);
       for (const info of machineNodes) {
         const delivered = deliveredBound(lastRound, info);
-        const sustained = sustainedBound(lastRound, info, takeScale);
+        const sustained = sustainedBound(lastRound, act, info);
         if (
           Math.min(delivered.bound, sustained.bound) <
           (act.get(info.id) ?? 0) - CONVERGENCE_EPS
@@ -2165,12 +2200,11 @@ export function solveEquilibrium(
         const settled = runRound();
         rounds += 1;
         lastSettled = settled;
-        const takeScale = buildTakeScale(settled, act);
         const settleDemNext = new Map<string, number>();
         let maxDelta = 0;
         for (const info of machineNodes) {
           const delivered = deliveredBound(settled, info);
-          const sustained = sustainedBound(settled, info, takeScale);
+          const sustained = sustainedBound(settled, act, info);
           // Demand may only RISE from its verdict seed. A rise is the honest
           // correction (a node pinned by a demand computed around the phantom
           // point, like the silicone electrolyzer at 75%); a fall is the
@@ -2211,6 +2245,14 @@ export function solveEquilibrium(
             }
           }
           act.set(info.id, next);
+        }
+        if (typeof process !== "undefined" && process.env?.SETTLE_DEBUG) {
+          console.log(
+            `settle pass ${pass}: ` +
+              machineNodes
+                .map((info) => `${info.id.slice(5, 11)}=${((act.get(info.id) ?? 0) * 100).toFixed(1)}`)
+                .join(" "),
+          );
         }
         poolInflow = settled.poolInflowNext;
         settleDem = settleDemNext;
