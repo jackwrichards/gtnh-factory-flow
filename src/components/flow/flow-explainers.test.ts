@@ -148,7 +148,7 @@ describe("format helpers", () => {
   it("suppresses numbers below the display noise floor", () => {
     expect(formatSlotRateOrNull(0.0002, "fluid")).toBeNull();
     expect(formatSlotRateOrNull(0, "item")).toBeNull();
-    expect(formatSlotRateOrNull(0.5, "item")).toBe("0.50/s");
+    expect(formatSlotRateOrNull(0.5, "item")).toBe("0.5/s");
   });
 
   it("formats ask multipliers compactly, with real magnitudes up to four digits", () => {
@@ -195,8 +195,13 @@ describe("explainPort — inputs", () => {
     );
     const story = explainPort(proj, result, "LCR", rails.inputs[0]!, verdict);
 
-    expect(story.stateWord).toBe("BOTTLENECK");
-    expect(story.lines[0]).toBe("Bottleneck: gets 5.14 L/s of 32.0 L/s — machine at 16%.");
+    // The maker is at full blast but simply makes too little: the supply is
+    // short, not clogged, so the word is STARVED (a clogged line would be
+    // BLOCKED). The edge's own hover keeps the BOTTLENECK word and the +N fix.
+    expect(story.stateWord).toBe("STARVED");
+    expect(story.lines[0]).toBe(
+      "Gets 5.14 L/s of the 32 L/s it wants from Distillation Tower. This is what holds the machine at 16%.",
+    );
     // No fix line any more: the hover names the state and the reason, and the
     // card's own marks say where to act.
     expect(story.lines[0]).toContain("holds the machine at");
@@ -233,9 +238,11 @@ describe("explainPort — inputs", () => {
     );
     const story = explainPort(proj, result, "N", rails.inputs[0]!, verdict);
 
-    expect(story.stateWord).toBe("BOTTLENECK");
+    // The maker itself is short (45%), so the line is not clogged: N is
+    // STARVED, and the edge's story points one step further up to the Cracker.
+    expect(story.stateWord).toBe("STARVED");
     expect(story.lines[0]).toContain("Gets");
-    expect(story.stateWord).toBe("BLOCKED");
+    expect(story.lines[0]).toContain("from Cracker");
   });
 
   it("clears the innocent input and warns about the next bottleneck", () => {
@@ -346,7 +353,7 @@ describe("explainPlug — the asker's side", () => {
     expect(rails.outputs[0]!.plug?.state).toBe("hungry");
     expect(rails.outputs[0]!.plug?.askerName).toBe("LCR");
     expect(story.stateWord).toBe("HUNGRY");
-    expect(story.lines[0]).toBe("16% = asked 32.0 L/s, this puts in 5.14 L/s.");
+    expect(story.lines[0]).toBe("Asked 32 L/s, gets 5.14 L/s (LCR).");
     expect(story.lines[0]).toContain("Asked");
     expect(story.lines[0]).toContain("gets");
   });
@@ -637,7 +644,7 @@ describe("buildEdgeStory", () => {
     expect(story?.from.name).toBe("Distillation Tower");
     expect(story?.from.note).toBe("at full speed");
     expect(story?.to[0]?.name).toBe("LCR");
-    expect(story?.to[0]?.text).toContain("wants 32.0 L/s, gets 5.14 L/s");
+    expect(story?.to[0]?.text).toContain("wants 32 L/s, gets 5.14 L/s");
     expect(story?.lines[0]).toContain("covers only 16% of what the LCR wants");
     expect(story?.action?.text).toBe("→ Add +6 Distillation Tower.");
   });
@@ -670,7 +677,7 @@ describe("buildEdgeStory", () => {
     );
     const story = buildEdgeStory(proj, result, ["e1"]);
 
-    expect(story?.to[0]?.text).toContain("its share of 32.0 L/s over 2 lines");
+    expect(story?.to[0]?.text).toContain("its share of 32 L/s over 2 lines");
   });
 
   it("keeps buffer lines dead simple", () => {
@@ -690,7 +697,7 @@ describe("buildEdgeStory", () => {
 
     expect(story?.stateWord).toBe("TO BUFFER");
     expect(story?.to[0]?.name).toBe("PE Drawer (product)");
-    expect(story?.lines[0]).toBe("Flows into the buffer at 3.00/s.");
+    expect(story?.lines[0]).toBe("Flows into the buffer at 3/s.");
   });
 
   it("reports spare capacity on a satisfied single-outlet line", () => {
@@ -715,8 +722,8 @@ describe("buildEdgeStory", () => {
     const story = buildEdgeStory(proj, result, ["eOut"]);
 
     expect(story?.stateWord).toBe("OK");
-    expect(story?.lines[0]).toBe("Delivers exactly what's asked: 4.00/s.");
-    expect(story?.lines[1]).toContain("could send 10.0/s, with 6.00/s spare");
+    expect(story?.lines[0]).toBe("Delivers exactly what's asked: 4/s.");
+    expect(story?.lines[1]).toContain("could send 10/s, with 6/s spare");
     expect(story?.from.note).toContain("could send more if asked");
   });
 });

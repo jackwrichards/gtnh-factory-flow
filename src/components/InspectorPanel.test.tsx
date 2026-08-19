@@ -11,6 +11,7 @@ import {
 import { calculateThroughput } from "@/lib/solver";
 import { closeBoundaries } from "@/lib/solver/close-boundaries";
 import { useFactoryStore } from "@/store/factory-store";
+import { writeBoardMotion } from "./flow/board-motion";
 import { InspectorPanel } from "./InspectorPanel";
 
 function makeBalance(index: number, overrides: Partial<ResourceBalance> = {}): ResourceBalance {
@@ -112,6 +113,10 @@ describe("InspectorPanel", () => {
       hoveredFlowResourceKey: undefined,
       selectedBoardIds: [],
     });
+    // These are structure tests, not motion tests: a folding row lingers for
+    // its 240ms presence tween, and waiting that out in every fold assertion
+    // would test the clock rather than the list.
+    writeBoardMotion({ moveMotion: false, valueMotion: false });
     seedResult({});
   });
 
@@ -120,7 +125,7 @@ describe("InspectorPanel", () => {
   // otherwise pile up in the same document.
   afterEach(cleanup);
 
-  it("shows all four groups at once, without tab switching", () => {
+  it("shows all three groups at once, without tab switching", () => {
     seedResult({
       externalInputs: [makeBalance(1, { deficitPerSecond: 240 })],
       unconsumedOutputs: [makeBalance(2, { producedPerSecond: 64, surplusPerSecond: 64 })],
@@ -130,27 +135,28 @@ describe("InspectorPanel", () => {
     render(<InspectorPanel />);
 
     expect(screen.getByText("Inputs")).toBeDefined();
-    expect(screen.getByText("Products")).toBeDefined();
-    expect(screen.getByText("Byproducts")).toBeDefined();
+    expect(screen.getByText("Outputs")).toBeDefined();
     expect(screen.getByText("Internal")).toBeDefined();
     expect(screen.getByText("Resource 1")).toBeDefined();
     expect(screen.getByText("Resource 2")).toBeDefined();
+    // Internal starts folded (the long tail that means "nothing to see");
+    // one click on the header opens it.
+    expect(screen.queryByText("Internal 3")).toBeNull();
+    fireEvent.click(screen.getByText("Internal").closest("button")!);
     expect(screen.getByText("Internal 3")).toBeDefined();
   });
 
-  // Nothing left over is a byproduct: it is coming out and no product drawer
-  // claimed it. Calling it a product because a drawer has not been placed yet
-  // would decide what the factory is for on the reader's behalf.
-  it("files unclaimed spare output under byproducts", () => {
+  // One Outputs list: product and spare both come out, and the list does not
+  // decide what the factory is for on the reader's behalf by calling the
+  // unclaimed spare a product.
+  it("lists unclaimed spare output in the one Outputs group", () => {
     seedResult({
       unconsumedOutputs: [makeBalance(2, { producedPerSecond: 64, surplusPerSecond: 64 })],
     });
 
     render(<InspectorPanel />);
 
-    const headers = screen.getAllByText(/^(Products|Byproducts)$/).map((el) => el.textContent);
-    expect(headers).toEqual(["Products", "Byproducts"]);
-    expect(screen.getByText("Nothing asked for yet.")).toBeDefined();
+    expect(screen.getByText("Outputs")).toBeDefined();
     expect(screen.getByText("Resource 2")).toBeDefined();
   });
 
@@ -173,6 +179,8 @@ describe("InspectorPanel", () => {
       seedResult({ internal: Array.from({ length: 400 }, (_, index) => makeInternal(index, 100)) });
 
       const { container } = render(<InspectorPanel />);
+      // Internal starts folded; open the long group before counting rows.
+      fireEvent.click(screen.getByText("Internal").closest("button")!);
       const rowCount = container.querySelectorAll("[data-resource-row]").length;
 
       // 600px of viewport over 30px rows is ~20 visible, plus overscan at each end.
@@ -186,6 +194,9 @@ describe("InspectorPanel", () => {
       seedResult({ internal: Array.from({ length: 400 }, (_, index) => makeInternal(index, 100)) });
 
       const { container } = render(<InspectorPanel />);
+      // Open the group first: the pinned copy only has work to do while the
+      // rows are actually being drawn.
+      fireEvent.click(screen.getByText("Internal").closest("button")!);
       const scroller = container.querySelector(".overflow-y-auto")!;
       fireEvent.scroll(scroller, { target: { scrollTop: 5000 } });
 
@@ -195,10 +206,14 @@ describe("InspectorPanel", () => {
     });
   });
 
-  it("collapses a section to its header", () => {
+  it("folds and unfolds a section at its header", () => {
     seedResult({ internal: [makeInternal(1, 100), makeInternal(2, 200)] });
 
     render(<InspectorPanel />);
+    // Internal starts folded: the rows cost nothing to render until opened.
+    expect(screen.queryByText("Internal 1")).toBeNull();
+
+    fireEvent.click(screen.getByText("Internal").closest("button")!);
     expect(screen.getByText("Internal 1")).toBeDefined();
 
     fireEvent.click(screen.getByText("Internal").closest("button")!);
@@ -221,8 +236,10 @@ describe("InspectorPanel", () => {
 
   it("explains an empty group rather than showing a blank area", () => {
     render(<InspectorPanel />);
-    expect(screen.getByText(/Nothing missing/)).toBeDefined();
-    expect(screen.getByText(/Nothing left over/)).toBeDefined();
+    // The open groups explain themselves; the empty Internal is folded, so it
+    // contributes no row at all (a folded group costs nothing to render).
+    expect(screen.getByText("Nothing missing.")).toBeDefined();
+    expect(screen.getByText("Nothing coming out yet.")).toBeDefined();
   });
 
   it("lights a resource on the canvas while it is pointed at", () => {
@@ -326,8 +343,10 @@ describe("InspectorPanel", () => {
       render(<InspectorPanel />);
 
       expect(screen.queryByText("Selection")).toBeNull();
-      // Made and eaten in-plan, so it sits under Internal, not Need.
       expect(screen.getByText("Ore")).toBeDefined();
+      // Made and eaten in-plan, so the ingot sits under Internal (which
+      // starts folded) rather than Inputs.
+      fireEvent.click(screen.getByText("Internal").closest("button")!);
       expect(screen.getByText("Ingot")).toBeDefined();
     });
 
