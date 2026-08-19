@@ -3181,6 +3181,11 @@ public final class GtnhCalcOracleExporter {
         families.add(new FusionFamily("fusion_computer", "Fusion Computer", "MTEFusionComputer"));
         families.add(new FusionFamily("large_fusion_computer", "Large Fusion Computer", "MTELargeFusionComputer"));
         families.add(new FissionFamily());
+        families.add(new LargeTurbineFamily("large_turbine", "Large Turbine", "MTELargeTurbine"));
+        families.add(new LargeTurbineFamily("xl_turbine", "XL Turbine", "MTEXLTurbine"));
+        families.add(new UcfeFamily());
+        families.add(new SupercriticalFamily());
+        families.add(new BoilerFamily());
         return families;
     }
 
@@ -4145,6 +4150,490 @@ public final class GtnhCalcOracleExporter {
                 entry.put("fuels", fuels);
                 entries.add(entry);
             }
+        }
+    }
+
+    /**
+     * The large and XL turbines burn from the machine's own live fuel
+     * table (the static FUELS), five variants per machine (gas, steam,
+     * high pressure steam, supercritical steam, plasma). The value is
+     * the machine's own getFuelValue, the cap is the machine's own
+     * maxEUOutput, and the entry tier is the machine's supported output
+     * grid. The table is never guessed: a machine without a readable
+     * FUELS table is a skipped machine, not a hardcoded fuel list.
+     */
+    private class LargeTurbineFamily extends GeneratorFamily {
+        LargeTurbineFamily(String id, String name, String sourceClass) {
+            super(id, name, sourceClass);
+        }
+
+        @Override
+        void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes) {
+            Number maxEuT = maxEuOutput(mte, notes);
+            if (maxEuT == null) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live maxEUOutput()");
+                return;
+            }
+            Object fuelsTable;
+            try {
+                fuelsTable = readStaticField(mte.getClass(), "FUELS");
+            } catch (Exception e) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live FUELS table: " + e);
+                return;
+            }
+            if (fuelsTable == null) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " FUELS is null");
+                return;
+            }
+            int tier = readIntField(mte, "mTier");
+            for (Object fuel : iterable(fuelsTable)) {
+                if (fuel == null || !(fuel instanceof FluidStack) && !(fuel instanceof ItemStack)) {
+                    skip(machine, notes, id + ": unexpected fuel type "
+                        + (fuel == null ? "null" : fuel.getClass().getName()) + " in " + mte.getClass().getSimpleName() + " FUELS");
+                    continue;
+                }
+                Number value = asNumber(invokeTyped(mte, "getFuelValue", fuel));
+                if (value == null || value.doubleValue() <= 0) {
+                    skip(machine, notes, id + ": " + displayNameOf(fuel) + " burns for 0 on " + mte.getClass().getSimpleName());
+                    continue;
+                }
+                Map<String, Object> fuelResource = fuel instanceof FluidStack
+                    ? fluidStack((FluidStack) fuel)
+                    : itemStack((ItemStack) fuel);
+                if (fuelResource == null) {
+                    skip(machine, notes, id + ": " + displayNameOf(fuel) + " has no readable resource form");
+                    continue;
+                }
+                Map<String, Object> entry = map();
+                entry.put("tier", Integer.valueOf(tier < 0 ? 0 : tier));
+                List<Object> fuels = new ArrayList<Object>();
+                Map<String, Object> fuelEntry = fuelResource;
+                fuelEntry.put("amount", Double.valueOf(1.0));
+                fuelEntry.put("periodTicks", Integer.valueOf(10));
+                fuelEntry.put("consumedPerOperation", Double.valueOf(10.0));
+                fuelEntry.put("euPerOperation", Double.valueOf(value.doubleValue() * 10.0));
+                fuelEntry.put("maxEuT", Double.valueOf(maxEuT.doubleValue()));
+                fuels.add(fuelEntry);
+                entry.put("fuels", fuels);
+                entries.add(entry);
+            }
+        }
+    }
+
+    /**
+     * The UCFE (GoodGenerator) burns from three books (diesel, gas
+     * turbine, rocket) with a per-book bonus, takes a promoter, and the
+     * grid it feeds follows the fuel. Everything is read on a fresh
+     * machine instance per fuel — the registry instance is never
+     * mutated: the fuel is loaded (mFuel), the machine is asked to
+     * process (processFuel, the spec-cited machine method), and the
+     * instance's own maxEUOutput() with the fuel loaded is the per-fuel
+     * grid. The promoter is the promoter-tank delta across the
+     * processing call (mPromoter before/after); where the machine
+     * exposes no usable promoter state the entry is exported without a
+     * promoter — a warning is recorded, the ratio is never defaulted.
+     *
+     * The accessor names (mFuel, mPromoter, processFuel) are the
+     * spec's citations of the machine's methods. The oracle is
+     * reflection-based: a name that does not resolve produces a skip
+     * naming the machine and the accessor. If the first pipeline run
+     * shows a family-wide UCFE miss, the warning says exactly what to
+     * rename — check the 1.7.10 GoodGenerator source in the oracle's
+     * gradle dependencies. The spec's formula (FuelAmount x
+     * mSpecialValue x bonus / 20) describes what the game computes; it
+     * is never re-derived here.
+     */
+    private class UcfeFamily extends GeneratorFamily {
+        UcfeFamily() {
+            super("universal_chemical_fuel_engine", "Universal Chemical Fuel Engine",
+                "MTEUniversalChemicalFuelEngineLegacy");
+        }
+
+        @Override
+        void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes) {
+            for (String mapField : new String[] { "dieselFuels", "gasTurbineFuels", "rocketFuels" }) {
+                for (Object recipeObj : fuelBook(mapField, notes)) {
+                    if (!(recipeObj instanceof GTRecipe)) {
+                        continue;
+                    }
+                    GTRecipe recipe = (GTRecipe) recipeObj;
+                    Object fuel = fuelOf(recipe);
+                    if (fuel == null) {
+                        skip(machine, notes, id + ": " + mapField + " entry without a first input");
+                        continue;
+                    }
+                    fillFuel(mte, machine, entries, notes, fuel);
+                }
+            }
+        }
+
+        private void fillFuel(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes, Object fuel) {
+            Object fresh = newInstance(mte.getClass(), notes);
+            if (fresh == null) {
+                return;
+            }
+            Object fuelTank = fuel instanceof FluidStack
+                ? (Object) new FluidStack((FluidStack) fuel, 1000000)
+                : new ItemStack((ItemStack) fuel, 1000000);
+            if (!writeField(fresh, "mFuel", fuelTank)) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live mFuel field");
+                return;
+            }
+            FluidStack promoterBefore = fluidField(fresh, "mPromoter");
+            double promoterStart = promoterBefore == null ? 0 : promoterBefore.amount;
+            Number value = asNumber(invokeBest(fresh, "processFuel", new Object[0]));
+            FluidStack promoterAfter = fluidField(fresh, "mPromoter");
+            double promoterEnd = promoterAfter == null ? 0 : promoterAfter.amount;
+            if (value == null || value.doubleValue() <= 0) {
+                skip(machine, notes, id + ": no live processFuel() on " + mte.getClass().getSimpleName()
+                    + " for " + displayNameOf(fuel));
+                return;
+            }
+            Number maxEuT = asNumber(invokeBest(fresh, "maxEUOutput", new Object[0]));
+            if (maxEuT == null || maxEuT.doubleValue() <= 0) {
+                skip(machine, notes, id + ": no live maxEUOutput() on a fuel-loaded " + mte.getClass().getSimpleName());
+                return;
+            }
+            double consumed = fuel instanceof FluidStack
+                ? (double) ((FluidStack) fuel).amount
+                : (double) ((ItemStack) fuel).stackSize;
+
+            Map<String, Object> fuelResource = fuel instanceof FluidStack
+                ? fluidStack((FluidStack) fuel)
+                : itemStack((ItemStack) fuel);
+            if (fuelResource == null) {
+                skip(machine, notes, id + ": " + displayNameOf(fuel) + " has no readable resource form");
+                return;
+            }
+            Map<String, Object> entry = map();
+            // The entry's tier is the grid this fuel feeds: the live
+            // maxEUOutput() of a fuel-loaded instance (the per-fuel grid),
+            // the same rule the RTG applies to its fuel-capped maxEuT.
+            entry.put("tier", Integer.valueOf(voltageOrdinalForEu(maxEuT.doubleValue())));
+            List<Object> fuels = new ArrayList<Object>();
+            Map<String, Object> fuelEntry = fuelResource;
+            fuelEntry.put("amount", Double.valueOf(1.0));
+            fuelEntry.put("periodTicks", Integer.valueOf(20));
+            fuelEntry.put("consumedPerOperation", Double.valueOf(consumed));
+            fuelEntry.put("euPerOperation", Double.valueOf(value.doubleValue()));
+            fuelEntry.put("maxEuT", Double.valueOf(maxEuT.doubleValue()));
+            fuels.add(fuelEntry);
+            entry.put("fuels", fuels);
+
+            double promoterUsed = promoterStart - promoterEnd;
+            if (promoterAfter != null && promoterUsed > 0 && consumed > 0) {
+                Map<String, Object> promoterResource = fluidStack(new FluidStack(promoterAfter.getFluid(), 1));
+                if (promoterResource == null) {
+                    notes.add(id + ": " + mte.getClass().getSimpleName() + " exposes no usable promoter state for "
+                        + displayNameOf(fuel) + "; the entry is exported without a promoter");
+                } else {
+                    Map<String, Object> promoter = promoterResource;
+                    promoter.put("litersPerLiterFuel", Double.valueOf(promoterUsed / consumed));
+                    entry.put("promoter", promoter);
+                }
+            } else {
+                notes.add(id + ": " + mte.getClass().getSimpleName() + " exposes no usable promoter state for "
+                    + displayNameOf(fuel) + "; the entry is exported without a promoter");
+            }
+            entries.add(entry);
+        }
+    }
+
+    /**
+     * The supercritical fluid turbine (GoodGenerator). It burns the
+     * live FluidRegistry's supercritical steam; the value and the cap
+     * are the fresh fuel-loaded instance's own live numbers (the
+     * machine method the spec cites, and its maxEUOutput — the
+     * maxPower cap), so no formula is re-derived. The byproduct is 1:1
+     * superheated steam, a spec-cited machine constant.
+     */
+    private class SupercriticalFamily extends GeneratorFamily {
+        SupercriticalFamily() {
+            super("supercritical_fluid_turbine", "Supercritical Fluid Turbine",
+                "MTESupercriticalFluidTurbineLegacy");
+        }
+
+        @Override
+        void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes) {
+            net.minecraftforge.fluids.Fluid fuel = net.minecraftforge.fluids.FluidRegistry.getFluid("supercritical_steam");
+            if (fuel == null) {
+                notes.add(id + ": the live FluidRegistry has no fluid named \"supercritical_steam\"");
+                return;
+            }
+            Object fresh = newInstance(mte.getClass(), notes);
+            if (fresh == null) {
+                return;
+            }
+            if (!writeField(fresh, "mFuel", new FluidStack(fuel, 1000000))) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live mFuel field");
+                return;
+            }
+            Number value = asNumber(invokeBest(fresh, "processFuel", new Object[0]));
+            if (value == null || value.doubleValue() <= 0) {
+                skip(machine, notes, id + ": no live processFuel() on " + mte.getClass().getSimpleName());
+                return;
+            }
+            Number maxEuT = asNumber(invokeBest(fresh, "maxEUOutput", new Object[0]));
+            if (maxEuT == null || maxEuT.doubleValue() <= 0) {
+                skip(machine, notes, id + ": no live maxEUOutput() on a fuel-loaded " + mte.getClass().getSimpleName());
+                return;
+            }
+            int tier = readIntField(mte, "mTier");
+            Map<String, Object> fuelResource = fluidStack(new FluidStack(fuel, 1));
+            if (fuelResource == null) {
+                skip(machine, notes, id + ": the supercritical fuel has no readable resource form");
+                return;
+            }
+            Map<String, Object> entry = map();
+            entry.put("tier", Integer.valueOf(tier < 0 ? 0 : tier));
+            List<Object> fuels = new ArrayList<Object>();
+            Map<String, Object> fuelEntry = fuelResource;
+            fuelEntry.put("amount", Double.valueOf(1.0));
+            fuelEntry.put("periodTicks", Integer.valueOf(10));
+            fuelEntry.put("consumedPerOperation", Double.valueOf(10.0));
+            fuelEntry.put("euPerOperation", Double.valueOf(value.doubleValue()));
+            fuelEntry.put("maxEuT", Double.valueOf(maxEuT.doubleValue()));
+            fuels.add(fuelEntry);
+            entry.put("fuels", fuels);
+
+            net.minecraftforge.fluids.Fluid superheated = net.minecraftforge.fluids.FluidRegistry.getFluid("superheated_steam");
+            if (superheated != null) {
+                Map<String, Object> byproductResource = fluidStack(new FluidStack(superheated, 1));
+                if (byproductResource != null) {
+                    List<Object> extras = new ArrayList<Object>();
+                    Map<String, Object> byproduct = byproductResource;
+                    byproduct.put("amount", Double.valueOf(10.0));
+                    extras.add(byproduct);
+                    entry.put("extraOutputs", extras);
+                }
+            } else {
+                notes.add(id + ": the live FluidRegistry has no fluid named \"superheated_steam\"; the byproduct is omitted");
+            }
+            entries.add(entry);
+        }
+    }
+
+    /**
+     * Boilers (bronze / steel / lava / solar + the large boiler) are
+     * production machines: water + fuel -> the live mSteam fluid. One
+     * live instance is one machine map — id from the live display name,
+     * name the live display name — and the "Boiler" name match catches
+     * them all without a guessed list. Fuel consumption is MEASURED: a
+     * fresh instance is supplied (fuel full, water full, steam empty),
+     * ticked for a 2000-tick steady-state window, and the entry records
+     * the window (measurementTicks) and the measured amount per
+     * 10-tick operation. A fuel that does not burn on this boiler is
+     * not listed (the solar boiler legitimately has none); a machine
+     * that cannot be ticked, has no mSteam, or reports no steam is a
+     * skipped machine, never a default.
+     */
+    private class BoilerFamily extends GeneratorFamily {
+        private static final int MEASUREMENT_TICKS = 2000;
+
+        BoilerFamily() {
+            super("boiler", "Boiler", "Boiler");
+        }
+
+        @Override
+        boolean matches(String simpleName) {
+            return simpleName.contains("Boiler");
+        }
+
+        @Override
+        String machineId(Object mte) {
+            String label = liveDisplayName(mte);
+            return domain(label != null ? label : mte.getClass().getSimpleName());
+        }
+
+        @Override
+        String machineName(Object mte) {
+            String label = liveDisplayName(mte);
+            return label != null ? label : mte.getClass().getSimpleName();
+        }
+
+        private String liveDisplayName(Object mte) {
+            Object stack = invokeBest(mte, "getStackForm", new Object[] { Long.valueOf(1L) });
+            return stack instanceof ItemStack ? ((ItemStack) stack).getDisplayName() : null;
+        }
+
+        /**
+         * The result of a single-fuel boiler measurement. A fuel that
+         * does not burn is not a failure (a solar boiler legitimately
+         * has none); a machine that cannot be ticked is.
+         */
+        private static final class Measurement {
+            static final Measurement NOT_A_FUEL = new Measurement(0, 0);
+            static final Measurement MACHINE_BROKEN = new Measurement(-1, -1);
+
+            final double steamPerSecond;
+            final double consumedPerOperation;
+
+            Measurement(double steamPerSecond, double consumedPerOperation) {
+                this.steamPerSecond = steamPerSecond;
+                this.consumedPerOperation = consumedPerOperation;
+            }
+        }
+
+        /**
+         * Run a fresh boiler on one fuel for the 2000-tick window and
+         * report the live steam production (getProductionPerSecond,
+         * L/s) and the fuel consumed per 10-tick operation. Named
+         * fields mFuel / mWater / mSteam and the onPostTickServer tick
+         * method are the 1.7.10 boiler source's; if a miss warning
+         * fires on the first pipeline run, rename the single string
+         * after checking the source. A world-access NPE during ticking
+         * is a machine failure — the documented fallback is to reuse
+         * the crop-tile world-nulling Proxy pattern earlier in this
+         * file.
+         */
+        private Measurement measure(Object mte, Map<String, Object> machine, List<String> notes,
+                net.minecraftforge.fluids.Fluid water, FluidStack steamType, Object fuel) {
+            Object fresh = newInstance(mte.getClass(), notes);
+            if (fresh == null) {
+                return Measurement.MACHINE_BROKEN;
+            }
+            Object fuelTank = fuel instanceof FluidStack
+                ? (Object) new FluidStack((FluidStack) fuel, 1000000)
+                : new ItemStack((ItemStack) fuel, 1000000);
+            if (!writeField(fresh, "mFuel", fuelTank)
+                || !writeField(fresh, "mWater", new FluidStack(water, 1000000))
+                || !writeField(fresh, "mSteam", new FluidStack(steamType.getFluid(), 0))) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName()
+                    + " has no usable live mFuel/mWater/mSteam fields");
+                return Measurement.MACHINE_BROKEN;
+            }
+            double fuelStart = amountOf(fuelTank);
+            Exception tickError = null;
+            for (long tick = 0; tick < MEASUREMENT_TICKS; tick++) {
+                try {
+                    invokeBest(fresh, "onPostTickServer",
+                        new Object[] { Long.valueOf(tick), Long.valueOf(tick) });
+                } catch (Exception e) {
+                    tickError = e;
+                    break;
+                }
+            }
+            if (tickError != null) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName()
+                    + " could not be ticked for the fuel measurement (" + tickError + "); the boiler is skipped");
+                return Measurement.MACHINE_BROKEN;
+            }
+            Number perSecond = asNumber(invokeBest(fresh, "getProductionPerSecond", new Object[0]));
+            if (perSecond == null || perSecond.doubleValue() <= 0) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName()
+                    + " reports no live getProductionPerSecond()");
+                return Measurement.MACHINE_BROKEN;
+            }
+            double consumedPerTick =
+                (fuelStart - amountOf(readField(fresh, "mFuel"))) / (double) MEASUREMENT_TICKS;
+            if (consumedPerTick <= 0) {
+                return Measurement.NOT_A_FUEL;
+            }
+            return new Measurement(perSecond.doubleValue(), consumedPerTick * 10.0);
+        }
+
+        private static double amountOf(Object tank) {
+            if (tank instanceof FluidStack) {
+                return (double) ((FluidStack) tank).amount;
+            }
+            if (tank instanceof ItemStack) {
+                return (double) ((ItemStack) tank).stackSize;
+            }
+            return 0;
+        }
+
+        @Override
+        void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes) {
+            net.minecraftforge.fluids.Fluid water = net.minecraftforge.fluids.FluidRegistry.getFluid("water");
+            if (water == null) {
+                skip(machine, notes, id + ": the live FluidRegistry has no fluid named \"water\"");
+                return;
+            }
+            FluidStack steamType = fluidField(mte, "mSteam");
+            if (steamType == null) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live mSteam field");
+                return;
+            }
+            List<Object> books = new ArrayList<Object>();
+            books.addAll(fuelBook("denseLiquidFuels", notes));
+            books.addAll(fuelBook("thermalBoilerRecipes", notes));
+
+            List<Object> fuels = new ArrayList<Object>();
+            Double steamPerSecond = null;
+            for (Object recipeObj : books) {
+                if (!(recipeObj instanceof GTRecipe)) {
+                    continue;
+                }
+                GTRecipe recipe = (GTRecipe) recipeObj;
+                Object fuel = fuelOf(recipe);
+                if (fuel == null) {
+                    continue;
+                }
+                Measurement measurement = measure(mte, machine, notes, water, steamType, fuel);
+                if (measurement == Measurement.MACHINE_BROKEN) {
+                    return;
+                }
+                if (measurement == Measurement.NOT_A_FUEL) {
+                    continue;
+                }
+                if (steamPerSecond == null) {
+                    steamPerSecond = Double.valueOf(measurement.steamPerSecond);
+                }
+                Map<String, Object> fuelResource = fuel instanceof FluidStack
+                    ? fluidStack((FluidStack) fuel)
+                    : itemStack((ItemStack) fuel);
+                if (fuelResource == null) {
+                    notes.add(id + ": " + displayNameOf(fuel) + " has no readable resource form");
+                    continue;
+                }
+                Map<String, Object> fuelEntry = fuelResource;
+                fuelEntry.put("amount", Double.valueOf(1.0));
+                fuelEntry.put("consumedPerOperation", Double.valueOf(measurement.consumedPerOperation));
+                fuels.add(fuelEntry);
+            }
+            if (steamPerSecond == null) {
+                // No fuel burned. A fuelless boiler (solar) is
+                // legitimate and still reports its steam; a machine
+                // that does not report steam cannot be explained and is
+                // skipped.
+                Object probe = newInstance(mte.getClass(), notes);
+                if (probe == null) {
+                    return;
+                }
+                Number probeSteam = asNumber(invokeBest(probe, "getProductionPerSecond", new Object[0]));
+                if (probeSteam == null || probeSteam.doubleValue() <= 0) {
+                    skip(machine, notes, id + ": " + mte.getClass().getSimpleName()
+                        + " produced no measurable steam; the boiler is skipped");
+                    return;
+                }
+                steamPerSecond = probeSteam;
+            }
+            // A 10-tick operation is half a second: L/s / 2. Water is
+            // 1:1 with the live steam (spec).
+            double steamPerOperation = steamPerSecond / 2.0;
+            Map<String, Object> entry = map();
+            entry.put("kind", "boiler");
+            entry.put("tier", Integer.valueOf(0));
+            entry.put("periodTicks", Integer.valueOf(10));
+            entry.put("steamPerOperation", Double.valueOf(steamPerOperation));
+            entry.put("waterPerOperation", Double.valueOf(steamPerOperation));
+            entry.put("measurementTicks", Integer.valueOf(MEASUREMENT_TICKS));
+            Map<String, Object> steamResource = fluidStack(new FluidStack(steamType.getFluid(), 1));
+            if (steamResource == null) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " steam has no readable resource form");
+                return;
+            }
+            Map<String, Object> steam = steamResource;
+            entry.put("steam", steam);
+            Map<String, Object> waterResource = fluidStack(new FluidStack(water, 1));
+            if (waterResource == null) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " water has no readable resource form");
+                return;
+            }
+            Map<String, Object> waterMap = waterResource;
+            entry.put("water", waterMap);
+            entry.put("fuels", fuels);
+            entries.add(entry);
         }
     }
 }
