@@ -1576,7 +1576,13 @@ function GlanceIoRow({ port }: { port: RailPort }) {
           in the sprite, so they zoom 1.5× inside an overflow-hidden box;
           fluids are a solid square with nothing to crop. */}
       <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden">
-        {port.resource ? (
+        {port.kind === "energy" ? (
+          // Energy is not an atlas image: the grid's bolt, in the card's
+          // energy colour, is its icon. The check must beat `port.resource`
+          // - a generator's own output row carries the resolved energy
+          // resource, and ResourceIcon has no art for it.
+          <Zap className="h-6 w-6 text-amber-400" />
+        ) : port.resource ? (
           <ResourceIcon
             resource={{ ...port.resource, amount: 1, chance: undefined }}
             size="sm"
@@ -1592,10 +1598,6 @@ function GlanceIoRow({ port }: { port: RailPort }) {
             }
             className={port.kind === "fluid" ? "!h-9 !w-9" : "!h-9 !w-9 origin-center scale-150"}
           />
-        ) : port.kind === "energy" ? (
-          // Energy is not an atlas image: the grid's bolt, in the card's
-          // energy colour, is its icon.
-          <Zap className="h-6 w-6 text-amber-400" />
         ) : null}
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
@@ -2583,7 +2585,12 @@ export function PortChip({
           row can now answer. Nothing here claims the pointer, so the handle
           above it gets the drag and the row gets the click. */}
       <span className="pointer-events-none relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden">
-        {port.resource ? (
+        {port.kind === "energy" ? (
+          // The bolt, not an atlas image - and the check must beat
+          // `port.resource`, because a generator's own output row carries the
+          // resolved energy resource and ResourceIcon has no art for it.
+          <Zap className="h-5 w-5 text-amber-400" />
+        ) : port.resource ? (
           <ResourceIcon
             resource={{ ...port.resource, amount: 1, chance: undefined }}
             bare
@@ -2608,8 +2615,6 @@ export function PortChip({
             }
             className={port.kind === "fluid" ? "" : "!h-7 !w-7 origin-center scale-150"}
           />
-        ) : port.kind === "energy" ? (
-          <Zap className="h-5 w-5 text-amber-400" />
         ) : (
           <span className="block h-7 w-7 border border-[var(--mc-47)] bg-[var(--mc-55)]" />
         )}

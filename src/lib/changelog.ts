@@ -74,13 +74,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "2.17.1",
-    date: "2026-08-18",
-    headline: "Side panel fixes",
+    date: "2026-08-19",
+    headline: "Generators",
     notes: [
-      "The resource list scrolls while a row is popped out wide.",
-      "The popped out row stays clear of the scroll bar.",
-      "The power list lost its stray sideways scroll bar.",
-      "Power lines no longer show hover popups.",
+      "Power is a real resource on the board: every machine shows the grid it draws from, and you can wire it in.",
+      "Add a generator with one click: the power list shows what each grid needs and what it gets, with a button to close the gap.",
+      "The fuel estimate is gone — your plan's power comes from real GTNH generators, from gas and steam turbines to fission, fusion, solar and RTG.",
+      "The resource and power lists lost their stray scroll bars, and power lines lost their hover popups.",
     ],
   },
   {
