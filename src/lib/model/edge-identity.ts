@@ -18,7 +18,7 @@ export function canonicalizeResourceHandleId(handleId?: string | null): string |
   const [side, kind, encodedResourceId] = handleId.split(":");
   if (
     (side !== "input" && side !== "output") ||
-    (kind !== "item" && kind !== "fluid") ||
+    (kind !== "item" && kind !== "fluid" && kind !== "energy") ||
     !encodedResourceId
   ) {
     return handleId;

@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
+import type { DatasetManifest } from "@/lib/datasets";
+import { PROJECT_SCHEMA_VERSION, type FactoryNode, type FactoryProject, type Recipe } from "@/lib/model/types";
 import { makeResourceHandleId } from "@/components/flow/resource-handles";
+import { calculateThroughput } from "@/lib/solver";
 import {
   captureBoardSelection,
   collectPocketConvergenceWarnings,
@@ -4118,5 +4120,127 @@ describe("cycled input picks", () => {
     });
 
     expect(useFactoryStore.getState().project.nodes[0]?.recipeInputOverrides).toBeUndefined();
+  });
+});
+
+const genRecipe = {
+  id: "gen",
+  name: "Generator",
+  machineType: "Generator",
+  minimumTier: "LV",
+  durationTicks: 20,
+  eut: 0,
+  machineHandlers: [{ id: "lv", label: "LV", machineType: "Generator", minimumTier: "LV", kind: "single" }],
+  inputs: [{ kind: "fluid", id: "benzene", amount: 1, displayName: "Benzene" }],
+  outputs: [{ kind: "energy", id: "lv", amount: 12800, displayName: "Energy (LV)" }],
+} as unknown as Recipe;
+
+const smelterRecipe = (eut: number, minimumTier: "LV" | "MV") =>
+  ({
+    id: "smelt",
+    name: "Smelt",
+    machineType: "Furnace",
+    minimumTier,
+    durationTicks: 20,
+    eut,
+    machineHandlers: [{ id: "base", label: "Furnace", machineType: "Furnace", minimumTier, kind: "single" }],
+    inputs: [{ kind: "item", id: "ore", amount: 1, displayName: "Ore" }],
+    outputs: [{ kind: "item", id: "ingot", amount: 1, displayName: "Ingot" }],
+  }) as unknown as Recipe;
+
+function machineNode(id: string, recipeId: string, overrides: Partial<FactoryNode> = {}) {
+  return {
+    id,
+    recipeId,
+    machineCount: 1,
+    parallel: 1,
+    overclockTier: "LV",
+    enabled: true,
+    position: { x: 0, y: 0 },
+    ...overrides,
+  } as FactoryNode;
+}
+
+// The store's initial datasetManifest is undefined and addPowerForTier
+// no-ops at the version check before anything else: tests that must get
+// PAST that check spread this in.
+function testDataset() {
+  return {
+    datasetManifest: {
+      schemaVersion: 1,
+      versions: [
+        {
+          id: "test-version",
+          gtnhVersion: "test",
+          channel: "stable",
+          publishedAt: "2026-08-18T00:00:00.000Z",
+          manifestPath: "test/manifest.json",
+          recipeDatasetPath: "test/recipe-dataset.json",
+          sourceInfo: {},
+        },
+      ],
+    } as unknown as DatasetManifest,
+    selectedDatasetVersionId: "test-version",
+  };
+}
+
+describe("wiring energy", () => {
+  function seedPowerProject(consumerTier: "LV" | "MV" = "LV", consumerEut = 10) {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "power-wire-project",
+      name: "Power wire",
+      recipes: [genRecipe, smelterRecipe(consumerEut, consumerTier)],
+      nodes: [
+        machineNode("G", "gen"),
+        machineNode("M", "smelt", { overclockTier: consumerTier }),
+      ],
+      edges: [],
+    };
+    useFactoryStore.setState({ project, lastResult: calculateThroughput(project) });
+  }
+
+  it("wires a generator to a machine on the same grid, with canonical handles", () => {
+    seedPowerProject("LV");
+    useFactoryStore.getState().connectNodes("G", "M", { kind: "energy", id: "lv" });
+
+    const edge = useFactoryStore.getState().project.edges.find((entry) => entry.resourceKind === "energy");
+    expect(edge).toBeDefined();
+    expect(edge!.source).toBe("G");
+    expect(edge!.target).toBe("M");
+    expect(edge!.resourceId).toBe("lv");
+    expect(edge!.sourceHandle).toBe("output:energy:lv");
+    expect(edge!.targetHandle).toBe("input:energy:lv");
+  });
+
+  it("refuses a grid mismatch: no transformer, no bridging", () => {
+    seedPowerProject("MV");
+    useFactoryStore.getState().connectNodes("G", "M", { kind: "energy", id: "lv" });
+
+    expect(useFactoryStore.getState().project.edges).toHaveLength(0);
+  });
+
+  it("refuses to feed a machine that draws nothing", () => {
+    seedPowerProject("LV", 0);
+    useFactoryStore.getState().connectNodes("G", "M", { kind: "energy", id: "lv" });
+
+    expect(useFactoryStore.getState().project.edges).toHaveLength(0);
+  });
+
+  it("auto-connects power when a machine lands next to a same-grid generator", () => {
+    seedPowerProject("LV");
+    useFactoryStore.getState().autoConnectNode("M");
+
+    const edge = useFactoryStore.getState().project.edges.find((entry) => entry.resourceKind === "energy");
+    expect(edge).toBeDefined();
+    expect(edge!.source).toBe("G");
+  });
+
+  it("toggles an identical energy wire off on a second drag", () => {
+    seedPowerProject("LV");
+    useFactoryStore.getState().connectNodes("G", "M", { kind: "energy", id: "lv" });
+    useFactoryStore.getState().connectNodes("G", "M", { kind: "energy", id: "lv" });
+
+    expect(useFactoryStore.getState().project.edges).toHaveLength(0);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FactoryProject } from "./types";
+import type { FactoryNode, FactoryProject, Recipe } from "./types";
 import { normalizeLoadedProject } from "./project-normalize";
 
 const PROJECT_SCHEMA_VERSION = 1;
@@ -230,5 +230,61 @@ describe("dropping pre-generator fuel settings on load", () => {
     const loaded = normalizeLoadedProject(raw as never);
     expect("fuelProfiles" in loaded).toBe(false);
     expect("selectedFuelProfileId" in loaded).toBe(false);
+  });
+});
+
+describe("keeping power wires on load", () => {
+  // A consumer's raw recipe carries no energy input slot - the draw is
+  // synthesized by the solver - so the slot check in endpointHandles would
+  // delete every power wire on load. It must not.
+  it("keeps a power wire on load: a consumer's raw recipe has no energy slot", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "power-load",
+      name: "Power load",
+      recipes: [
+        {
+          id: "gen",
+          name: "Generator",
+          machineType: "Generator",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 0,
+          machineHandlers: [],
+          inputs: [],
+          outputs: [{ kind: "energy", id: "lv", amount: 12800, displayName: "Energy (LV)" }],
+        } as unknown as Recipe,
+        {
+          id: "smelt",
+          name: "Smelt",
+          machineType: "Furnace",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 10,
+          machineHandlers: [],
+          inputs: [{ kind: "item", id: "ore", amount: 1, displayName: "Ore" }],
+          outputs: [{ kind: "item", id: "ingot", amount: 1, displayName: "Ingot" }],
+        } as unknown as Recipe,
+      ],
+      nodes: [
+        { id: "G", recipeId: "gen", machineCount: 1, parallel: 1, overclockTier: "LV", enabled: true, position: { x: 0, y: 0 } } as unknown as FactoryNode,
+        { id: "M", recipeId: "smelt", machineCount: 1, parallel: 1, overclockTier: "LV", enabled: true, position: { x: 440, y: 0 } } as unknown as FactoryNode,
+      ],
+      edges: [
+        {
+          id: "power",
+          source: "G",
+          target: "M",
+          resourceKind: "energy",
+          resourceId: "lv",
+          sourceHandle: "output:energy:lv",
+          targetHandle: "input:energy:lv",
+          label: "Energy (LV)",
+        },
+      ],
+    };
+
+    const normalized = normalizeLoadedProject(project);
+    expect(normalized.edges.map((edge) => edge.id)).toContain("power");
   });
 });

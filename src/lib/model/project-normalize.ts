@@ -161,6 +161,18 @@ function dropCrossFormConnections(project: FactoryProject): FactoryProject {
     if (isTrashRecipe(recipe)) {
       return true;
     }
+    // A generator's energy output and a machine's draw have no recipe slot to
+    // check: the draw is synthesized by the solver, so the slot check below
+    // would delete every power wire on load — the same trap the trash check
+    // above documents. Re-implement the power-report's kind guard here (eut
+    // and duration are all it needs; importing the solver into the model
+    // would be a layering cycle).
+    if (kind === "energy") {
+      if (side === "source") {
+        return recipe.outputs.some((slot) => slot.kind === "energy");
+      }
+      return Math.abs(recipe.eut) > 0 && recipe.durationTicks > 0;
+    }
     const slots = side === "source" ? recipe.outputs : recipe.inputs;
     return slots.some((slot) => slot.kind === kind);
   };

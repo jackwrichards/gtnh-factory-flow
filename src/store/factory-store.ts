@@ -11,6 +11,7 @@ import {
 import { normalizeLoadedProject } from "@/lib/model/project-normalize";
 import { setActiveRateUnit, type RateUnit } from "@/lib/model/rate-unit";
 import { calculateThroughput } from "@/lib/solver";
+import { getNodePowerReport, hasPowerReport } from "@/lib/solver/power-report";
 import { applyRecipeInputOverrides, inputOverrideAmount } from "@/lib/model/recipe-input-overrides";
 import type { AlternativeCycleFace } from "@/lib/nei/alternative-cycle";
 import { createCropFarmPlaceholderRecipe, isCropFarmRecipe } from "@/lib/model/passive-production";
@@ -3101,6 +3102,19 @@ function convergePocketBoundaryEdges(project: FactoryProject, pocketId: string):
   return { ...project, edges: [...project.edges, ...additions] };
 }
 
+/**
+ * The grid a card actually draws from — its power report's tier, lower-cased
+ * into an energy id ("LuV" → "luv"; never toUpperCase, the id is the id).
+ * Machines without a power report (manual/instant, zero-EU) draw no energy
+ * and can never be an energy wire's end.
+ */
+function nodeEnergyTier(recipe: Recipe, node: FactoryNode): string | undefined {
+  if (!hasPowerReport(recipe)) {
+    return undefined;
+  }
+  return getNodePowerReport(recipe, node).tier.toLowerCase();
+}
+
 function buildEdgeBetweenNodes(
   project: FactoryProject,
   sourceNodeId: string,
@@ -3205,6 +3219,24 @@ function buildEdgeBetweenNodes(
 
   if (!sourceNode || !targetNode || !sourceRecipe || !targetRecipe) {
     return undefined;
+  }
+
+  // A wire of energy has no recipe slot to match on either end: the source
+  // must output it, the target must draw from that same grid. No bridging —
+  // a transformer is a machine the player places, not a property of the wire.
+  const sourceEnergy = sourceRecipe.outputs.find((output) => output.kind === "energy");
+  const targetTier = nodeEnergyTier(targetRecipe, targetNode);
+  if (sourceEnergy && targetTier === sourceEnergy.id) {
+    return {
+      id: createId("edge"),
+      source: sourceNode.id,
+      target: targetNode.id,
+      sourceHandle: makeResourceHandleId("output", sourceEnergy),
+      targetHandle: makeResourceHandleId("input", { kind: "energy", id: targetTier }),
+      resourceKind: "energy",
+      resourceId: sourceEnergy.id,
+      label: sourceEnergy.displayName ?? `Energy (${targetTier.toUpperCase()})`,
+    };
   }
 
   if (selectedResource?.sourceHandle && selectedResource.targetHandle) {
@@ -3317,6 +3349,23 @@ function buildCompatibleEdgesBetweenNodes(
       });
     });
   });
+
+  // The one pairing slots cannot express: power. A generator's energy output
+  // meets the target's grid when the target draws from that same tier.
+  const sourceEnergy = sourceRecipe.outputs.find((output) => output.kind === "energy");
+  const targetTier = nodeEnergyTier(targetRecipe, targetNode);
+  if (sourceEnergy && targetTier === sourceEnergy.id) {
+    edges.push({
+      id: createId("edge"),
+      source: sourceNode.id,
+      target: targetNode.id,
+      sourceHandle: makeResourceHandleId("output", sourceEnergy),
+      targetHandle: makeResourceHandleId("input", { kind: "energy", id: targetTier }),
+      resourceKind: "energy",
+      resourceId: sourceEnergy.id,
+      label: sourceEnergy.displayName ?? `Energy (${targetTier.toUpperCase()})`,
+    });
+  }
 
   // Slots, not rows: a recipe holding the same resource in two output slots and
   // a taker holding it in two input slots pairs up four ways, and all four land
@@ -3460,7 +3509,7 @@ function parseResourceHandleId(handleId?: string | null):
   const [side, kind, encodedResourceId, encodedSlotIndex] = handleId.split(":");
   if (
     (side !== "input" && side !== "output") ||
-    (kind !== "item" && kind !== "fluid") ||
+    (kind !== "item" && kind !== "fluid" && kind !== "energy") ||
     !encodedResourceId
   ) {
     return undefined;
