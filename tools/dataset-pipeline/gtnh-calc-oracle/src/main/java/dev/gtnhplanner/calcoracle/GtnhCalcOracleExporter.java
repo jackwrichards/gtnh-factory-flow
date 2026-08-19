@@ -3175,6 +3175,9 @@ public final class GtnhCalcOracleExporter {
         families.add(new BasicGeneratorFamily("combustion_generator", "Combustion Generator", "MTEDieselGenerator", "dieselFuels"));
         families.add(new BasicGeneratorFamily("thermal_generator", "Thermal Generator", "MTEGeothermalGenerator", "hotFuels"));
         families.add(new BasicGeneratorFamily("plasma_generator", "Plasma Generator", "MTEPlasmaGenerator", "plasmaFuels"));
+        families.add(new SteamTurbineFamily());
+        families.add(new SolarFamily());
+        families.add(new RtgFamily());
         return families;
     }
 
@@ -3804,6 +3807,154 @@ public final class GtnhCalcOracleExporter {
             }
             entry.put("fuels", fuels);
             entries.add(entry);
+        }
+    }
+
+    /**
+     * The steam turbine has no fuel book: it burns the live
+     * FluidRegistry's "steam", and the machine's own getFuelValue prices
+     * it (spec: 3). The per-tick feed is the machine's own
+     * getEfficiency() (spec: 6 + tier), so a 10-tick burn consumes ten
+     * feeds and produces value x feed x 10.
+     *
+     * Unit note: the feed is read per tick. If the first pipeline run's
+     * numbers land 10x off the in-game tooltip, the feed is per-operation
+     * and the two x 10 factors below are the one place to fix.
+     */
+    private class SteamTurbineFamily extends GeneratorFamily {
+        SteamTurbineFamily() {
+            super("steam_turbine", "Steam Turbine", "MTESteamTurbine");
+        }
+
+        @Override
+        void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes) {
+            net.minecraftforge.fluids.Fluid steam = net.minecraftforge.fluids.FluidRegistry.getFluid("steam");
+            if (steam == null) {
+                notes.add(id + ": the live FluidRegistry has no fluid named \"steam\"");
+                return;
+            }
+            Number maxEuT = maxEuOutput(mte, notes);
+            if (maxEuT == null) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live maxEUOutput()");
+                return;
+            }
+            Number value = asNumber(invokeTyped(mte, "getFuelValue", new FluidStack(steam, 1)));
+            if (value == null || value.doubleValue() <= 0) {
+                skip(machine, notes, id + ": the live machine burns steam for 0");
+                return;
+            }
+            Number feed = asNumber(invokeBest(mte, "getEfficiency", new Object[0]));
+            if (feed == null || feed.doubleValue() <= 0) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live getEfficiency()");
+                return;
+            }
+            Map<String, Object> steamResource = fluidStack(new FluidStack(steam, 1));
+            if (steamResource == null) {
+                skip(machine, notes, id + ": the live steam fluid has no readable resource form");
+                return;
+            }
+            Map<String, Object> entry = map();
+            int tier = readIntField(mte, "mTier");
+            entry.put("tier", Integer.valueOf(tier < 0 ? 0 : tier));
+            List<Object> fuels = new ArrayList<Object>();
+            Map<String, Object> fuelEntry = steamResource;
+            fuelEntry.put("amount", Double.valueOf(1.0));
+            fuelEntry.put("consumedPerOperation", Double.valueOf(feed.doubleValue() * 10.0));
+            fuelEntry.put("periodTicks", Integer.valueOf(10));
+            fuelEntry.put("euPerOperation", Double.valueOf(value.doubleValue() * feed.doubleValue() * 10.0));
+            fuelEntry.put("maxEuT", Double.valueOf(maxEuT.doubleValue()));
+            fuels.add(fuelEntry);
+            entry.put("fuels", fuels);
+            entries.add(entry);
+        }
+    }
+
+    /**
+     * The solar generator burns nothing. The in-game unit outputs
+     * maxEUOutput() every 20 ticks and is always on; note the LV solar's
+     * maxEUOutput() is overridden to 1 in game code, and the live read
+     * carries that into the export — the normalizer's energy id follows
+     * maxEuT, not the machine tier, so an LV solar feeds energy:ulv.
+     */
+    private class SolarFamily extends GeneratorFamily {
+        SolarFamily() {
+            super("solar_generator", "Solar Generator", "MTESolarGenerator");
+        }
+
+        @Override
+        void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes) {
+            Number maxEuT = maxEuOutput(mte, notes);
+            if (maxEuT == null || maxEuT.doubleValue() <= 0) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live maxEUOutput()");
+                return;
+            }
+            Map<String, Object> entry = map();
+            int tier = readIntField(mte, "mTier");
+            entry.put("tier", Integer.valueOf(tier < 0 ? 0 : tier));
+            entry.put("periodTicks", Integer.valueOf(20));
+            entry.put("maxEuT", Double.valueOf(maxEuT.doubleValue()));
+            entry.put("euPerOperation", Double.valueOf(maxEuT.doubleValue() * 20.0));
+            entry.put("fuelless", Boolean.TRUE);
+            entry.put("fuels", new ArrayList<Object>());
+            entries.add(entry);
+        }
+    }
+
+    /**
+     * The RTG burns one fuel at a time, one per 24000-tick day. The
+     * per-fuel value is the book's total (mSpecialValue); the grid it
+     * feeds is the fuel's own output voltage, so the export is one entry
+     * per fuel and the entry tier follows the fuel's rate
+     * (voltageOrdinalForEu), not the machine's.
+     */
+    private class RtgFamily extends GeneratorFamily {
+        RtgFamily() {
+            super("rtg", "RTG", "MTERTGenerator");
+        }
+
+        @Override
+        void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes) {
+            List<Object> book = fuelBook("rtgFuels", notes);
+            if (book.isEmpty()) {
+                return;
+            }
+            Number maxEuT = maxEuOutput(mte, notes);
+            if (maxEuT == null) {
+                skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live maxEUOutput()");
+                return;
+            }
+            for (Object recipeObj : book) {
+                if (!(recipeObj instanceof GTRecipe)) {
+                    continue;
+                }
+                GTRecipe recipe = (GTRecipe) recipeObj;
+                Object fuel = fuelOf(recipe);
+                Number total = asNumber(recipe.mSpecialValue);
+                if (fuel == null || total == null || total.doubleValue() <= 0) {
+                    skip(machine, notes, id + ": rtgFuels entry without a usable fuel or total value");
+                    continue;
+                }
+                double rate = Math.min(maxEuT.doubleValue(), total.doubleValue() / 24000.0);
+                Map<String, Object> entry = map();
+                entry.put("tier", Integer.valueOf(voltageOrdinalForEu(rate)));
+                List<Object> fuels = new ArrayList<Object>();
+                Map<String, Object> fuelResource = fuel instanceof FluidStack
+                    ? fluidStack((FluidStack) fuel)
+                    : itemStack((ItemStack) fuel);
+                if (fuelResource == null) {
+                    skip(machine, notes, id + ": " + displayNameOf(fuel) + " has no readable resource form");
+                    continue;
+                }
+                Map<String, Object> fuelEntry = fuelResource;
+                fuelEntry.put("amount", Double.valueOf(1.0));
+                fuelEntry.put("periodTicks", Integer.valueOf(24000));
+                fuelEntry.put("consumedPerOperation", Double.valueOf(1.0));
+                fuelEntry.put("euPerOperation", Double.valueOf(total.doubleValue()));
+                fuelEntry.put("maxEuT", Double.valueOf(rate));
+                fuels.add(fuelEntry);
+                entry.put("fuels", fuels);
+                entries.add(entry);
+            }
         }
     }
 }
