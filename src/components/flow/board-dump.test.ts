@@ -170,10 +170,14 @@ describe("buildBoardDump", () => {
   });
 
   it("carries resource ids for anything it named, and nothing it did not", () => {
+    // The power draw is a real input line on each card (smelter on MV,
+    // bender on LV), so the dump names both grids.
     expect(dumpOf([]).resourceIds).toEqual({
       Ingot: "item:ingot",
       Plate: "item:plate",
       "Raw Ore": "item:ore",
+      "Energy (LV)": "energy:lv",
+      "Energy (MV)": "energy:mv",
     });
   });
 });

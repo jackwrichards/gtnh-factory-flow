@@ -580,16 +580,23 @@ function findBareSlots(
   const wiredOn = (edges: ProjectEdge[], key: string) =>
     edges.some((edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === key);
 
+  // Energy is a boundary, not a slot to close: the grid supplies a machine's
+  // draw and absorbs a generator's output, so an unwired energy row is the
+  // same "add a generator" hint the solver makes of it, not a missing wire.
+  // closeBoundaries and the bare-input/bare-output exclusions all agree; the
+  // "unwired" checklist is about the matter loop only.
+  const isEnergy = (key: string) => key.startsWith("energy:");
+
   const inputs: NonNullable<NodeVerdict["bare"]>["inputs"] = [];
   for (const [key, flow] of Object.entries(nodeResult.inputs)) {
-    if (flow.amountPerSecond > RATE_EPSILON && !wiredOn(incoming, key)) {
+    if (!isEnergy(key) && flow.amountPerSecond > RATE_EPSILON && !wiredOn(incoming, key)) {
       inputs.push(describe(flow, key));
     }
   }
 
   const outputs: NonNullable<NodeVerdict["bare"]>["outputs"] = [];
   for (const [key, flow] of Object.entries(nodeResult.outputs)) {
-    if (flow.amountPerSecond > RATE_EPSILON && !wiredOn(outgoing, key)) {
+    if (!isEnergy(key) && flow.amountPerSecond > RATE_EPSILON && !wiredOn(outgoing, key)) {
       outputs.push(describe(flow, key));
     }
   }
@@ -863,8 +870,14 @@ function findBindingInput(
     );
     // A bare input delivers nothing and binds hardest of all. It used to be
     // skipped here as hand-fed, which meant the one input actually stopping
-    // the machine could never be named.
+    // the machine could never be named. The one exception is the grid: an
+    // unwired draw never stops the machine (the solver bills it at full
+    // tilt), so naming it the cause would blame a phantom — while a WIRED
+    // line whose generator runs dry falls through like any other line.
     if (edges.length === 0) {
+      if (key.startsWith("energy:")) {
+        continue;
+      }
       candidates.push({ key, ratio: 0, supplied: 0, need: flow.amountPerSecond, edges });
       continue;
     }

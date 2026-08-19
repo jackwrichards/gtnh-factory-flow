@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
+import {
+  PROJECT_SCHEMA_VERSION,
+  type FactoryEdge,
+  type FactoryNode,
+  type FactoryProject,
+  type MachineTier,
+  type Recipe,
+} from "@/lib/model/types";
 import { calculateThroughput } from "./throughput";
 import { closeBoundaries } from "./close-boundaries";
 
@@ -1903,5 +1910,253 @@ describe("calculateThroughput", () => {
     expect(edge.transferredPerSecond).toBeCloseTo(1);
     expect(edge.nameplateDemandPerSecond).toBeCloseTo(1);
     expect(edge.constraint).toBe("full");
+  });
+});
+
+/** A generator node: zero-EU, one energy output, nameplate `powerPerSecond` EU/s. */
+function generatorNode(id: string, tierId: string, powerPerSecond: number) {
+  return {
+    id,
+    recipeId: "gen",
+    machineCount: 1,
+    parallel: 1,
+    overclockTier: tierId.toUpperCase(),
+    enabled: true,
+    position: { x: 0, y: 0 },
+  } as FactoryNode;
+}
+
+function generatorRecipe(tier: string, powerPerSecond: number) {
+  return {
+    id: "gen",
+    name: "Generator",
+    machineType: "Generator",
+    minimumTier: tier,
+    durationTicks: 20,
+    eut: 0,
+    machineHandlers: [
+      {
+        id: "base",
+        label: "Generator",
+        machineType: "Generator",
+        minimumTier: tier as MachineTier,
+        kind: "single",
+      },
+    ],
+    inputs: [{ kind: "fluid", id: "benzene", amount: 1, displayName: "Benzene" }],
+    // The dataset's energy output is EU PER OPERATION; a 20-tick recipe runs
+    // one operation per second, so the amount is the per-second figure as-is
+    // (this is the pipeline's `energy = min(euPerOp, maxEuT x period)` clamp,
+    // one op per period).
+    outputs: [
+      { kind: "energy", id: tier.toLowerCase(), amount: powerPerSecond, displayName: `Energy (${tier})` },
+    ],
+  } as unknown as Recipe;
+}
+
+function fullProjectFixture({
+  recipes,
+  nodes,
+  edges = [],
+}: {
+  recipes: Recipe[];
+  nodes: FactoryNode[];
+  edges?: FactoryEdge[];
+}): FactoryProject {
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "power-flow-project",
+    name: "Power flow",
+    recipes,
+    nodes,
+    edges,
+  } as unknown as FactoryProject;
+}
+
+function machineNodeFixture(id: string, overrides: Partial<FactoryNode> = {}): FactoryNode {
+  return {
+    id,
+    recipeId: "smelt",
+    machineCount: 1,
+    parallel: 1,
+    overclockTier: "LV",
+    enabled: true,
+    position: { x: 0, y: 0 },
+    ...overrides,
+  } as unknown as FactoryNode;
+}
+
+function smelterRecipe(eut: number, minimumTier: string, durationTicks: number): Recipe {
+  return {
+    id: "smelt",
+    name: "Smelt",
+    machineType: "Furnace",
+    minimumTier: minimumTier as MachineTier,
+    durationTicks,
+    eut,
+    machineHandlers: [
+      {
+        id: "base",
+        label: "Furnace",
+        machineType: "Furnace",
+        minimumTier: minimumTier as MachineTier,
+        kind: "single",
+      },
+    ],
+    inputs: [{ kind: "item", id: "ore", amount: 1, displayName: "Ore" }],
+    outputs: [{ kind: "item", id: "ingot", amount: 1, displayName: "Ingot" }],
+  } as unknown as Recipe;
+}
+
+// Mirrors lcrRecipe in power-report.test.ts - the proven under-powered
+// fixture, as a full recipe.
+function lcrStyleRecipe(eut: number, minimumTier: string): Recipe {
+  return {
+    id: "lcr",
+    name: "Large Chemical Reactor",
+    machineType: "Large Chemical Reactor",
+    minimumTier: minimumTier as MachineTier,
+    durationTicks: 400,
+    eut,
+    machineHandlers: [
+      {
+        id: "base",
+        label: "Large Chemical Reactor",
+        machineType: "Large Chemical Reactor",
+        minimumTier: minimumTier as MachineTier,
+        kind: "single",
+      },
+    ],
+    inputs: [{ kind: "item", id: "reagent", amount: 1, displayName: "Reagent" }],
+    outputs: [{ kind: "item", id: "product", amount: 1, displayName: "Product" }],
+  } as unknown as Recipe;
+}
+
+describe("power as a flow", () => {
+  it("bills a machine's draw as an energy input on its own grid", () => {
+    // 10 EU/t: the dataset's eut is per TICK, so a machine drawing 10 EU/t
+    // drinks 10 x 20 = 200 EU/s, on LV.
+    const project = fullProjectFixture({
+      recipes: [smelterRecipe(10, "LV", 20)],
+      nodes: [machineNodeFixture("M")],
+      edges: [],
+    });
+    const result = calculateThroughput(closeBoundaries(project), { generatedAt: "fixed" });
+    const node = result.nodes["M"]!;
+    expect(node.inputs["energy:lv"]).toBeDefined();
+    // The nameplate book the Power section already shows (EU/tick).
+    expect(node.euT).toBe(10);
+    expect(result.resources["energy:lv"].consumedPerSecond).toBeCloseTo(200);
+  });
+
+  it("does not bill a stalled machine any draw", () => {
+    // The proven under-powered fixture from power-report.test.ts: an HV
+    // machine running an MV overclock with a single hatch stalls to zero,
+    // and a stalled machine must not still drink.
+    const project = fullProjectFixture({
+      recipes: [lcrStyleRecipe(480, "HV")],
+      nodes: [machineNodeFixture("M", { overclockTier: "MV", energyHatches: 1 })],
+      edges: [],
+    });
+    const result = calculateThroughput(closeBoundaries(project), { generatedAt: "fixed" });
+    const node = result.nodes["M"]!;
+    expect(node.utilization).toBeCloseTo(0);
+    // The state gate is the whole stall model: a machine that cannot run
+    // draws NOTHING - not a nameplate figure. The power block (Task 6) sums
+    // nodeResult.inputs, so a stalled machine correctly adds zero to the
+    // grid's demand, and supplying power un-stalls it through the same
+    // equilibrium that un-starves a short fuel line.
+    expect(result.resources["energy:mv"]?.consumedPerSecond ?? 0).toBeCloseTo(0);
+    expect(node.inputs["energy:mv"]).toBeUndefined();
+  });
+
+  it("bills a generator's output as an energy output, with no draw of its own", () => {
+    const project = fullProjectFixture({
+      recipes: [generatorRecipe("lv", 12800)],
+      nodes: [generatorNode("G", "lv", 12800)],
+      edges: [],
+    });
+    const result = calculateThroughput(closeBoundaries(project), { generatedAt: "fixed" });
+    const node = result.nodes["G"]!;
+    expect(node.inputs["energy:lv"]).toBeUndefined();
+    expect(node.outputs["energy:lv"].amountPerSecond).toBeCloseTo(12800);
+    expect(result.resources["energy:lv"].producedPerSecond).toBeCloseTo(12800);
+  });
+
+  it("moves wired energy from the generator's output to the machine's input", () => {
+    const project = fullProjectFixture({
+      recipes: [smelterRecipe(10, "LV", 20), generatorRecipe("lv", 12800)],
+      nodes: [machineNodeFixture("M"), generatorNode("G", "lv", 12800)],
+      edges: [
+        {
+          id: "power",
+          source: "G",
+          target: "M",
+          resourceKind: "energy",
+          resourceId: "lv",
+          sourceHandle: "output:energy:lv",
+          targetHandle: "input:energy:lv",
+        },
+      ],
+    });
+    const result = calculateThroughput(closeBoundaries(project), { generatedAt: "fixed" });
+    const book = result.resources["energy:lv"];
+    expect(book.producedPerSecond).toBeCloseTo(12800);
+    expect(book.consumedPerSecond).toBeCloseTo(200); // the smelter's 10 EU/t x 20.
+    // The generator is a producer, not a consumer: partial downstream demand
+    // must not cap it (the file's existing "free producer surplus" test is
+    // the precedent).
+    expect(result.nodes["G"]!.outputs["energy:lv"].amountPerSecond).toBeCloseTo(12800);
+  });
+
+  it("does not invent a storage drawer for unwired generator energy", () => {
+    const project = fullProjectFixture({
+      recipes: [generatorRecipe("lv", 12800)],
+      nodes: [generatorNode("G", "lv", 12800)],
+      edges: [],
+    });
+    const closed = closeBoundaries(project);
+    // G's benzene still gets its drawer - exactly ONE, the fluid "in" slot.
+    // The energy output gets nothing: there is no storage that buffers the
+    // grid, and attach() (close-boundaries.ts) would cast "energy" into
+    // FactoryStorage["kind"], which does not have it.
+    expect(closed.storages ?? []).toHaveLength(1);
+    expect((closed.storages ?? [])[0]).toMatchObject({ kind: "fluid", resourceId: "benzene" });
+    expect((closed.edges ?? []).every((edge) => edge.resourceKind !== "energy")).toBe(true);
+  });
+
+  it("names the grid a machine actually runs on, even when it mismatches the generator's", () => {
+    const project = fullProjectFixture({
+      recipes: [smelterRecipe(10, "MV", 20), generatorRecipe("lv", 12800)],
+      nodes: [
+        machineNodeFixture("M", { overclockTier: "MV" }),
+        generatorNode("G", "lv", 12800),
+      ],
+      edges: [],
+    });
+    const result = calculateThroughput(closeBoundaries(project), { generatedAt: "fixed" });
+    // M is an MV machine: it bills energy:mv, and the LV generator's
+    // energy:lv output sits unsold on its own line. No grid bridging (a
+    // transformer is a machine the player places - Task 7), so the two never
+    // meet - and the unsold output must not stall the generator.
+    expect(result.nodes["M"]!.inputs["energy:mv"]).toBeDefined();
+    expect(result.nodes["M"]!.inputs["energy:lv"]).toBeUndefined();
+    expect(result.nodes["G"]!.outputs["energy:lv"].amountPerSecond).toBeCloseTo(12800);
+    expect(result.nodes["G"]!.utilization).toBeCloseTo(1);
+  });
+
+  it("keeps a generator-less board running at full tilt", () => {
+    const project = fullProjectFixture({
+      recipes: [smelterRecipe(10, "LV", 20)],
+      nodes: [machineNodeFixture("M")],
+      edges: [],
+    });
+    const result = calculateThroughput(closeBoundaries(project), { generatedAt: "fixed" });
+    // An unwired energy row is a grid hint, not an empty input bus: the board
+    // as drawn (ore from a sketch drawer, no generator, no power wire) runs
+    // at 100%. The regression this pins is the bare-input rule applying to
+    // the injected row, which would zero EVERY existing plan.
+    expect(result.nodes["M"]!.utilization).toBeCloseTo(1);
+    expect(result.nodes["M"]!.inputs["energy:lv"]).toBeDefined();
   });
 });

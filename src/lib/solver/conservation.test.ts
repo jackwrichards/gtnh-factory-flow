@@ -799,6 +799,11 @@ describe("conservation: the settled flows never outrun the wires", () => {
     for (const [nodeId, nodeResult] of Object.entries(result.nodes)) {
       const actual = Math.min(1, nodeResult.utilization);
       for (const [key, flow] of Object.entries(nodeResult.inputs)) {
+        // The grid supplies the power draw; no board edge carries it, so the
+        // wire-delivery arithmetic below does not apply to it.
+        if (key.startsWith("energy:")) {
+          continue;
+        }
         const consumed = flow.amountPerSecond * actual;
         let delivered = 0;
         for (const boardEdge of boardEdges) {

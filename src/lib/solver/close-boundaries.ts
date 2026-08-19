@@ -101,6 +101,12 @@ export function closeBoundaries(project: FactoryProject): FactoryProject {
       }
     }
     for (const output of recipe.outputs) {
+      if (output.kind === "energy") {
+        // Energy is a resource on the grid, not a fluid: there is no storage
+        // that buffers it, and attach() would cast "energy" into
+        // FactoryStorage["kind"], which does not have it.
+        continue;
+      }
       if ((output.amount ?? 0) <= 0) {
         continue;
       }
