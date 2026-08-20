@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { gtnhFuelProfiles } from "@/lib/model/fuels";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
 import { calculateThroughput } from "@/lib/solver/throughput";
 import { buildBoardDump, formatBoardDump } from "./board-dump";
@@ -97,8 +96,6 @@ function makeStarvedProject(): FactoryProject {
         resourceId: "plate",
       },
     ],
-    fuelProfiles: gtnhFuelProfiles,
-    selectedFuelProfileId: "biodiesel",
   };
 }
 
@@ -173,10 +170,14 @@ describe("buildBoardDump", () => {
   });
 
   it("carries resource ids for anything it named, and nothing it did not", () => {
+    // The power draw is a real input line on each card (smelter on MV,
+    // bender on LV), so the dump names both grids.
     expect(dumpOf([]).resourceIds).toEqual({
       Ingot: "item:ingot",
       Plate: "item:plate",
       "Raw Ore": "item:ore",
+      "Energy (LV)": "energy:lv",
+      "Energy (MV)": "energy:mv",
     });
   });
 });

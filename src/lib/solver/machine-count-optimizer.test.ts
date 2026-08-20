@@ -32,7 +32,6 @@ function project(partial: Pick<FactoryProject, "recipes" | "nodes" | "edges">): 
     schemaVersion: 1,
     id: "optimizer-test",
     name: "optimizer-test",
-    fuelProfiles: [],
     storages: [],
     ...partial,
   } as FactoryProject;

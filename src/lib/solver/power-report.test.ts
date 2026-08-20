@@ -131,7 +131,6 @@ describe("energy hatches", () => {
           resourceId: "polyethylene",
         },
       ],
-      fuelProfiles: [],
     };
 
     const stalled = calculateThroughput(project);

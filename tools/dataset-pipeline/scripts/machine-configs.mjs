@@ -27,8 +27,8 @@ export const VOLTAGE_TIER_NAMES = [
   "UHV",
   "UEV",
   "UIV",
+  "UMV",
   "UXV",
-  "OpV",
   "MAX",
 ];
 
@@ -242,7 +242,7 @@ export function machineConfigControlsForOracleRecipe(machineType, specialValue, 
 // Machine handler templates from recipe map catalysts
 // ---------------------------------------------------------------------------
 
-const TIER_SUFFIX_PATTERN = /\s*\((ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UXV|OpV|MAX)\)\s*$/i;
+const TIER_SUFFIX_PATTERN = /\s*\((ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UMV|UXV|OpV|MAX)\)\s*$/i;
 const ROMAN_SUFFIX_PATTERN = /\s+(?:I|II|III|IV|V|VI|VII|VIII|IX|X)$/;
 const GRADE_PREFIX_PATTERN =
   /^(?:Basic|Advanced|Elite|Ultimate|Epic|MAX|Turbo|Quick|Instant|Universal)\s+/i;
@@ -1313,7 +1313,7 @@ function voltageTierFromTooltip(tooltip) {
       continue;
     }
     const match =
-      /\b(ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UXV|OpV|MAX)\b/i.exec(
+      /\b(ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UMV|UXV|OpV|MAX)\b/i.exec(
         line.replace(/voltage/i, ""),
       );
     if (match) {

@@ -2444,7 +2444,7 @@ export function FactoryFlow() {
       }
       const channelTotal = channelTotals.get(edge.id);
       const edgeResult = result.edges[edge.id];
-      const unit = rateUnitSuffix(edge.resourceKind === "fluid").trim();
+      const unit = rateUnitSuffix(edge.resourceKind).trim();
       const demand =
         channelTotal?.demand ?? edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
       const sourceStorage = storagesById.get(edge.source);

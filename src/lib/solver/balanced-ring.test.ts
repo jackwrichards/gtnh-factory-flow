@@ -109,7 +109,6 @@ function buildProject(withCellSource: boolean): FactoryProject {
     nodes,
     storages,
     edges,
-    fuelProfiles: [],
   } as FactoryProject;
 }
 
@@ -198,7 +197,6 @@ describe("minimal balanced ring", () => {
         wire("empty", "fill", "item", "cell"),
         wire("empty", "d_prod", "item", "product"),
       ],
-      fuelProfiles: [],
     } as FactoryProject;
     const result = calculateThroughput(projectB);
     expect(result.nodes.fill.utilization).toBeCloseTo(1, 3);

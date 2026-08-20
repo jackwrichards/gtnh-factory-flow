@@ -12,13 +12,11 @@ const plan = {
   recipes: [{ id: "r1", name: "Macerate" }],
   nodes: [{ id: "n1", recipeId: "r1", position: { x: 0, y: 20 } }],
   edges: [{ id: "e1", source: "n1", target: "n1" }],
-  fuelProfiles: [],
 };
 
 describe("planContentFingerprint", () => {
   it("ignores key order", () => {
     const shuffled = {
-      fuelProfiles: [],
       edges: [{ target: "n1", source: "n1", id: "e1" }],
       nodes: [{ position: { y: 20, x: 0 }, recipeId: "r1", id: "n1" }],
       recipes: [{ name: "Macerate", id: "r1" }],

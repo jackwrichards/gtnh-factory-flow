@@ -54,7 +54,6 @@ function project(partial: Partial<FactoryProject>): FactoryProject {
     schemaVersion: 1,
     id: "verdict-test",
     name: "verdict-test",
-    fuelProfiles: [],
     storages: [],
     recipes: [],
     nodes: [],
@@ -802,6 +801,70 @@ describe("buildRailPorts", () => {
     expect(chokeRails.outputs[0]!.tone).toBe("ok");
     expect(chokeRails.outputs[0]!.plug?.state).toBe("hungry");
     expect(chokeRails.outputs[0]!.plug?.askPerSecond).toBeCloseTo(340, 4);
+  });
+
+  it("builds an energy port from the synthetic draw, with no recipe slot to look up", () => {
+    const proj = project({
+      nodes: [machineNode("N"), machineNode("G")],
+      edges: [{ id: "ePower", source: "G", target: "N", resourceKind: "energy", resourceId: "lv" }],
+    });
+    const result = throughput(
+      {
+        N: nodeResult({
+          utilization: 1,
+          inputs: {
+            "energy:lv": {
+              key: "energy:lv",
+              kind: "energy",
+              resourceId: "lv",
+              displayName: "Energy (LV)",
+              amountPerSecond: 20,
+            } as unknown as ResourceFlow,
+          },
+          outputs: {},
+        }),
+      },
+      { ePower: edgeResult({ transferredPerSecond: 20, demandPerSecond: 20 }) },
+    );
+    const verdict = deriveNodeVerdict(proj, result, "N");
+    const rails = buildRailPorts(proj, result, "N", { inputs: [], outputs: [] } as never, verdict);
+
+    // The flow alone made the port: canonical handle, named from the flow,
+    // wired (the edge carries it), no recipe resource to render an icon from.
+    expect(rails.inputs).toHaveLength(1);
+    expect(rails.inputs[0]!.kind).toBe("energy");
+    expect(rails.inputs[0]!.resourceId).toBe("lv");
+    expect(rails.inputs[0]!.resource).toBeUndefined();
+    expect(rails.inputs[0]!.handleId).toBe("input:energy:lv");
+    expect(rails.inputs[0]!.connected).toBe(true);
+  });
+
+  it("flags an unwired energy port unsupplied, like any other unmet input", () => {
+    const proj = project({ nodes: [machineNode("N")] });
+    const result = throughput(
+      {
+        N: nodeResult({
+          utilization: 0,
+          inputs: {
+            "energy:lv": {
+              key: "energy:lv",
+              kind: "energy",
+              resourceId: "lv",
+              displayName: "Energy (LV)",
+              amountPerSecond: 20,
+            } as unknown as ResourceFlow,
+          },
+          outputs: {},
+        }),
+      },
+      {},
+    );
+    const verdict = deriveNodeVerdict(proj, result, "N");
+    const rails = buildRailPorts(proj, result, "N", { inputs: [], outputs: [] } as never, verdict);
+
+    expect(rails.inputs).toHaveLength(1);
+    expect(rails.inputs[0]!.unsupplied).toBe(true);
+    expect(rails.inputs[0]!.connected).toBe(false);
   });
 });
 

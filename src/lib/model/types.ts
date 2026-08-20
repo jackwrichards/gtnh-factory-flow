@@ -5,7 +5,7 @@ export type ItemId = string;
 export type FluidId = string;
 export type AspectId = string;
 export type ResourceId = ItemId | FluidId | AspectId;
-export type ResourceKind = "item" | "fluid" | "aspect";
+export type ResourceKind = "item" | "fluid" | "aspect" | "energy";
 export type ResourceKey = `${ResourceKind}:${string}`;
 
 export interface ResourceIconAtlasRef {
@@ -499,16 +499,6 @@ export interface FactoryEdge {
   }>;
 }
 
-export interface FuelProfile {
-  id: string;
-  name: string;
-  fuelFluidId: FluidId;
-  euPerLiter?: number;
-  euPerBucket?: number;
-  isDemo?: boolean;
-  notes?: string;
-}
-
 /**
  * How the author had the workspace set up when they shared a plan.
  *
@@ -577,8 +567,6 @@ export interface FactoryProject {
   annotations?: FactoryAnnotation[];
   pockets?: FactoryPocket[];
   edges: FactoryEdge[];
-  fuelProfiles: FuelProfile[];
-  selectedFuelProfileId?: string;
   notes?: string;
   metadata?: {
     isDemo?: boolean;
@@ -756,13 +744,6 @@ export interface BottleneckReport {
   capacityPerSecond?: number;
 }
 
-export interface FuelEstimate {
-  fuelProfile: FuelProfile;
-  totalEuPerSecond: number;
-  fuelPerSecond: number;
-  unit: "L/s" | "buckets/s";
-}
-
 export interface ThroughputResult {
   nodes: Record<string, NodeThroughputResult>;
   storages: Record<string, StorageThroughputResult>;
@@ -770,7 +751,6 @@ export interface ThroughputResult {
   edges: Record<string, EdgeThroughput>;
   totalEuT: number;
   totalEuPerSecond: number;
-  fuelEstimate?: FuelEstimate;
   bottlenecks: BottleneckReport[];
   externalInputs: ResourceBalance[];
   unconsumedOutputs: ResourceBalance[];

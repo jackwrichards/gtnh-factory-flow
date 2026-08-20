@@ -856,7 +856,7 @@ function storageMatchesSearch(storage: FactoryStorage, query: string) {
 
 function formatCompactRate(value: number, kind: string): string {
   const scaled = value * rateUnitMultiplier();
-  const unit = rateUnitSuffix(kind === "fluid").trimStart();
+  const unit = rateUnitSuffix(kind).trimStart();
   const abs = Math.abs(scaled);
 
   // The floor is written per second and scaled with the unit, so "balanced"

@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { gtnhFuelProfiles } from "@/lib/model/fuels";
 import {
   PROJECT_SCHEMA_VERSION,
   type FactoryProject,
@@ -11,6 +10,7 @@ import {
 import { calculateThroughput } from "@/lib/solver";
 import { closeBoundaries } from "@/lib/solver/close-boundaries";
 import { useFactoryStore } from "@/store/factory-store";
+import { writeBoardMotion } from "./flow/board-motion";
 import { InspectorPanel } from "./InspectorPanel";
 
 function makeBalance(index: number, overrides: Partial<ResourceBalance> = {}): ResourceBalance {
@@ -112,6 +112,10 @@ describe("InspectorPanel", () => {
       hoveredFlowResourceKey: undefined,
       selectedBoardIds: [],
     });
+    // These are structure tests, not motion tests: a folding row lingers for
+    // its 240ms presence tween, and waiting that out in every fold assertion
+    // would test the clock rather than the list.
+    writeBoardMotion({ moveMotion: false, valueMotion: false });
     seedResult({});
   });
 
@@ -120,7 +124,7 @@ describe("InspectorPanel", () => {
   // otherwise pile up in the same document.
   afterEach(cleanup);
 
-  it("shows the three groups at once, with Internal folded by default", () => {
+  it("shows all three groups at once, without tab switching", () => {
     seedResult({
       externalInputs: [makeBalance(1, { deficitPerSecond: 240 })],
       unconsumedOutputs: [makeBalance(2, { producedPerSecond: 64, surplusPerSecond: 64 })],
@@ -134,16 +138,17 @@ describe("InspectorPanel", () => {
     expect(screen.getByText("Internal")).toBeDefined();
     expect(screen.getByText("Resource 1")).toBeDefined();
     expect(screen.getByText("Resource 2")).toBeDefined();
-    // Internal is the long tail and the group that means "nothing to see",
-    // so it starts folded; one click on its header opens it.
+    // Internal starts folded (the long tail that means "nothing to see");
+    // one click on the header opens it.
     expect(screen.queryByText("Internal 3")).toBeNull();
     fireEvent.click(screen.getByText("Internal").closest("button")!);
     expect(screen.getByText("Internal 3")).toBeDefined();
   });
 
-  // One Outputs section: the old Products/Byproducts split is gone, so spare
-  // output nothing claims still lands in plain sight under Outputs.
-  it("files unclaimed spare output under the one Outputs section", () => {
+  // One Outputs list: product and spare both come out, and the list does not
+  // decide what the factory is for on the reader's behalf by calling the
+  // unclaimed spare a product.
+  it("lists unclaimed spare output in the one Outputs group", () => {
     seedResult({
       unconsumedOutputs: [makeBalance(2, { producedPerSecond: 64, surplusPerSecond: 64 })],
     });
@@ -151,8 +156,6 @@ describe("InspectorPanel", () => {
     render(<InspectorPanel />);
 
     expect(screen.getByText("Outputs")).toBeDefined();
-    expect(screen.queryByText("Products")).toBeNull();
-    expect(screen.queryByText("Byproducts")).toBeNull();
     expect(screen.getByText("Resource 2")).toBeDefined();
   });
 
@@ -170,15 +173,13 @@ describe("InspectorPanel", () => {
 
   it("windows a large plan instead of rendering every row", () => {
     // The panel has to stay cheap at hundreds of resources; rendering them all
-    // is the thing this replaced. Inputs, because that group starts open.
+    // is the thing this replaced.
     withViewport(600, () => {
-      seedResult({
-        externalInputs: Array.from({ length: 400 }, (_, index) =>
-          makeBalance(index, { deficitPerSecond: 100 }),
-        ),
-      });
+      seedResult({ internal: Array.from({ length: 400 }, (_, index) => makeInternal(index, 100)) });
 
       const { container } = render(<InspectorPanel />);
+      // Internal starts folded; open the long group before counting rows.
+      fireEvent.click(screen.getByText("Internal").closest("button")!);
       const rowCount = container.querySelectorAll("[data-resource-row]").length;
 
       // 600px of viewport over 30px rows is ~20 visible, plus overscan at each end.
@@ -189,33 +190,34 @@ describe("InspectorPanel", () => {
 
   it("keeps a section header pinned when scrolled deep into a long group", () => {
     withViewport(600, () => {
-      seedResult({
-        externalInputs: Array.from({ length: 400 }, (_, index) =>
-          makeBalance(index, { deficitPerSecond: 100 }),
-        ),
-      });
+      seedResult({ internal: Array.from({ length: 400 }, (_, index) => makeInternal(index, 100)) });
 
       const { container } = render(<InspectorPanel />);
+      // Open the group first: the pinned copy only has work to do while the
+      // rows are actually being drawn.
+      fireEvent.click(screen.getByText("Internal").closest("button")!);
       const scroller = container.querySelector(".overflow-y-auto")!;
       fireEvent.scroll(scroller, { target: { scrollTop: 5000 } });
 
       // Far past the header's own row, so it only survives via the pinned copy.
-      expect(screen.getAllByText("Inputs").length).toBeGreaterThan(0);
-      expect(screen.queryByText("Resource 0")).toBeNull();
+      expect(screen.getByText("Internal")).toBeDefined();
+      expect(screen.queryByText("Internal 0")).toBeNull();
     });
   });
 
-  it("collapses a section to its header", async () => {
-    seedResult({ externalInputs: [makeBalance(1, { deficitPerSecond: 100 })] });
+  it("folds and unfolds a section at its header", () => {
+    seedResult({ internal: [makeInternal(1, 100), makeInternal(2, 200)] });
 
     render(<InspectorPanel />);
-    expect(screen.getByText("Resource 1")).toBeDefined();
+    // Internal starts folded: the rows cost nothing to render until opened.
+    expect(screen.queryByText("Internal 1")).toBeNull();
 
-    // The row folds away over a short presence tween rather than popping,
-    // so give the fold its moment before asserting it finished.
-    fireEvent.click(screen.getByText("Inputs").closest("button")!);
-    await waitFor(() => expect(screen.queryByText("Resource 1")).toBeNull());
-    expect(screen.getByText("Inputs")).toBeDefined();
+    fireEvent.click(screen.getByText("Internal").closest("button")!);
+    expect(screen.getByText("Internal 1")).toBeDefined();
+
+    fireEvent.click(screen.getByText("Internal").closest("button")!);
+    expect(screen.queryByText("Internal 1")).toBeNull();
+    expect(screen.getByText("Internal")).toBeDefined();
   });
 
   it("keeps section counts on the header while filtering", () => {
@@ -233,8 +235,10 @@ describe("InspectorPanel", () => {
 
   it("explains an empty group rather than showing a blank area", () => {
     render(<InspectorPanel />);
-    expect(screen.getByText(/Nothing missing/)).toBeDefined();
-    expect(screen.getByText(/Nothing coming out yet/)).toBeDefined();
+    // The open groups explain themselves; the empty Internal is folded, so it
+    // contributes no row at all (a folded group costs nothing to render).
+    expect(screen.getByText("Nothing missing.")).toBeDefined();
+    expect(screen.getByText("Nothing coming out yet.")).toBeDefined();
   });
 
   it("lights a resource on the canvas while it is pointed at", () => {
@@ -317,8 +321,6 @@ describe("InspectorPanel", () => {
             resourceId: "ingot",
           },
         ],
-        fuelProfiles: gtnhFuelProfiles,
-        selectedFuelProfileId: "biodiesel",
       };
 
       // Boundary closed: this is about how the panel GROUPS a plan's books,
@@ -339,9 +341,8 @@ describe("InspectorPanel", () => {
 
       expect(screen.queryByText("Selection")).toBeNull();
       expect(screen.getByText("Ore")).toBeDefined();
-      // Made and eaten in-plan, so it sits under Internal, not Need — and
-      // Internal starts folded.
-      expect(screen.queryByText("Ingot")).toBeNull();
+      // Made and eaten in-plan, so the ingot sits under Internal (which
+      // starts folded) rather than Inputs.
       fireEvent.click(screen.getByText("Internal").closest("button")!);
       expect(screen.getByText("Ingot")).toBeDefined();
     });

@@ -381,3 +381,458 @@ describe("mining worldgen becomes source recipes", () => {
     );
   });
 });
+
+/**
+ * A slice of the generators domain the oracle exports from the live power
+ * machines. Values are synthetic, chosen so every shaping rule is pinned:
+ *
+ *   Gas Turbine           per-fuel values on the fuel, an over-cap fuel
+ *                         clamped to the LV grid (fuel and energy together),
+ *                         a cell fuel with an empty container out
+ *   Solar Generator       fuelless, entry-level period/eu; the in-game LV
+ *                         unit's maxEUOutput() is overridden to 1, so an
+ *                         LV machine feeds energy:ulv
+ *   RTG                   one pellet per 24000-tick day, the entry's tier
+ *                         follows the fuel's own output voltage - a slow
+ *                         fuel (5 EU/t) sits below the LV floor and feeds
+ *                         the ULV grid, where tier 0 is a real ordinal
+ *   Large Fusion MK-IV    a combined burn: entry-level eu, two fuels (the
+ *                         book carries their counts in `amount`), a plasma
+ *                         byproduct in extraOutputs
+ *   Nuclear Reactor       a fission entry flagged as the mSpecialValue
+ *                         fallback
+ *   UCFE                  a promoter fluid riding in as an extra input; the
+ *                         entry's tier follows the fuel's 2048 EU/t (EV),
+ *                         not the machine's own tier
+ *   Boiler                an ordinary fuel + water -> steam production
+ *                         recipe, no energy, no generator metadata
+ *   Broken Generator      no usable catalysts: dropped with a warning
+ */
+const GENERATORS_EXPORT = {
+  schemaVersion: 1,
+  exporter: "gtnh-oracle",
+  format: "dev.gtnhplanner.oracle.v1",
+  generatedAt: "2026-08-18T05:00:00.000Z",
+  minecraftVersion: "1.7.10",
+  loadedMods: [],
+  adapters: [],
+  recipeCount: 0,
+  domains: [
+    {
+      id: "generators",
+      machines: [
+        {
+          id: "gas_turbine",
+          name: "Gas Turbine",
+          sourceClass: "gregtech.api.metatileentity.basic.MTEGasTurbine",
+          catalysts: [
+            {
+              resource: item("gregtech:gt.blockmachines@2301", 1, "LV Gas Turbine"),
+              sourceClass: "gregtech.api.metatileentity.basic.MTEGasTurbine",
+              tier: 1,
+            },
+            {
+              resource: item("gregtech:gt.blockmachines@2302", 1, "MV Gas Turbine"),
+              sourceClass: "gregtech.api.metatileentity.basic.MTEGasTurbine",
+              tier: 2,
+            },
+          ],
+          entries: [
+            {
+              tier: 1,
+              fuels: [
+                {
+                  kind: "fluid",
+                  id: "benzene",
+                  amount: 1,
+                  displayName: "Benzene",
+                  periodTicks: 10,
+                  consumedPerOperation: 4,
+                  euPerOperation: 512,
+                  maxEuT: 32,
+                  containerOut: item("gregtech:gt.metaitem.unified@7000", 1, "Empty Cell"),
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "solar_generator",
+          name: "Solar Generator",
+          sourceClass: "gregtech.api.metatileentity.basic.MTESolarGenerator",
+          catalysts: [
+            {
+              resource: item("gregtech:gt.blockmachines@2030", 1, "LV Solar Generator"),
+              sourceClass: "gregtech.api.metatileentity.basic.MTESolarGenerator",
+              tier: 1,
+            },
+          ],
+          entries: [
+            { tier: 1, periodTicks: 20, maxEuT: 1, euPerOperation: 20, fuelless: true, fuels: [] },
+          ],
+        },
+        {
+          id: "rtg",
+          name: "RTG",
+          sourceClass: "gtplusplus.api.metatileentity.MTERTGenerator",
+          catalysts: [
+            {
+              resource: item("gregtech:gt.blockmachines@2900", 1, "RTG"),
+              sourceClass: "gtplusplus.api.metatileentity.MTERTGenerator",
+              tier: 1,
+            },
+          ],
+          entries: [
+            {
+              tier: 1,
+              fuels: [
+                {
+                  kind: "item",
+                  id: "gregtech:gt.metaitem.01@32766",
+                  amount: 1,
+                  displayName: "Uranium-235 Pellet",
+                  periodTicks: 24000,
+                  consumedPerOperation: 1,
+                  euPerOperation: 288000,
+                  maxEuT: 32,
+                },
+              ],
+            },
+            {
+              tier: 0,
+              fuels: [
+                {
+                  kind: "item",
+                  id: "gregtech:gt.metaitem.01@32770",
+                  amount: 1,
+                  displayName: "Plutonium-238 Pellet",
+                  periodTicks: 24000,
+                  consumedPerOperation: 1,
+                  euPerOperation: 120000,
+                  maxEuT: 5,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "large_fusion_computer",
+          name: "Large Fusion Computer",
+          sourceClass: "goodgenerator.power.machine.MTELargeFusionComputer",
+          catalysts: [
+            {
+              resource: item("goodgenerator:goodgenerator@104", 1, "Large Fusion Computer MK-IV"),
+              sourceClass: "goodgenerator.power.machine.MTELargeFusionComputer",
+              tier: 12,
+            },
+          ],
+          entries: [
+            {
+              tier: 12,
+              periodTicks: 100,
+              maxEuT: 134217728,
+              euPerOperation: 2500000,
+              fuels: [
+                fluid("deuterium", 4, "Deuterium"),
+                fluid("tritium", 4, "Tritium"),
+              ],
+              extraOutputs: [item("gregtech:gt.metaitem.02@32400", 1, "Plasma Cell")],
+            },
+          ],
+        },
+        {
+          id: "nuclear_reactor",
+          name: "Nuclear Reactor",
+          sourceClass: "gtplusplus.api.metatileentity.MTENuclearReactor",
+          catalysts: [
+            {
+              resource: item("gregtech:gt.blockmachines@2901", 1, "Nuclear Reactor"),
+              sourceClass: "gtplusplus.api.metatileentity.MTENuclearReactor",
+              tier: 8,
+            },
+          ],
+          entries: [
+            {
+              tier: 8,
+              source: "fission-fallback",
+              fuels: [
+                {
+                  kind: "item",
+                  id: "gregtech:gt.metaitem.01@32768",
+                  amount: 1,
+                  displayName: "Uranium-235 Fuel Rod",
+                  periodTicks: 10,
+                  consumedPerOperation: 1,
+                  euPerOperation: 102400,
+                  maxEuT: 524288,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "universal_chemical_fuel_engine",
+          name: "Universal Chemical Fuel Engine",
+          sourceClass: "goodgenerator.power.machine.MTEUniversalChemicalFuelEngineLegacy",
+          catalysts: [
+            {
+              resource: item("goodgenerator:goodgenerator@64", 1, "Universal Chemical Fuel Engine"),
+              sourceClass: "goodgenerator.power.machine.MTEUniversalChemicalFuelEngineLegacy",
+              tier: 5,
+            },
+          ],
+          entries: [
+            {
+              tier: 4,
+              promoter: {
+                kind: "fluid",
+                id: "combustion_promoter",
+                amount: 1,
+                displayName: "Combustion Promoter",
+                litersPerLiterFuel: 1,
+              },
+              fuels: [
+                {
+                  kind: "fluid",
+                  id: "rocket_fuel",
+                  amount: 1,
+                  displayName: "Rocket Fuel",
+                  periodTicks: 20,
+                  consumedPerOperation: 2,
+                  euPerOperation: 5120,
+                  maxEuT: 2048,
+                },
+              ],
+            },
+          ],
+        },
+        {
+          id: "boiler",
+          name: "Boiler",
+          sourceClass: "gregtech.api.metatileentity.basic.MTEBoiler",
+          catalysts: [
+            {
+              resource: item("gregtech:gt.blockmachines@2010", 1, "Bronze Boiler"),
+              sourceClass: "gregtech.api.metatileentity.basic.MTEBoiler",
+              tier: 0,
+            },
+          ],
+          entries: [
+            {
+              kind: "boiler",
+              tier: 0,
+              periodTicks: 10,
+              steamPerOperation: 10,
+              waterPerOperation: 10,
+              measurementTicks: 2000,
+              steam: fluid("steam", 1, "Steam"),
+              water: fluid("water", 1, "Water"),
+              fuels: [{ kind: "fluid", id: "crude_oil", amount: 1, displayName: "Crude Oil", consumedPerOperation: 0.5 }],
+            },
+          ],
+        },
+        {
+          id: "broken_generator",
+          name: "Broken Generator",
+          sourceClass: "nowhere.MTEBrokenGenerator",
+          catalysts: [],
+          entries: [{ tier: 1, fuels: [] }],
+        },
+      ],
+    },
+  ],
+};
+
+describe("generators domain becomes recipes", () => {
+  let dataset;
+
+  beforeAll(() => {
+    dataset = normalize(GENERATORS_EXPORT);
+  });
+
+  afterAll(() => {
+    dataset = undefined;
+  });
+
+  it("turns a (machine, tier, fuel) entry into a zero-draw generator recipe", () => {
+    const recipe = dataset.recipes.find((entry) => entry.id.endsWith("gas-turbine:lv-benzene"));
+
+    expect(recipe).toBeDefined();
+    expect(recipe.eut).toBe(0);
+    expect(recipe.durationTicks).toBe(10);
+    expect(recipe.minimumTier).toBe("LV");
+    expect(recipe.machineType).toBe("Gas Turbine");
+    expect(recipe.name).toBe("Gas Turbine: Benzene");
+    // 512 EU per 10 ticks of benzene, but the LV grid takes 32 EU/t x 10 =
+    // 320: the burn is clamped to what the grid accepts, fuel and energy
+    // together (4 L x 320/512 = 2.5 L).
+    expect(recipe.inputs).toEqual([
+      { kind: "fluid", id: "benzene", amount: 2.5, displayName: "Benzene" },
+    ]);
+    expect(recipe.outputs.map((output) => [output.kind, output.id, output.amount])).toEqual([
+      ["energy", "lv", 320],
+      ["item", "gregtech:gt.metaitem.unified@7000", 1],
+    ]);
+    expect(recipe.metadata.generator).toEqual({
+      machine: "Gas Turbine",
+      tier: "LV",
+      maxEuT: 32,
+      periodTicks: 10,
+      euPerOperation: 512,
+      source: "oracle",
+    });
+  });
+
+  it("lists the tiered variants as machine handler options", () => {
+    const recipe = dataset.recipes.find((entry) => entry.id.endsWith("gas-turbine:lv-benzene"));
+
+    expect(
+      recipe.machineHandlers.map((handler) => [handler.label, handler.minimumTier, handler.id]),
+    ).toEqual([
+      ["LV Gas Turbine", "LV", "gas-turbine-lv"],
+      ["MV Gas Turbine", "MV", "gas-turbine-mv"],
+    ]);
+  });
+
+  it("derives the energy id from the live maxEUOutput, not the machine tier", () => {
+    // The LV solar's maxEUOutput() is 1 (the game's own override), so an LV
+    // machine feeds the ULV grid.
+    const solar = dataset.recipes.find((entry) => entry.id.endsWith("solar-generator:lv-none"));
+
+    expect(solar).toBeDefined();
+    expect(solar.name).toBe("Solar Generator");
+    expect(solar.minimumTier).toBe("LV");
+    expect(solar.inputs).toEqual([]);
+    expect(solar.durationTicks).toBe(20);
+    expect(solar.outputs).toEqual([{ kind: "energy", id: "ulv", amount: 20, displayName: "Energy (ULV)" }]);
+    expect(solar.machineHandlers).toBeUndefined();
+  });
+
+  it("burns one RTG pellet per 24000-tick day", () => {
+    const rtg = dataset.recipes.find((entry) => entry.id.endsWith("rtg:lv-gregtech-gt-metaitem-01-32766"));
+
+    expect(rtg).toBeDefined();
+    expect(rtg.durationTicks).toBe(24000);
+    expect(rtg.inputs).toEqual([
+      { kind: "item", id: "gregtech:gt.metaitem.01@32766", amount: 1, displayName: "Uranium-235 Pellet" },
+    ]);
+    expect(rtg.outputs).toEqual([{ kind: "energy", id: "lv", amount: 288000, displayName: "Energy (LV)" }]);
+  });
+
+  it("feeds a slow RTG fuel to the ULV grid, where tier 0 is a real ordinal", () => {
+    const pu238 = dataset.recipes.find((entry) =>
+      entry.id.endsWith("rtg:ulv-gregtech-gt-metaitem-01-32770"),
+    );
+
+    expect(pu238).toBeDefined();
+    expect(pu238.durationTicks).toBe(24000);
+    expect(pu238.inputs).toEqual([
+      { kind: "item", id: "gregtech:gt.metaitem.01@32770", amount: 1, displayName: "Plutonium-238 Pellet" },
+    ]);
+    // 120000 EU per day is 5 EU/t: below the LV floor, so the burn feeds
+    // the ULV grid rather than the machine's own LV tier.
+    expect(pu238.outputs).toEqual([
+      { kind: "energy", id: "ulv", amount: 120000, displayName: "Energy (ULV)" },
+    ]);
+  });
+
+  it("keeps a combined fusion burn as one recipe with both fuels and the plasma byproduct", () => {
+    const fusion = dataset.recipes.find((entry) => entry.id.endsWith("large-fusion-computer:umv-deuterium-tritium"));
+
+    expect(fusion).toBeDefined();
+    expect(fusion.durationTicks).toBe(100);
+    expect(fusion.minimumTier).toBe("UMV");
+    expect(fusion.name).toBe("Large Fusion Computer: Deuterium + Tritium");
+    expect(fusion.inputs.map((input) => [input.id, input.amount])).toEqual([
+      ["deuterium", 4],
+      ["tritium", 4],
+    ]);
+    expect(fusion.outputs.map((output) => [output.kind, output.id, output.amount])).toEqual([
+      ["energy", "umv", 2500000],
+      ["item", "gregtech:gt.metaitem.02@32400", 1],
+    ]);
+  });
+
+  it("flags the fission fallback in the entry's metadata", () => {
+    const fission = dataset.recipes.find((entry) => entry.id.endsWith("nuclear-reactor:uv-gregtech-gt-metaitem-01-32768"));
+
+    expect(fission).toBeDefined();
+    expect(fission.durationTicks).toBe(10);
+    expect(fission.outputs).toEqual([{ kind: "energy", id: "uv", amount: 102400, displayName: "Energy (UV)" }]);
+    expect(fission.metadata.generator.source).toBe("fission-fallback");
+  });
+
+  it("scales the UCFE promoter to the (clamped) fuel input", () => {
+    const ucfe = dataset.recipes.find((entry) => entry.id.endsWith("universal-chemical-fuel-engine:ev-rocket-fuel"));
+
+    expect(ucfe).toBeDefined();
+    expect(ucfe.durationTicks).toBe(20);
+    expect(ucfe.inputs.map((input) => [input.id, input.amount])).toEqual([
+      ["rocket_fuel", 2],
+      ["combustion_promoter", 2],
+    ]);
+    expect(ucfe.outputs).toEqual([{ kind: "energy", id: "ev", amount: 5120, displayName: "Energy (EV)" }]);
+  });
+
+  it("shapes boiler entries as ordinary production recipes", () => {
+    const boiler = dataset.recipes.find((entry) => entry.id.endsWith("boiler:boiler-crude-oil"));
+
+    expect(boiler).toBeDefined();
+    expect(boiler.name).toBe("Boiler: Crude Oil");
+    expect(boiler.eut).toBe(0);
+    expect(boiler.durationTicks).toBe(10);
+    expect(boiler.minimumTier).toBe("ULV");
+    expect(boiler.inputs.map((input) => [input.id, input.amount])).toEqual([
+      ["water", 10],
+      ["crude_oil", 0.5],
+    ]);
+    expect(boiler.outputs).toEqual([{ kind: "fluid", id: "steam", amount: 10, displayName: "Steam" }]);
+    expect(boiler.metadata?.generator).toBeUndefined();
+  });
+
+  it("drops a machine without usable catalysts and says so in the report", () => {
+    expect(dataset.recipes.filter((entry) => entry.machineType === "Broken Generator")).toEqual([]);
+    expect(dataset.generators.warnings).toEqual([
+      "generators: Broken Generator exported no usable catalysts; machine dropped",
+    ]);
+    expect(dataset.generators.machines.map((machine) => machine.id)).not.toContain("broken_generator");
+    expect(dataset.generators.machines.map((machine) => [machine.id, machine.entryCount])).toEqual([
+      ["gas_turbine", 1],
+      ["solar_generator", 1],
+      ["rtg", 2],
+      ["large_fusion_computer", 1],
+      ["nuclear_reactor", 1],
+      ["universal_chemical_fuel_engine", 1],
+      ["boiler", 1],
+    ]);
+  });
+
+  it("adds the energy resources to the catalog without icons", () => {
+    const energy = dataset.resources
+      .filter((entry) => entry.kind === "energy")
+      .map((entry) => [entry.id, entry.displayName, entry.iconPath])
+      .sort();
+
+    expect(energy).toEqual([
+      ["ev", "Energy (EV)", undefined],
+      ["lv", "Energy (LV)", undefined],
+      ["ulv", "Energy (ULV)", undefined],
+      ["umv", "Energy (UMV)", undefined],
+      ["uv", "Energy (UV)", undefined],
+    ]);
+  });
+
+  it("registers every generator machine as a recipe map", () => {
+    expect(dataset.recipeMaps).toEqual(
+      expect.arrayContaining([
+        "Gas Turbine",
+        "Solar Generator",
+        "RTG",
+        "Large Fusion Computer",
+        "Nuclear Reactor",
+        "Universal Chemical Fuel Engine",
+        "Boiler",
+      ]),
+    );
+  });
+});

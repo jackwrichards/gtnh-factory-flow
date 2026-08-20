@@ -77,7 +77,7 @@ function formatRateValue(perSecond: number): string {
 }
 
 function rateUnitFor(kind: ResourceBalance["kind"]): string {
-  return rateUnitSuffix(kind === "fluid").trim();
+  return rateUnitSuffix(kind).trim();
 }
 
 /** How long a row takes to grow into the list or fold out of it. */

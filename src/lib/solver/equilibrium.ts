@@ -473,7 +473,11 @@ export function solveEquilibrium(
         drainEdges: [],
         edges: [],
         trashEdges: [],
-        freeDisposal: false,
+        // The grid absorbs power without limit: an unsold output is surplus
+        // capacity, not a clog, so a producer of energy is never paced to
+        // what its takers pull. There is no drain drawer for it (a grid is
+        // not storage), which is what this flag stands in for.
+        freeDisposal: (sourceOutputFlow?.key ?? key).startsWith("energy:"),
       };
       if (!existing) {
         budgets.set(prepared.budgetKey, budget);
@@ -587,11 +591,17 @@ export function solveEquilibrium(
       const needKey = `${node.id}|${inputKey}`;
       if (needs.has(needKey)) {
         wiredInputs.push({ needKey, nameplatePerSecond: flow.amountPerSecond });
-      } else {
+      } else if (!inputKey.startsWith("energy:")) {
         // Nothing feeds this ingredient. In a closed plan that is not a
         // standing assumption that you carry it in by hand, it is a machine
         // with an empty input bus: it does not run until something declares
         // where the ingredient comes from.
+        //
+        // The one exception is the grid itself: an unwired energy row is a
+        // hint to add a generator, not an empty input bus. A WIRED energy
+        // edge lands in wiredInputs above and still throttles - a fuel-
+        // starved generator's 0 transfer stops the plant, exactly like a
+        // short fuel line.
         bareInputKeys.push(inputKey as ResourceKey);
       }
     }
@@ -613,6 +623,13 @@ export function solveEquilibrium(
     const bareOutputKeys: ResourceKey[] = [];
     for (const [outputKey, flow] of Object.entries(nodeResult.outputs)) {
       if (flow.amountPerSecond <= EPSILON) {
+        continue;
+      }
+      if (outputKey.startsWith("energy:")) {
+        // Energy has no storage to fill: an unsold output is surplus grid
+        // power, not a full bus. Stalling here would stop every unwired
+        // generator - and closeBoundaries no longer hides one behind a sink
+        // drawer.
         continue;
       }
       if (!budgets.has(`${node.id}|${outputKey}`)) {
@@ -1543,6 +1560,21 @@ export function solveEquilibrium(
         } else if (stat.required > EPSILON) {
           pressure = Number.POSITIVE_INFINITY;
           pressureShadow = Number.POSITIVE_INFINITY;
+        }
+      }
+
+      // The grid is a buyer of up to nameplate: a generator runs flat out
+      // and the unclaimed share simply goes unconsumed, like a product a can
+      // would drink. The rule reads the node's own output book, not the
+      // budgets, because an UNWIRED energy output has no budget at all -
+      // there is no edge to pin - and a producer with no takers on any
+      // budget would otherwise sit at zero pressure and never start.
+      if (nodeResult) {
+        for (const [outputKey, flow] of Object.entries(nodeResult.outputs)) {
+          if (outputKey.startsWith("energy:") && flow.amountPerSecond > EPSILON) {
+            pressure = Math.max(pressure, 1);
+            pressureShadow = Math.max(pressureShadow, 1);
+          }
         }
       }
 

@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { gtnhFuelProfiles } from "@/lib/model/fuels";
 import {
   PROJECT_SCHEMA_VERSION,
   type FactoryProject,
@@ -85,8 +84,6 @@ function chainProject(outputAmount: number, inputAmount: number): FactoryProject
     edges: [
       { id: "e1", source: "maker", target: "eater", resourceKind: "fluid", resourceId: "gas" },
     ],
-    fuelProfiles: gtnhFuelProfiles,
-    selectedFuelProfileId: "biodiesel",
   };
 }
 
@@ -220,7 +217,6 @@ describe("buffer spillover is a boundary positive", () => {
         wire("e-out", "tank", "eater", "z"),
         wire("e-final", "eater", "d-out", "out"),
       ],
-      fuelProfiles: [],
     }) as FactoryProject;
 
   it("shows a filling tank's catch in Outputs, at the fill rate", () => {

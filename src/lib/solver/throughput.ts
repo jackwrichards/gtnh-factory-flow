@@ -10,7 +10,6 @@ import type {
   EdgeThroughput,
   FactoryProject,
   FactoryStorage,
-  FuelEstimate,
   NodeThroughputResult,
   Recipe,
   ResourceAmount,
@@ -22,6 +21,7 @@ import type {
   ThroughputResult,
 } from "../model/types";
 import { TICKS_PER_SECOND } from "../model/types";
+import { energyResourceForTier } from "../model/energy";
 import { applyRecipeInputOverrides } from "../model/recipe-input-overrides";
 import { applyMachineHandlerToRecipe } from "../model/recipe-rules";
 import { getStorageRoles } from "../model/storage-role";
@@ -160,6 +160,24 @@ export function calculateThroughput(
       addFlow(inputs, input, amountPerSecond);
     }
 
+    // The machine's own power draw, billed onto the grid it actually runs on.
+    // drawEuT (power-report.ts) is Math.abs(eut) x the node's parallel
+    // multiplier, so drawEuT x machineCount x parallel is this node's euT -
+    // EU per TICK, the figure the Power section already shows. x20 turns it
+    // into EU/s for the resource books.
+    //
+    // The state === "ok" gate is the whole stall model: an under-powered
+    // machine is pinned to zero by the equilibrium, and a machine that cannot
+    // run draws nothing - so its grid demand vanishes with it, and supplying
+    // the power un-stalls it through that same equilibrium.
+    if (powerReport && powerReport.state === "ok" && powerReport.drawEuT > 0) {
+      addFlow(
+        inputs,
+        energyResourceForTier(powerReport.tier),
+        powerReport.drawEuT * node.machineCount * node.parallel * TICKS_PER_SECOND,
+      );
+    }
+
     for (const output of runtimeOutputs ?? effectiveRecipe.outputs) {
       const amountPerSecond =
         output.amount *
@@ -260,7 +278,6 @@ export function calculateThroughput(
     edges: edgeResults,
     totalEuT,
     totalEuPerSecond: totalEuT * TICKS_PER_SECOND,
-    fuelEstimate: calculateFuelEstimate(project, totalEuT),
     bottlenecks,
     externalInputs,
     unconsumedOutputs,
@@ -461,6 +478,13 @@ function calculateConnectedInputSupply(
     }
     for (const [inputKey, flow] of Object.entries(nodeResult.inputs)) {
       if (flow.amountPerSecond > EPSILON) {
+        if (inputKey.startsWith("energy:")) {
+          // The grid is not a supply line the board must name a source for:
+          // an unwired draw is a hint, not a zero-delivery ingredient. A
+          // WIRED draw still reaches the map through the edge loop below, so
+          // a fuel-starved generator still throttles the plant.
+          continue;
+        }
         addRequiredRate(supplyByNodeAndResource, node.id, inputKey as ResourceKey, 0);
       }
     }
@@ -632,6 +656,19 @@ function finalizeNodeReports(
         targetKey,
         Math.max(requiredByResource.get(targetKey) ?? 0, node.targetOutput.amountPerSecond),
       );
+    }
+    // The grid is a buyer of up to nameplate: a generator's power is wanted
+    // in full whether or not the wires happen to carry it all, so a partial
+    // or absent downstream ask never paces a generator down. The engine's
+    // own pressure rule stops it stalling; this stops the re-derived reading
+    // from capping the card to whatever the consumer's one edge asked for.
+    for (const [outputKey, flow] of Object.entries(nodeResult.outputs)) {
+      if (outputKey.startsWith("energy:")) {
+        requiredByResource.set(
+          outputKey as ResourceKey,
+          Math.max(requiredByResource.get(outputKey as ResourceKey) ?? 0, flow.amountPerSecond),
+        );
+      }
     }
 
     const outputFlows = Object.values(nodeResult.outputs);
@@ -1044,41 +1081,6 @@ function getNodeStatus(utilization: number): NodeThroughputResult["status"] {
   }
 
   return "underutilized";
-}
-
-function calculateFuelEstimate(
-  project: FactoryProject,
-  totalEuT: number,
-): FuelEstimate | undefined {
-  const selectedFuel = project.fuelProfiles.find(
-    (fuel) => fuel.id === project.selectedFuelProfileId,
-  );
-
-  if (!selectedFuel) {
-    return undefined;
-  }
-
-  const totalEuPerSecond = totalEuT * TICKS_PER_SECOND;
-
-  if (selectedFuel.euPerLiter) {
-    return {
-      fuelProfile: selectedFuel,
-      totalEuPerSecond,
-      fuelPerSecond: totalEuPerSecond / selectedFuel.euPerLiter,
-      unit: "L/s",
-    };
-  }
-
-  if (selectedFuel.euPerBucket) {
-    return {
-      fuelProfile: selectedFuel,
-      totalEuPerSecond,
-      fuelPerSecond: totalEuPerSecond / selectedFuel.euPerBucket,
-      unit: "buckets/s",
-    };
-  }
-
-  return undefined;
 }
 
 export function getResourceDisplayName(

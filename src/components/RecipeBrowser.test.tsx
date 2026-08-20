@@ -116,7 +116,6 @@ describe("RecipeBrowser", () => {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "recipe-browser-test",
       name: "Recipe browser test",
-      fuelProfiles: [],
       recipes: [],
       nodes: [],
       edges: [],

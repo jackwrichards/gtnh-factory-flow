@@ -10,7 +10,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { ChevronDown, Copy, Cpu, Minus, Plus, Sprout } from "lucide-react";
+import { ChevronDown, Copy, Cpu, Minus, Plus, Sprout, Zap } from "lucide-react";
 import type {
   FactoryNode,
   MachineConfigTierOption,
@@ -1576,7 +1576,13 @@ function GlanceIoRow({ port }: { port: RailPort }) {
           in the sprite, so they zoom 1.5× inside an overflow-hidden box;
           fluids are a solid square with nothing to crop. */}
       <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden">
-        {port.resource ? (
+        {port.kind === "energy" ? (
+          // Energy is not an atlas image: the grid's bolt, in the card's
+          // energy colour, is its icon. The check must beat `port.resource`
+          // - a generator's own output row carries the resolved energy
+          // resource, and ResourceIcon has no art for it.
+          <Zap className="h-6 w-6 text-amber-400" />
+        ) : port.resource ? (
           <ResourceIcon
             resource={{ ...port.resource, amount: 1, chance: undefined }}
             size="sm"
@@ -2579,7 +2585,12 @@ export function PortChip({
           row can now answer. Nothing here claims the pointer, so the handle
           above it gets the drag and the row gets the click. */}
       <span className="pointer-events-none relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden">
-        {port.resource ? (
+        {port.kind === "energy" ? (
+          // The bolt, not an atlas image - and the check must beat
+          // `port.resource`, because a generator's own output row carries the
+          // resolved energy resource and ResourceIcon has no art for it.
+          <Zap className="h-5 w-5 text-amber-400" />
+        ) : port.resource ? (
           <ResourceIcon
             resource={{ ...port.resource, amount: 1, chance: undefined }}
             bare
@@ -2847,7 +2858,7 @@ function CustomRatePanel({
         className="nodrag h-6 shrink-0 border border-[var(--mc-33)] bg-[var(--mc-93)] px-1 text-right text-[13px] text-[var(--mc-ink)]"
       />
       <span className="shrink-0 pr-1 text-[11px] font-bold text-[var(--mc-ink-muted)]">
-        {rateUnitSuffix(kind === "fluid").trim() || "/s"}
+        {rateUnitSuffix(kind).trim() || "/s"}
       </span>
     </div>
     </GridBlock>

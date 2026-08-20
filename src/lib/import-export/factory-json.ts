@@ -1,5 +1,4 @@
 import { ZodError } from "zod";
-import { normalizeProjectFuelProfiles } from "../model/fuels";
 import { normalizeLoadedProject } from "../model/project-normalize";
 import { factoryProjectSchema } from "../model/schemas";
 import type { FactoryProject } from "../model/types";
@@ -37,7 +36,7 @@ export function parseFactoryProjectJson(source: string): FactoryProject {
 }
 
 export function serializeFactoryProject(project: FactoryProject): string {
-  const validatedProject = factoryProjectSchema.parse(normalizeProjectFuelProfiles(project));
+  const validatedProject = factoryProjectSchema.parse(project);
   return `${JSON.stringify(validatedProject, null, 2)}\n`;
 }
 

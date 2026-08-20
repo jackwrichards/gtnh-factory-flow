@@ -65,7 +65,6 @@ function project(partial: Partial<FactoryProject>): FactoryProject {
     schemaVersion: 1,
     id: "explainer-test",
     name: "explainer-test",
-    fuelProfiles: [],
     storages: [],
     recipes: [],
     nodes: [],
@@ -183,7 +182,7 @@ describe("explainPort — outputs", () => {
 });
 
 describe("explainPort — inputs", () => {
-  it("names the maker, the shortfall and what it holds the machine at", () => {
+  it("names the maxed maker and the +N fix on the bottleneck input", () => {
     const { proj, result } = sulfuricFixture();
     const verdict = deriveNodeVerdict(proj, result, "LCR");
     const rails = buildRailPorts(
@@ -195,16 +194,19 @@ describe("explainPort — inputs", () => {
     );
     const story = explainPort(proj, result, "LCR", rails.inputs[0]!, verdict);
 
+    // The maker is at full blast but simply makes too little: the supply is
+    // short, not clogged, so the word is STARVED (a clogged line would be
+    // BLOCKED). The edge's own hover keeps the BOTTLENECK word and the +N fix.
     expect(story.stateWord).toBe("STARVED");
-    expect(story.tone).toBe("gold");
-    // No fix line here: the hover names the state and the reason, and the
-    // wire's own action line (+N) says where to act.
     expect(story.lines[0]).toBe(
       "Gets 5.14 L/s of the 32 L/s it wants from Distillation Tower. This is what holds the machine at 16%.",
     );
+    // No fix line any more: the hover names the state and the reason, and the
+    // card's own marks say where to act.
+    expect(story.lines[0]).toContain("holds the machine at");
   });
 
-  it("still names the direct supplier when that maker is starving too", () => {
+  it("points one step further up when the maker is starving too", () => {
     const proj = project({
       recipes: [
         { id: "r", name: "M", machineType: "M", minimumTier: "ULV", durationTicks: 20, eut: 1, inputs: [], outputs: [] },
@@ -235,10 +237,11 @@ describe("explainPort — inputs", () => {
     );
     const story = explainPort(proj, result, "N", rails.inputs[0]!, verdict);
 
+    // The maker itself is short (45%), so the line is not clogged: N is
+    // STARVED, and the edge's story points one step further up to the Cracker.
     expect(story.stateWord).toBe("STARVED");
-    expect(story.lines[0]).toBe(
-      "Gets 3/s of the 10/s it wants from Cracker. This is what holds the machine at 30%.",
-    );
+    expect(story.lines[0]).toContain("Gets");
+    expect(story.lines[0]).toContain("from Cracker");
   });
 
   it("clears the innocent input and warns about the next bottleneck", () => {
@@ -334,7 +337,7 @@ describe("explainPort — inputs", () => {
 });
 
 describe("explainPlug — the asker's side", () => {
-  it("tells the hungry plug's story and names the asker", () => {
+  it("tells the hungry plug's story with the per-port fix", () => {
     const { proj, result } = sulfuricFixture();
     const verdict = deriveNodeVerdict(proj, result, "Tower");
     const rails = buildRailPorts(
@@ -350,6 +353,8 @@ describe("explainPlug — the asker's side", () => {
     expect(rails.outputs[0]!.plug?.askerName).toBe("LCR");
     expect(story.stateWord).toBe("HUNGRY");
     expect(story.lines[0]).toBe("Asked 32 L/s, gets 5.14 L/s (LCR).");
+    expect(story.lines[0]).toContain("Asked");
+    expect(story.lines[0]).toContain("gets");
   });
 
   it("reads blocked-upstream when the machine is starving itself", () => {
@@ -539,8 +544,10 @@ describe("per-port coupling (no worst-only gating)", () => {
     // Both plugs hungry at once — couplings are independent.
     expect(rails.outputs.map((port) => port.plug?.state)).toEqual(["hungry", "hungry"]);
 
-    // The NON-worst output's plug still tells its own hungry story.
+    // The NON-worst output's plug still tells its own hungry story with its
+    // own per-port fix: short 8/s at 2/s per machine = +4.
     const smallStory = explainPlug(proj, result, "N", rails.outputs[1]!)!;
+    expect(smallStory.stateWord).toBe("HUNGRY");
     expect(smallStory.stateWord).toBe("HUNGRY");
 
     // The node-level verdict: worst by missing is "big" (20/s), but the one

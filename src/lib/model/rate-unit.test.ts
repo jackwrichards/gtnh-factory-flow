@@ -11,10 +11,17 @@ describe("rate units", () => {
   it("reads a tick as a twentieth of a second", () => {
     setActiveRateUnit("tick");
     expect(rateUnitMultiplier()).toBeCloseTo(0.05);
-    expect(rateUnitSuffix(false)).toBe("/t");
-    expect(rateUnitSuffix(true)).toBe(" L/t");
     // 2,000 L/s of nitrobenzene is the figure the game itself quotes per tick.
     expect(formatSlotRate(2000, "fluid")).toBe("100 L/t");
+  });
+
+  it("suffixes a rate per resource kind", () => {
+    setActiveRateUnit("tick");
+    expect(rateUnitSuffix("item")).toBe("/t");
+    expect(rateUnitSuffix("fluid")).toBe(" L/t");
+    // Power reads the way the game quotes it: EU per unit, k/M/G folded
+    // downstream by formatCompact.
+    expect(rateUnitSuffix("energy")).toBe(" EU/t");
   });
 
   it("keeps a slow line visible per tick", () => {

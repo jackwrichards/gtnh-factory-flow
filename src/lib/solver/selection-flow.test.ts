@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { gtnhFuelProfiles } from "@/lib/model/fuels";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
 import { calculateThroughput } from "./throughput";
 import { calculateSelectionFlow } from "./selection-flow";
@@ -89,8 +88,6 @@ function makeChainProject(): FactoryProject {
         resourceId: "plate",
       },
     ],
-    fuelProfiles: gtnhFuelProfiles,
-    selectedFuelProfileId: "biodiesel",
   };
 }
 

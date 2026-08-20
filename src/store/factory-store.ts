@@ -2,7 +2,9 @@
 
 import { create } from "zustand";
 import { createEmptyProject } from "@/examples";
-import type { DatasetManifest, RecipeDataset } from "@/lib/datasets";
+import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
+import type { DatasetManifest, RecipeDataset, RecipeSummary } from "@/lib/datasets";
+import { getRecipeDatasetRecipe, queryRecipeDatasetRecipes } from "@/lib/datasets/browser-loader";
 import {
   canonicalizeResourceHandleId,
   dedupeEdgeWires,
@@ -11,6 +13,7 @@ import {
 import { normalizeLoadedProject } from "@/lib/model/project-normalize";
 import { setActiveRateUnit, type RateUnit } from "@/lib/model/rate-unit";
 import { calculateThroughput } from "@/lib/solver";
+import { getNodePowerReport, hasPowerReport } from "@/lib/solver/power-report";
 import { applyRecipeInputOverrides, inputOverrideAmount } from "@/lib/model/recipe-input-overrides";
 import type { AlternativeCycleFace } from "@/lib/nei/alternative-cycle";
 import { createCropFarmPlaceholderRecipe, isCropFarmRecipe } from "@/lib/model/passive-production";
@@ -55,6 +58,7 @@ import type {
   MachineTier,
   Recipe,
   ResourceAmount,
+  ResourceKey,
   ResourceKind,
   TargetRate,
   ThroughputResult,
@@ -419,6 +423,13 @@ interface FactoryStore {
       };
     }>,
   ) => void;
+  /**
+   * Close a grid's power gap with one machine: the best generator the dataset
+   * offers for that tier, sized to the nameplate deficit, wired to the
+   * node with the largest draw on that grid. No-op when the dataset is not
+   * loaded, no generator exists for the tier, or the grid is already covered.
+   */
+  addPowerForTier: (tier: MachineTier) => Promise<void>;
   reconnectEdge: (
     edgeId: string,
     connection: {
@@ -434,7 +445,6 @@ interface FactoryStore {
   optimizeMachineCounts: () => void;
   deleteEdge: (edgeId: string) => void;
   setTargetRate: (targetRate?: TargetRate) => void;
-  selectFuelProfile: (fuelProfileId: string) => void;
   renameProject: (name: string) => void;
 }
 
@@ -2110,6 +2120,111 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       });
     });
   },
+  addPowerForTier: async (tier) => {
+    const state = get();
+    const version = state.datasetManifest?.versions.find(
+      (entry) => entry.id === state.selectedDatasetVersionId,
+    );
+    if (!version) {
+      return;
+    }
+
+    const tierId = tier.toLowerCase();
+    const key = `energy:${tierId}` as ResourceKey;
+
+    // The nameplate gap the power block shows: a machine at 0% still needs
+    // its full grid when it does run, so the build is sized to the books,
+    // not to today's utilization.
+    let deficit = 0;
+    for (const node of Object.values(state.lastResult.nodes)) {
+      if (node.status === "missing-recipe") {
+        continue;
+      }
+      deficit += (node.inputs[key]?.amountPerSecond ?? 0) - (node.outputs[key]?.amountPerSecond ?? 0);
+    }
+    if (deficit <= 0) {
+      return;
+    }
+
+    const candidates = await queryRecipeDatasetRecipes(DEFAULT_DATASET_MANIFEST_URL, version, {
+      query: "",
+      resource: { kind: "energy", id: tierId },
+      mode: "recipes",
+      maxTier: "all",
+      offset: 0,
+      limit: 120,
+    });
+    const winner = pickPowerRecipe(candidates.recipes, tierId);
+    if (!winner) {
+      return;
+    }
+
+    const recipe = await getRecipeDatasetRecipe(DEFAULT_DATASET_MANIFEST_URL, version, winner.id);
+    const energyOutput = recipe.outputs.find((output) => output.kind === "energy");
+    const perMachinePerSecond =
+      energyOutput && recipe.durationTicks > 0
+        ? (energyOutput.amount * 20) / recipe.durationTicks
+        : 0;
+    if (perMachinePerSecond <= 0) {
+      return;
+    }
+
+    // The wire lands on the node drinking hardest from this grid.
+    let anchor: FactoryNode | undefined;
+    let anchorDraw = 0;
+    for (const node of state.project.nodes) {
+      const draw = state.lastResult.nodes[node.id]?.inputs[key]?.amountPerSecond ?? 0;
+      if (draw > anchorDraw) {
+        anchor = node;
+        anchorDraw = draw;
+      }
+    }
+    if (!anchor) {
+      return;
+    }
+
+    const node: FactoryNode = {
+      id: createId("node"),
+      recipeId: recipe.id,
+      machineCount: Math.max(1, Math.ceil(deficit / perMachinePerSecond)),
+      parallel: 1,
+      overclockTier: recipe.minimumTier,
+      enabled: true,
+      position: snapPositionToGrid({ x: anchor.position.x - 440, y: anchor.position.y }),
+      pocketId: state.activePocketId,
+    };
+
+    const recipeAlreadyInProject = state.project.recipes.some((entry) => entry.id === recipe.id);
+    const edge: FactoryEdge = {
+      id: createId("edge"),
+      source: node.id,
+      target: anchor.id,
+      sourceHandle: makeResourceHandleId("output", { kind: "energy", id: tierId }),
+      targetHandle: makeResourceHandleId("input", { kind: "energy", id: tierId }),
+      resourceKind: "energy",
+      resourceId: tierId,
+      label: energyOutput?.displayName ?? `Energy (${tier})`,
+    };
+    const project = touchProject({
+      ...state.project,
+      recipes: recipeAlreadyInProject
+        ? state.project.recipes.map((entry) => (entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry))
+        : [...state.project.recipes, recipe],
+      nodes: [...state.project.nodes, node],
+      edges: [...state.project.edges, edge],
+    });
+
+    set(
+      withProjectHistory(state, {
+        project,
+        selectedNodeId: node.id,
+        selectedRecipeId: recipe.id,
+        placedBoardIds: [node.id],
+        placedBoardToken: state.placedBoardToken + 1,
+        lastResult: calculateThroughput(project),
+      }),
+    );
+  },
   reconnectEdge: (edgeId, connection) => {
     set((state) => {
       const oldEdge = state.project.edges.find((edge) => edge.id === edgeId);
@@ -2326,18 +2441,6 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       const project = touchProject({
         ...state.project,
         assumeBoundaries: assumeBoundaries || undefined,
-      });
-      return withProjectHistory(state, {
-        project,
-        lastResult: calculateThroughput(project),
-      });
-    });
-  },
-  selectFuelProfile: (fuelProfileId) => {
-    set((state) => {
-      const project = touchProject({
-        ...state.project,
-        selectedFuelProfileId: fuelProfileId,
       });
       return withProjectHistory(state, {
         project,
@@ -3114,6 +3217,43 @@ function convergePocketBoundaryEdges(project: FactoryProject, pocketId: string):
   return { ...project, edges: [...project.edges, ...additions] };
 }
 
+/**
+ * The best generator for a grid, by EU per second, ties by the smaller name:
+ * deterministic across reloads, which a "place the first hit" is not.
+ */
+export function pickPowerRecipe(
+  summaries: RecipeSummary[],
+  tierId: string,
+): RecipeSummary | undefined {
+  let best: { summary: RecipeSummary; rate: number } | undefined;
+  for (const summary of summaries) {
+    const energy = summary.outputs.find(
+      (output) => output.kind === "energy" && output.id === tierId,
+    );
+    if (!energy || summary.durationTicks <= 0) {
+      continue;
+    }
+    const rate = (energy.amount * 20) / summary.durationTicks;
+    if (!best || rate > best.rate || (rate === best.rate && summary.name < best.summary.name)) {
+      best = { summary, rate };
+    }
+  }
+  return best?.summary;
+}
+
+/**
+ * The grid a card actually draws from — its power report's tier, lower-cased
+ * into an energy id ("LuV" → "luv"; never toUpperCase, the id is the id).
+ * Machines without a power report (manual/instant, zero-EU) draw no energy
+ * and can never be an energy wire's end.
+ */
+function nodeEnergyTier(recipe: Recipe, node: FactoryNode): string | undefined {
+  if (!hasPowerReport(recipe)) {
+    return undefined;
+  }
+  return getNodePowerReport(recipe, node).tier.toLowerCase();
+}
+
 function buildEdgeBetweenNodes(
   project: FactoryProject,
   sourceNodeId: string,
@@ -3218,6 +3358,24 @@ function buildEdgeBetweenNodes(
 
   if (!sourceNode || !targetNode || !sourceRecipe || !targetRecipe) {
     return undefined;
+  }
+
+  // A wire of energy has no recipe slot to match on either end: the source
+  // must output it, the target must draw from that same grid. No bridging —
+  // a transformer is a machine the player places, not a property of the wire.
+  const sourceEnergy = sourceRecipe.outputs.find((output) => output.kind === "energy");
+  const targetTier = nodeEnergyTier(targetRecipe, targetNode);
+  if (sourceEnergy && targetTier === sourceEnergy.id) {
+    return {
+      id: createId("edge"),
+      source: sourceNode.id,
+      target: targetNode.id,
+      sourceHandle: makeResourceHandleId("output", sourceEnergy),
+      targetHandle: makeResourceHandleId("input", { kind: "energy", id: targetTier }),
+      resourceKind: "energy",
+      resourceId: sourceEnergy.id,
+      label: sourceEnergy.displayName ?? `Energy (${targetTier.toUpperCase()})`,
+    };
   }
 
   if (selectedResource?.sourceHandle && selectedResource.targetHandle) {
@@ -3330,6 +3488,23 @@ function buildCompatibleEdgesBetweenNodes(
       });
     });
   });
+
+  // The one pairing slots cannot express: power. A generator's energy output
+  // meets the target's grid when the target draws from that same tier.
+  const sourceEnergy = sourceRecipe.outputs.find((output) => output.kind === "energy");
+  const targetTier = nodeEnergyTier(targetRecipe, targetNode);
+  if (sourceEnergy && targetTier === sourceEnergy.id) {
+    edges.push({
+      id: createId("edge"),
+      source: sourceNode.id,
+      target: targetNode.id,
+      sourceHandle: makeResourceHandleId("output", sourceEnergy),
+      targetHandle: makeResourceHandleId("input", { kind: "energy", id: targetTier }),
+      resourceKind: "energy",
+      resourceId: sourceEnergy.id,
+      label: sourceEnergy.displayName ?? `Energy (${targetTier.toUpperCase()})`,
+    });
+  }
 
   // Slots, not rows: a recipe holding the same resource in two output slots and
   // a taker holding it in two input slots pairs up four ways, and all four land
@@ -3473,7 +3648,7 @@ function parseResourceHandleId(handleId?: string | null):
   const [side, kind, encodedResourceId, encodedSlotIndex] = handleId.split(":");
   if (
     (side !== "input" && side !== "output") ||
-    (kind !== "item" && kind !== "fluid") ||
+    (kind !== "item" && kind !== "fluid" && kind !== "energy") ||
     !encodedResourceId
   ) {
     return undefined;

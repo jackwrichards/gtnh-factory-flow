@@ -73,6 +73,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.19.0",
+    date: "2026-08-20",
+    headline: "Generators",
+    notes: [
+      "Power is a real resource on the board: every machine shows the grid it draws from, and you can wire it in.",
+      "Add a generator with one click: the power list shows what each grid needs and what it gets, with a button to close the gap.",
+      "The fuel estimate is gone — your plan's power comes from real GTNH generators, from gas and steam turbines to fission, fusion, solar and RTG.",
+    ],
+  },
+  {
     version: "2.18.1",
     date: "2026-08-19",
     headline: "Seeds are not machines",

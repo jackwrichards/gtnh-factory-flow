@@ -31,9 +31,15 @@ export function rateUnitMultiplier(): number {
   return UNITS[state.unit].multiplier;
 }
 
-export function rateUnitSuffix(fluid: boolean): string {
+export function rateUnitSuffix(kind: string): string {
   const { per } = UNITS[state.unit];
-  return fluid ? ` L/${per}` : `/${per}`;
+  if (kind === "fluid") {
+    return ` L/${per}`;
+  }
+  if (kind === "energy") {
+    return ` EU/${per}`;
+  }
+  return `/${per}`;
 }
 
 /**

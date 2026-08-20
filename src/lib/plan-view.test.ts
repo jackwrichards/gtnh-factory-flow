@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { gtnhFuelProfiles } from "@/lib/model/fuels";
 import { factoryProjectSchema } from "@/lib/model/schemas";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject, type PlanViewState } from "@/lib/model/types";
 import { parseFactoryProjectJson, serializeFactoryProject } from "@/lib/import-export";
@@ -60,8 +59,6 @@ function project(view?: PlanViewState): FactoryProject {
       },
     ],
     edges: [],
-    fuelProfiles: gtnhFuelProfiles,
-    selectedFuelProfileId: "biodiesel",
   };
 }
 

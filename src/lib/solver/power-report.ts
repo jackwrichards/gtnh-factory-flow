@@ -2,6 +2,7 @@ import {
   applyMachineHandlerToRecipe,
   getSelectedMachineHandler,
   GT_FURNACE_RECIPE_EUT,
+  isGeneratorRecipe,
   isHighPressureSteamHandler,
   isSmeltingRecipeMap,
   isSteamMachineHandler,
@@ -208,6 +209,12 @@ export function getNodeSteamReport(
   node: PowerReportNode,
 ): NodeSteamReport | undefined {
   if (!recipe.machineType) {
+    return undefined;
+  }
+  // A "Steam Turbine" is a generator whose name happens to carry the word:
+  // it has an energy output, draws no EU, and owes the grid nothing - the
+  // steam line it would get here is a phantom bill.
+  if (isGeneratorRecipe(recipe)) {
     return undefined;
   }
   const handler = getSelectedMachineHandler(recipe, node);

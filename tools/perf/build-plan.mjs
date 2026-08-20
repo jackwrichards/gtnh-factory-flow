@@ -188,7 +188,6 @@ const project = {
   storages: [],
   annotations: [],
   edges,
-  fuelProfiles: [],
   metadata: { source: "perf-stress" },
 };
 
