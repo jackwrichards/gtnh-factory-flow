@@ -12,7 +12,6 @@
     "test:watch": "vitest",
     "datasets:detect": "node tools/dataset-pipeline/scripts/detect-gtnh-versions.mjs",
     "datasets:manifest": "node tools/dataset-pipeline/scripts/rebuild-manifest.mjs",
-    "agent": "tsx src/agent/server.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
