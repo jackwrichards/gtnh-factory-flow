@@ -16,6 +16,7 @@ import {
 import {
   BLUEPRINT_SUMMARY_COLUMNS,
   blueprintStorageErrorMessage,
+  countBlueprintMachines,
   parseHighestTier,
   parseResourceStats,
   rowToBlueprintSummary,
@@ -144,10 +145,7 @@ export async function PUT(request: Request, context: RouteContext) {
     patch.storage_count = captured.storages.length;
     patch.edge_count = captured.edges.length;
     patch.pocket_count = captured.pockets.length;
-    patch.machine_count = captured.nodes.reduce(
-      (sum, node) => sum + Math.max(0, Math.round(node.machineCount)),
-      0,
-    );
+    patch.machine_count = countBlueprintMachines(captured);
     patch.needs = parseResourceStats(needs);
     patch.outputs = parseResourceStats(outputs);
     patch.highest_tier = parseHighestTier(highestTier);

@@ -746,7 +746,15 @@ function finalizeNodeReports(
     const actualBound =
       actualLimit !== undefined &&
       actualLimit < Math.min(1, utilizationReport.utilization) - EPSILON;
-    if (actualBound) {
+    // The settle world may also RAISE a node past a stale verdict demand -
+    // one computed around the phantom operating point - never past 100%, and
+    // always backed by flow the wires really granted. Figures above 100%
+    // (a genuinely over-asked node) are left alone.
+    const actualRaise =
+      actualLimit !== undefined &&
+      utilizationReport.utilization <= 1 + EPSILON &&
+      actualLimit > utilizationReport.utilization + EPSILON;
+    if (actualBound || actualRaise) {
       utilizationReport.utilization = actualLimit;
       utilizationReport.requiredRatePerSecond = utilizationReport.maxRatePerSecond * actualLimit;
       utilizationReport.theoreticalMachinesRequired = node.machineCount * actualLimit;
@@ -755,6 +763,14 @@ function finalizeNodeReports(
           ...utilizationReport.limitingResource,
           amountPerSecond: utilizationReport.requiredRatePerSecond,
         };
+      }
+      // When the settlement's OUTPUT side is what bound the node - it makes
+      // more than its takers really drink and has nowhere to shed it - the
+      // clog-blind verdict names no culprit, so the settled world's own clog
+      // key fills the silence and the card can still say why it is slow.
+      const actualClog = equilibrium.actualClogOutputByNode.get(node.id);
+      if (actualClog !== undefined && nodeResult.clogOutputKey === undefined) {
+        nodeResult.clogOutputKey = actualClog;
       }
     }
 

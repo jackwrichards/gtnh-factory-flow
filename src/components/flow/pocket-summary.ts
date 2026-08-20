@@ -1,4 +1,5 @@
 import { describeStorage, getStorageRole } from "@/lib/model/storage-role";
+import { getNodeMachineBuildCount } from "@/lib/model/passive-production";
 import { calculateThroughput } from "@/lib/solver";
 import type {
   FactoryEdge,
@@ -59,6 +60,7 @@ export function computePocketSummaries(
 
   const allPockets = project.pockets ?? [];
   const icons = buildResourceIconLookup(project);
+  const recipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe]));
 
   for (const pocket of pockets) {
     // Membership is transitive: a nested pocket's machines count toward the
@@ -189,7 +191,11 @@ export function computePocketSummaries(
     summaries.set(pocket.id, {
       inputs,
       outputs,
-      machineCount: nodes.reduce((sum, node) => sum + Math.max(0, node.machineCount), 0),
+      // Crop cards count the harvesters their crops fill, not seeds.
+      machineCount: nodes.reduce(
+        (sum, node) => sum + getNodeMachineBuildCount(recipesById.get(node.recipeId), node),
+        0,
+      ),
       memberCount: memberIds.size,
     });
   }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FactoryNode, FactoryProject, ThroughputResult } from "@/lib/model/types";
+import type { FactoryNode, FactoryProject, Recipe, ThroughputResult } from "@/lib/model/types";
 import { PROJECT_SCHEMA_VERSION } from "@/lib/model/types";
 import { computeCommunityPlanStats } from "./plan-stats";
 
@@ -16,15 +16,39 @@ function makeNode(overrides: Partial<FactoryNode>): FactoryNode {
   };
 }
 
-function makeProject(nodes: FactoryNode[]): FactoryProject {
+function makeProject(nodes: FactoryNode[], recipes: Recipe[] = []): FactoryProject {
   return {
     schemaVersion: PROJECT_SCHEMA_VERSION,
     id: "project-1",
     name: "Test plan",
-    recipes: [],
+    recipes,
     nodes,
     storages: [],
     edges: [],
+  };
+}
+
+/** A CropsNH crop card: `machineCount` on its node means planted crops. */
+function makeCropRecipe(id: string): Recipe {
+  return {
+    id,
+    name: "Crop Farm: Oilberry",
+    kind: "crop_produce",
+    machineType: "Crop Manager",
+    minimumTier: "NONE",
+    durationTicks: 256,
+    eut: 0,
+    inputs: [],
+    outputs: [],
+    source: { recipeMap: "Crop Farm" },
+    metadata: {
+      cropsNh: {
+        tier: 8,
+        growthPoints: 2200,
+        dropChance: 1,
+        drops: [{ id: "item:oilberry", stackSize: 1, weight: 10000 }],
+      },
+    },
   };
 }
 
@@ -59,6 +83,37 @@ describe("computeCommunityPlanStats", () => {
     expect(stats.highestTierIndex).toBeGreaterThan(0);
     expect(stats.nodeCount).toBe(3);
     expect(stats.totalEuT).toBe(1234);
+  });
+
+  it("counts crop cards by the harvesters their crops fill, not by seeds", () => {
+    const project = makeProject(
+      [
+        // 50 oilberries under an LV Crop Manager (605 sticks per layer x 5):
+        // one machine to build, not fifty.
+        makeNode({
+          id: "managed",
+          recipeId: "crop-1",
+          machineCount: 50,
+          overclockTier: "NONE",
+          machineHandlerId: "crop-manager",
+          machineConfigTiers: { cropManagerTier: "1" },
+        }),
+        // Hand-picked sticks build nothing at all.
+        makeNode({
+          id: "by-hand",
+          recipeId: "crop-1",
+          machineCount: 20,
+          overclockTier: "NONE",
+        }),
+        // An ordinary machine card still counts as itself.
+        makeNode({ id: "machine", recipeId: "recipe-1", machineCount: 3 }),
+      ],
+      [makeCropRecipe("crop-1")],
+    );
+
+    const stats = computeCommunityPlanStats(project, makeResult({}));
+
+    expect(stats.machineCount).toBe(4);
   });
 
   it("ignores unknown tier strings instead of crashing", () => {

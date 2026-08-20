@@ -138,6 +138,13 @@ export interface EquilibriumSolution {
   /** The input whose real arrivals pulled `actualByNode` below the verdict
    * level, for nodes the settlement throttled. */
   actualLimitingInputByNode: Map<string, ResourceKey>;
+  /**
+   * The OUTPUT whose settled takers pulled `actualByNode` down instead: the
+   * machine over-ran what its consumers really drink and has no drain to
+   * shed the difference. The verdict clog stays clog-blind by design; this
+   * is the settled world's own clog name, so the card can still say why.
+   */
+  actualClogOutputByNode: Map<string, ResourceKey>;
   edgeAllocations: Map<string, EdgeAllocationResult>;
   eatenByNeed: Map<string, number>;
   unmetDesireByNeed: Map<string, number>;
@@ -676,6 +683,11 @@ export function solveEquilibrium(
   // runRound throttles the ACTUAL-flow side - desire asks, actual offers,
   // sink absorption - by it, and the verdict-side fills stand down.
   let settleAct: Map<string, number> | undefined;
+  /** The settle world's own demand book, re-read from each settle round's
+   * fills so a node pinned by a stale verdict demand (computed around the
+   * phantom operating point) can rise to what the settled flows really ask
+   * of it. Undefined outside the settlement. */
+  let settleDem: Map<string, number> | undefined;
   // The priority tranche starts empty: round one splits fairly, and from the
   // second round on each output's must-ship rate is served first (see the
   // priority map in runRound).
@@ -875,6 +887,23 @@ export function solveEquilibrium(
         }
         activeAnchors.allowanceByBucket.set(bucket, total);
       }
+      // Settle-world anchors additionally cap at each consumer's actual
+      // consumption this round (see RingAnchorPlan.consumptionCapByNeed).
+      if (settleAct) {
+        activeAnchors.consumptionCapByNeed = new Map();
+        for (const needKey of activeAnchors.needs.keys()) {
+          const need = needs.get(needKey);
+          if (!need) {
+            continue;
+          }
+          activeAnchors.consumptionCapByNeed.set(
+            needKey,
+            clampUtilization(settleAct.get(need.targetId) ?? 0) * need.nameplatePerSecond,
+          );
+        }
+      } else {
+        activeAnchors.consumptionCapByNeed = undefined;
+      }
     }
 
     // Potentials: what each input could draw if everything else wanted it -
@@ -919,22 +948,21 @@ export function solveEquilibrium(
         continue;
       }
       const ceiling = sibCeil(info, needKey);
-      // Settling: consumption follows the recipe at the node's actual level -
-      // a machine at 10% eats 10% of EVERY ingredient, so a starved input
-      // releases its siblings' unclaimed shares back to the board. The
-      // availability and shadow asks stand down (their fills answer verdict
-      // questions the settlement leaves frozen).
+      // Settling: OFFERS follow each node's actual level (conservation), but
+      // asks must NOT - an ask throttled by the falling level is the ratchet
+      // that killed balanced rings: a transient dip shrinks the ask, the
+      // source drawer stops covering the difference, and nothing ever pulls
+      // the level back up. Asks stay at the live settle-world DEMAND, so a
+      // need keeps asking for what its takers genuinely want and a dip can
+      // recover. Consumption is booked at the actual level regardless (the
+      // taker-attribution in the settle bounds and the export clamp both
+      // scale intake to act). The availability and shadow asks stand down
+      // (their fills answer verdict questions the settlement leaves frozen).
       askAvailability.set(needKey, settleAct ? 0 : need.nameplatePerSecond * ceiling);
-      askDesire.set(
-        needKey,
-        need.nameplatePerSecond *
-          Math.min(
-            settleAct
-              ? clampUtilization(settleAct.get(need.targetId) ?? 0)
-              : clampUtilization(dem.get(need.targetId) ?? 1),
-            ceiling,
-          ),
-      );
+      const askDemand = settleAct
+        ? clampUtilization(settleDem?.get(need.targetId) ?? dem.get(need.targetId) ?? 1)
+        : clampUtilization(dem.get(need.targetId) ?? 1);
+      askDesire.set(needKey, need.nameplatePerSecond * Math.min(askDemand, ceiling));
       // The same ask, throttled by demWANT instead of dem: what this consumer
       // would take if no clog anywhere were holding it back. See the shadow
       // fill below for why disposal has to be judged on this and not on dem.
@@ -1119,9 +1147,16 @@ export function solveEquilibrium(
               Math.max(1, (budget?.drainEdges.length ?? 0) + (budget?.trashEdges.length ?? 0))
           : (bufferAbsorbByEdge.get(edge.id) ?? 0);
       });
+      // In the settle world the pull relays by CAPABILITY, not absorption:
+      // absorption follows the feeder's falling level, so a buffer-fed ring
+      // member that dips loses its demand credit, the lost credit justifies
+      // the dip, and the ring's demand collapses through the tank (the same
+      // self-justifying idle the shadow relay cures in the verdict world).
       const pullTakes = waterFillShares(
         desireFill.poolRequested.get(poolKey) ?? 0,
-        absorbedCaps,
+        settleAct
+          ? pool.sinkEdges.map((edge) => budgetOffer.get(edge.budgetKey) ?? 0)
+          : absorbedCaps,
       );
       const shadowCaps = pool.sinkEdges.map((edge) => budgetOffer.get(edge.budgetKey) ?? 0);
       const shadowTakes = waterFillShares(
@@ -1132,6 +1167,64 @@ export function solveEquilibrium(
         overflowPullByEdge.set(edge.id, pullTakes[index]!);
         shadowRelayByEdge.set(edge.id, shadowTakes[index]!);
       });
+    }
+
+    // A source drawer is MAKEUP, not competition. The fills already serve
+    // real machines before touching the infinite drawer (drain priority),
+    // and the demand relay has to agree: judged on grants alone, a machine
+    // idling beside a source reads "nothing asks for more" because the source
+    // quietly covered the residual ask, the idling justifies itself, and the
+    // artifact is a fixed point (the silicone electrolyzer pinned at 75%
+    // while its suppliers' HCl must be drunk; in game it runs flat out). So
+    // each machine edge reclaims demand credit for the share of the source-
+    // covered ask it COULD supply - up to its capability offer - and the
+    // source lines give exactly that credit back.
+    const reclaimByEdge = new Map<string, number>();
+    for (const [, need] of needs) {
+      if (need.machineEdges.length === 0 || need.storageEdges.length === 0) {
+        continue;
+      }
+      let sourceCovered = 0;
+      for (const edge of need.storageEdges) {
+        const capable = poolOfferCapable.get(edge.poolKey);
+        const bottomless =
+          (capable !== undefined && !Number.isFinite(capable)) ||
+          backedPoolKeys.has(edge.poolKey);
+        if (bottomless) {
+          sourceCovered += eatenByEdge.get(edge.id) ?? 0;
+        }
+      }
+      if (sourceCovered <= EPSILON) {
+        continue;
+      }
+      const caps = need.machineEdges.map((edge) =>
+        Math.max(0, (budgetOffer.get(edge.budgetKey) ?? 0) - (eatenByEdge.get(edge.id) ?? 0)),
+      );
+      const takes = waterFillShares(sourceCovered, caps);
+      let reclaimed = 0;
+      need.machineEdges.forEach((edge, index) => {
+        const take = takes[index]!;
+        if (take > EPSILON) {
+          reclaimByEdge.set(edge.id, take);
+          reclaimed += take;
+        }
+      });
+      if (reclaimed <= EPSILON) {
+        continue;
+      }
+      for (const edge of need.storageEdges) {
+        const capable = poolOfferCapable.get(edge.poolKey);
+        const bottomless =
+          (capable !== undefined && !Number.isFinite(capable)) ||
+          backedPoolKeys.has(edge.poolKey);
+        if (!bottomless) {
+          continue;
+        }
+        const covered = eatenByEdge.get(edge.id) ?? 0;
+        if (covered > EPSILON) {
+          reclaimByEdge.set(edge.id, -reclaimed * (covered / sourceCovered));
+        }
+      }
     }
 
     for (const edge of edges) {
@@ -1207,7 +1300,13 @@ export function solveEquilibrium(
       const eaten = eatenByEdge.get(edge.id) ?? 0;
       const need = needs.get(edge.needKey);
       const unmet = Math.max(0, desireFill.remainingNeed.get(edge.needKey) ?? 0);
-      demandByEdge.set(edge.id, eaten + unmet / Math.max(1, need?.edgeCount ?? 1));
+      demandByEdge.set(
+        edge.id,
+        Math.max(
+          0,
+          eaten + unmet / Math.max(1, need?.edgeCount ?? 1) + (reclaimByEdge.get(edge.id) ?? 0),
+        ),
+      );
     }
 
     // ---- Drawer-to-drawer settlement. ------------------------------------
@@ -1745,15 +1844,17 @@ export function solveEquilibrium(
     supplyByBucket: Map<string, { budgetKeys: string[]; poolKeys: string[] }>;
   }
 
-  const findDeadRings = (): DeadRing[] => {
-    // Vertices: machines that converged to (at most dust above) zero
-    // capability, plus every drawer (a ring may pass through a buffer). Live
-    // machines are pruned FIRST, so any cycle that survives is dead wall to
-    // wall - the exact signature the dead-loop badge fires on, at the same
-    // threshold the badge uses.
+  const findDeadRings = (levelOf?: (id: string) => number): DeadRing[] => {
+    // Vertices: machines that converged to (at most dust above) zero level -
+    // capability for the main rescue, settled actual for the settlement's -
+    // plus every drawer (a ring may pass through a buffer). Live machines are
+    // pruned FIRST, so any cycle that survives is dead wall to wall - the
+    // exact signature the dead-loop badge fires on, at the same threshold the
+    // badge uses.
+    const level = levelOf ?? ((id: string) => cap.get(id) ?? 1);
     const vertices = new Set<string>();
     for (const info of machineNodes) {
-      if ((cap.get(info.id) ?? 1) <= DEAD_RING_EPSILON) {
+      if (level(info.id) <= DEAD_RING_EPSILON) {
         vertices.add(info.id);
       }
     }
@@ -1952,6 +2053,7 @@ export function solveEquilibrium(
   // skip this entirely and keep their figures bit for bit.
   const act = new Map<string, number>();
   const actBinders = new Map<string, ResourceKey>();
+  const actClogBinders = new Map<string, ResourceKey>();
   {
     for (const info of machineNodes) {
       act.set(
@@ -1988,6 +2090,34 @@ export function solveEquilibrium(
       }
       return { bound, binder };
     };
+    // The MIRROR bound: production has to be TAKEN, not only fed. An output
+    // wired only to machines (no drain, no can, no overflow buffer) has
+    // nowhere to shed a surplus, so in game the chest behind it fills and the
+    // machine slows to its takers' real pace. Without this half, a machine
+    // could settle above its consumers, the difference vanished from every
+    // book, and - worse - its OTHER outputs, byproducts of production that
+    // never really happened, kept feeding the board: the bauxite line's mixer
+    // needs 9 NaOH per op, the loop returns 0.75, and the plan still read 23%
+    // because the AlOH reactor ran 3x past its taker and the phantom run's
+    // byproduct NaOH was booked as real. The verdict layer stays clog-blind
+    // on purpose (one wire clears it); the settled flows must not.
+    // Grants are demand-level asks (see askDesire), but a taker only EATS at
+    // its own actual level - a machine at 10% eats 10% of everything. The
+    // scale per need turns granted flow into consumed flow, so a producer is
+    // bounded by what its takers really drink, never by what they were merely
+    // handed.
+    // THE MIRROR BOUND IS PARKED, deliberately (2026-08-19). Bounding a
+    // machine by what its takers actually drink is the right physics - an
+    // output with no drawer backs up in game - but crediting a producer with
+    // its takers' consumption needs an allocation rule that is fair to
+    // co-suppliers AND leaves a dipped supplier room to recover, and every
+    // rule tried so far fixes one pinned board while breaking another.
+    // Judged on the fill's own grants it walked healthy boards to zero, and
+    // the player who repaired his bauxite line with an NaOH source drawer
+    // watched the repair READ as dead. Branch solver-sustained-credit-wip
+    // carries the four attempted rules and the acceptance matrix for the
+    // real fix. Until then an unconsumed surplus shows on the books but does
+    // not throttle its maker: too-generous numbers over false zeros.
     let needsSettling = false;
     for (const info of machineNodes) {
       const { bound, binder } = deliveredBound(lastRound, info);
@@ -1999,31 +2129,64 @@ export function solveEquilibrium(
       }
     }
     if (needsSettling) {
-      // The converged verdict levels are a hard ceiling: settlement only ever
-      // removes flow the desire fill could not back, never invents any.
-      const actCeiling = new Map(act);
-      poolInflow = lastRound.poolInflowNext;
-      unconditionalByBudget = lastRound.unconditionalNext;
-      for (let pass = 0; pass < SETTLE_ROUNDS; pass += 1) {
+      // The settle world's own descent. Verdict capability and disposal are
+      // the hard ceilings (the settlement may never outrun the could-world),
+      // but DEMAND is re-read from each settled round: the verdict demand was
+      // computed around the phantom operating point, and a node it pinned low
+      // (the silicone electrolyzer stuck at 75% while its suppliers' output
+      // must be drunk) may honestly rise once the settled asks reach it. A
+      // rise is never invention - it is still capped by what the wires
+      // actually granted (deliveredBound), which rides act-throttled offers.
+      const verdictLastRound = lastRound;
+      const verdictAct = new Map(act);
+      const verdictInputBinders = new Map(actBinders);
+      const verdictClogBinders = new Map(actClogBinders);
+      const runSettleLoop = (): RoundOutput | undefined => {
+        let lastSettled: RoundOutput | undefined;
+        poolInflow = lastRound.poolInflowNext;
+        unconditionalByBudget = lastRound.unconditionalNext;
+        for (let pass = 0; pass < SETTLE_ROUNDS; pass += 1) {
         settleAct = act;
         const settled = runRound();
         rounds += 1;
+        lastSettled = settled;
+        const settleDemNext = new Map<string, number>();
         let maxDelta = 0;
         for (const info of machineNodes) {
-          const { bound, binder } = deliveredBound(settled, info);
-          const next = Math.min(actCeiling.get(info.id) ?? 0, bound);
+          const delivered = deliveredBound(settled, info);
+          // Demand may only RISE from its verdict seed. A rise is the honest
+          // correction (a node pinned by a demand computed around the phantom
+          // point, like the silicone electrolyzer at 75%); a fall is the
+          // collapse vector - settle demand rides the settle asks, which ride
+          // the falling levels, and letting it follow them down unravels
+          // every ring. The delivered bound does all honest downward work.
+          const demandCeiling = Math.max(
+            clampUtilization(dem.get(info.id) ?? 1),
+            clampUtilization(settleDem?.get(info.id) ?? 0),
+            clampUtilization(settled.demNext.get(info.id) ?? 1),
+          );
+          settleDemNext.set(info.id, demandCeiling);
+          const next = clampUtilization(
+            Math.min(
+              clampUtilization(cap.get(info.id) ?? 1),
+              clampUtilization(disp.get(info.id) ?? 1),
+              demandCeiling,
+              delivered.bound,
+            ),
+          );
           const previous = act.get(info.id) ?? 0;
           maxDelta = Math.max(maxDelta, Math.abs(next - previous));
           // The binder is only visible while the bound is DROPPING: at the
           // settled point every input of a throttled node ties at its level
           // (a machine at 10% eats 10% of everything), so the name is taken
           // from the pass that pulled it down.
-          if (next < previous - CONVERGENCE_EPS && binder !== undefined) {
-            actBinders.set(info.id, binder);
+          if (next < previous - CONVERGENCE_EPS && delivered.binder !== undefined) {
+            actBinders.set(info.id, delivered.binder);
           }
           act.set(info.id, next);
         }
         poolInflow = settled.poolInflowNext;
+        settleDem = settleDemNext;
         // Adopt the settled physical flows; demand, availability and the
         // unmet-desire book keep the last verdict round's story - what is
         // WANTED and what COULD arrive are diagnosis, not delivery.
@@ -2035,8 +2198,150 @@ export function solveEquilibrium(
         if (maxDelta < CONVERGENCE_EPS) {
           break;
         }
+        }
+        return lastSettled;
+      };
+      runSettleLoop();
+
+      // ---- The settlement's own ring appeal. -----------------------------
+      // A self-contained ring that conserves its goods EXACTLY (the magnesium
+      // loop: 8 salt -> 4 sodium, 2 magnesium -> 6 MgCl2 -> back, gain 1.0)
+      // has no restoring force under the flow bounds: delivered rides the
+      // supplier's level and sustained rides the taker's, each one pass
+      // behind, and the lag mismatch bleeds the level a little every pass all
+      // the way to zero - a board that runs forever in game reads dead. Same
+      // disease, same cure as the main descent's balanced-ring rescue: rings
+      // the settlement zeroed (that the verdicts ran) get one appeal with
+      // their internal needs allowed to draw the anchor, dead last, and the
+      // appeal is adopted only if the settled anchors idle at ~0/s. A ring
+      // that leans on the anchor every round - the bauxite lye loop, short
+      // 8.25 NaOH per op - is honestly dead and keeps its zero.
+      {
+        const crushedRings = findDeadRings((id) => act.get(id) ?? 1).filter((ring) => {
+          for (const needKey of ring.anchoredNeeds.keys()) {
+            const targetId = needs.get(needKey)?.targetId;
+            if (targetId && (verdictAct.get(targetId) ?? 0) > DEAD_RING_EPSILON) {
+              return true;
+            }
+          }
+          return false;
+        });
+        if (crushedRings.length > 0) {
+          const failedAct = new Map(act);
+          const failedLastRound = lastRound;
+          const failedInputBinders = new Map(actBinders);
+          const failedClogBinders = new Map(actClogBinders);
+          let candidates = crushedRings;
+          let adopted = false;
+          for (
+            let attempt = 0;
+            attempt <= crushedRings.length && candidates.length > 0;
+            attempt += 1
+          ) {
+            activeAnchors = {
+              needs: new Map(),
+              bucketByNeed: new Map(),
+              supplyByBucket: new Map(),
+              allowanceByBucket: new Map(),
+            };
+            for (const ring of candidates) {
+              for (const [needKey, anchorEdges] of ring.anchoredNeeds) {
+                activeAnchors.needs.set(needKey, anchorEdges);
+              }
+              for (const [needKey, bucket] of ring.bucketByNeed) {
+                activeAnchors.bucketByNeed.set(needKey, bucket);
+              }
+              for (const [bucket, supply] of ring.supplyByBucket) {
+                activeAnchors.supplyByBucket.set(bucket, supply);
+              }
+            }
+            // Each attempt re-descends from the verdict entry state, so a
+            // rejected ring's earlier collapse cannot contaminate the retry.
+            act.clear();
+            for (const [key, value] of verdictAct) act.set(key, value);
+            actBinders.clear();
+            for (const [key, value] of verdictInputBinders) actBinders.set(key, value);
+            actClogBinders.clear();
+            for (const [key, value] of verdictClogBinders) actClogBinders.set(key, value);
+            settleDem = undefined;
+            lastRound = verdictLastRound;
+            const settled = runSettleLoop();
+            // Judged PER NEED against that need's own real flow, same rule as
+            // the main rescue: an anchor still carrying real material at the
+            // fixed point means the ring only stands because of it.
+            const sustained = candidates.filter((ring) => {
+              if (!settled) {
+                return false;
+              }
+              for (const [needKey, anchorEdges] of ring.anchoredNeeds) {
+                const anchorFlow = settled.anchorGrantByNeed.get(needKey) ?? 0;
+                if (anchorFlow <= RING_ANCHOR_FLOOR) {
+                  continue;
+                }
+                let realFlow = 0;
+                for (const edge of anchorEdges) {
+                  realFlow += settled.eatenByEdge.get(edge.id) ?? 0;
+                }
+                realFlow = Math.max(0, realFlow - anchorFlow);
+                if (anchorFlow > Math.max(RING_ANCHOR_FLOOR, realFlow * RING_ANCHOR_TOLERANCE)) {
+                  return false;
+                }
+              }
+              return true;
+            });
+            if (sustained.length === candidates.length) {
+              adopted = true;
+              break;
+            }
+            candidates = sustained;
+          }
+          activeAnchors = undefined;
+          if (!adopted) {
+            act.clear();
+            for (const [key, value] of failedAct) act.set(key, value);
+            actBinders.clear();
+            for (const [key, value] of failedInputBinders) actBinders.set(key, value);
+            actClogBinders.clear();
+            for (const [key, value] of failedClogBinders) actClogBinders.set(key, value);
+            lastRound = failedLastRound;
+          }
+        }
       }
       settleAct = undefined;
+      settleDem = undefined;
+    }
+  }
+
+  // The physical-flow book must not outrun the machines it feeds. The desire
+  // fill's asks are throttled by DEMAND alone, deliberately (see askDesire):
+  // a machine pinned below its demand - a bare slot, a clog, the settlement -
+  // was still granted its full demand-level intake, and exporting that grant
+  // as-is makes every downstream book lie in unison: the wire pill carries
+  // flow the card denies, a source drawer "drains" 0.05/s into an EBF at 0%,
+  // and the boundary calls the plan short of material nothing consumes. So
+  // the exported intake of every need is scaled down to the node's actual
+  // level here, after all verdicts are final. Settled boards already sit at
+  // exactly this bound (the settle asks are act-throttled), so this touches
+  // only the skip case. The verdict books - demand, availability, unmet
+  // desire - keep telling what is WANTED; this is only what MOVES.
+  for (const [, need] of needs) {
+    const info = infoById.get(need.targetId);
+    if (!info || need.nameplatePerSecond <= EPSILON) {
+      continue;
+    }
+    const allowed =
+      clampUtilization(act.get(need.targetId) ?? 0) * need.nameplatePerSecond;
+    const intakeEdges = [...need.machineEdges, ...need.storageEdges];
+    let intake = 0;
+    for (const edge of intakeEdges) {
+      intake += lastRound.eatenByEdge.get(edge.id) ?? 0;
+    }
+    if (intake <= allowed + Math.max(EPSILON, allowed * 1e-9)) {
+      continue;
+    }
+    const scale = allowed / intake;
+    for (const edge of intakeEdges) {
+      lastRound.eatenByEdge.set(edge.id, (lastRound.eatenByEdge.get(edge.id) ?? 0) * scale);
     }
   }
 
@@ -2075,6 +2380,7 @@ export function solveEquilibrium(
     clogOutputByNode: lastRound.clogOutputNext,
     actualByNode: act,
     actualLimitingInputByNode: actBinders,
+    actualClogOutputByNode: actClogBinders,
     edgeAllocations,
     eatenByNeed,
     unmetDesireByNeed: lastRound.unmetDesireByNeed,
@@ -2136,6 +2442,15 @@ interface RingAnchorPlan {
   /** Per bucket, this round's capability-measured ring supply of the
    * resource. Stamped by runRound before the fills run. */
   allowanceByBucket: Map<string, number>;
+  /**
+   * SETTLE-world anchors only: per need, the consumer's actual consumption
+   * (its settle level x nameplate). The settle fills ask at DEMAND, so the
+   * residual ask includes slack the node never eats - an anchor covering it
+   * would hold deliveredBound at demand-level forever and the ring would run
+   * on anchor material. Capped at consumption, the anchor smooths dips and
+   * idles at the fixed point, where the original validation reads it.
+   */
+  consumptionCapByNeed?: Map<string, number>;
 }
 
 function runFill(
@@ -2336,7 +2651,14 @@ function runFill(
       for (const edge of anchorEdges) {
         granted += grants.get(edge.id) ?? 0;
       }
-      const grant = Math.min(rem, Math.max(0, capability - granted));
+      const consumptionCap = anchors.consumptionCapByNeed?.get(needKey);
+      const grant = Math.min(
+        rem,
+        Math.max(0, capability - granted),
+        consumptionCap === undefined
+          ? Number.POSITIVE_INFINITY
+          : Math.max(0, consumptionCap - granted),
+      );
       if (grant <= EPSILON) {
         continue;
       }

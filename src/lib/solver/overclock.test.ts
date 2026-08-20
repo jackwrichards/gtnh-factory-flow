@@ -103,7 +103,7 @@ describe("GT overclocking", () => {
       },
     );
 
-    expect(stats.tier).toBe("OpV");
+    expect(stats.tier).toBe("UXV");
     expect(stats.overclockSteps).toBe(11);
     expect(stats.eut).toBe(120 * 4 ** 11);
   });

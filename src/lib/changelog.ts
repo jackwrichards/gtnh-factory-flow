@@ -73,14 +73,35 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "2.17.1",
-    date: "2026-08-19",
+    version: "2.19.0",
+    date: "2026-08-20",
     headline: "Generators",
     notes: [
       "Power is a real resource on the board: every machine shows the grid it draws from, and you can wire it in.",
       "Add a generator with one click: the power list shows what each grid needs and what it gets, with a button to close the gap.",
       "The fuel estimate is gone — your plan's power comes from real GTNH generators, from gas and steam turbines to fission, fusion, solar and RTG.",
-      "The resource and power lists lost their stray scroll bars, and power lines lost their hover popups.",
+    ],
+  },
+  {
+    version: "2.18.1",
+    date: "2026-08-19",
+    headline: "Seeds are not machines",
+    notes: [
+      "A board that read 0% after you wired in a supply drawer runs again.",
+      "The machine list counts the Crop Managers and Industrial Farms your crops fill, not one machine per seed.",
+      "A shared setup's card refreshes its rates with the current app instead of showing the numbers it was saved with.",
+      "The two voltage tiers above UIV now wear their right names: UMV, then UXV.",
+    ],
+  },
+  {
+    version: "2.18.0",
+    date: "2026-08-19",
+    headline: "Stalled lines read stalled",
+    notes: [
+      "A machine only counts what really arrives and only makes what something takes away.",
+      "A loop that cannot keep itself fed reads 0%, and each card names what stops it.",
+      "WASD and the arrow keys pan the board, plus and minus zoom it.",
+      "The side panel scrolls cleanly while a row is popped out wide.",
     ],
   },
   {

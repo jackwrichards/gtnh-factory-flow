@@ -737,18 +737,18 @@ describe("generators domain becomes recipes", () => {
   });
 
   it("keeps a combined fusion burn as one recipe with both fuels and the plasma byproduct", () => {
-    const fusion = dataset.recipes.find((entry) => entry.id.endsWith("large-fusion-computer:uxv-deuterium-tritium"));
+    const fusion = dataset.recipes.find((entry) => entry.id.endsWith("large-fusion-computer:umv-deuterium-tritium"));
 
     expect(fusion).toBeDefined();
     expect(fusion.durationTicks).toBe(100);
-    expect(fusion.minimumTier).toBe("UXV");
+    expect(fusion.minimumTier).toBe("UMV");
     expect(fusion.name).toBe("Large Fusion Computer: Deuterium + Tritium");
     expect(fusion.inputs.map((input) => [input.id, input.amount])).toEqual([
       ["deuterium", 4],
       ["tritium", 4],
     ]);
     expect(fusion.outputs.map((output) => [output.kind, output.id, output.amount])).toEqual([
-      ["energy", "uxv", 2500000],
+      ["energy", "umv", 2500000],
       ["item", "gregtech:gt.metaitem.02@32400", 1],
     ]);
   });
@@ -817,8 +817,8 @@ describe("generators domain becomes recipes", () => {
       ["ev", "Energy (EV)", undefined],
       ["lv", "Energy (LV)", undefined],
       ["ulv", "Energy (ULV)", undefined],
+      ["umv", "Energy (UMV)", undefined],
       ["uv", "Energy (UV)", undefined],
-      ["uxv", "Energy (UXV)", undefined],
     ]);
   });
 

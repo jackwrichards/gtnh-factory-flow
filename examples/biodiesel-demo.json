@@ -361,6 +361,14 @@
       "resourceKind": "fluid",
       "resourceId": "methanol",
       "label": "Methanol"
+    },
+    {
+      "id": "edge-carbon-spare",
+      "source": "node-electrolyzer",
+      "target": "demo-carbon-drawer",
+      "resourceKind": "item",
+      "resourceId": "carbon_dust",
+      "label": "Carbon Dust"
     }
   ],
   "fuelProfiles": [
@@ -395,5 +403,18 @@
     "isDemo": true,
     "source": "Manual GTNH Factory Flow MVP demo, not an authoritative GTNH dataset.",
     "createdAt": "2026-05-19T00:00:00.000Z"
-  }
+  },
+  "storages": [
+    {
+      "id": "demo-carbon-drawer",
+      "kind": "item",
+      "resourceId": "carbon_dust",
+      "displayName": "Carbon Dust",
+      "drainMode": "byproduct",
+      "position": {
+        "x": -580,
+        "y": 340
+      }
+    }
+  ]
 }

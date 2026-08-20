@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { factoryProjectSchema } from "@/lib/model/schemas";
+import { normalizeLoadedProject } from "@/lib/model/project-normalize";
 import { calculateThroughput } from "@/lib/solver";
 import { computeCommunityPlanStats } from "@/lib/community/plan-stats";
+import type { CommunityPlanSummary } from "@/lib/community/types";
+import { APP_VERSION } from "@/lib/version";
 import {
   COMMUNITY_DESCRIPTION_MAX_LENGTH,
   COMMUNITY_NAME_MAX_LENGTH,
@@ -74,6 +78,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ plan
       { ...data, views: data.views + (countView ? 1 : 0) },
       sessionUser?.id,
     );
+    await refreshStaleStats(db, planId, plan);
     if (deviceId) {
       await attachMyVotes([plan], makeActorKey(request, deviceId));
     }
@@ -84,6 +89,76 @@ export async function GET(request: Request, { params }: { params: Promise<{ plan
       { error: error instanceof Error ? error.message : "Loading the plan failed." },
       { status: 500 },
     );
+  }
+}
+
+/**
+ * Saved stat cards go stale as the solver improves: a plan shared by an old
+ * release keeps the numbers that release computed, so its preview disagrees
+ * with the board a player sees on opening it. On preview open, recompute from
+ * the stored plan JSON with today's solver — once per plan per release — and
+ * persist the result. Best-effort throughout: a schema without the
+ * stats_version column, a plan today's parser rejects, or a failed write all
+ * leave the saved card serving as before, except that freshly computed
+ * numbers still go out in this response even when the write fails.
+ */
+async function refreshStaleStats(
+  db: SupabaseClient,
+  planId: string,
+  plan: CommunityPlanSummary,
+): Promise<void> {
+  try {
+    const { data, error } = await db
+      .from("community_plans")
+      .select("stats_version")
+      .eq("id", planId)
+      .single<{ stats_version: string | null }>();
+    if (error || data?.stats_version === APP_VERSION) {
+      return;
+    }
+
+    const { data: planRow } = await db
+      .from("community_plans")
+      .select("plan")
+      .eq("id", planId)
+      .single<{ plan: unknown }>();
+    const parsed = factoryProjectSchema.safeParse(planRow?.plan);
+    if (!parsed.success) {
+      return;
+    }
+
+    // The same funnel the board runs a loaded plan through, so the card and
+    // the opened tab compute from the identical project.
+    const project = normalizeLoadedProject(parsed.data);
+    const stats = computeCommunityPlanStats(project, calculateThroughput(project));
+    plan.needs = stats.needs;
+    plan.outputs = stats.outputs;
+    plan.totalEuT = stats.totalEuT;
+    plan.machineCount = stats.machineCount;
+    plan.nodeCount = stats.nodeCount;
+    plan.storageCount = stats.storageCount;
+    plan.edgeCount = stats.edgeCount;
+    plan.highestTier = stats.highestTier;
+    plan.highestTierIndex = stats.highestTierIndex;
+
+    // Not an author edit: updated_at stays untouched.
+    await db
+      .from("community_plans")
+      .update({
+        needs: stats.needs,
+        outputs: stats.outputs,
+        total_eu_t: stats.totalEuT,
+        machine_count: stats.machineCount,
+        node_count: stats.nodeCount,
+        storage_count: stats.storageCount,
+        edge_count: stats.edgeCount,
+        highest_tier: stats.highestTier ?? null,
+        highest_tier_index: stats.highestTierIndex,
+        stats_version: APP_VERSION,
+      })
+      .eq("id", planId);
+  } catch {
+    // A plan today's solver chokes on keeps its saved card.
   }
 }
 
@@ -201,6 +276,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ plan
         edge_count: stats.edgeCount,
         highest_tier: stats.highestTier ?? null,
         highest_tier_index: stats.highestTierIndex,
+        stats_version: APP_VERSION,
       });
     }
 

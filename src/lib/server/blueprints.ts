@@ -6,6 +6,8 @@ import {
   type BlueprintSummary,
 } from "@/lib/blueprints/types";
 import type { EntryIcon } from "@/lib/community/types";
+import { getNodeMachineBuildCount } from "@/lib/model/passive-production";
+import type { FactoryNode, Recipe } from "@/lib/model/types";
 import { getCommunityDb } from "@/lib/server/community";
 
 /**
@@ -26,6 +28,24 @@ const resourceStatsSchema = z.array(resourceStatSchema).max(BLUEPRINT_RESOURCE_S
 export function parseResourceStats(value: unknown) {
   const parsed = resourceStatsSchema.safeParse(value);
   return parsed.success ? parsed.data : [];
+}
+
+/**
+ * Machines a captured payload builds. Crop cards count the harvesters their
+ * planted crops fill, never one machine per seed.
+ */
+export function countBlueprintMachines(captured: {
+  nodes: Array<
+    Pick<FactoryNode, "recipeId" | "machineCount"> &
+      Partial<Pick<FactoryNode, "machineConfigTiers" | "machineHandlerId">>
+  >;
+  recipes: Array<Pick<Recipe, "id" | "machineType" | "source" | "metadata">>;
+}): number {
+  const recipesById = new Map(captured.recipes.map((recipe) => [recipe.id, recipe]));
+  return captured.nodes.reduce(
+    (sum, node) => sum + getNodeMachineBuildCount(recipesById.get(node.recipeId), node),
+    0,
+  );
 }
 
 export const BLUEPRINT_SUMMARY_COLUMNS =
@@ -60,11 +80,13 @@ export interface BlueprintRow {
 /** GT tier labels a blueprint may report; anything else stores as none. */
 const KNOWN_TIERS = new Set([
   "ULV", "LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV",
-  "UHV", "UEV", "UIV", "UXV", "OpV", "MAX",
+  "UHV", "UEV", "UIV", "UMV", "UXV", "MAX",
 ]);
 
 export function parseHighestTier(value: unknown): string | null {
-  return typeof value === "string" && KNOWN_TIERS.has(value) ? value : null;
+  // "OpV" is the old misname of the 536M EU/t tier; it stores as UXV now.
+  const tier = value === "OpV" ? "UXV" : value;
+  return typeof tier === "string" && KNOWN_TIERS.has(tier) ? tier : null;
 }
 
 export function rowToBlueprintSummary(

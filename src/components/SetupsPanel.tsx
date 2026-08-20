@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ArrowBigUp,
   Check,
@@ -23,6 +23,7 @@ import { normalizeBlueprintTags } from "@/lib/blueprints/types";
 import {
   deleteCommunityPlan,
   downloadCommunityPlan,
+  getCommunityPlan,
   listCommunityPlans,
   patchCommunityPlan,
   tagPlanWithCommunityId,
@@ -197,6 +198,35 @@ export function SetupsPanel() {
             plans: current.plans.map((plan) => (plan.id === planId ? patch(plan) : plan)),
           }
         : current,
+    );
+  };
+
+  // A post shared by an old release carries the stat card that release
+  // computed, and the server only recomputes it when the plan is fetched
+  // alone. Pointing at a row is where those numbers show, so the first hover
+  // asks once for the current summary and patches the stat fields in place —
+  // never counts, votes or tags, which the row may have moved locally since.
+  const refreshedStatsRef = useRef(new Set<string>());
+  const refreshStats = (planId: string) => {
+    if (refreshedStatsRef.current.has(planId)) {
+      return;
+    }
+    refreshedStatsRef.current.add(planId);
+    void getCommunityPlan(planId, { countView: false }).then(
+      (summary) =>
+        patchPlan(planId, (entry) => ({
+          ...entry,
+          needs: summary.needs,
+          outputs: summary.outputs,
+          totalEuT: summary.totalEuT,
+          machineCount: summary.machineCount,
+          nodeCount: summary.nodeCount,
+          storageCount: summary.storageCount,
+          edgeCount: summary.edgeCount,
+          highestTier: summary.highestTier,
+          highestTierIndex: summary.highestTierIndex,
+        })),
+      () => refreshedStatsRef.current.delete(planId),
     );
   };
 
@@ -533,6 +563,7 @@ export function SetupsPanel() {
                   onEditIcon={() => setIconEditId(plan.id)}
                   onSaveTags={(tags) => void saveTags(plan, tags)}
                   onTag={(tag) => setQuery(`#${tag}`)}
+                  onHover={() => refreshStats(plan.id)}
                 />
               ))}
             </ul>
@@ -626,6 +657,7 @@ function SetupRow({
   onEditIcon,
   onSaveTags,
   onTag,
+  onHover,
 }: {
   plan: CommunityPlanSummary;
   busy?: "open" | "pocket";
@@ -642,6 +674,7 @@ function SetupRow({
   onEditIcon: () => void;
   onSaveTags: (tags: string[]) => void;
   onTag: (tag: string) => void;
+  onHover: () => void;
 }) {
   const isBusy = busy !== undefined;
   // The overwrite asks first: it names the tab that would replace the post.
@@ -671,6 +704,7 @@ function SetupRow({
   return (
     <li
       className="group rounded-[4px] border border-neutral-700 bg-[#25272c] px-1.5 py-1 hover:border-neutral-500"
+      onMouseEnter={onHover}
       // Double-click anywhere that isn't a button opens the setup — the
       // folder button stays as the single-click way.
       onDoubleClick={(event) => {

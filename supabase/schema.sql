@@ -63,6 +63,11 @@ alter table community_plans add column if not exists tags_text text not null def
 alter table community_plans add column if not exists is_public boolean not null default true;
 -- The item face the author picked for list rows: {kind, resourceId, icon refs}.
 alter table community_plans add column if not exists icon jsonb;
+-- The app release whose solver computed the stored stat card. The plan detail
+-- read recomputes stats from the plan JSON when this trails the running
+-- release, so old cards heal as the solver improves. Empty means unknown,
+-- which counts as stale.
+alter table community_plans add column if not exists stats_version text not null default '';
 
 create index if not exists community_plans_public_idx
   on community_plans (is_public, created_at desc);

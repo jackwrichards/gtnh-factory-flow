@@ -62,7 +62,7 @@ public final class GtnhCalcOracleExporter {
 
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
     private static final String[] GT_VOLTAGE_NAMES = new String[] {
-        "ULV", "LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV", "UHV", "UEV", "UIV", "UXV", "OpV", "MAX"
+        "ULV", "LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV", "UHV", "UEV", "UIV", "UMV", "UXV", "MAX"
     };
     private static final long[] GT_VOLTAGES = new long[] {
         8L, 32L, 128L, 512L, 2048L, 8192L, 32768L, 131072L, 524288L, 2097152L, 8388608L,

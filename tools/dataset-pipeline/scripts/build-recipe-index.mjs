@@ -246,7 +246,6 @@ function tierIndex(recipe) {
     "UIV",
     "UMV",
     "UXV",
-    "OpV",
     "MAX",
   ];
   const explicitTierIndex = tiers.indexOf(recipe.minimumTier);

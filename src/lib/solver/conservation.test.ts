@@ -308,6 +308,33 @@ describe("conservation: both ends, or the machine does not run", () => {
     expect(result.externalInputs.find((b) => b.resourceId === "gold")).toBeUndefined();
   });
 
+  it("a machine stopped by a bare slot draws nothing from its source drawer", () => {
+    // The player's board: an EBF with its fluid input unwired, magnesium on a
+    // SOURCE drawer, products drained. The card read 0% while the drawer
+    // "drained" the full nameplate into it and the boundary called the plan
+    // short of magnesium - the desire fill's grants are demand-throttled on
+    // purpose, so the exported books must be clamped to what the node runs at.
+    const result = calculateThroughput(
+      project({
+        recipes: [recipe("mix", [["gold", 5], ["redstone", 5]], [["goldblock", 1]])],
+        nodes: [node("au", "mix")],
+        storages: [drawer("src", "gold"), drawer("d-au", "goldblock")],
+        edges: [wire("s1", "src", "au", "gold"), wire("d2", "au", "d-au", "goldblock")],
+      }),
+      { generatedAt: "fixed" },
+    );
+
+    expect(result.nodes["au"].utilization).toBeCloseTo(0);
+    // The wire still SHOWS the want - diagnosis - but carries nothing.
+    expect(result.edges["s1"].demandPerSecond).toBeCloseTo(5);
+    expect(result.edges["s1"].transferredPerSecond).toBeCloseTo(0);
+    // The drawer pours nothing, and the plan is not "short" of gold: the
+    // boundary and the warnings read off the same physical book as the card.
+    expect(result.storages["src"].consumedPerSecond).toBeCloseTo(0);
+    expect(result.externalInputs.find((b) => b.resourceId === "gold")).toBeUndefined();
+    expect(result.bottlenecks).toHaveLength(0);
+  });
+
   it("a SOURCE drawer is how a plan says it imports something", () => {
     const result = calculateThroughput(
       project({
@@ -773,26 +800,32 @@ describe("conservation: the settled flows never outrun the wires", () => {
       { generatedAt: "fixed" },
     );
 
-    // The LCR is clogged by HCl at 6.25% - and BOTH its sides say so at once.
-    // Before the convergence fix the loop stopped while the priority tranches
-    // were still moving, and one report mixed 4.17% inputs with 6.25% outputs.
+    // The LCR is clogged by HCl at exactly the level the game reaches: its
+    // HCl (1000/3 per op) plus the tower's recycled share (a fifth of that)
+    // must ALL be drunk by the electrolyzer, so 500·L = (250/9)·E with E
+    // capped at 1, and L = 1/18 = 5.56%. Two answers this test has pinned
+    // before were both artifacts: 6.25% let the tower's surplus dHCl vanish
+    // from the books, and 4.17% froze the electrolyzer at a stale 75% demand
+    // because the chlorine SOURCE quietly covered the residual ask (the
+    // demand-reclaim rule is what cures that).
     const lcr = result.nodes["lcr"];
-    expect(lcr.utilization).toBeCloseTo(0.0625, 3);
+    expect(lcr.utilization).toBeCloseTo(1 / 18, 3);
     expect(lcr.clogOutputKey).toBe("item:hcl");
-    expect(result.edges["e-methane"].transferredPerSecond).toBeCloseTo((1000 / 3) * 0.0625, 3);
-    expect(result.edges["e-hcl"].transferredPerSecond).toBeCloseTo((1000 / 3) * 0.0625, 3);
+    expect(result.nodes["elec"].utilization).toBeCloseTo(1, 3);
+    expect(result.edges["e-methane"].transferredPerSecond).toBeCloseTo((1000 / 3) / 18, 3);
+    expect(result.edges["e-hcl"].transferredPerSecond).toBeCloseTo((1000 / 3) / 18, 3);
 
-    // The chem reactor runs at the PDMS that arrives: 0.03125/s of a 0.3/s
-    // appetite is 10.4%, and the product drawer banks 4.5 L/s - not 43.2.
+    // The chem reactor runs at the PDMS that arrives: 0.5/18 = 0.02778/s of a
+    // 0.3/s appetite is 9.26%, and the product drawer banks 4.0 L/s - not 43.2.
     const chem = result.nodes["chem"];
-    expect(chem.utilization).toBeCloseTo(0.104, 2);
+    expect(chem.utilization).toBeCloseTo(0.5 / 18 / 0.3, 2);
     expect(chem.limitingInputKey).toBe("item:pdms");
-    expect(result.storages["d-silicone"].producedPerSecond).toBeCloseTo(4.5, 2);
+    expect(result.storages["d-silicone"].producedPerSecond).toBeCloseTo(43.2 * (0.5 / 18 / 0.3), 2);
     // The want survives for the striped bar: the wire still says 0.3/s asked.
     expect(result.edges["e-pdms"].nameplateDemandPerSecond).toBeCloseTo(0.3, 3);
-    expect(result.edges["e-pdms"].transferredPerSecond).toBeCloseTo(0.03125, 3);
+    expect(result.edges["e-pdms"].transferredPerSecond).toBeCloseTo(0.5 / 18, 3);
     // And its sulfur drawer drains at the settled level, not the nameplate.
-    expect(result.edges["e-sulfur"].transferredPerSecond).toBeCloseTo((1 / 30) * 0.104, 3);
+    expect(result.edges["e-sulfur"].transferredPerSecond).toBeCloseTo((1 / 30) * (0.5 / 18 / 0.3), 3);
 
     // Nothing anywhere eats more than its wires deliver, and (everything here
     // being fully wired with no banked stock) nothing arrives uneaten either.
@@ -814,5 +847,84 @@ describe("conservation: the settled flows never outrun the wires", () => {
         expect(Math.abs(consumed - delivered)).toBeLessThan(0.001);
       }
     }
+  });
+
+  it("a recycle loop that returns less than it eats reads zero, not a made-up level", () => {
+    // The bauxite storm (2026-08-18), distilled: the mixer needs 9 lye per op
+    // and the loop hands back 0.75, with no other supply anywhere. In game the
+    // line runs until the primed lye is gone and then stands still forever -
+    // so the planner says zero, with the wires quiet and nothing minted. The
+    // live site's 23% was byproducts of production that never really happened.
+    const result = calculateThroughput(
+      project({
+        recipes: [
+          recipe("mixline", [["lye", 9], ["ore", 1]], [["slurry", 1]]),
+          recipe("refine", [["slurry", 1]], [["lye", 0.75], ["alumina", 1]]),
+        ],
+        nodes: [node("mx", "mixline"), node("rf", "refine")],
+        storages: [drawer("src-ore", "ore"), drawer("d-al", "alumina")],
+        edges: [
+          wire("w-ore", "src-ore", "mx", "ore"),
+          wire("w-slurry", "mx", "rf", "slurry"),
+          wire("w-lye", "rf", "mx", "lye"),
+          wire("w-al", "rf", "d-al", "alumina"),
+        ],
+      }),
+      { generatedAt: "fixed" },
+    );
+
+    expect(result.nodes["mx"].utilization).toBeCloseTo(0, 3);
+    expect(result.nodes["rf"].utilization).toBeCloseTo(0, 3);
+    for (const edgeId of ["w-ore", "w-slurry", "w-lye", "w-al"]) {
+      expect(result.edges[edgeId].transferredPerSecond).toBeCloseTo(0, 3);
+    }
+    // No phantom imports and no phantom products.
+    expect(result.externalInputs.find((b) => b.resourceId === "ore")).toBeUndefined();
+    expect(result.storages["d-al"].producedPerSecond).toBeCloseTo(0, 3);
+  });
+
+  it("a healthy balanced ring is untouched by an unrelated machine settling", () => {
+    // The mirror-bound fear: enforcing conservation must never bleed a
+    // mass-conserving ring (loop gain exactly 1.0) to zero through iteration
+    // lag while the settlement re-books an unrelated corner of the board.
+    // Here the ring circulates one token through three machines while a
+    // stopped machine elsewhere (bare gas slot, fuel on a source drawer)
+    // forces the settlement to run. The ring must hold full speed and the
+    // stopped machine's drawer must stay quiet.
+    const result = calculateThroughput(
+      project({
+        recipes: [
+          recipe("r1", [["la", 1], ["water", 1]], [["lb", 1], ["prod", 1]]),
+          recipe("r2", [["lb", 1]], [["lc", 1]]),
+          recipe("r3", [["lc", 1]], [["la", 1]]),
+          recipe("stalled", [["fuel", 1], ["gas", 1]], [["out", 1]]),
+        ],
+        nodes: [node("n1", "r1"), node("n2", "r2"), node("n3", "r3"), node("tm", "stalled")],
+        storages: [
+          drawer("src-water", "water"),
+          drawer("src-fuel", "fuel"),
+          drawer("d-prod", "prod"),
+          drawer("d-out", "out"),
+        ],
+        edges: [
+          wire("w-water", "src-water", "n1", "water"),
+          wire("w-lb", "n1", "n2", "lb"),
+          wire("w-lc", "n2", "n3", "lc"),
+          wire("w-la", "n3", "n1", "la"),
+          wire("w-prod", "n1", "d-prod", "prod"),
+          wire("w-fuel", "src-fuel", "tm", "fuel"),
+          wire("w-out", "tm", "d-out", "out"),
+        ],
+      }),
+      { generatedAt: "fixed" },
+    );
+
+    expect(result.nodes["n1"].utilization).toBeCloseTo(1, 3);
+    expect(result.nodes["n2"].utilization).toBeCloseTo(1, 3);
+    expect(result.nodes["n3"].utilization).toBeCloseTo(1, 3);
+    expect(result.nodes["tm"].utilization).toBeCloseTo(0, 3);
+    expect(result.edges["w-fuel"].transferredPerSecond).toBeCloseTo(0, 3);
+    expect(result.edges["w-la"].transferredPerSecond).toBeCloseTo(1, 3);
+    expect(result.storages["d-prod"].producedPerSecond).toBeCloseTo(1, 3);
   });
 });

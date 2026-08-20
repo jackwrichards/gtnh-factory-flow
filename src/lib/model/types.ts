@@ -47,8 +47,8 @@ export type MachineTier =
   | "UHV"
   | "UEV"
   | "UIV"
+  | "UMV"
   | "UXV"
-  | "OpV"
   | "MAX"
   | "DEMO";
 

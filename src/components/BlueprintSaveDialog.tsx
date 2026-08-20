@@ -4,6 +4,7 @@ import { Globe, LoaderCircle, Save, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { computeBlueprintIo } from "@/lib/blueprints/io-stats";
 import { normalizeBlueprintTags } from "@/lib/blueprints/types";
+import { getNodeMachineBuildCount } from "@/lib/model/passive-production";
 import type { EntryIcon } from "@/lib/community/types";
 import { useBlueprintStore, type BlueprintSaveRequest } from "@/store/blueprint-store";
 import { renderIoStats, TierBadge } from "./shelf-cards";
@@ -42,10 +43,14 @@ function SaveDialogBody({ request }: { request: BlueprintSaveRequest }) {
 
   const io = useMemo(() => computeBlueprintIo(request.payload), [request.payload]);
   const cardCount = request.payload.nodes.length + request.payload.storages.length;
-  const machineCount = request.payload.nodes.reduce(
-    (sum, node) => sum + Math.max(0, Math.round(node.machineCount)),
-    0,
-  );
+  // Crop cards count the harvesters their crops fill, not seeds.
+  const machineCount = useMemo(() => {
+    const recipesById = new Map(request.payload.recipes.map((recipe) => [recipe.id, recipe]));
+    return request.payload.nodes.reduce(
+      (sum, node) => sum + getNodeMachineBuildCount(recipesById.get(node.recipeId), node),
+      0,
+    );
+  }, [request.payload]);
   const isOverwrite = Boolean(request.blueprintId);
 
   const close = () => setSaveRequest(undefined);

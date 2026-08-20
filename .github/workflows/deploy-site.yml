@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - develop
   workflow_dispatch:
 
 permissions:
@@ -31,10 +30,6 @@ jobs:
             main)
               deploy_name="gtnh-factory-flow"
               port="8580"
-              ;;
-            develop)
-              deploy_name="gtnh-factory-flow-dev"
-              port="8581"
               ;;
             *)
               echo "Unsupported deploy branch: ${GITHUB_REF_NAME}" >&2

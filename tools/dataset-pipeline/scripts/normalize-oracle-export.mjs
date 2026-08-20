@@ -30,8 +30,8 @@ const GT_VOLTAGE_NAMES = [
   "UHV",
   "UEV",
   "UIV",
+  "UMV",
   "UXV",
-  "OpV",
   "MAX",
 ];
 if (!inputPath || !outputPath) {
@@ -2399,8 +2399,8 @@ function voltageTierForEu(eut) {
     ["UHV", 2097152],
     ["UEV", 8388608],
     ["UIV", 33554432],
-    ["UXV", 134217728],
-    ["OpV", 536870912],
+    ["UMV", 134217728],
+    ["UXV", 536870912],
   ];
   return tiers.find(([, max]) => value <= max)?.[0] ?? "MAX";
 }

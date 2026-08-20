@@ -10,6 +10,15 @@ import { machineArtPixels } from "./flow/MachinePicker";
 import { ResourceIcon } from "./nei/ResourceIcon";
 import { getSelectedMachineHandler } from "@/lib/model/recipe-rules";
 import { isCustomRateRecipe } from "@/lib/model/custom-rate";
+import {
+  CROP_HARVESTER_INDUSTRIAL_FARM_ID,
+  cropsNhHarvesterFromTiers,
+  cropsNhHarvesterMachineCount,
+  cropsNhHarvesterTierName,
+  cropsNhIsHandPicked,
+  getCropsNhStats,
+  isCropProductionRecipe,
+} from "@/lib/model/passive-production";
 import { formatCompact, formatCompactStable } from "@/lib/model/resources";
 import { getVoltageTierIndex } from "@/lib/model/tiers";
 import type { MachineTier } from "@/lib/model/types";
@@ -103,12 +112,26 @@ export function MachineShoppingList() {
         continue;
       }
       const handler = getSelectedMachineHandler(recipe, node);
+      // A crop card's machineCount is planted crops, not machines. What it
+      // builds is the manager or farm those crops fill; a hand-picked or
+      // legacy passive crop builds nothing and stays off the list.
+      const crop = getCropsNhStats(recipe)
+        ? cropsNhHarvesterFromTiers(node.machineConfigTiers, node.machineHandlerId)
+        : undefined;
+      if (crop ? cropsNhIsHandPicked(crop) : isCropProductionRecipe(recipe)) {
+        continue;
+      }
       // A steam machine's row bills litres, never EU: its power report would
       // only carry a phantom tier chip and a zero draw.
       const steam = getNodeSteamReport(recipe, node);
       const report =
         !steam && hasPowerReport(recipe) ? getNodePowerReport(recipe, node) : undefined;
-      const count = node.machineCount * Math.max(1, node.parallel);
+      const count = crop
+        ? cropsNhHarvesterMachineCount(crop, node.machineCount)
+        : node.machineCount * Math.max(1, node.parallel);
+      if (crop && count <= 0) {
+        continue;
+      }
       // A machine at 30% runs at full draw 30% of the time, so its
       // time-averaged burn is the nameplate figure times its solved usage.
       // At exactly 0% it never starts, so even PEAK bills it nothing; any
@@ -156,14 +179,27 @@ export function MachineShoppingList() {
       // multiblock's hatch count splits it further. A steam multiblock splits
       // on its pressure: a bronze build and a steel one are different things
       // to construct.
+      // A crop harvester's build is its tier: an LV manager and an HV manager
+      // are different things to construct, exactly like powered machines.
+      const cropTier = crop
+        ? (cropsNhHarvesterTierName(crop.tierIndex) as VoltageTier)
+        : undefined;
       const buildKey = report
         ? `${report.tier}|${report.isMultiblock ? report.hatches : "single"}`
         : steam
           ? `steam|${steam.highPressure ? "high" : "bronze"}`
-          : "plain";
+          : cropTier
+            ? `crop|${cropTier}`
+            : "plain";
       // Steam machines sort with ULV: they are the start of the game, not the
       // end of the list a missing tier would banish them to.
-      const tierIndex = report ? getVoltageTierIndex(report.tier) : steam ? 0 : Number.POSITIVE_INFINITY;
+      const tierIndex = report
+        ? getVoltageTierIndex(report.tier)
+        : steam
+          ? 0
+          : cropTier
+            ? getVoltageTierIndex(cropTier)
+            : Number.POSITIVE_INFINITY;
       group.minTierIndex = Math.min(group.minTierIndex, tierIndex);
       const build =
         group.buildsByKey.get(buildKey) ??
@@ -172,8 +208,11 @@ export function MachineShoppingList() {
             key: `${handler.label}|${buildKey}`,
             count: 0,
             hatches: report?.hatches ?? 1,
-            isMultiblock: report?.isMultiblock ?? steam?.isMultiblock ?? false,
-            tier: report?.tier,
+            isMultiblock:
+              report?.isMultiblock ??
+              steam?.isMultiblock ??
+              crop?.id === CROP_HARVESTER_INDUSTRIAL_FARM_ID,
+            tier: report?.tier ?? cropTier,
             tierIndex,
             euT: undefined,
             steamLs: undefined,

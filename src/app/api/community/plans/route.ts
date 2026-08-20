@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { factoryProjectSchema } from "@/lib/model/schemas";
 import { calculateThroughput } from "@/lib/solver";
 import { computeCommunityPlanStats } from "@/lib/community/plan-stats";
+import { APP_VERSION } from "@/lib/version";
 import {
   COMMUNITY_DESCRIPTION_MAX_LENGTH,
   COMMUNITY_NAME_MAX_LENGTH,
@@ -230,6 +231,7 @@ export async function POST(request: Request) {
         edge_count: stats.edgeCount,
         highest_tier: stats.highestTier ?? null,
         highest_tier_index: stats.highestTierIndex,
+        stats_version: APP_VERSION,
         uploader_key: actorKey,
       })
       .select("id")

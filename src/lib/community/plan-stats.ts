@@ -1,5 +1,6 @@
 import type { FactoryProject, MachineTier, ThroughputResult } from "@/lib/model/types";
 import { GT_VOLTAGE_TIERS, getVoltageTierIndex } from "@/lib/model/tiers";
+import { getNodeMachineBuildCount } from "@/lib/model/passive-production";
 import {
   COMMUNITY_RESOURCE_STAT_LIMIT,
   type CommunityPlanStats,
@@ -30,13 +31,16 @@ export function computeCommunityPlanStats(
   let highestTierIndex = -1;
   let highestTier: Exclude<MachineTier, "DEMO"> | undefined;
   let machineCount = 0;
+  const recipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe]));
 
   for (const node of project.nodes) {
     if (!node.enabled) {
       continue;
     }
 
-    machineCount += Math.max(0, Math.round(node.machineCount));
+    // A crop card's machineCount is planted crops, not machines: it counts
+    // the managers or farms those crops fill, and hand-picked crops nothing.
+    machineCount += getNodeMachineBuildCount(recipesById.get(node.recipeId), node);
     if (isVoltageTier(node.overclockTier)) {
       const index = getVoltageTierIndex(node.overclockTier);
       if (index > highestTierIndex) {

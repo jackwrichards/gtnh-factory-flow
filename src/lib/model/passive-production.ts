@@ -1,4 +1,5 @@
 import type {
+  FactoryNode,
   MachineConfigControl,
   MachineConfigTierOption,
   MachineHandler,
@@ -347,6 +348,47 @@ export function cropsNhCropsPerMachine(setup: CropHarvesterSetup): number {
     return cropsNhSquarePerTier(setup.tierIndex) * CROP_MANAGER_LAYERS;
   }
   return cropsNhSquarePerTier(setup.tierIndex);
+}
+
+/**
+ * Machines a crop card actually builds. A crop card's `machineCount` is the
+ * number of PLANTED CROPS, never a machine count: fifty oilberry sticks under
+ * one LV Crop Manager are one machine, not fifty. Hand-picked crops build
+ * nothing at all.
+ */
+export function cropsNhHarvesterMachineCount(
+  setup: CropHarvesterSetup,
+  cropCount: number,
+): number {
+  if (cropsNhIsHandPicked(setup) || !(cropCount > 0)) {
+    return 0;
+  }
+  return Math.ceil(cropCount / cropsNhCropsPerMachine(setup));
+}
+
+/**
+ * What a card contributes to a MACHINE count (the build list, a shared plan's
+ * stat card, a pocket's face). An ordinary card is its machineCount; a crop
+ * card counts the harvesters its planted crops fill instead, and the legacy
+ * passive crops, which have no harvester behind them at all, count nothing.
+ */
+export function getNodeMachineBuildCount(
+  recipe:
+    | (Pick<Recipe, "machineType" | "source" | "metadata"> & { name?: string; recipeMap?: string })
+    | undefined,
+  node: Pick<FactoryNode, "machineCount"> &
+    Partial<Pick<FactoryNode, "machineConfigTiers" | "machineHandlerId">>,
+): number {
+  if (recipe && getCropsNhStats(recipe)) {
+    return cropsNhHarvesterMachineCount(
+      cropsNhHarvesterFromTiers(node.machineConfigTiers, node.machineHandlerId),
+      Math.round(node.machineCount),
+    );
+  }
+  if (recipe && isCropProductionRecipe(recipe)) {
+    return 0;
+  }
+  return Math.max(0, Math.round(node.machineCount));
 }
 
 /** `MTEIndustrialFarm`: upgrade slots = clamp(tier - MIN_CASING_TIER + 1, 1, 12). */

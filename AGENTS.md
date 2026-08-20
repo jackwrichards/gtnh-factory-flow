@@ -26,8 +26,16 @@ Working notes for future agents on GTNH Factory Flow.
   THEIR board, a headline plus at most four notes. Every note is one short
   sentence. No second sentence saying what it used to do, no reasoning, no
   jargon ("solver", "refactor", "edge role"). Newest first.
-- Default working branch for feature work is `develop`.
-- `main` is production. Push/merge there only when the user asks for main/prod deployment.
+- `main` is the ONLY branch, by explicit decision (2026-08-19): all work lands
+  on it, and stale feature branches were deleted after verifying main carried
+  every patch. Do not accumulate long-lived branches; the unmerged
+  reachability-wizard work survives as the tag `archive/reachability-wizard`.
+- Pushing `main` does not deploy gtnhplanner.com by itself; deploys are asked
+  for explicitly.
+- CI (`.github/workflows/ci.yml`) runs typecheck + the full vitest suite on
+  every PR and push to main. The suite is expected GREEN; there are no
+  tolerated failures. A test pinning player-facing copy must be updated in the
+  same change that rewords the copy.
 - `https://gtnhplanner.com/` is production for this repo.
 - `origin` is `jackwrichards/gtnh-factory-flow` (this project). `upstream` is
   `Samiracle64/gtnh-factory-flow`, the repo this was originally forked from -
@@ -36,7 +44,7 @@ Working notes for future agents on GTNH Factory Flow.
 - To regenerate both datasets:
 
 ```bash
-gh workflow run "GTNH dataset pipeline" --ref develop -f channel=both -f publish=true -f force_rebuild=true
+gh workflow run "GTNH dataset pipeline" --ref main -f channel=both -f publish=true -f force_rebuild=true
 ```
 
 - Watch long runs instead of assuming success:

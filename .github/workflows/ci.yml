@@ -1,0 +1,37 @@
+# Typecheck + tests on every pull request and every push to main — the same
+# two commands AGENTS.md names as the verification suite. The full suite is
+# expected green: as of 2026-08-19 there are no tolerated failures, so any
+# red here is a real regression (or a test left pinning copy that changed —
+# update the pin in the same PR that changes the copy).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Typecheck and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run test

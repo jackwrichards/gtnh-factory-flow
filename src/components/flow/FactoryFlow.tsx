@@ -206,6 +206,7 @@ import { rateUnitSuffix, type RateUnit } from "@/lib/model/rate-unit";
 import { useIsCompactViewport } from "@/lib/compact-view";
 import { browseHoveredPort } from "./port-browse";
 import { useBoardTouchGestures } from "./board-touch-gestures";
+import { useBoardCameraControls } from "./board-camera-controls";
 import { getSupplyCeiling } from "@/components/inspector/usage-limits";
 import {
   EDGE_DETAIL_ARROWS,
@@ -3979,6 +3980,11 @@ export function FactoryFlow() {
     enabled: nodeColorPaintMode === undefined && annotationTool === undefined && !isDeleteMode,
   });
 
+  // The camera under the hand: the wheel eases toward its target, a released
+  // pan glides for a beat, and WASD/arrows pan while PageUp/PageDown and +/-
+  // zoom. Owns the wheel outright — zoomOnScroll is off below.
+  useBoardCameraControls({ boardRef, instanceRef: flowInstanceRef });
+
   // Compact windows fold each toolbar into a single button, and only one of them
   // unfolds at a time: expanded, any two of these rows would cross each other on
   // a 390px board, which is the mess they are being folded away to avoid.
@@ -4543,6 +4549,11 @@ export function FactoryFlow() {
         // the pane, upstream of React's synthetic events — stopPropagation
         // in the dot handlers can never reach it, so it goes off wholesale.
         zoomOnDoubleClick={false}
+        // The wheel belongs to the camera controller (useBoardCameraControls),
+        // which eases toward a target zoom instead of stepping. One owner: with
+        // this on, d3 would fight the controller for the same wheel events.
+        // Touch pinch stays d3's (zoomOnPinch default).
+        zoomOnScroll={false}
         // The same floor and ceiling a framing move is clamped to.
         minZoom={BOARD_MIN_ZOOM}
         maxZoom={BOARD_MAX_ZOOM}

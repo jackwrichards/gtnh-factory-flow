@@ -18,7 +18,7 @@ export const GT_TIER_COLORS: Record<
   UHV: { background: "#cf2f2f", border: "#751919", text: "#ffffff", shadow: "#7d2020" },
   UEV: { background: "#2f2f2f", border: "#090909", text: "#ffffff", shadow: "#111111" },
   UIV: { background: "#f1f1f1", border: "#969696", text: "#111111", shadow: "#aaaaaa" },
-  UXV: { background: "#55dfe6", border: "#16868b", text: "#071b1a", shadow: "#1a9197" },
-  OpV: { background: "#2dd36f", border: "#146b38", text: "#06180c", shadow: "#18743d" },
+  UMV: { background: "#55dfe6", border: "#16868b", text: "#071b1a", shadow: "#1a9197" },
+  UXV: { background: "#2dd36f", border: "#146b38", text: "#06180c", shadow: "#18743d" },
   MAX: { background: "#ff5bd6", border: "#8c2172", text: "#111111", shadow: "#9a2b7f" },
 };

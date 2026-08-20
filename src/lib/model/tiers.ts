@@ -13,15 +13,15 @@ export const GT_VOLTAGE_TIERS: Array<{ tier: Exclude<MachineTier, "DEMO">; maxEu
   { tier: "UHV", maxEuT: 2097152 },
   { tier: "UEV", maxEuT: 8388608 },
   { tier: "UIV", maxEuT: 33554432 },
-  { tier: "UXV", maxEuT: 134217728 },
-  { tier: "OpV", maxEuT: 536870912 },
+  { tier: "UMV", maxEuT: 134217728 },
+  { tier: "UXV", maxEuT: 536870912 },
   { tier: "MAX", maxEuT: Number.POSITIVE_INFINITY },
 ];
 
 export const GT_OVERCLOCK_TIERS = GT_VOLTAGE_TIERS.filter((entry) => Number.isFinite(entry.maxEuT));
 
 export function getHighestFiniteVoltageTier(): Exclude<MachineTier, "DEMO"> {
-  return GT_OVERCLOCK_TIERS[GT_OVERCLOCK_TIERS.length - 1]?.tier ?? "OpV";
+  return GT_OVERCLOCK_TIERS[GT_OVERCLOCK_TIERS.length - 1]?.tier ?? "UXV";
 }
 
 export function getVoltageTierForEuT(euT: number): Exclude<MachineTier, "DEMO"> {
@@ -61,6 +61,12 @@ export function resolveVoltageTier(
   const tier = GT_OVERCLOCK_TIERS.find((entry) => entry.tier === value)?.tier;
   if (tier) {
     return tier;
+  }
+
+  // The 536M EU/t tier spent a while misnamed "OpV" (a GTCEu name; GTNH calls
+  // it UXV). Plans saved back then still say it, and it must keep its voltage.
+  if (value === "OpV") {
+    return "UXV";
   }
 
   if (value === "MAX") {
