@@ -3273,7 +3273,7 @@ public final class GtnhCalcOracleExporter {
 
     private String displayNameOf(Object value) {
         if (value instanceof FluidStack) {
-            return ((FluidStack) value).getName();
+            return ((FluidStack) value).fluid.getName();
         }
         if (value instanceof ItemStack) {
             return ((ItemStack) value).getDisplayName();
@@ -3717,6 +3717,43 @@ public final class GtnhCalcOracleExporter {
             return recipes;
         }
 
+        /**
+         * The machine's own fuel book, read off its live getRecipeMap()
+         * instead of a hardcoded static field. GTNH New Horizons moved the
+         * generator fuel maps out of gregtech.api.util.GT_Recipe_Map (which
+         * no longer exists) into per-mod singletons (gregtech.api.recipe.
+         * RecipeMaps, gtPlusPlus.api.recipe.GTPPRecipeMaps), but every
+         * generator still returns its own map from getRecipeMap(), so asking
+         * the machine is uniform across all the basic families and needs no
+         * per-family field name. Same shape as fuelBook: a live list of
+         * GTRecipe, sorted by the fuel's display name for determinism.
+         */
+        List<Object> machineFuelBook(Object mte, List<String> notes) {
+            List<Object> recipes = new ArrayList<Object>();
+            Object backend = invokeBest(mte, "getRecipeMap", new Object[0]);
+            if (backend == null) {
+                notes.add(id + ": no live getRecipeMap() on " + mte.getClass().getSimpleName());
+                return recipes;
+            }
+            Object list = invokeBest(backend, "getAllRecipes", new Object[0]);
+            if (list == null) {
+                notes.add(id + ": " + mte.getClass().getSimpleName() + " recipe map exposes no getAllRecipes()");
+                return recipes;
+            }
+            for (Object recipe : iterable(list)) {
+                recipes.add(recipe);
+            }
+            java.util.Collections.sort(recipes, new java.util.Comparator<Object>() {
+                @Override
+                public int compare(Object a, Object b) {
+                    Object fuelA = a instanceof GTRecipe ? fuelOf((GTRecipe) a) : null;
+                    Object fuelB = b instanceof GTRecipe ? fuelOf((GTRecipe) b) : null;
+                    return displayNameOf(fuelA).compareTo(displayNameOf(fuelB));
+                }
+            });
+            return recipes;
+        }
+
         Number maxEuOutput(Object mte, List<String> notes) {
             return asNumber(invokeBest(mte, "maxEUOutput", new Object[0]));
         }
@@ -3763,7 +3800,7 @@ public final class GtnhCalcOracleExporter {
 
         @Override
         void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes) {
-            List<Object> book = fuelBook(mapField, notes);
+            List<Object> book = machineFuelBook(mte, notes);
             if (book.isEmpty()) {
                 return;
             }
@@ -3922,7 +3959,7 @@ public final class GtnhCalcOracleExporter {
 
         @Override
         void fillEntries(Object mte, Map<String, Object> machine, List<Object> entries, List<String> notes) {
-            List<Object> book = fuelBook("rtgFuels", notes);
+            List<Object> book = machineFuelBook(mte, notes);
             if (book.isEmpty()) {
                 return;
             }
@@ -4272,9 +4309,14 @@ public final class GtnhCalcOracleExporter {
             if (fresh == null) {
                 return;
             }
-            Object fuelTank = fuel instanceof FluidStack
-                ? (Object) new FluidStack((FluidStack) fuel, 1000000)
-                : new ItemStack((ItemStack) fuel, 1000000);
+            Object fuelTank;
+            if (fuel instanceof FluidStack) {
+                fuelTank = new FluidStack((FluidStack) fuel, 1000000);
+            } else {
+                ItemStack bigFuel = ((ItemStack) fuel).copy();
+                bigFuel.stackSize = 1000000;
+                fuelTank = bigFuel;
+            }
             if (!writeField(fresh, "mFuel", fuelTank)) {
                 skip(machine, notes, id + ": " + mte.getClass().getSimpleName() + " has no live mFuel field");
                 return;
@@ -4442,7 +4484,7 @@ public final class GtnhCalcOracleExporter {
         @Override
         String machineId(Object mte) {
             String label = liveDisplayName(mte);
-            return domain(label != null ? label : mte.getClass().getSimpleName());
+            return label != null ? label : mte.getClass().getSimpleName();
         }
 
         @Override
@@ -4492,9 +4534,14 @@ public final class GtnhCalcOracleExporter {
             if (fresh == null) {
                 return Measurement.MACHINE_BROKEN;
             }
-            Object fuelTank = fuel instanceof FluidStack
-                ? (Object) new FluidStack((FluidStack) fuel, 1000000)
-                : new ItemStack((ItemStack) fuel, 1000000);
+            Object fuelTank;
+            if (fuel instanceof FluidStack) {
+                fuelTank = new FluidStack((FluidStack) fuel, 1000000);
+            } else {
+                ItemStack bigFuel = ((ItemStack) fuel).copy();
+                bigFuel.stackSize = 1000000;
+                fuelTank = bigFuel;
+            }
             if (!writeField(fresh, "mFuel", fuelTank)
                 || !writeField(fresh, "mWater", new FluidStack(water, 1000000))
                 || !writeField(fresh, "mSteam", new FluidStack(steamType.getFluid(), 0))) {
@@ -4606,7 +4653,7 @@ public final class GtnhCalcOracleExporter {
                         + " produced no measurable steam; the boiler is skipped");
                     return;
                 }
-                steamPerSecond = probeSteam;
+                steamPerSecond = Double.valueOf(probeSteam.doubleValue());
             }
             // A 10-tick operation is half a second: L/s / 2. Water is
             // 1:1 with the live steam (spec).
