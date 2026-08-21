@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DatasetManifest, RecipeSummary } from "@/lib/datasets";
 import { getRecipeDatasetRecipe, queryRecipeDatasetRecipes } from "@/lib/datasets/browser-loader";
-import { PROJECT_SCHEMA_VERSION, type FactoryNode, type FactoryProject, type Recipe } from "@/lib/model/types";
+import { PROJECT_SCHEMA_VERSION, type FactoryNode, type FactoryProject, type Recipe, type ResourceKey } from "@/lib/model/types";
 import { makeResourceHandleId } from "@/components/flow/resource-handles";
 import { calculateThroughput } from "@/lib/solver";
 import {
@@ -4288,6 +4288,27 @@ describe("pickPowerRecipe", () => {
     const good = powerSummary({ id: "good", name: "Good", amount: 2048, durationTicks: 20 });
     expect(pickPowerRecipe([otherGrid, instant, good], "lv")?.id).toBe("good");
   });
+
+  it("prefers the generator whose fuel the board already produces, over a name tie", () => {
+    const combustion = powerSummary({ id: "diesel", name: "Combustion", amount: 4096, durationTicks: 20 }); // 4096/s
+    combustion.inputs = [{ kind: "fluid", id: "diesel", amount: 1, displayName: "Diesel" }];
+    const gas = powerSummary({ id: "gas", name: "Gas Turbine", amount: 4096, durationTicks: 20 }); // 4096/s
+    gas.inputs = [{ kind: "fluid", id: "benzene", amount: 1, displayName: "Benzene" }];
+    const board: Map<ResourceKey, number> = new Map([["fluid:benzene", 12]]);
+    // Tied on rate, and "Combustion" sorts first — but the board makes benzene, so gas wins.
+    expect(pickPowerRecipe([combustion, gas], "lv", board)?.id).toBe("gas");
+    expect(pickPowerRecipe([gas, combustion], "lv", board)?.id).toBe("gas");
+  });
+
+  it("falls back to rate and name when the board produces no generator fuel", () => {
+    const combustion = powerSummary({ id: "diesel", name: "Combustion", amount: 4096, durationTicks: 20 });
+    combustion.inputs = [{ kind: "fluid", id: "diesel", amount: 1, displayName: "Diesel" }];
+    const gas = powerSummary({ id: "gas", name: "Gas Turbine", amount: 4096, durationTicks: 20 });
+    gas.inputs = [{ kind: "fluid", id: "benzene", amount: 1, displayName: "Benzene" }];
+    const board: Map<ResourceKey, number> = new Map([["fluid:water", 999]]);
+    // No match (the board only makes water), so the rate tie breaks by name -> Combustion.
+    expect(pickPowerRecipe([gas, combustion], "lv", board)?.id).toBe("diesel");
+  });
 });
 
 describe("addPowerForTier", () => {
@@ -4353,6 +4374,61 @@ describe("addPowerForTier", () => {
     // The new card is the selection, and the solve ran on the new project.
     expect(useFactoryStore.getState().selectedNodeId).toBe(placed!.id);
     expect(useFactoryStore.getState().lastResult.nodes[placed!.id]).toBeDefined();
+  });
+
+  it("places a generator whose fuel the board already produces, over an equal-rate one that sorts first", async () => {
+    // A source node that makes benzene, so the board's production set includes
+    // fluid:benzene. Two candidates tie on rate; "Combustion" sorts before
+    // "Gas Turbine", so only the fuel preference can break the tie.
+    const benzeneSource = {
+      id: "benz-src",
+      name: "Benzene source",
+      machineType: "Source",
+      minimumTier: "LV",
+      durationTicks: 20,
+      eut: 0,
+      machineHandlers: [{ id: "base", label: "Source", machineType: "Source", minimumTier: "LV", kind: "single" }],
+      inputs: [],
+      outputs: [{ kind: "fluid", id: "benzene", amount: 1, displayName: "Benzene" }],
+    } as unknown as Recipe;
+    const gasSummary = powerSummary({ id: "gas-st-lv", name: "Gas Turbine", amount: 12800, durationTicks: 10 });
+    gasSummary.inputs = [{ kind: "fluid", id: "benzene", amount: 1, displayName: "Benzene" }];
+    const combSummary = powerSummary({ id: "comb-lv", name: "Combustion Generator", amount: 12800, durationTicks: 10 });
+    combSummary.inputs = [{ kind: "fluid", id: "diesel", amount: 1, displayName: "Diesel" }];
+
+    vi.mocked(queryRecipeDatasetRecipes).mockResolvedValue({
+      recipes: [combSummary, gasSummary],
+      total: 2,
+      recipeMaps: ["Generator"],
+      offset: 0,
+      limit: 120,
+      hasMore: false,
+    });
+    vi.mocked(getRecipeDatasetRecipe).mockResolvedValue({
+      ...genRecipe,
+      id: "gas-st-lv",
+      name: "Gas Turbine",
+      machineHandlers: [{ id: "lv", label: "LV Gas Turbine", machineType: "Gas Turbine", minimumTier: "LV", kind: "single" }],
+    } as unknown as Recipe);
+
+    const seed: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "power-fuel",
+      name: "Power fuel",
+      recipes: [smelterRecipe(10, "LV"), benzeneSource],
+      nodes: [machineNode("M", "smelt"), machineNode("B", "benz-src")],
+      edges: [],
+    };
+    useFactoryStore.setState({
+      project: seed,
+      lastResult: calculateThroughput(seed),
+      ...testDataset(),
+    });
+    await useFactoryStore.getState().addPowerForTier("LV");
+
+    const placed = useFactoryStore.getState().project.nodes.find((node) => node.recipeId === "gas-st-lv");
+    expect(placed).toBeDefined(); // benzene is on the board, so gas turbine beats combustion
+    expect(useFactoryStore.getState().project.nodes.find((node) => node.recipeId === "comb-lv")).toBeUndefined();
   });
 
   it("does nothing when the grid is already covered", async () => {

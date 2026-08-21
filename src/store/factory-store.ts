@@ -2136,25 +2136,45 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     // its full grid when it does run, so the build is sized to the books,
     // not to today's utilization.
     let deficit = 0;
+    // What the board already produces, by resource key: the tie-break that lets
+    // one-click close on an existing fuel line instead of a blind default.
+    const boardProduced = new Map<ResourceKey, number>();
     for (const node of Object.values(state.lastResult.nodes)) {
       if (node.status === "missing-recipe") {
         continue;
       }
       deficit += (node.inputs[key]?.amountPerSecond ?? 0) - (node.outputs[key]?.amountPerSecond ?? 0);
+      for (const [producedKey, output] of Object.entries(node.outputs)) {
+        boardProduced.set(
+          producedKey as ResourceKey,
+          (boardProduced.get(producedKey as ResourceKey) ?? 0) + (output.amountPerSecond ?? 0),
+        );
+      }
     }
     if (deficit <= 0) {
       return;
     }
 
-    const candidates = await queryRecipeDatasetRecipes(DEFAULT_DATASET_MANIFEST_URL, version, {
-      query: "",
-      resource: { kind: "energy", id: tierId },
-      mode: "recipes",
-      maxTier: "all",
-      offset: 0,
-      limit: 120,
-    });
-    const winner = pickPowerRecipe(candidates.recipes, tierId);
+    // A resource query with no recipeMap returns only the first recipe-map tab,
+    // so a button that read just that page could never place anything but the
+    // alphabetically-first generator. Pull every family that produces this grid
+    // before picking, so gas turbine, steam and semi-fluid are all in play.
+    const queryPowerPage = (recipeMap?: string) =>
+      queryRecipeDatasetRecipes(DEFAULT_DATASET_MANIFEST_URL, version, {
+        query: "",
+        resource: { kind: "energy", id: tierId },
+        mode: "recipes",
+        maxTier: "all",
+        offset: 0,
+        limit: 120,
+        ...(recipeMap ? { recipeMap } : {}),
+      });
+    const firstPage = await queryPowerPage();
+    const powerSummaries = [...firstPage.recipes];
+    for (const recipeMap of firstPage.recipeMaps.slice(1)) {
+      powerSummaries.push(...(await queryPowerPage(recipeMap)).recipes);
+    }
+    const winner = pickPowerRecipe(powerSummaries, tierId, boardProduced);
     if (!winner) {
       return;
     }
@@ -3218,14 +3238,20 @@ function convergePocketBoundaryEdges(project: FactoryProject, pocketId: string):
 }
 
 /**
- * The best generator for a grid, by EU per second, ties by the smaller name:
- * deterministic across reloads, which a "place the first hit" is not.
+ * The best generator for a grid. Every fuel clamps to the tier's max output,
+ * so several families tie on rate; to pick among them, prefer a generator whose
+ * fuel the board already produces (so the placed card closes on existing
+ * production) — `boardProduced` maps each produced resource key to its rate —
+ * then the higher rate (fewer machines), then the smaller name. Deterministic
+ * across reloads, which a "place the first hit" is not.
  */
 export function pickPowerRecipe(
   summaries: RecipeSummary[],
   tierId: string,
+  boardProduced?: Map<ResourceKey, number>,
 ): RecipeSummary | undefined {
-  let best: { summary: RecipeSummary; rate: number } | undefined;
+  type PowerCandidate = { summary: RecipeSummary; rate: number; fuelRate: number };
+  let best: PowerCandidate | undefined;
   for (const summary of summaries) {
     const energy = summary.outputs.find(
       (output) => output.kind === "energy" && output.id === tierId,
@@ -3234,11 +3260,30 @@ export function pickPowerRecipe(
       continue;
     }
     const rate = (energy.amount * 20) / summary.durationTicks;
-    if (!best || rate > best.rate || (rate === best.rate && summary.name < best.summary.name)) {
-      best = { summary, rate };
+    const fuel = summary.inputs[0]
+      ? boardProduced?.get(getResourceKey(summary.inputs[0])) ?? 0
+      : 0;
+    const candidate = { summary, rate, fuelRate: fuel };
+    if (!best || powerCandidateWins(candidate, best)) {
+      best = candidate;
     }
   }
   return best?.summary;
+}
+
+function powerCandidateWins(a: { summary: RecipeSummary; rate: number; fuelRate: number }, b: { summary: RecipeSummary; rate: number; fuelRate: number }): boolean {
+  const aMakes = a.fuelRate > 0;
+  const bMakes = b.fuelRate > 0;
+  if (aMakes !== bMakes) {
+    return aMakes;
+  }
+  if (a.rate !== b.rate) {
+    return a.rate > b.rate;
+  }
+  if (aMakes && a.fuelRate !== b.fuelRate) {
+    return a.fuelRate > b.fuelRate;
+  }
+  return a.summary.name < b.summary.name;
 }
 
 /**
