@@ -288,6 +288,38 @@ export function RecipeSearchOverlay({
     storedRateView = view;
     setRateView(view);
   }, []);
+  // The wheel walks the rate pills: down for the next reading, up for the
+  // previous, wrapping at the ends. Attached by hand and non-passive so
+  // the results behind do not scroll with it.
+  const ratePillsRef = useRef<HTMLSpanElement | null>(null);
+  const rateViewRef = useRef(rateView);
+  rateViewRef.current = rateView;
+  useEffect(() => {
+    const element = ratePillsRef.current;
+    if (!element) {
+      return;
+    }
+    const onWheel = (event: WheelEvent) => {
+      const delta = event.deltaY || event.deltaX;
+      if (!delta) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const at = RATE_VIEW_CHOICES.findIndex((choice) => choice.view === rateViewRef.current);
+      const step = delta > 0 ? 1 : -1;
+      const next =
+        RATE_VIEW_CHOICES[(at + step + RATE_VIEW_CHOICES.length) % RATE_VIEW_CHOICES.length]!;
+      if (next.view === "eu") {
+        playBoardSound("dialEnergy");
+      } else {
+        playBoardSound("tick");
+      }
+      changeRateView(next.view);
+    };
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => element.removeEventListener("wheel", onWheel);
+  }, [changeRateView, compact]);
   const [chipMenu, setChipMenu] = useState<
     | {
         x: number;
@@ -895,6 +927,7 @@ export function RecipeSearchOverlay({
   );
   const ratePillGroup = (
     <span
+      ref={ratePillsRef}
       className="flex shrink-0 items-center border-2 border-[var(--mc-47)] bg-[var(--mc-25)]"
     >
       {RATE_VIEW_CHOICES.map((choice) => (
