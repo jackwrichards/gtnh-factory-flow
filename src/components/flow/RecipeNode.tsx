@@ -192,7 +192,7 @@ import {
   formatTimes,
   type PortStory,
 } from "./flow-explainers";
-import { useFactoryStore } from "@/store/factory-store";
+import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import {
   GLANCE_NEUTRAL_SURFACE,
   GT_NODE_COLORS,
@@ -567,6 +567,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   // numbers can change.
   const { project: liveProject, lastResult } = useFactoryStore.getState();
   const verdict = deriveNodeVerdict(liveProject, lastResult, projectNode.id);
+  // The rate and power dials are the one thing that changes what the card
+  // prints without changing the books, so the card subscribes to them.
+  useRateDisplayUnits();
   // Solve mode: the card answers "how many machines" instead of "how hard is
   // this build running", so the usage cell and the count stepper both yield.
   const solveMode = useFactoryStore((state) => state.project.solveMode === true);

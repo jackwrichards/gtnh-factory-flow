@@ -6,7 +6,11 @@ import { Copy, Maximize2, PackageOpen, Save } from "lucide-react";
 import type { FactoryPocket } from "@/lib/model/types";
 import { RECIPE_NODE_WIDTH } from "@/lib/board-grid";
 import { fluidArtPixels, isSwatchFluid, ResourceIcon } from "@/components/nei/ResourceIcon";
-import { captureBoardSelection, useFactoryStore } from "@/store/factory-store";
+import {
+  captureBoardSelection,
+  useFactoryStore,
+  useRateDisplayUnits,
+} from "@/store/factory-store";
 import { useBlueprintStore } from "@/store/blueprint-store";
 
 import { formatSlotRateOrNull } from "./flow-explainers";
@@ -87,6 +91,8 @@ function PocketNodeComponent({ data, selected }: NodeProps<PocketFlowNode>) {
   // anonymous purple card.
   const chrome = boardChrome(pocket.id, pocket.theme, pocket.colorTag);
   const expandPocket = useFactoryStore((state) => state.expandPocket);
+  // The summary rows print rates, so the card follows the rate dials.
+  useRateDisplayUnits();
   const dissolvePocket = useFactoryStore((state) => state.dissolvePocket);
   const renamePocket = useFactoryStore((state) => state.renamePocket);
   const deleteBoardSelection = useFactoryStore((state) => state.deleteBoardSelection);

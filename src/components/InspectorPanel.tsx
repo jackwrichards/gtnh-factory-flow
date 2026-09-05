@@ -31,7 +31,7 @@ import type {
 } from "@/lib/model/types";
 import { calculateSelectionFlow, selectInternalBalances } from "@/lib/solver";
 import { selectTrendSeries, useResourceTrends } from "@/lib/resource-trends";
-import { useFactoryStore } from "@/store/factory-store";
+import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
   toggleResourceFavourite,
@@ -308,6 +308,8 @@ export function InspectorPanel() {
 function FlowIOPanel() {
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
+  // Every row prints a rate: follow the rate and power dials.
+  useRateDisplayUnits();
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const setHoveredFlowResourceKey = useFactoryStore((state) => state.setHoveredFlowResourceKey);
   const selectedBoardIds = useFactoryStore((state) => state.selectedBoardIds);

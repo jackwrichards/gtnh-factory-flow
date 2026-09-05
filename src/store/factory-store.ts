@@ -848,18 +848,20 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   lastResult: solveBooks(initialProject),
   rateUnit: "second",
   setRateUnit: (unit) => {
-    // The formatters read a module singleton; recomputing the result gives
-    // every rate surface a fresh identity so nothing shows a stale unit.
+    // A VIEW change: the books are per-second and stay exactly as they are.
+    // The formatters read a module singleton, and every surface that prints
+    // a rate also subscribes to the dial (useRateDisplayUnits) so it
+    // re-renders. This used to re-solve the whole plan just to hand every
+    // surface a fresh result identity, which froze big boards on a unit
+    // switch.
     setActiveRateUnit(unit);
-    const { project } = get();
-    set({ rateUnit: unit, lastResult: solveBooks(project) });
+    set({ rateUnit: unit });
   },
   powerDisplayUnit: "eu",
   setPowerDisplayUnit: (unit) => {
-    // Same singleton trick as the rate unit above, for the same reason.
+    // Same view-only rule as the rate unit above.
     setActivePowerDisplayUnit(unit);
-    const { project } = get();
-    set({ powerDisplayUnit: unit, lastResult: solveBooks(project) });
+    set({ powerDisplayUnit: unit });
   },
   setProject: (project) => {
     // A plan ARRIVING (import, tab switch, setup open) is not an action;
@@ -5309,3 +5311,14 @@ function createId(prefix: string): string {
 registerBooksSink((result) => {
   useFactoryStore.setState({ lastResult: result });
 });
+
+/**
+ * Subscribe a component to the two board-wide display dials, the rate unit
+ * and the power unit. The formatters in rate-unit.ts read module singletons,
+ * so a component that prints a rate needs this to re-render when a dial
+ * turns. The dials are pure view: they never touch the books.
+ */
+export function useRateDisplayUnits(): void {
+  useFactoryStore((state) => state.rateUnit);
+  useFactoryStore((state) => state.powerDisplayUnit);
+}

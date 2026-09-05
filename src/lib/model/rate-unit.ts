@@ -1,9 +1,10 @@
 /**
  * The board-wide rate unit. A module singleton (not React state) so every
  * formatter — node ports, tooltips, edge labels, sidebar rates — reads the
- * same setting without threading a prop through the world. The store action
- * that flips it also recomputes the throughput result, which rebuilds every
- * surface, so nothing renders a stale unit.
+ * same setting without threading a prop through the world. Flipping it is a
+ * VIEW change and never touches the books (they are per-second): every
+ * surface that prints a rate subscribes to the store's dial
+ * (`useRateDisplayUnits`) so it re-renders with the new unit.
  */
 export type RateUnit = "tick" | "second" | "minute" | "hour" | "eu";
 

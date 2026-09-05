@@ -121,6 +121,7 @@ import {
   captureBoardSelection,
   findToggleDuplicateEdge,
   useFactoryStore,
+  useRateDisplayUnits,
   wouldConnectionStorageSpawn,
   type BoardClipboardPayload,
   type BoardFraming,
@@ -239,6 +240,7 @@ import {
   type ResourceHandleSide,
 } from "./resource-handles";
 import {
+  edgeUnit,
   formatEdgeRateLabelFrom,
   getEdgeRateLabelValues,
   isEdgeStarved,
@@ -714,7 +716,8 @@ type ResourceEdgeData = {
   nameplateDemand?: number;
   /** Producer's full output rate; set only when this edge is its sole outlet. */
   sourceCapacity?: number;
-  unit: string;
+  /** The wire's kind; its unit is read from the live dials at format time. */
+  resourceKind: string;
   isLimited: boolean;
   /** Producer is maxed out and the consumer is going hungry. */
   isSupplyCapped: boolean;
@@ -3163,7 +3166,6 @@ export function FactoryFlow() {
       }
       const channelTotal = channelTotals.get(edge.id);
       const edgeResult = result.edges[edge.id];
-      const unit = rateSuffixForKind(edge.resourceKind).trim();
       const demand =
         channelTotal?.demand ?? edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
       const sourceStorage = storagesById.get(edge.source);
@@ -3296,7 +3298,7 @@ export function FactoryFlow() {
             edgeResult?.sourceCapacityPerSecond !== undefined
               ? edgeResult.sourceCapacityPerSecond * ceilingFor(edge.source)
               : undefined,
-          unit,
+          resourceKind: edge.resourceKind,
           isLimited: edgeResult?.isLimited === true && !targetStorage,
           isSupplyCapped,
           isStorageTarget: Boolean(targetStorage),
@@ -9356,8 +9358,11 @@ const PaintToolbar = memo(function PaintToolbar({
  * there is no honest halfway between "has a percent" and "has none".
  */
 function EdgeRateLabelText({ data }: { data: EdgeLabelInput | undefined }) {
+  // The unit is read live: turning a rate dial re-renders this leaf and
+  // nothing upstream of it.
+  useRateDisplayUnits();
   const { flowing, ratio } = getEdgeRateLabelValues(data);
-  const unit = data?.unit ?? "/s";
+  const unit = data ? edgeUnit(data) : "/s";
   const hasRatio = ratio !== undefined;
   return (
     <MotionNumberText

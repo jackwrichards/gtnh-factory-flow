@@ -10,7 +10,7 @@ import {
 function makeEdge(overrides: Partial<EdgeLabelInput> = {}): EdgeLabelInput {
   return {
     demand: 100,
-    unit: "/s",
+    resourceKind: "item",
     isLimited: false,
     isSupplyCapped: false,
     ...overrides,
@@ -56,7 +56,7 @@ describe("formatEdgeRateLabel", () => {
           demand: 12,
           transferred: 12,
           nameplateDemand: 480,
-          unit: "L/s",
+          resourceKind: "fluid",
           isSupplyCapped: true,
         }),
       ),

@@ -68,6 +68,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.56.3",
+    date: "2026-09-05",
+    headline: "Switching units no longer freezes a big board",
+    notes: [
+      "The rate unit and the power unit keys switch instantly on any board size.",
+    ],
+  },
+  {
     version: "2.56.2",
     date: "2026-09-05",
     headline: "Large Naquadah Reactor fuel amounts match the game",

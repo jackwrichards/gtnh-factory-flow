@@ -34,7 +34,7 @@ import {
 } from "@/lib/solver/power-report";
 import { useWorkspaceView, writeWorkspaceView } from "@/lib/workspace-view";
 import { getPowerMachineIcon } from "@/lib/power/planner-data";
-import { useFactoryStore } from "@/store/factory-store";
+import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { getEnergyHatchType } from "@/lib/machines/energy-hatches";
 import { getHatchAmps } from "@/lib/solver/power";
 import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
@@ -135,6 +135,8 @@ interface MachineGroup {
 export function MachineShoppingList() {
   const project = useFactoryStore((state) => state.project);
   const lastResult = useFactoryStore((state) => state.lastResult);
+  // The power column follows the power dial (EU/t or amps of a tier).
+  useRateDisplayUnits();
   const focusBoardNode = useFactoryStore((state) => state.focusBoardNode);
   const machineIcons = useMachineHandlerIcons();
   // PEAK against AVG, panel arithmetic only: PEAK is every machine at full

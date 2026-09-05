@@ -20,7 +20,7 @@ import { FLUID_ICON_SCALE, fluidArtPixels, ResourceIcon } from "@/components/nei
 import { NodeGlanceIcon } from "./NodeGlance";
 import { isWiringConnection } from "./connection-drag";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
-import { useFactoryStore } from "@/store/factory-store";
+import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { useBoardView } from "./board-view";
 import { MotionNumberText } from "./board-motion";
 import { formatSlotRate } from "./flow-explainers";
@@ -256,6 +256,8 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
     reactFlowStore.getState().addSelectedNodes([storage.id]);
   };
   const recipeSearch = useFactoryStore((state) => state.highlightSearch);
+  // The rails print rates, so the drawer follows the rate and power dials.
+  useRateDisplayUnits();
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
   const setHoveredFlowScope = useFactoryStore((state) => state.setHoveredFlowScope);

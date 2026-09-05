@@ -1,5 +1,9 @@
 import { formatCompact } from "@/lib/model";
-import { rateMultiplierForKind, rateUnitMultiplier } from "@/lib/model/rate-unit";
+import {
+  rateMultiplierForKind,
+  rateSuffixForKind,
+  rateUnitMultiplier,
+} from "@/lib/model/rate-unit";
 
 /**
  * The parts of an edge's render data that decide its label. Kept structural so
@@ -16,7 +20,12 @@ export interface EdgeLabelInput {
    * several consumers would show the same headroom on every line.
    */
   sourceCapacity?: number;
-  unit: string;
+  /**
+   * The wire's resource kind. Its unit is derived from this at format time
+   * (rateSuffixForKind reads the board's live dials), never baked into the
+   * edge data, so a unit switch needs no edge rebuild.
+   */
+  resourceKind: string;
   isLimited: boolean;
   isSupplyCapped: boolean;
   /** The line ends in a barrel or tank; demand on it comes from whatever drains that storage. */
@@ -125,7 +134,7 @@ export function describeEdgeRate(data: EdgeLabelInput | undefined): string {
   }
 
   const { flowing, nameplate } = getEdgeFlowFigures(data);
-  const unit = data.unit;
+  const unit = edgeUnit(data);
 
   // Dead simple for barrels: they take whatever arrives, end of story.
   if (data.isStorageTarget) {
@@ -196,7 +205,12 @@ export function formatEdgeRateLabel(data: EdgeLabelInput | undefined): string {
   }
 
   const { flowing, ratio } = getEdgeRateLabelValues(data);
-  return formatEdgeRateLabelFrom(data.unit, flowing, ratio);
+  return formatEdgeRateLabelFrom(edgeUnit(data), flowing, ratio);
+}
+
+/** The unit this wire's label wears right now, from the board's live dials. */
+export function edgeUnit(data: Pick<EdgeLabelInput, "resourceKind">): string {
+  return rateSuffixForKind(data.resourceKind).trim();
 }
 
 /** Uncapped except against absurdity: a drawer-scale ratio stays readable. */
