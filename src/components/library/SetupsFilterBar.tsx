@@ -1,7 +1,8 @@
 "use client";
 
-import { Plus, Search, X } from "lucide-react";
+import { Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { useIsCompactViewport } from "@/lib/compact-view";
 import { ItemPickerPopover } from "@/components/ItemPickerPopover";
 import { parseEuT } from "@/lib/community/eu-shorthand";
 import { parsePlanSearch, withTag } from "@/lib/community/search-query";
@@ -121,6 +122,18 @@ export function SetupsFilterBar({
   } = filters;
   const [picking, setPicking] = useState<"makes" | "takes">();
   const [searchFocused, setSearchFocused] = useState(false);
+  // On a phone everything but the search folds behind one key, which
+  // wears a count of the filters in force so a narrowed list is never a
+  // mystery.
+  const isCompact = useIsCompactViewport();
+  const [unfolded, setUnfolded] = useState(false);
+  const showFilters = !isCompact || unfolded;
+  const inForce =
+    (myPosts?.checked ? 1 : 0) +
+    (maxEuT !== undefined ? 1 : 0) +
+    (maxTier ? 1 : 0) +
+    makes.length +
+    takes.length;
 
   // #tag completion: the word being typed, against the tags known, minus
   // the ones already in the search. A two-word tag travels as one word.
@@ -132,7 +145,8 @@ export function SetupsFilterBar({
       : [...new Set(knownTags)]
           .filter(
             (tag) =>
-              tag.startsWith(typedTag.toLowerCase().replace(/_/g, " ")) && !chosenTags.includes(tag),
+              tag.startsWith(typedTag.toLowerCase().replace(/_/g, " ")) &&
+              !chosenTags.includes(tag),
           )
           .sort()
           .slice(0, 12);
@@ -217,7 +231,25 @@ export function SetupsFilterBar({
             </div>
           ) : null}
         </div>
-        {myPosts ? (
+        {isCompact ? (
+          <button
+            type="button"
+            onClick={() => {
+              playBoardSound("shelfTick");
+              setUnfolded((current) => !current);
+            }}
+            aria-expanded={unfolded}
+            className={[
+              `flex h-7 shrink-0 items-center gap-1.5 px-2 text-xs ${INSET}`,
+              unfolded || inForce > 0 ? "!text-cyan-200" : "",
+            ].join(" ")}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+            Filters
+            {inForce > 0 ? <span className="tabular-nums">{inForce}</span> : null}
+          </button>
+        ) : null}
+        {showFilters && myPosts ? (
           <label
             className={[
               `flex h-7 shrink-0 cursor-pointer select-none items-center gap-1.5 px-2 text-xs ${INSET}`,
@@ -236,56 +268,62 @@ export function SetupsFilterBar({
             My posts
           </label>
         ) : null}
-        <label
-          title="Leave out anything that draws more than this. Shorthand works: 512, 14.3k, 2M, 1.5G"
-          className={[
-            `flex h-7 w-[118px] shrink-0 items-center gap-1 px-2 text-xs compact:w-auto compact:min-w-0 compact:flex-1 ${INSET}`,
-            maxEuText && maxEuT === undefined ? "!text-red-300" : "",
-          ].join(" ")}
-        >
-          <span className="shrink-0 text-[var(--mc-ink-muted)]">EU/t ≤</span>
-          <input
-            value={maxEuText}
-            onChange={(event) => setMaxEuText(event.target.value)}
-            onBlur={() => playBoardSound("shelfTick")}
-            placeholder="any"
-            aria-label="Highest EU/t to show"
-            className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[var(--mc-ink-muted)]"
-          />
-        </label>
-        <select
-          value={maxTier}
-          onChange={(event) => {
-            playBoardSound("shelfTick");
-            setMaxTier(event.target.value);
-          }}
-          aria-label="Highest power tier"
-          className={`h-7 shrink-0 px-1 text-xs outline-none compact:min-w-0 compact:flex-1 ${INSET}`}
-        >
-          <option value="">Any tier</option>
-          {GT_VOLTAGE_TIERS.map((entry, index) => (
-            <option key={entry.tier} value={String(index)}>
-              Up to {entry.tier}
-            </option>
-          ))}
-        </select>
-        <select
-          value={sort}
-          onChange={(event) => {
-            playBoardSound("shelfTick");
-            setSort(event.target.value);
-          }}
-          aria-label="Sort"
-          className={`h-7 shrink-0 px-1 text-xs outline-none compact:min-w-0 compact:flex-1 ${INSET}`}
-        >
-          {sortOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        {showFilters ? (
+          <>
+            {/* Unfolded on a phone, the boxes take a row of their own. */}
+            <div className="hidden basis-full compact:block" />
+            <label
+              title="Leave out anything that draws more than this. Shorthand works: 512, 14.3k, 2M, 1.5G"
+              className={[
+                `flex h-7 w-[118px] shrink-0 items-center gap-1 px-2 text-xs compact:w-auto compact:min-w-0 compact:flex-1 ${INSET}`,
+                maxEuText && maxEuT === undefined ? "!text-red-300" : "",
+              ].join(" ")}
+            >
+              <span className="shrink-0 text-[var(--mc-ink-muted)]">EU/t ≤</span>
+              <input
+                value={maxEuText}
+                onChange={(event) => setMaxEuText(event.target.value)}
+                onBlur={() => playBoardSound("shelfTick")}
+                placeholder="any"
+                aria-label="Highest EU/t to show"
+                className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-[var(--mc-ink-muted)]"
+              />
+            </label>
+            <select
+              value={maxTier}
+              onChange={(event) => {
+                playBoardSound("shelfTick");
+                setMaxTier(event.target.value);
+              }}
+              aria-label="Highest power tier"
+              className={`h-7 shrink-0 px-1 text-xs outline-none compact:min-w-0 compact:flex-1 ${INSET}`}
+            >
+              <option value="">Any tier</option>
+              {GT_VOLTAGE_TIERS.map((entry, index) => (
+                <option key={entry.tier} value={String(index)}>
+                  Up to {entry.tier}
+                </option>
+              ))}
+            </select>
+            <select
+              value={sort}
+              onChange={(event) => {
+                playBoardSound("shelfTick");
+                setSort(event.target.value);
+              }}
+              aria-label="Sort"
+              className={`h-7 shrink-0 px-1 text-xs outline-none compact:min-w-0 compact:flex-1 ${INSET}`}
+            >
+              {sortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : null}
       </div>
-      {itemFilter ? (
+      {itemFilter && showFilters ? (
         <div className="flex min-h-9 flex-wrap items-center gap-2 border-t border-[var(--mc-33)]/60 bg-[#0c0e11] px-4 py-1 compact:gap-1.5 compact:px-2">
           <span className="mr-1 text-[10px] font-black uppercase tracking-[0.14em] text-[var(--mc-ink-muted)]">
             Item filter

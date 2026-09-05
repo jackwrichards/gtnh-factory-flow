@@ -507,7 +507,17 @@ export function SetupsGrid({
         itemFilter={scope !== "saved"}
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 compact:px-2">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-3 compact:px-2"
+        onScroll={(event) => {
+          // Belt and braces beside the sentinel: within two screens of the
+          // end, ask for the next page.
+          const el = event.currentTarget;
+          if (hasMore && !isLoading && el.scrollTop + el.clientHeight > el.scrollHeight - 1600) {
+            setTarget({ key, page: activePage + 1 });
+          }
+        }}
+      >
         {error ? <p className="mb-2 text-[11px] text-red-400">{error}</p> : null}
         {needsAccount && !isAuthLoading ? (
           <p className="text-[12px] leading-relaxed text-[var(--mc-ink-muted)]">

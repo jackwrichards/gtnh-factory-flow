@@ -397,7 +397,43 @@ export function LibraryPage() {
             an accent by contrast rather than colour, flush to the board. */}
         <div className="flex h-full min-h-0 overflow-hidden border-4 border-[#23262d] bg-[#101215] shadow-[inset_2px_2px_0_rgba(255,255,255,0.05),inset_-2px_-2px_0_rgba(0,0,0,0.6)] compact:flex-col compact:border-0 compact:shadow-none">
           {/* THE RAIL: all, then folders. On a phone, one row of chips. */}
-          <aside className="flex w-[184px] shrink-0 flex-col gap-1 overflow-y-auto bg-[#101215] px-2 py-2 compact:w-full compact:flex-row compact:items-center compact:overflow-x-auto compact:overflow-y-hidden compact:border-b compact:border-r-0 compact:py-1.5">
+          {/* On a phone the rail is one dropdown: the chips in a row had to
+              be scrolled sideways to be found at all. */}
+          <div className="hidden shrink-0 border-b border-[var(--mc-33)] px-2 py-1.5 compact:block">
+            <select
+              value={railValue(library.view)}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value === "new") {
+                  const name = window.prompt("Name the collection");
+                  if (name?.trim()) {
+                    void createFolder(name).then((folder) =>
+                      setLibraryView({ kind: "folder", folderId: folder.id }),
+                    );
+                  }
+                  return;
+                }
+                playBoardSound("shelfTick");
+                setLibraryView(railView(value));
+              }}
+              aria-label="Where in the library"
+              className="h-9 w-full border-2 border-[var(--mc-33)] bg-[#17191d] px-2 text-[13px] font-bold text-neutral-100 outline-none shadow-[inset_2px_2px_0_#30343b,inset_-2px_-2px_0_#050607]"
+            >
+              <option value="all">My designs ({designs.length})</option>
+              <option value="favorites">
+                Favorites ({designs.filter((design) => design.favorite).length})
+              </option>
+              {folders.map((folder) => (
+                <option key={folder.id} value={`folder:${folder.id}`}>
+                  {folder.name} ({perFolder.get(folder.id) ?? 0})
+                </option>
+              ))}
+              <option value="new">New collection…</option>
+              <option value="public">Public setups</option>
+              <option value="saved">Saved ({savedIds.length})</option>
+            </select>
+          </div>
+          <aside className="flex w-[184px] shrink-0 flex-col gap-1 overflow-y-auto bg-[#101215] px-2 py-2 compact:hidden">
             <RailItem
               icon={LayoutGrid}
               label="My designs"
@@ -957,6 +993,29 @@ function BarButton({
       {children}
     </button>
   );
+}
+
+/** The rail dropdown's value for a view, and back. */
+function railValue(view: ReturnType<typeof useLibraryTab>["view"]): string {
+  switch (view.kind) {
+    case "folder":
+      return `folder:${view.folderId}`;
+    case "public":
+    case "saved":
+    case "favorites":
+    case "all":
+      return view.kind;
+  }
+}
+
+function railView(value: string): Parameters<typeof setLibraryView>[0] {
+  if (value.startsWith("folder:")) {
+    return { kind: "folder", folderId: value.slice("folder:".length) };
+  }
+  if (value === "public" || value === "saved" || value === "favorites") {
+    return { kind: value };
+  }
+  return { kind: "all" };
 }
 
 function sortDesignsBy(designs: DesignSummary[], sort: SortKey): DesignSummary[] {
