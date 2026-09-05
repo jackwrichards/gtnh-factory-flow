@@ -68,6 +68,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.56.2",
+    date: "2026-09-05",
+    headline: "Large Naquadah Reactor fuel amounts match the game",
+    notes: [
+      "An LNR card now asks for the real litres of fuel and depleted fuel per second, including every booster.",
+    ],
+  },
+  {
     version: "2.56.1",
     date: "2026-09-04",
     headline: "The library on a phone",

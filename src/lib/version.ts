@@ -1,4 +1,4 @@
-﻿/**
+/**
  * The user-facing app version, shown as a chip in the header.
  *
  * ONE bump per RELEASE, where a release is a deploy to the live site - never
@@ -16,4 +16,4 @@
  * `src/lib/changelog.ts` written for players, not for developers, and kept to
  * a headline plus a few one-line notes.
  */
-export const APP_VERSION = "2.56.1";
+export const APP_VERSION = "2.56.2";
