@@ -68,6 +68,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "2.56.1",
+    date: "2026-09-04",
+    headline: "The library on a phone",
+    notes: [
+      "The library's sections are one dropdown on a phone, and the filters sit behind one key.",
+      "A finger scrolls the library; a held press on a tile opens its menu.",
+      "The focus page stacks on a phone, with Back above the picture and Open across the width.",
+    ],
+  },
+  {
     version: "2.56.0",
     date: "2026-09-04",
     headline: "The library: every design and every shared setup in one place",
