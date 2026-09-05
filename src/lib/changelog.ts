@@ -73,6 +73,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "Switching units no longer freezes a big board",
     notes: [
       "The rate unit and the power unit keys switch instantly on any board size.",
+      "A machine held back by one of its outputs now reads clogged and names the machine that cannot take more.",
     ],
   },
   {

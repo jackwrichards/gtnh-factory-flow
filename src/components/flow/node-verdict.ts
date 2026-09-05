@@ -184,6 +184,13 @@ export interface NodeVerdict {
      * itself stopped: the card is waiting on THAT machine, not on a drawer.
      */
     stoppedTakerName?: string;
+    /**
+     * Set when the output's takers all run but none can take more: the
+     * card is held at their pace, and their own cards say what holds them.
+     */
+    heldTakerName?: string;
+    /** The held taker's own speed, display percent, for the hover. */
+    heldTakerPct?: number;
   };
   /** Dead-loop: the ring this card is trapped in, and who else is in it. */
   spiral?: DeathSpiral;
@@ -478,6 +485,151 @@ function findStoppedTakerClog(
 }
 
 /**
+ * The output that holds a FED card below the speed its hungry takers want.
+ *
+ * The books never idle a fed machine with somewhere to put its output, so a
+ * card whose inputs are covered, whose one output is over-asked and which
+ * still sits below full speed is being held by ANOTHER output: every wire
+ * on it lands on a machine that cannot take more, and no drawer absorbs
+ * the rest. That is a clog, one machine removed - two more of this card
+ * would only make more of the stuck thing. The old diagnosis filed the
+ * taker's smaller ask as demand, so `clogOutputKey` never named it and the
+ * card fell through to BOTTLENECK with advice to add machines here.
+ *
+ * Prefers an output whose taker is visibly held (clogged, stopped, or at
+ * full speed) over one merely pacing, so the name on the hover is the card
+ * whose own story explains this one.
+ */
+function findHeldOutputClog(
+  project: FactoryProject,
+  result: ThroughputResult,
+  nodeResult: NodeThroughputResult,
+  outgoing: ProjectEdge[],
+  hungryKey: string,
+  utilization: number,
+  wanted: number,
+): NodeVerdict["clog"] {
+  let best: { rank: number; clog: NonNullable<NodeVerdict["clog"]> } | undefined;
+  for (const [key, flow] of Object.entries(nodeResult.outputs).sort(([left], [right]) =>
+    left < right ? -1 : left > right ? 1 : 0,
+  )) {
+    if (key === hungryKey || flow.amountPerSecond <= RATE_EPSILON || flow.kind === "power") {
+      continue;
+    }
+    const edges = outgoing.filter(
+      (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === key,
+    );
+    if (edges.length === 0) {
+      continue;
+    }
+    const takers = machineTakersBehindOutput(project, edges);
+    if (!takers || takers.size === 0) {
+      continue;
+    }
+    let taken = 0;
+    for (const edge of edges) {
+      taken += result.edges[edge.id]?.transferredPerSecond ?? 0;
+    }
+    const made = flow.amountPerSecond * wanted;
+    if (made - taken <= RATE_EPSILON) {
+      continue;
+    }
+    const named = rankHeldTaker(project, result, takers);
+    const clog: NonNullable<NodeVerdict["clog"]> = {
+      resourceKey: key,
+      kind: flow.kind,
+      displayName: flow.displayName ?? flow.resourceId ?? key,
+      madePerSecond: made,
+      takenPerSecond: taken,
+      surplusPerSecond: made - taken,
+      heldBackPct: Math.max(0, Math.round((wanted - utilization) * 1000) / 10),
+      heldTakerName: named.name,
+      heldTakerPct: named.pct,
+    };
+    if (!best || named.rank > best.rank) {
+      best = { rank: named.rank, clog };
+    }
+  }
+  return best?.clog;
+}
+
+/**
+ * The machines behind one output port, through any buffers on the way.
+ * Absent when a drain drawer or an overflow buffer sits on the route: those
+ * absorb a surplus, so nothing on that port can be holding the card.
+ */
+function machineTakersBehindOutput(
+  project: FactoryProject,
+  edges: ProjectEdge[],
+): Set<string> | undefined {
+  const storageById = new Map((project.storages ?? []).map((storage) => [storage.id, storage]));
+  const nodeIds = new Set(project.nodes.map((entry) => entry.id));
+  const outgoingBy = outgoingByNode(project);
+  const takers = new Set<string>();
+  const seen = new Set<string>();
+  let absorbed = false;
+  const walk = (edgesOut: ProjectEdge[]) => {
+    for (const edge of edgesOut) {
+      const storage = storageById.get(edge.target);
+      if (storage) {
+        const isDrain = (outgoingBy.get(storage.id) ?? []).length === 0;
+        if (isDrain || (storage.bufferMode ?? "overflow") === "overflow") {
+          absorbed = true;
+          return;
+        }
+        if (!seen.has(storage.id)) {
+          seen.add(storage.id);
+          walk(outgoingBy.get(storage.id) ?? []);
+        }
+      } else if (nodeIds.has(edge.target)) {
+        takers.add(edge.target);
+      }
+    }
+  };
+  walk(edges);
+  return absorbed ? undefined : takers;
+}
+
+/**
+ * Which taker to name on a held output. A stopped or clogged one explains
+ * itself best (rank 3), a full one next (2), a merely pacing one last (1).
+ * Deterministic: ties go to the first id in sort order.
+ */
+function rankHeldTaker(
+  project: FactoryProject,
+  result: ThroughputResult,
+  takers: Set<string>,
+): { rank: number; name: string; pct: number } {
+  const recipeById = new Map(project.recipes.map((entry) => [entry.id, entry]));
+  const nodeById = new Map(project.nodes.map((entry) => [entry.id, entry]));
+  let best: { rank: number; name: string; pct: number } | undefined;
+  for (const taker of [...takers].sort()) {
+    const takerResult = result.nodes[taker];
+    const takerNode = nodeById.get(taker);
+    const takerUtil = clamp01(takerResult?.utilization, 0);
+    const takerCapable = clamp01(takerResult?.capableUtilization, 1);
+    const takerDisposal = clamp01(takerResult?.disposalUtilization, 1);
+    const rank =
+      takerNode?.enabled === false || !takerResult || takerUtil <= VERDICT_EPSILON
+        ? 3
+        : takerDisposal < 1 - VERDICT_EPSILON && takerDisposal < takerCapable - VERDICT_EPSILON
+          ? 3
+          : takerUtil >= 1 - VERDICT_EPSILON
+            ? 2
+            : 1;
+    if (!best || rank > best.rank) {
+      const recipe = takerNode ? recipeById.get(takerNode.recipeId) : undefined;
+      best = {
+        rank,
+        name: recipe?.machineType ?? recipe?.name ?? takerResult?.recipeName ?? taker,
+        pct: Math.round(takerUtil * 1000) / 10,
+      };
+    }
+  }
+  return best ?? { rank: 0, name: "", pct: 0 };
+}
+
+/**
  * What ONE inbound line can honestly deliver, buffers included.
  *
  * This is the call every consumer of honestEdgeAvailablePerSecond should make.
@@ -671,6 +823,21 @@ export function deriveNodeVerdict(
   ) {
     const clog = describeClog(nodeResult, utilization, disposal);
     if (clog) {
+      // Name the machine on the other end when there is one: "nowhere to
+      // go" with an address sends the player to the card that says why.
+      if (result) {
+        const takers = machineTakersBehindOutput(
+          project,
+          outgoing.filter(
+            (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === clog.resourceKey,
+          ),
+        );
+        if (takers && takers.size > 0) {
+          const named = rankHeldTaker(project, result, takers);
+          clog.heldTakerName = named.name;
+          clog.heldTakerPct = named.pct;
+        }
+      }
       return { kind: "clogged", pct, clog, deficit };
     }
   }
@@ -678,6 +845,24 @@ export function deriveNodeVerdict(
   if (utilization >= 1 - VERDICT_EPSILON) {
     return deficit ? { kind: "bottleneck", pct, deficit } : { kind: "balanced", pct };
   }
+
+  // Below full speed with a hungry taker, BOTTLENECK is only true if this
+  // card could actually ramp. When another wired output has no home for
+  // the extra, it cannot, and the honest word is CLOGGED naming that
+  // output's taker. Asked only on the paths that would otherwise say
+  // bottleneck, after a genuinely short input has had its say.
+  const heldClog = () =>
+    deficit && result
+      ? findHeldOutputClog(
+          project,
+          result,
+          nodeResult,
+          outgoing,
+          deficit.resourceKey,
+          utilization,
+          Math.min(1, capable, Math.max(demand, utilization)),
+        )
+      : undefined;
 
   // Below full speed there is always a cause. Downstream owns it only when
   // demand is the strictly smaller limit; a tie means something upstream
@@ -688,7 +873,10 @@ export function deriveNodeVerdict(
     // solver just isn't relaying the pull. Its inputs are covered, so this
     // card is where the fix goes — a bottleneck like any other.
     if (deficit) {
-      return { kind: "bottleneck", pct, deficit };
+      const held = heldClog();
+      return held
+        ? { kind: "clogged", pct, clog: held, deficit }
+        : { kind: "bottleneck", pct, deficit };
     }
     // No headroom figure: it was old-engine capability minus the books'
     // utilization, a percentage of nothing a player can see on the card.
@@ -706,7 +894,13 @@ export function deriveNodeVerdict(
   // "gets 2,000/s, wants 100/s, so you are short", which is nonsense. No
   // genuinely short input means no shortage story: the line is pacing it.
   if (!binding || binding.shortfallPerSecond <= RATE_EPSILON) {
-    return deficit ? { kind: "bottleneck", pct, deficit } : { kind: "paced", pct };
+    if (!deficit) {
+      return { kind: "paced", pct };
+    }
+    const held = heldClog();
+    return held
+      ? { kind: "clogged", pct, clog: held, deficit }
+      : { kind: "bottleneck", pct, deficit };
   }
   return {
     kind: deficit ? "blocked" : "starved",

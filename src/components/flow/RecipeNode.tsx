@@ -2578,6 +2578,9 @@ function verdictHoverDetail(verdict: NodeVerdict, isCustomRate: boolean): string
       if (clog.stoppedTakerName) {
         return `Nothing takes the ${clog.displayName}: ${clog.stoppedTakerName} has stopped. Its own card says why.`;
       }
+      if (clog.heldTakerName) {
+        return `The spare ${spare} of ${clog.displayName} has nowhere to go: ${clog.heldTakerName} cannot take more at ${formatPct(clog.heldTakerPct ?? 0)}%. Its own card says why. More machines here would not help.`;
+      }
       if (clog.takenPerSecond <= 0.0005) {
         return `Nothing takes the ${clog.displayName}. A machine cannot run with a full output.`;
       }
