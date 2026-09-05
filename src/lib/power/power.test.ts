@@ -439,6 +439,49 @@ describe("reactors and endgame", () => {
     );
   });
 
+  // Game: FuelRecipeLoader getFluidOrGas(1) per recipe; MTELargeNaquadahReactor
+  // burns pall litres (booster multiplier) over NaquadahFuelTime ticks.
+  // Wiki Large_Naquadah_Reactor summary table pins the boosted L/s figures.
+  it("burns 1 L of LNR fuel per recipe, not 1000 L (wiki EU/L and L/s)", () => {
+    const base = compute("large-naquadah-reactor", {
+      fuel: "Naq Fuel Mk-I",
+      coolant: "None",
+      booster: "None",
+    });
+    // 1 L / 3 s; the old formula used 1000 L and reported 333.33 L/s.
+    expect(base.inputs.find((flow) => flow.name === "Naq Fuel Mk-I")?.perSecond).toBeCloseTo(1 / 3, 6);
+    expect(base.outputs[0]?.perSecond).toBeCloseTo(1 / 3, 6);
+
+    // Wiki: Mk-I + Cryotheum + Molten Naquadah (x4) -> 1.33 L/s fuel.
+    const wikiMkI = compute("large-naquadah-reactor", {
+      fuel: "Naq Fuel Mk-I",
+      coolant: "Cryotheum",
+      booster: "Molten Naquadah",
+    });
+    expect(wikiMkI.euPerTick).toBeCloseTo(975000 * 2.75 * 4, 4);
+    expect(wikiMkI.inputs.find((flow) => flow.name === "Naq Fuel Mk-I")?.perSecond).toBeCloseTo(
+      4 / 3,
+      6,
+    );
+    expect(wikiMkI.inputs.find((flow) => flow.name === "Cryotheum")?.perSecond).toBe(1000);
+    expect(wikiMkI.inputs.find((flow) => flow.name === "Molten Naquadah")?.perSecond).toBe(20);
+
+    // Wiki / Discord: Mk-VI + Temporal Fluid + Enlarged Fluid (x64) -> 5.33 L/s.
+    const wikiMkVI = compute("large-naquadah-reactor", {
+      fuel: "Naq Fuel Mk-VI",
+      coolant: "Tachyon Rich Temporal Fluid",
+      booster: "Spatially Enlarged Fluid",
+    });
+    expect(wikiMkVI.euPerTick).toBeCloseTo(2_077_795_200 * 5 * 64, 0);
+    expect(wikiMkVI.inputs.find((flow) => flow.name === "Naq Fuel Mk-VI")?.perSecond).toBeCloseTo(
+      64 / 12,
+      6,
+    );
+    expect(wikiMkVI.inputs.find((flow) => flow.name === "Tachyon Rich Temporal Fluid")?.perSecond).toBe(
+      20,
+    );
+  });
+
   it("runs helium fusion at Mk-I from the workbook table", () => {
     const model = compute("fusion-reactor", { recipe: "Helium Plasma", mark: "1" });
     expect(model.euPerTick).toBe(-1920);

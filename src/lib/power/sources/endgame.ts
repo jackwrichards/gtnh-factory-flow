@@ -75,8 +75,12 @@ const lnr: PowerSourceDefinition = {
     const coolantEfficiency = coolant?.efficiency ?? 1;
     const boostMultiplier = booster?.multiplier ?? 1;
     const euPerTick = fuel.euPerTick * coolantEfficiency * boostMultiplier;
-    // 1000 L of fuel lasts secondsPerCell; boosters burn it that much faster.
-    const fuelPerSecond = (1000 * boostMultiplier) / fuel.secondsPerCell;
+    // FuelRecipeLoader registers every LNR fuel as getFluidOrGas(1) (= 1 L);
+    // MTELargeNaquadahReactor consumes pall litres per recipe (pall = booster
+    // multiplier, or 1), lasting secondsPerCell seconds. So L/s = boost / seconds.
+    // The old (1000 * boost) / seconds treated a cell as 1000 L and overstated
+    // every fuel (and depleted output) 1000x; coolants/boosters were already right.
+    const fuelPerSecond = boostMultiplier / fuel.secondsPerCell;
 
     const inputs = [liters(fuel.name, fuelPerSecond), liters("Liquid Air", 2400)];
     if (coolant && coolant.litersPerSecond > 0) {
