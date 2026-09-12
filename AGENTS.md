@@ -1366,6 +1366,11 @@ Working notes for future agents on GTNH Factory Flow.
   edge. Old plans and view blobs carrying the keys parse (unknown keys
   strip); `lineLabelsMode` stays in the plan-view type as a historical
   field nothing reads. The ports carry the numbers.
+  Ratio drawers are the explicit exception (Jack, 2026-09-12): their outgoing
+  wires show the configured PERCENTAGE, never a rate pill. The badge opens
+  that branch in `StorageRatioEditor.tsx`, the same editor the RATIO header
+  opens. It uses the existing edge-label layer so wiring mode and camera
+  gestures retain their pointer protections.
 - THE BOARD MENU (Jack, 2026-09-08): ONE right-click menu for the whole
   board, `src/components/flow/BoardContextMenu.tsx`, on React Flow's
   `onPaneContextMenu` / `onNodeContextMenu` / `onEdgeContextMenu`. The
@@ -1444,6 +1449,19 @@ Working notes for future agents on GTNH Factory Flow.
   byproduct pill changes bookkeeping, never pace. Targets are display
   arithmetic, not rows - a target-driven >100% figure survives in finalize,
   a demand-driven one does not.
+- RATIO is the buffer's third mode (Jack, 2026-09-12), after non-strict
+  (`overflow`) and strict. Same card size and any-side wiring. `ratioWeight`
+  on each outgoing edge stores nonnegative parts (absent = 1, zero closes a
+  branch); percentages normalize across the current outgoing connections.
+  One drawn channel is one branch: shared-recipe slot edges to the same card
+  share a combined allocation, not a fixed internal recipe mix. The model
+  helper is `model/storage-ratios.ts`; both Build and Solve use the same
+  equality rows in `solver/storage-ratios.ts`. Ratio buffers cannot bank:
+  a saturated/blocked positive branch holds the split and throttles upstream.
+  Pool ignores the saved manual split, like its other manual wires. Switching
+  away preserves weights; removing a wire renormalizes the remaining ones.
+  Inserting another drawer on a branch carries its parts onto the upstream
+  replacement wire. The editor changes a whole drawn channel in one undo step.
 - The drain pill cycles THREE ways since 2026-08-23: product, byproduct,
   trash. A TRASH drawer is the byproduct's shape (free disposal, no demand)
   with the books voided (`applyTrashedOutputBalances` covers it alongside

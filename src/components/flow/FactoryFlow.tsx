@@ -6,10 +6,14 @@ import { emitBoardCameraMove } from "@/lib/board-camera-signal";
 
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { useViewerLock } from "./use-viewer-lock";
+import { StorageRatioEditor } from "./StorageRatioEditor";
+import { openRatioEditor } from "./ratio-editor";
+import { formatRatioShare, getProjectRatioBranches } from "@/lib/model/storage-ratios";
 
 import {
   BaseEdge,
   ConnectionMode,
+  EdgeLabelRenderer,
   Position,
   ReactFlow,
   SelectionMode,
@@ -753,6 +757,7 @@ const EXPORT_PNG_PIXEL_RATIO = 2;
 const EXPORT_PNG_MAX_PIXEL_SIDE = 8192;
 const FLOW_EDGE_LABEL_SELECT_EVENT = "gtnh-flow.edge-label-select";
 type ResourceEdgeData = {
+  ratio?: { storageId: string; share: number };
   resource: Pick<
     ResourceAmount,
     "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
@@ -3313,6 +3318,12 @@ export function FactoryFlow() {
     // What the grid solve needs about every wire, collected as the edge
     // objects are built and published in one shot below.
     const gridRouteInputs: GridRouteEdgeInput[] = [];
+    const ratioByEdge = new Map<string, { storageId: string; share: number }>();
+    for (const [storageId, branches] of getProjectRatioBranches(project)) {
+      for (const branch of branches) {
+        for (const edge of branch.edges) ratioByEdge.set(edge.id, { storageId, share: branch.share / branch.edges.length });
+      }
+    }
     const builtEdges = project.edges.flatMap((edge, edgeIndex) => {
       // The pocket view remap. A wire whose endpoint is collapsed inside a
       // pocket renders against the pocket CARD instead, docking on the
@@ -3447,6 +3458,10 @@ export function FactoryFlow() {
         type: "resourceEdge",
         data: {
           resource,
+          ratio: sourceIsPocket || !ratioByEdge.has(edge.id) ? undefined : {
+            storageId: edge.source,
+            share: (channelEdgeIdsByRepresentative.get(edge.id) ?? [edge.id]).reduce((sum, id) => sum + (ratioByEdge.get(id)?.share ?? 0), 0),
+          },
           color: edgeColor,
           demand,
           // Always the real flow. demand can sit at the full-speed rate on
@@ -6545,6 +6560,7 @@ export function FactoryFlow() {
       }}
     >
       {boardMenu && !isReadOnly ? <BoardContextMenu target={boardMenu} onClose={closeBoardMenu} /> : null}
+      <StorageRatioEditor />
       <ReactFlow
         nodes={checklistNodes}
         edges={checklistEdges}
@@ -9784,6 +9800,7 @@ function ResourceEdgeComponent({
     [isPowerEdge, liveRoute.points],
   );
   const drawnPath = lightningPath ?? liveRoute.path;
+  const ratioLabelPoint = data?.ratio ? getPointAtPolylineRatio(liveRoute.points, 0.65) : undefined;
   // The dots the user has pinned — the draft while one is mid-drag. Only
   // the DOT follows the pointer; the wire holds its route and takes the
   // real one on release. Live previews always guessed wrong.
@@ -9941,6 +9958,18 @@ function ResourceEdgeComponent({
               strokeWidth={Math.max(14, coreStrokeWidth + 6)} style={{ pointerEvents: "stroke" }} />
           </svg>
         </ViewportPortal>
+      ) : null}
+      {data?.ratio && ratioLabelPoint && !checklistMode ? (
+        <EdgeLabelRenderer>
+          <button type="button" data-ratio-edge={id} aria-label={`Edit split: ${formatRatioShare(data.ratio.share)}`}
+            className="nodrag nopan nowheel absolute rounded border border-[#779ba3] bg-[#1d2a35] px-1.5 py-0.5 text-[11px] font-bold text-[#e7f4f5] shadow-sm hover:border-cyan-200 focus:outline-cyan-300"
+            style={{ left: ratioLabelPoint.x, top: ratioLabelPoint.y, transform: "translate(-50%, -50%)", pointerEvents: "all", zIndex: 30 }}
+            onPointerDown={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}
+            onClick={event => { event.stopPropagation(); openRatioEditor(data.ratio!.storageId, event.currentTarget, id); }}
+            onMouseEnter={applyEdgeFlowScope} onMouseLeave={() => setHoveredFlowScope(undefined)}>
+            {formatRatioShare(data.ratio.share)}
+          </button>
+        </EdgeLabelRenderer>
       ) : null}
       {(
         <>

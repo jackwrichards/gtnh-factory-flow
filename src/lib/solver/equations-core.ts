@@ -7,6 +7,7 @@ import { type LinearProgram, type LpSolution } from "./simplex";
 import { solveLpAuto } from "./lp-engine";
 import { listSharedMachineGroups } from "@/lib/model/shared-machine";
 import { isPoolEdgeId } from "./pool-mode";
+import { storageRatioEqualities } from "./storage-ratios";
 
 /**
  * The board's steady state as equations, solved directly: the BOOKS half of
@@ -159,7 +160,7 @@ export function solveEquationsCore(
     if (role === "product" || role === "byproduct" || role === "trash") {
       return "sink";
     }
-    return storage.bufferMode === "strict" ? "strict-buffer" : "buffer";
+    return storage.bufferMode === "strict" || storage.bufferMode === "ratio" ? "strict-buffer" : "buffer";
   };
 
   const flowVar = new Map<string, number>();
@@ -202,7 +203,7 @@ export function solveEquationsCore(
   let totalVars = nextVar + 1;
   const vents: Array<{ nodeId: string; key: ResourceKey; varIndex: number; scale: number }> = [];
 
-  const equalities: LinearProgram["equalities"] = [];
+  const equalities: LinearProgram["equalities"] = storageRatioEqualities(project, flowVar);
   const upperBounds: LinearProgram["upperBounds"] = [];
 
   for (const id of machineIds) {

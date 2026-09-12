@@ -7,6 +7,7 @@ import { collectTrashNodeIds } from "@/lib/model/trash";
 import { getCompatibleOutputFlow, getEdgeTargetDemandKey } from "./equilibrium";
 import { type LinearProgram, type LpSolution } from "./simplex";
 import { solveLpAuto } from "./lp-engine";
+import { storageRatioEqualities } from "./storage-ratios";
 
 /**
  * SOLVE MODE: the planner's question turned around. Plan mode fixes the
@@ -130,7 +131,7 @@ export function solveSolveMode(
     if (role === "product" || role === "byproduct" || role === "trash") {
       return "sink";
     }
-    return storage.bufferMode === "strict" ? "strict-buffer" : "buffer";
+    return storage.bufferMode === "strict" || storage.bufferMode === "ratio" ? "strict-buffer" : "buffer";
   };
 
   const flowVar = new Map<string, number>();
@@ -165,7 +166,7 @@ export function solveSolveMode(
     }
   }
 
-  const equalities: LinearProgram["equalities"] = [];
+  const equalities: LinearProgram["equalities"] = storageRatioEqualities(project, flowVar);
   const upperBounds: LinearProgram["upperBounds"] = [];
 
   // Drawer-to-drawer wires get a finite roof so a teleporter chain cannot

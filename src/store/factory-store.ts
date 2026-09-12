@@ -101,6 +101,7 @@ import type {
 } from "@/lib/model/types";
 import { nearestFreeSpot, type PlacementRect } from "@/components/flow/board-placement";
 import { getStorageRoles } from "@/lib/model/storage-role";
+import { edgeRatioWeight } from "@/lib/model/storage-ratios";
 import { collectPocketMembers, expandPocketSelection } from "@/lib/model/pocket-connections";
 import { paperForBoardId, pickBoardPaper } from "@/lib/model/board-paper";
 import type { BoardCamera } from "@/lib/designs/design-camera";
@@ -735,6 +736,7 @@ interface FactoryStore {
     },
   ) => void;
   updateEdge: (edgeId: string, patch: Partial<FactoryEdge>) => void;
+  setRatioBranchWeight: (storageId: string, edgeIds: string[], weight: number) => void;
   autoConnectNode: (nodeId: string) => void;
   optimizeMachineCount: (nodeId: string) => void;
   optimizeMachineCounts: () => void;
@@ -2668,8 +2670,16 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
           sourceHandle: edge.sourceHandle,
           targetHandle: inHandle,
         });
-        if (into && !findDuplicateEdge(project.edges, into)) {
-          project = { ...project, edges: [...project.edges, into] };
+        if (into) {
+          // Inserting a drawer must leave the upstream ratio allocation on
+          // the incoming wire, including the total of a merged channel.
+          const duplicate = findDuplicateEdge(project.edges, into);
+          const keepsRatio = edge.ratioWeight !== undefined || state.project.storages?.some(s => s.id === edge.source && s.bufferMode === "ratio");
+          if (!duplicate) {
+            project = { ...project, edges: [...project.edges, keepsRatio ? { ...into, ratioWeight: edgeRatioWeight(edge) } : into] };
+          } else if (keepsRatio) {
+            project = { ...project, edges: project.edges.map(e => e.id === duplicate.id ? { ...e, ratioWeight: Math.min(Number.MAX_VALUE, edgeRatioWeight(e) + edgeRatioWeight(edge)) } : e) };
+          }
         }
         const outOf = buildEdgeBetweenNodes(project, storage.id, edge.target, {
           ...resource,
@@ -4295,6 +4305,22 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         project,
         lastResult: solveBooks(project),
       });
+    });
+  },
+  setRatioBranchWeight: (storageId, edgeIds, weight) => {
+    if (!Number.isFinite(weight) || weight < 0) return;
+    set((state) => {
+      if (state.isReadOnly) return state;
+      const ids = new Set(edgeIds);
+      const matching = state.project.edges.filter(edge => edge.source === storageId && ids.has(edge.id));
+      if (!matching.length) return state;
+      const part = weight / matching.length;
+      if (matching.every(edge => (edge.ratioWeight ?? 1) === part)) return state;
+      const project = touchProject({
+        ...state.project,
+        edges: state.project.edges.map(edge => edge.source === storageId && ids.has(edge.id) ? { ...edge, ratioWeight: part } : edge),
+      });
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
     });
   },
   autoConnectNode: (nodeId) => {

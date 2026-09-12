@@ -2,9 +2,10 @@
 
 import { Handle, Position, useStoreApi, type Node, type NodeProps } from "@xyflow/react";
 import { memo, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowDownToLine, ArrowLeftRight, Pencil } from "lucide-react";
+import { ArrowDownToLine, ArrowLeftRight, Pencil, Split } from "lucide-react";
 import type {
   FactoryStorage,
+  StorageBufferMode,
   StorageDrainMode,
   StorageThroughputResult,
 } from "@/lib/model/types";
@@ -32,6 +33,7 @@ import { useRenderedHandles } from "./use-rendered-handles";
 import { GT_NODE_COLORS } from "./node-colors";
 import { getPaintBrushCursor } from "./paint-cursor";
 import { hasAnySolveNumbers } from "@/lib/solver/throughput";
+import { openRatioEditor } from "./ratio-editor";
 
 
 export interface StorageNodeData extends Record<string, unknown> {
@@ -118,9 +120,9 @@ const ROLE_TINTS: Record<StorageRole, string> = {
   idle: "#5d6877",
 };
 
-/** Which of the two buffer behaviours this drawer runs (absent is overflow). */
+/** Both strict and ratio buffers pass through without banking surplus. */
 function isStrictBuffer(storage: FactoryStorage): boolean {
-  return storage.bufferMode === "strict";
+  return storage.bufferMode === "strict" || storage.bufferMode === "ratio";
 }
 
 // Inline (not utility classes) so React Flow's own handle stylesheet can
@@ -904,7 +906,8 @@ function StorageHeader({
   const noun = isTank ? "tank" : "drawer";
   const presentation = ROLE_PRESENTATION[role];
   const strict = role === "buffer" && isStrictBuffer(storage);
-  const word = strict ? "STRICT" : presentation.word;
+  const ratio = role === "buffer" && storage.bufferMode === "ratio";
+  const word = ratio ? "RATIO" : strict ? "STRICT" : presentation.word;
 
   return (
     <div
@@ -947,10 +950,12 @@ function StorageHeader({
       >
         {word}
       </div>
+      {ratio ? <button type="button" data-tooltip-stop aria-label="Edit drawer ratios" onClick={event => { event.stopPropagation(); openRatioEditor(storageId, event.currentTarget); }}
+        className="board-edit-chrome nodrag absolute inset-y-0 left-5 right-5 z-10 cursor-pointer" /> : null}
       {isDrainRole(role) ? (
         <DrainModeSwap storageId={storageId} role={role} kind={storage.kind} />
       ) : null}
-      {role === "buffer" ? <BufferModeSwap storageId={storageId} strict={strict} /> : null}
+      {role === "buffer" ? <BufferModeSwap storageId={storageId} mode={storage.bufferMode ?? "overflow"} /> : null}
     </div>
   );
 }
@@ -958,23 +963,24 @@ function StorageHeader({
 /**
  * The one thing about a BUFFER you choose, worn as its own icon so the tile
  * SAYS which one it is: an arrow dropping into a tray while the tank catches
- * overflow, plain left-right arrows when it is a strict pass-through.
- * Clicking flips it.
+ * overflow, left-right arrows for strict pass-through, a fork for ratios.
+ * Clicking cycles all three; entering ratio opens its branch editor.
  */
-function BufferModeSwap({ storageId, strict }: { storageId: string; strict: boolean }) {
+function BufferModeSwap({ storageId, mode }: { storageId: string; mode: StorageBufferMode }) {
   const updateStorage = useFactoryStore((state) => state.updateStorage);
-  const Icon = strict ? ArrowLeftRight : ArrowDownToLine;
+  const Icon = mode === "ratio" ? Split : mode === "strict" ? ArrowLeftRight : ArrowDownToLine;
+  const next = mode === "overflow" ? "strict" : mode === "strict" ? "ratio" : "overflow";
 
   return (
-    <MinecraftTooltip content={() => <RecipeTooltip view={buildBufferKeyTooltip(strict)} />}>
+    <MinecraftTooltip content={() => <RecipeTooltip view={buildBufferKeyTooltip(mode)} />}>
     <button
       type="button"
       onClick={(event) => {
         event.stopPropagation();
-        updateStorage(storageId, { bufferMode: strict ? "overflow" : "strict" });
+        updateStorage(storageId, { bufferMode: next });
+        if (next === "ratio") openRatioEditor(storageId, event.currentTarget);
       }}
-      aria-label={strict ? "Switch to overflow" : "Switch to strict"}
-      aria-pressed={strict}
+      aria-label={`Switch to ${next}`}
       className="board-edit-chrome nodrag relative z-40 ml-auto flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
     >
       <Icon aria-hidden className="h-2.5 w-2.5" />

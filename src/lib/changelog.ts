@@ -47,6 +47,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.2.0",
+    date: "2026-09-12",
+    headline: "Choose your drawer's split",
+    notes: [
+      "Drawers and tanks have a third mode: Ratio, which divides incoming supply between outgoing wires in your chosen proportions.",
+      "Click RATIO or a wire's percentage to type or scroll each branch's parts, such as 1000:20 or 1:1.",
+      "Ratio mode holds the split when a branch backs up, in both Build and Solve.",
+    ],
+  },
+  {
     version: "3.1.9",
     date: "2026-09-12",
     headline: "Singleblock tiers match the game",

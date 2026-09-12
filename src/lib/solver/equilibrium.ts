@@ -437,7 +437,7 @@ export function solveEquilibrium(
     const isOverflowBufferSink =
       role === "storage-sink" &&
       storageRoles.get(edge.target) === "buffer" &&
-      targetStorage?.bufferMode !== "strict";
+      (targetStorage?.bufferMode ?? "overflow") === "overflow";
     const prepared: PreparedEdge = {
       id: edge.id,
       sourceId: edge.source,

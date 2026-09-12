@@ -1,6 +1,7 @@
 import type {
   FactoryProject,
   FactoryStorage,
+  StorageBufferMode,
   StorageThroughputResult,
   ThroughputResult,
 } from "@/lib/model/types";
@@ -58,7 +59,7 @@ export function buildStorageTooltip(
   const rate = (value: number) => formatSlotRate(value, storage.kind);
   const view: RecipeTooltipView = {
     title: storage.displayName ?? storage.resourceId,
-    subtitle: strict ? "Buffer · Strict" : ROLE_WORD[role],
+    subtitle: role === "buffer" && storage.bufferMode === "ratio" ? "Buffer · Ratio" : strict ? "Buffer · Strict" : ROLE_WORD[role],
     rows: [],
     // A drawer is a port with no rows to browse: dragging is its one gesture,
     // and in pool mode a drag lands nothing.
@@ -135,8 +136,9 @@ export function buildDrainKeyTooltip(role: StorageRole, next: string): RecipeToo
   return { title: ROLE_WORD[role], rows: [], actions: NEXT_ACTION(next) };
 }
 
-export function buildBufferKeyTooltip(strict: boolean): RecipeTooltipView {
-  return strict
-    ? { title: "Strict", subtitle: "Surplus stalls the feeder", rows: [], actions: NEXT_ACTION("overflow") }
-    : { title: "Overflow", subtitle: "Surplus stored", rows: [], actions: NEXT_ACTION("strict") };
+export function buildBufferKeyTooltip(mode: StorageBufferMode): RecipeTooltipView {
+  if (mode === "ratio") return { title: "Ratio", subtitle: "Fixed output shares", rows: [], actions: NEXT_ACTION("overflow") };
+  return mode === "strict"
+    ? { title: "Strict", subtitle: "Surplus stalls the feeder", rows: [], actions: NEXT_ACTION("ratio") }
+    : { title: "Non-strict", subtitle: "Surplus stored", rows: [], actions: NEXT_ACTION("strict") };
 }

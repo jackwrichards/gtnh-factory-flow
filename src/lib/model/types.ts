@@ -424,10 +424,11 @@ export type StorageDrainMode = "product" | "byproduct" | "trash";
  * takers leave, filling at a visible rate, so the feeder never clogs on it -
  * the way a real chest or tank behaves. `strict` passes through only what is
  * pulled and hands the surplus back to the feeder as a clog, for players who
- * want the imbalance surfaced instead of stored. Neither mode can run the
- * tank net-negative: a buffer never invents supply.
+ * want the imbalance surfaced instead of stored. `ratio` also passes through
+ * without banking, dividing outflow by the outgoing wires' ratioWeight parts.
+ * No mode can run the tank net-negative: a buffer never invents supply.
  */
-export type StorageBufferMode = "overflow" | "strict";
+export type StorageBufferMode = "overflow" | "strict" | "ratio";
 
 export interface FactoryStorage {
   id: string;
@@ -615,6 +616,8 @@ export interface FactoryEdge {
   resourceId: ResourceId;
   label?: string;
   ratePerSecond?: number;
+  /** Relative parts leaving a ratio buffer; absent is one, zero closes this branch. */
+  ratioWeight?: number;
   /**
    * A loose cell wire (SetupRules.looseCellWires): the edge's own resource is
    * what leaves the source - the filled CELL or the FLUID - and its target

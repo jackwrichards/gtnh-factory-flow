@@ -97,8 +97,9 @@ describe("drawer tooltips are words and figures", () => {
   });
   it("describes the keys by state and next state", () => {
     expect(buildDrainKeyTooltip("product", "byproduct")).toMatchObject({ title: "Product", actions: [{ label: "Switch to byproduct" }] });
-    expect(buildBufferKeyTooltip(true)).toMatchObject({ title: "Strict", actions: [{ label: "Switch to overflow" }] });
-    expect(buildBufferKeyTooltip(false)).toMatchObject({ title: "Overflow", actions: [{ label: "Switch to strict" }] });
+    expect(buildBufferKeyTooltip("strict")).toMatchObject({ title: "Strict", actions: [{ label: "Switch to ratio" }] });
+    expect(buildBufferKeyTooltip("overflow")).toMatchObject({ title: "Non-strict", actions: [{ label: "Switch to strict" }] });
+    expect(buildBufferKeyTooltip("ratio")).toMatchObject({ title: "Ratio", actions: [{ label: "Switch to overflow" }] });
     const field = buildTargetTooltip(drawer("out", product, { targetPerSecond: 150 }), { producedPerSecond: 100, targetUnreachable: true } as never);
     expect(labels(field)).toEqual(["Required", "Reachable"]);
     expect(field.actions?.[0]?.label).toBe("Edit amount");
