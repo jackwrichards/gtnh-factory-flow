@@ -2107,7 +2107,6 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
                       ? formatChipEnergy(chip.resource, "input", eut, durationTicks)
                       : formatChipAmount(chip.resource, rateView, durationTicks, ratioDivisor)
                 }
-                hasAlternatives={chip.faces.length > 1}
                 onCycle={
                   chip.faces.length > 1
                     ? (step) => {
@@ -2450,8 +2449,6 @@ function ResourceChip({
   hit?: boolean;
   amountText: ChipAmount;
   chance?: number;
-  /** The slot accepts several forms; the icon wears the classic blue plus. */
-  hasAlternatives?: boolean;
   /** Wheel over the chip steps through the forms, and the choice sticks. */
   onCycle?: (step: 1 | -1) => void;
   onBrowseResource: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
@@ -2522,8 +2519,6 @@ function ResourceChip({
           className="!h-full !w-full"
           iconPixelSize={machineArtPixels(32)}
         />
-        {/* No badge of our own: ResourceIcon already draws the blue plus for
-            a slot that accepts several forms. */}
       </span>
       {/* The icon is the big thing; the name is smaller and may take a
           second line rather than losing its second word to an ellipsis. */}

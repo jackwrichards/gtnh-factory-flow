@@ -116,16 +116,11 @@ function ResourceIconComponent({
         </span>
       ) : null}
 
-      {resource && shouldShowAlternativeMarker(resource) ? (
+      {resource && alternativeState === "locked" && shouldShowAlternativeMarker(resource) ? (
         <span
-          className={[
-            "absolute left-0 bottom-0 font-mono text-[9px] font-black leading-none drop-shadow-[1px_1px_0_#000]",
-            // Amber reads as "you set this" against the cyan the rest of the
-            // slot chrome uses for "there is more here".
-            alternativeState === "locked" ? "text-[#ffaa00]" : "text-[#55ffff]",
-          ].join(" ")}
+          className="absolute left-0 bottom-0 font-mono text-[9px] font-black leading-none text-[#ffaa00] drop-shadow-[1px_1px_0_#000]"
         >
-          {alternativeState === "locked" ? "■" : "+"}
+          ■
         </span>
       ) : null}
 
@@ -292,8 +287,8 @@ function buildTooltipLabel(
  * group's name and then every member of it, twice: once from the dataset's own
  * tooltip and once built here. On a group like `logWood` that is eight wrapped
  * lines of names covering the card, in front of the one thing you pointed at.
- * The rotating art and the "+" already say there are alternatives, and the wheel
- * shows them one at a time, so the tip only names what is on the slot right now.
+ * The wheel shows alternatives one at a time, so the tip only names what is
+ * on the slot right now.
  */
 function isOreDictionaryNoiseLine(line: string): boolean {
   const normalized = line.trim().toLowerCase();

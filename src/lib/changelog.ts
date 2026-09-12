@@ -54,6 +54,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Recipe dropdowns open without summoning the phone keyboard; tap the filter when you want to type.",
       "Filtering keeps the menu open when the keyboard changes the screen height, and focusing a card control no longer dismisses menus through an accidental board scroll.",
       "Fixed a board crash when resizing or opening the keyboard switches between desktop and compact layouts.",
+      "Removed the cyan plus badges from item icons; ingredient alternatives remain available through the existing controls.",
     ],
   },
   {
