@@ -7,11 +7,13 @@ import { emitBoardCameraMove } from "@/lib/board-camera-signal";
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { useViewerLock } from "./use-viewer-lock";
 import { StorageRatioEditor } from "./StorageRatioEditor";
-import { getProjectRatioBranches } from "@/lib/model/storage-ratios";
+import { formatRatioShare, getProjectRatioBranches } from "@/lib/model/storage-ratios";
+import { ratioExitLabel } from "./ratio-exit-label";
 
 import {
   BaseEdge,
   ConnectionMode,
+  EdgeLabelRenderer,
   Position,
   ReactFlow,
   SelectionMode,
@@ -755,6 +757,7 @@ const EXPORT_PNG_PIXEL_RATIO = 2;
 const EXPORT_PNG_MAX_PIXEL_SIDE = 8192;
 const FLOW_EDGE_LABEL_SELECT_EVENT = "gtnh-flow.edge-label-select";
 type ResourceEdgeData = {
+  ratio?: { share: number; index: number };
   resource: Pick<
     ResourceAmount,
     "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
@@ -2144,7 +2147,6 @@ export function FactoryFlow() {
   );
 
   const nodesFromProject = useMemo<BoardFlowNode[]>(() => {
-    const ratioBranches = getProjectRatioBranches(project);
     // An item inside an open board is a React Flow CHILD of the frame: its
     // stored position is already frame-relative, so handing the owner over
     // as `parentId` is the whole mechanism that makes a dragged title bar
@@ -2267,8 +2269,6 @@ export function FactoryFlow() {
             data: reuseObjectIdentity(storageNodeDataCache, storage.id, {
               storage,
               result: result.storages[storage.id],
-              // A primitive keeps unchanged cards stable in the shallow data cache.
-              ratioSharesKey: ratioBranches.get(storage.id)?.map((branch) => branch.share).join(","),
             }),
           }) satisfies StorageFlowNode,
       ),
@@ -3318,6 +3318,12 @@ export function FactoryFlow() {
     // What the grid solve needs about every wire, collected as the edge
     // objects are built and published in one shot below.
     const gridRouteInputs: GridRouteEdgeInput[] = [];
+    const ratioByEdge = new Map<string, { share: number; index: number }>();
+    for (const branches of getProjectRatioBranches(project).values()) {
+      branches.forEach((branch, index) => {
+        for (const edge of branch.edges) ratioByEdge.set(edge.id, { share: branch.share / branch.edges.length, index });
+      });
+    }
     const builtEdges = project.edges.flatMap((edge, edgeIndex) => {
       // The pocket view remap. A wire whose endpoint is collapsed inside a
       // pocket renders against the pocket CARD instead, docking on the
@@ -3452,6 +3458,10 @@ export function FactoryFlow() {
         type: "resourceEdge",
         data: {
           resource,
+          ratio: sourceIsPocket || !ratioByEdge.has(edge.id) ? undefined : {
+            share: (channelEdgeIdsByRepresentative.get(edge.id) ?? [edge.id]).reduce((sum, id) => sum + (ratioByEdge.get(id)?.share ?? 0), 0),
+            index: ratioByEdge.get(edge.id)!.index,
+          },
           color: edgeColor,
           demand,
           // Always the real flow. demand can sit at the full-speed rate on
@@ -9790,6 +9800,7 @@ function ResourceEdgeComponent({
     [isPowerEdge, liveRoute.points],
   );
   const drawnPath = lightningPath ?? liveRoute.path;
+  const ratioLabel = data?.ratio ? ratioExitLabel(liveRoute.points, data.ratio.index) : undefined;
   // The dots the user has pinned — the draft while one is mid-drag. Only
   // the DOT follows the pointer; the wire holds its route and takes the
   // real one on release. Live previews always guessed wrong.
@@ -9938,6 +9949,15 @@ function ResourceEdgeComponent({
 
   return (
     <>
+      {data?.ratio && ratioLabel ? (
+        <EdgeLabelRenderer>
+          <span data-ratio-edge={id}
+            className="pointer-events-none absolute whitespace-nowrap text-[10px] font-bold leading-3 text-[#e8e9ee] [text-shadow:1px_0_2px_#101318,-1px_0_2px_#101318,0_1px_2px_#101318,0_-1px_2px_#101318]"
+            style={{ left: ratioLabel.x, top: ratioLabel.y, transform: ratioLabel.transform }}>
+            {formatRatioShare(data.ratio.share)}
+          </span>
+        </EdgeLabelRenderer>
+      ) : null}
       {checklistMode && liveRoute.path ? (
         <ViewportPortal>
           {/* Only the invisible hit target clears port hit boxes. The visible

@@ -1366,8 +1366,9 @@ Working notes for future agents on GTNH Factory Flow.
   edge. Old plans and view blobs carrying the keys parse (unknown keys
   strip); `lineLabelsMode` stays in the plan-view type as a historical
   field nothing reads. The ports carry the numbers.
-  Ratio drawers have NO exception (Jack, 2026-09-12): the split belongs
-  entirely on the drawer. Never draw percentages or editing controls on edges.
+  Ratio drawers are the narrow exception (Jack's revision, 2026-09-12):
+  every outgoing wire shows its share right beside the source exit, never
+  midway down the wire. These are plain percentages, not editable pills.
 - THE BOARD MENU (Jack, 2026-09-08): ONE right-click menu for the whole
   board, `src/components/flow/BoardContextMenu.tsx`, on React Flow's
   `onPaneContextMenu` / `onNodeContextMenu` / `onEdgeContextMenu`. The
@@ -1459,11 +1460,12 @@ Working notes for future agents on GTNH Factory Flow.
   away preserves weights; removing a wire renormalizes the remaining ones.
   Inserting another drawer on a branch carries its parts onto the upstream
   replacement wire. The editor changes a whole drawn channel in one undo step.
-  Ratio wears a cyan tint, double rim and fork, with its percentages and split
-  bar on the card. The separate pencil opens `StorageRatioEditor.tsx` as a
-  full-screen native dialog: destinations, editable parts, percentages, Done.
-  Switching modes NEVER opens the editor. Keep mode controls on the card;
-  don't add flow rates or more settings to the split editor.
+  Ratio keeps the ordinary drawer colour, with a double rim and fork. No
+  combined percentage or bar on the card: EVERY outgoing share is printed at
+  its wire's exit. The bottom-centre pencil opens `StorageRatioEditor.tsx`, a
+  compact sheet matching Settings (grey plate, bevels, output/parts/share rows).
+  Switching modes NEVER opens it. No full-screen editor, blue tint, coloured
+  bars, flow rates or extra settings.
 - The drain pill cycles THREE ways since 2026-08-23: product, byproduct,
   trash. A TRASH drawer is the byproduct's shape (free disposal, no demand)
   with the books voided (`applyTrashedOutputBalances` covers it alongside

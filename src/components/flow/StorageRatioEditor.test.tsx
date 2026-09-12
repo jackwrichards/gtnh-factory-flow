@@ -49,7 +49,7 @@ afterEach(() => {
   useFactoryStore.setState(initial);
 });
 
-it("only opens explicitly, commits on Done, and reopens saved parts", () => {
+it("only opens explicitly, commits on Close, and reopens saved parts", () => {
   render(<StorageRatioEditor />);
   act(() => useFactoryStore.getState().updateStorage("split", { bufferMode: "strict" }));
   act(() => useFactoryStore.getState().updateStorage("split", { bufferMode: "ratio" }));
@@ -57,11 +57,11 @@ it("only opens explicitly, commits on Done, and reopens saved parts", () => {
   act(() => openRatioEditor("split"));
   expect(screen.getByRole("dialog").tagName).toBe("DIALOG");
   expect(screen.getAllByRole("button")).toHaveLength(1);
-  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Done" }));
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close" }));
   const input = screen.getByRole("spinbutton", { name: "Plate drawer parts" });
   act(() => input.focus());
   fireEvent.change(input, { target: { value: "1000" } });
-  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  fireEvent.click(screen.getByRole("button", { name: "Close" }));
   expect(screen.queryByRole("dialog")).toBeNull();
   act(() => openRatioEditor("split"));
   expect(

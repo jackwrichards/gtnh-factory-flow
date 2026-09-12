@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Split } from "lucide-react";
+import { X } from "lucide-react";
 import {
   formatRatioShare,
   getStorageRatioBranches,
@@ -10,7 +10,6 @@ import {
 } from "@/lib/model/storage-ratios";
 import { useFactoryStore } from "@/store/factory-store";
 import { RATIO_EDITOR_EVENT, type RatioEditorRequest } from "./ratio-editor";
-import { ratioColor } from "./storage-ratio-presentation";
 
 /** One listener per board; closed drawers acquire no editor subscriptions. */
 export const StorageRatioEditor = memo(function StorageRatioEditor() {
@@ -45,7 +44,7 @@ function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose
   useEffect(() => {
     const dialog = rootRef.current;
     dialog?.showModal();
-    // Open on Done, not a number field: phones should not launch a keyboard.
+    // Open on Close, not a number field: phones should not launch a keyboard.
     doneRef.current?.focus({ preventScroll: true });
     return () => dialog?.close();
   }, []);
@@ -80,8 +79,7 @@ function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose
       aria-label="Drawer split"
       data-ratio-editor
       data-tooltip-stop
-      className="ui-zoom nodrag nopan nowheel fixed inset-0 m-0 max-h-none max-w-none overflow-y-auto border-0 bg-[#10191e] p-0 text-[#e8f4f5] backdrop:bg-[#10191e]"
-      style={{ width: "calc(100 * var(--ui-vw, 1vw))", height: "calc(100 * var(--ui-dvh, 1dvh))" }}
+      className="ui-zoom nodrag nopan nowheel fixed inset-0 m-auto max-h-[calc(88*var(--ui-vh))] w-[calc(100*var(--ui-vw)-32px)] max-w-sm flex-col overflow-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-0 text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),4px_4px_0_rgba(0,0,0,0.45)] open:flex backdrop:bg-neutral-950/75 backdrop:backdrop-blur-sm compact:backdrop:[backdrop-filter:none]"
       onCancel={(event) => {
         event.preventDefault();
         close();
@@ -91,53 +89,41 @@ function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose
       onKeyDown={(event) => event.stopPropagation()}
       onWheel={(event) => event.stopPropagation()}
     >
-      <div className="mx-auto flex min-h-full w-full max-w-[720px] flex-col px-5 py-6 sm:px-10 sm:py-12">
-        <header className="sticky top-0 z-10 mb-8 flex items-center justify-between gap-4 bg-[#10191e] py-2">
-          <div className="flex min-w-0 items-center gap-3">
-            <Split aria-hidden className="h-7 w-7 shrink-0 text-cyan-200" />
-            <div className="min-w-0">
-              <h2 className="text-xl font-bold">Split</h2>
-              <p className="truncate text-xs text-slate-400">
-                {storage?.displayName ?? storage?.resourceId}
-              </p>
-            </div>
-          </div>
-          <button
-            ref={doneRef}
-            type="button"
-            onClick={close}
-            className="shrink-0 rounded border border-cyan-200/50 bg-cyan-200/10 px-4 py-2 text-sm font-bold text-cyan-100 hover:bg-cyan-200/20 focus-visible:outline-2 focus-visible:outline-cyan-200"
-          >
-            Done
-          </button>
-        </header>
-        <div aria-hidden className="mb-3 flex h-12 overflow-hidden rounded bg-white/5">
-          {branches.map((branch, index) => (
-            <div
-              key={branch.targetId + index}
-              className="flex min-w-0 items-center justify-center overflow-hidden text-sm font-bold text-[#10191e]"
-              style={{ width: `${branch.share * 100}%`, background: ratioColor(index) }}
-            >
-              {branch.share >= 0.13 ? formatRatioShare(branch.share) : null}
-            </div>
-          ))}
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b-2 border-[var(--mc-15)] px-4 py-2.5">
+        <h2 className="min-w-0 truncate text-sm font-bold">
+          Split · {storage?.displayName ?? storage?.resourceId}
+        </h2>
+        <button
+          ref={doneRef}
+          type="button"
+          aria-label="Close"
+          onClick={close}
+          className="flex h-7 w-7 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </header>
+      <div className="min-h-0 overflow-y-auto px-4">
+        <div className="grid grid-cols-[minmax(0,1fr)_76px_68px] gap-2 border-b border-[var(--mc-36)] py-2 text-[10px] text-[var(--mc-ink-muted)]">
+          <span>Output</span>
+          <span className="text-right">Parts</span>
+          <span className="text-right">Share</span>
         </div>
-        <p className="mb-7 text-xs text-slate-400">Type or scroll the parts. Percentages follow.</p>
-        <div className="flex flex-col gap-3">
-          {branches.map((branch, index) => (
-            <RatioBranchRow
-              key={branch.edges.map((e) => e.id).join("|")}
-              branch={branch}
-              storageId={request.storageId}
-              name={names.get(branch.targetId) ?? "Machine"}
-              index={index}
-            />
-          ))}
-        </div>
+        {branches.map((branch, index) => (
+          <RatioBranchRow
+            key={branch.edges.map((e) => e.id).join("|")}
+            branch={branch}
+            storageId={request.storageId}
+            name={names.get(branch.targetId) ?? "Machine"}
+            index={index}
+          />
+        ))}
         {!branches.length ? (
-          <p className="py-4 text-sm text-slate-400">Connect an output to set its share.</p>
+          <p className="py-3 text-xs text-[var(--mc-ink-muted)]">
+            Connect an output to set its share.
+          </p>
         ) : branches.every((branch) => branch.share === 0) ? (
-          <p className="mt-4 text-xs text-slate-400">All outputs closed.</p>
+          <p className="pb-3 text-xs text-[var(--mc-ink-muted)]">All outputs closed.</p>
         ) : null}
       </div>
     </dialog>,
@@ -191,16 +177,8 @@ function RatioBranchRow({
     return () => input?.removeEventListener("wheel", wheel);
   }, []);
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_88px] items-center gap-x-4 gap-y-3 rounded border border-white/10 bg-white/[0.025] p-4 sm:grid-cols-[minmax(0,1fr)_100px_90px]">
-      <label
-        htmlFor={`ratio-parts-${index}`}
-        className="col-span-2 flex min-w-0 items-center gap-3 text-sm sm:col-span-1"
-      >
-        <span
-          aria-hidden
-          className="h-3 w-3 shrink-0 rounded-sm"
-          style={{ background: ratioColor(index) }}
-        />
+    <div className="grid grid-cols-[minmax(0,1fr)_76px_68px] items-center gap-2 border-b border-[var(--mc-36)] py-3 last:border-b-0">
+      <label htmlFor={`ratio-parts-${index}`} className="min-w-0 text-xs">
         <span className="min-w-0 break-words">{name}</span>
       </label>
       <input
@@ -211,7 +189,8 @@ function RatioBranchRow({
         inputMode="decimal"
         min="0"
         step="any"
-        className="min-w-0 w-full rounded border border-white/20 bg-black/20 px-3 py-2 text-right text-base tabular-nums focus:outline-cyan-200"
+        title="Type or scroll parts"
+        className="h-7 min-w-0 w-full border-2 border-[var(--mc-15)] bg-[var(--mc-25)] px-1 text-right text-xs tabular-nums focus:outline-[var(--mc-ink-muted)]"
         value={editing ? draft : String(branch.weight)}
         onFocus={() => {
           setDraft(String(branch.weight));
@@ -227,10 +206,7 @@ function RatioBranchRow({
           if (event.key === "Enter") event.currentTarget.blur();
         }}
       />
-      <output
-        className="text-right text-base font-bold tabular-nums"
-        style={{ color: ratioColor(index) }}
-      >
+      <output className="text-right text-xs font-bold tabular-nums">
         {formatRatioShare(branch.share)}
       </output>
     </div>

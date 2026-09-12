@@ -34,15 +34,11 @@ import { GT_NODE_COLORS } from "./node-colors";
 import { getPaintBrushCursor } from "./paint-cursor";
 import { hasAnySolveNumbers } from "@/lib/solver/throughput";
 import { openRatioEditor } from "./ratio-editor";
-import { formatRatioShare } from "@/lib/model/storage-ratios";
-import { ratioColor } from "./storage-ratio-presentation";
 
 
 export interface StorageNodeData extends Record<string, unknown> {
   storage: FactoryStorage;
   result?: StorageThroughputResult;
-  /** Normalized outgoing shares, encoded for the flow node's shallow cache. */
-  ratioSharesKey?: string;
 }
 
 export type StorageFlowNode = Node<StorageNodeData, "storageNode">;
@@ -111,7 +107,6 @@ function storageTint(storage: Pick<FactoryStorage, "kind" | "colorTag" | "buffer
   if (storage.kind === "power") {
     return POWER_STORAGE_TINT;
   }
-  if (role === "buffer" && storage.bufferMode === "ratio") return "#5acbd4";
   return ROLE_TINTS[role];
 }
 
@@ -206,7 +201,7 @@ function storageIconPixelSize(
 }
 
 function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
-  const { storage, result, ratioSharesKey } = data;
+  const { storage, result } = data;
   const reactFlowStore = useStoreApi();
   // The invisible wire handles blanket the card body, and React Flow does not
   // select a node for clicks that land on a handle - so a plain click (no
@@ -418,7 +413,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             fill underneath is already the role-coloured ground. */}
         <NodeGlanceIcon>
           {storage.bufferMode === "ratio" && role === "buffer" ? (
-            <Split aria-hidden className="absolute right-0 top-0 z-20 h-7 w-7 rounded-sm bg-[#10272d] p-1 text-cyan-200" />
+            <Split aria-hidden className="absolute right-0 top-0 z-20 h-7 w-7 bg-[#252a33] p-1 text-[#e8e9ee]" />
           ) : null}
           {/* Deliberately bigger than the card it sits on.
               Zoomed out, WHAT is in the drawer is the only thing worth
@@ -571,10 +566,10 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
                 )}
                 className={role === "buffer" && storage.bufferMode === "ratio" ? "!h-[24px] !w-[24px]" : "!h-[36px] !w-[36px]"}
               />
-              {role === "buffer" && storage.bufferMode === "ratio" ? <Split aria-hidden className="h-5 w-5 text-cyan-200" /> : null}
+              {role === "buffer" && storage.bufferMode === "ratio" ? <Split aria-hidden className="h-5 w-5 text-[#e8e9ee]" /> : null}
             </div>
             {role === "buffer" && storage.bufferMode === "ratio" ? (
-              <RatioSplitButton storageId={storage.id} sharesKey={ratioSharesKey} />
+              <RatioSplitButton storageId={storage.id} />
             ) : solveMode && role === "product" ? (
               <TargetLine storage={storage} result={result} />
             ) : (
@@ -906,27 +901,17 @@ export function TargetLine({
   );
 }
 
-function RatioSplitButton({ storageId, sharesKey }: { storageId: string; sharesKey?: string }) {
-  const shares = sharesKey ? sharesKey.split(",").map(Number) : [];
-  const percentages = shares.map(formatRatioShare);
-  const summary = shares.length <= 2 ? percentages.join(" / ")
-    : shares.length === 3 ? `${percentages.map((value) => value.replace("%", "")).join("/")}%`
-    : `${percentages[0]} + ${shares.length - 1} more`;
+function RatioSplitButton({ storageId }: { storageId: string }) {
   return (
-    <button type="button" data-tooltip-stop data-ratio-split aria-label="Edit drawer ratios"
-      title={`${percentages.join(" / ")} · Edit split`}
+    <button type="button" data-tooltip-stop aria-label="Edit drawer ratios" title="Edit split"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => { event.stopPropagation(); openRatioEditor(storageId); }}
-      className="nodrag nopan relative z-40 mx-auto mb-0.5 flex w-[70px] shrink-0 flex-col gap-0.5 rounded-sm border border-cyan-200/40 bg-[#10272d] px-1 py-0.5 text-cyan-100 hover:bg-[#23505a]"
+      className="board-edit-chrome nodrag nopan relative z-40 mx-auto mb-0.5 flex h-4 w-6 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
     >
-      <span className="flex w-full items-center justify-center gap-1 whitespace-nowrap font-bold tabular-nums" style={{ fontSize: summary.length > 15 ? 5 : 7 }}><span>{summary || "Set split"}</span><Pencil aria-hidden className="board-edit-chrome h-2 w-2 shrink-0" /></span>
-      <span aria-hidden className="flex h-[3px] w-full overflow-hidden bg-white/10">
-        {shares.map((share, index) => <span key={index} style={{ width: `${share * 100}%`, background: ratioColor(index) }} />)}
-      </span>
+      <Pencil aria-hidden className="h-2.5 w-2.5" />
     </button>
   );
 }
-
 function StorageHeader({
   storage,
   isTank,
