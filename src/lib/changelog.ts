@@ -51,7 +51,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-09-12",
     headline: "Singleblock tiers match the game",
     notes: [
-      "Singleblocks follow their full machine progression, including renamed Ultimate and Epic variants.",
+      "Singleblocks follow their full machine progression, including Ultimate/Epic variants and the Basic-to-Chemical Dehydrator chain.",
       "Tier controls and calculations stop at each machine's highest registered tier, including on older plans.",
       "Singleblock tier controls skip unregistered intermediate machines, including the IV-to-ZPM Cold Trap and Reactor Processing Unit.",
       "Electric Furnace retains its real tier limit, and the Ore Washing Plant controller stays separate from the singleblock Ore Washer.",
