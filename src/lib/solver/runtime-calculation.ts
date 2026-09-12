@@ -1,8 +1,8 @@
 import {
   getRecipeMaximumVoltageTier,
+  getRunVoltageTier,
   getVoltageTierIndex,
   GT_VOLTAGE_TIERS,
-  resolveVoltageTier as resolveModelVoltageTier,
 } from "@/lib/model/tiers";
 import { getMachineBehaviour } from "@/lib/machines/machine-table";
 import { isFusionRecipe } from "@/lib/machines/fusion";
@@ -38,7 +38,7 @@ export function prefersCuratedMachineMath(recipe: { machineType?: string }): boo
 
 export function selectRuntimeCalculationVariant(
   recipe: Pick<Recipe, "runtimeCalculation"> &
-    Partial<Pick<Recipe, "machineType" | "machineProfile" | "maximumTier">>,
+    Partial<Pick<Recipe, "machineType" | "machineProfile" | "maximumTier" | "availableTiers" | "minimumTier" | "eut">>,
   node: Pick<
     FactoryNode,
     "machineHandlerId" | "overclockTier" | "coilTier" | "machineConfigTiers"
@@ -60,11 +60,10 @@ export function selectRuntimeCalculationVariant(
   // including when an old plan still stores MAX on a family ending at UMV.
   const maximum = getRecipeMaximumVoltageTier(recipe);
   if (
-    maximum &&
-    recipe.machineProfile?.kind !== "multiblock" &&
-    getVoltageTierIndex(resolveModelVoltageTier(node.overclockTier, maximum)) > getVoltageTierIndex(maximum)
+    (maximum || recipe.availableTiers?.length) &&
+    recipe.machineProfile?.kind !== "multiblock"
   ) {
-    node = { ...node, overclockTier: maximum };
+    node = { ...node, overclockTier: getRunVoltageTier({ ...recipe, minimumTier: recipe.minimumTier ?? "ULV", eut: recipe.eut ?? 0 }, node.overclockTier) };
   }
   const variants = recipe.runtimeCalculation?.variants ?? [];
   if (recipe.runtimeCalculation?.status !== "computed" || variants.length === 0) {

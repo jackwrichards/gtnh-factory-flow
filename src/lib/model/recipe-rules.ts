@@ -48,7 +48,7 @@ export function getRecipeMachineHandlers(
     const normalized = normalizeFusionHandler(normalizeMachineHandler(handler), recipe);
     const fusion = getFusionMachine(normalized.machineType);
     if (fusion && fusionMark !== undefined && fusion.mark < fusionMark) continue;
-    const familyId = slug(normalized.label);
+    const familyId = `${normalized.kind ?? "single"}:${slug(normalized.label)}`;
     if (!handlersByFamily.has(familyId)) {
       handlersByFamily.set(familyId, normalized);
     }
@@ -220,6 +220,7 @@ export function applyMachineHandlerToRecipe(
     machineType: handler.machineType,
     minimumTier,
     maximumTier: handler.maximumTier,
+    availableTiers: handler.availableTiers,
     durationTicks: handlerDurationTicks ?? recipe.durationTicks,
     eut,
     machineConfigControls,
@@ -228,6 +229,7 @@ export function applyMachineHandlerToRecipe(
       machineType: handler.machineType,
       minimumTier,
       maximumTier: handler.maximumTier,
+      availableTiers: handler.availableTiers,
       durationTicks: handlerDurationTicks ?? recipe.machineProfile?.durationTicks,
       eut: handlerEut ?? recipe.machineProfile?.eut,
       maxParallel: handler.maxParallel ?? recipe.machineProfile?.maxParallel,
@@ -436,9 +438,10 @@ export function recipeMapName(recipe: Pick<Recipe, "machineType" | "source">): s
 }
 
 function normalizeMachineHandler(handler: MachineHandler): MachineHandler {
-  // Fusion's Roman numeral names a different reactor, not a singleblock
-  // voltage suffix. Stripping it merged I/II/III and IV/V into two families.
-  if (getFusionMachine(handler.machineType)) return handler;
+  // Controller names are identities, not singleblock voltage aliases: Ore
+  // Washing Plant is distinct from Ore Washer, and fusion numerals name
+  // different reactors. Preserve explicit multiblocks before family folding.
+  if (handler.kind === "multiblock" || getFusionMachine(handler.machineType)) return handler;
   const familyLabel = machineHandlerFamilyLabel(handler.label);
   return {
     ...handler,

@@ -31,6 +31,8 @@ const renderedIconDir = process.env.GTNH_RENDERED_ICON_DIR;
 const oracleStrict = envFlag("GTNH_ORACLE_STRICT", false);
 
 const raw = JSON.parse(stripBom(await fs.readFile(inputPath, "utf8")));
+const singleblockFamilyIds = new Set((findDomain("gregtech")?.recipeMaps ?? []).flatMap(map =>
+  buildMachineHandlerTemplates(map.name, map.catalysts).filter(handler => handler.kind === "single").map(handler => handler.id)));
 const renderedIcons = await stageRenderedIcons(renderedIconDir, outDir);
 
 const resources = new Map();
@@ -166,7 +168,7 @@ function normalizeGregtech(domain) {
     // machines become selectable handlers with their own stats, so one
     // machine's bonuses no longer leak onto another (the Dangote Distillus
     // used to force 12 parallels onto the plain Distillation Tower).
-    const handlerTemplates = buildMachineHandlerTemplates(machineType, recipeMap.catalysts);
+    const handlerTemplates = buildMachineHandlerTemplates(machineType, recipeMap.catalysts, singleblockFamilyIds);
     registerMachineHandlerIcons(handlerTemplates);
     const catalystControls = primaryMachineHandlerControls(handlerTemplates);
     for (const rawRecipe of recipeMap.recipes ?? []) {
@@ -436,7 +438,7 @@ function normalizeSmelting(domain) {
  * Smelter's parallels arrive through its parsed tooltip controls.
  */
 function furnaceHandlerTemplates() {
-  const templates = buildMachineHandlerTemplates("Furnace", furnaceCatalysts);
+  const templates = buildMachineHandlerTemplates("Furnace", furnaceCatalysts, singleblockFamilyIds);
   registerMachineHandlerIcons(templates);
   if (templates.length === 0) {
     return [];
@@ -452,6 +454,7 @@ function furnaceHandlerTemplates() {
     electricTiers.length > 0
       ? [
           {
+            ...templates.find(isElectricSingle),
             id: "electric-furnace",
             label: "Electric Furnace",
             kind: "single",

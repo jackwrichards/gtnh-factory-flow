@@ -284,6 +284,19 @@ Working notes for future agents on GTNH Factory Flow.
   the generic OverclockCalculator's longer ladder does not create machines.
   See `tools/dataset-pipeline/scripts/singleblock-tiers.test.mjs` and its real
   catalyst fixture. Multiblocks and steam machines keep separate identities.
+  `availableTiers` carries every registered singleblock voltage into handlers,
+  effective recipes and saved plans. Both the UI and solver must use it:
+  Cold Trap and Reactor Processing Unit have IV and ZPM blocks but no LuV.
+  Do not interpolate nonexistent intermediate machines. The full 53-map
+  fixture and `docs/singleblock-tier-audit.md` cover all 53 exported electric
+  processing families, including Circuit Assembler's real MAX endpoint.
+  Furnace's smelting adapter must preserve the electric template's tier
+  metadata when replacing its base stats. A multiblock whose name collides
+  with a singleblock gets a distinct ID across maps (Ore Washing Plant);
+  never apply the singleblock name aliases to an explicit multiblock handler.
+  When a voltage-input singleblock omits Machine Type, use its exported
+  recipe-map membership with its class: Basic and Chemical Dehydrator are
+  one MV–ZPM chain, confirmed by GregtechDehydrator's identical backend/slots.
 - Machine BEHAVIOUR (speed, EU discount, parallels, overclock style) comes from
   the curated table in `src/lib/machines/machine-table.ts`, transcribed from
   ShadowTheAge's MIT calculator (`https://github.com/ShadowTheAge/gtnh`,

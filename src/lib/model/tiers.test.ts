@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getRecipeMaximumVoltageTier, getRunVoltageTier, getVoltageTierForEuT } from "./tiers";
+import { getRecipeMaximumVoltageTier, getRecipeAvailableVoltageTiers, getRunVoltageTier, getVoltageTierForEuT } from "./tiers";
 
 describe("GT voltage tiers", () => {
   it("selects the first tier that can cover a recipe EU/t", () => {
@@ -11,6 +11,24 @@ describe("GT voltage tiers", () => {
     expect(getVoltageTierForEuT(512)).toBe("HV");
     expect(getVoltageTierForEuT(2048)).toBe("EV");
     expect(getVoltageTierForEuT(8192)).toBe("IV");
+  });
+});
+
+describe("registered singleblock tiers", () => {
+  const trap = { eut: 7680, minimumTier: "IV", maximumTier: "ZPM", availableTiers: ["IV", "ZPM"] };
+  it("uses actual blocks on both sides of a missing intermediate tier", () => {
+    expect(getRunVoltageTier(trap, "LuV")).toBe("IV");
+    expect(getRunVoltageTier(trap, "ZPM")).toBe("ZPM");
+    expect(getRunVoltageTier(trap, "MAX")).toBe("ZPM");
+    expect(getRunVoltageTier(trap, "LV")).toBe("IV");
+  });
+  it("steps up to a real block when the recipe requires the missing tier", () => {
+    expect(getRunVoltageTier({ ...trap, minimumTier: "LuV", eut: 30720 }, "LuV")).toBe("ZPM");
+    expect(getRunVoltageTier({ ...trap, minimumTier: "LuV", eut: 30720 }, "IV")).toBe("ZPM");
+  });
+  it("normalizes tier order and ignores unrecognized legacy metadata", () => {
+    expect(getRecipeAvailableVoltageTiers({ availableTiers: ["ZPM", "bad", "IV", "IV"] })).toEqual(["IV", "ZPM"]);
+    expect(getRunVoltageTier({ eut: 30, minimumTier: "LV", availableTiers: [] }, "MV")).toBe("MV");
   });
 });
 

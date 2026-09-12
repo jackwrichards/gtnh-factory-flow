@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import singleblockCatalysts from "./__fixtures__/singleblock-catalysts.json";
 
 const scriptPath = fileURLToPath(new URL("./normalize-oracle-export.mjs", import.meta.url));
 
@@ -46,6 +47,28 @@ it("retains long fusion thresholds independently of legacy specialValue", () => 
       fluidInputs: [fluid("a", 1, "A")], fluidOutputs: [fluid("b", 1, "B")] }],
   }] }] });
   expect(dataset.recipes[0].metadata).toMatchObject({ fusionStartupEu: 6_000_000_000, specialValue: 0 });
+});
+
+it("retains real furnace tiers and separates the Ore Washing Plant controller across maps", () => {
+  const dataset = normalize({ domains: [
+    { id: "gregtech", recipeMaps: singleblockCatalysts
+      .filter(map => ["gt.recipe.furnace", "gt.recipe.orewasher", "gtpp.recipe.simplewasher"].includes(map.id))
+      .map(map => ({ ...map, recipes: map.id === "gt.recipe.furnace" ? [] : [{
+        id: map.id, durationTicks: 20, eut: 30,
+        itemInputs: [item("minecraft:stone", 1, "Stone")],
+        itemOutputs: [item("minecraft:sand", 1, "Sand")],
+      }] })) },
+    { id: "smelting", recipes: [{ id: "smelt", input: item("minecraft:sand", 1, "Sand"), output: item("minecraft:glass", 1, "Glass") }] },
+  ] });
+  const furnace = dataset.recipes.find(recipe => recipe.source.recipeMap === "Furnace")
+    .machineHandlers.find(handler => handler.id === "electric-furnace");
+  expect(furnace).toMatchObject({minimumTier: "LV", maximumTier: "UMV", durationTicks: 128, eut: 4});
+  expect(furnace.availableTiers).toEqual(["LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV", "UHV", "UEV", "UIV", "UMV"]);
+  const washers = dataset.recipes.filter(recipe => recipe.source.recipeMap !== "Furnace");
+  expect(washers).toHaveLength(2);
+  for (const recipe of washers) {
+    expect(recipe.machineHandlers.find(handler => handler.id === "ore-washing-plant-multiblock")?.kind).toBe("multiblock");
+  }
 });
 
 const RESISTOR = "gregtech:gt.metaitem.01@32716";

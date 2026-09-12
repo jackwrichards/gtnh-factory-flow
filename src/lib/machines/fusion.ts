@@ -149,6 +149,7 @@ export function normalizeFusionHandler(
     kind: "multiblock",
     minimumTier: machine.tier,
     maximumTier: undefined,
+    availableTiers: undefined,
     durationTicks: undefined,
     eut: undefined,
     maxParallel: parallels,

@@ -76,6 +76,8 @@ import {
   getCropsNhStats,
   getVoltageTierIndex,
   getRecipeMaximumVoltageTier,
+  getRecipeAvailableVoltageTiers,
+  getRunVoltageTier,
   getRecipeMinimumVoltageTier,
   BEE_INDUSTRIAL_PRODUCTION_CONTROL_ID,
   BEE_INDUSTRIAL_SPEED_CONTROL_ID,
@@ -887,6 +889,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       tierControl.allowBelowMinimum ? undefined : tierControl.minimum,
       direction,
       tierControl.maximum,
+      tierControl.available,
     );
     if (nextTier !== tierControl.current) {
       // The board's ONE sound for a voltage tier: the power unit dial's
@@ -4250,7 +4253,7 @@ type VoltageTier = Exclude<MachineTier, "DEMO">;
 
 function getNodeTierControl(recipe: Recipe, node: FactoryNode) {
   const fusion = getFusionMachine(recipe.machineType);
-  if (fusion) return { minimum: fusion.tier, maximum: fusion.tier, current: fusion.tier, allowBelowMinimum: false, fixed: true };
+  if (fusion) return { minimum: fusion.tier, maximum: fusion.tier, current: fusion.tier, available: undefined, allowBelowMinimum: false, fixed: true };
   if (isIndustrialApiaryMachineType(recipe.machineType)) {
     return undefined;
   }
@@ -4271,14 +4274,11 @@ function getNodeTierControl(recipe: Recipe, node: FactoryNode) {
   // ...and capped at the family's last registered machine. Higher-tier
   // names may change (Canning Machine -> Can Operator) within that family.
   const maximum = allowBelowMinimum ? undefined : getRecipeMaximumVoltageTier(recipe);
-  const resolved = resolveVoltageTier(node.overclockTier, minimum);
-  const floored =
-    !allowBelowMinimum && getVoltageTierIndex(resolved) < getVoltageTierIndex(minimum)
-      ? minimum
-      : resolved;
-  const current =
-    maximum && getVoltageTierIndex(floored) > getVoltageTierIndex(maximum) ? maximum : floored;
-  return { minimum, maximum, current, allowBelowMinimum, fixed: false };
+  const available = allowBelowMinimum ? undefined : getRecipeAvailableVoltageTiers(recipe);
+  const current = allowBelowMinimum
+    ? resolveVoltageTier(node.overclockTier, minimum)
+    : getRunVoltageTier(recipe, node.overclockTier);
+  return { minimum, maximum, current, available, allowBelowMinimum, fixed: false };
 }
 
 function isTierDrivenOutputRecipe(recipe: Recipe) {
@@ -4291,10 +4291,20 @@ function getAdjacentTier(
   floor: VoltageTier | undefined,
   direction: -1 | 1,
   ceiling?: VoltageTier,
+  available?: VoltageTier[],
 ) {
   const currentIndex = getVoltageTierIndex(current);
   const floorIndex = floor ? getVoltageTierIndex(floor) : 0;
   const ceilingIndex = ceiling ? getVoltageTierIndex(ceiling) : GT_OVERCLOCK_TIERS.length - 1;
+  if (available) {
+    const choices = available.filter((tier) => {
+      const index = getVoltageTierIndex(tier);
+      return index >= floorIndex && index <= ceilingIndex;
+    });
+    return (direction > 0
+      ? choices.find((tier) => getVoltageTierIndex(tier) > currentIndex)
+      : choices.findLast((tier) => getVoltageTierIndex(tier) < currentIndex)) ?? current;
+  }
   const nextIndex = Math.min(ceilingIndex, Math.max(floorIndex, currentIndex + direction));
   return GT_OVERCLOCK_TIERS[nextIndex]?.tier ?? current;
 }

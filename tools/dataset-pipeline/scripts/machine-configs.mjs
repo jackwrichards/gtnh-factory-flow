@@ -243,7 +243,7 @@ const GRADE_PREFIX_PATTERN =
   /^(?:Basic|Advanced|Elite|Ultimate|Epic|MAX|Turbo|Quick|Instant|Universal)\s+/i;
 const PER_TIER_LINE_PATTERN = /\bper\s+.+?\s+tier\b/i;
 
-export function buildMachineHandlerTemplates(machineType, catalysts) {
+export function buildMachineHandlerTemplates(machineType, catalysts, singleblockFamilyIds = new Set()) {
   const families = new Map();
 
   for (const catalyst of catalysts ?? []) {
@@ -279,14 +279,16 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
     // Reactor -> Chemical Performer). Their exported class and explicit
     // Machine Type still identify the same family. Scope this to voltage
     // input machines, so steam machines and multiblock controllers stay apart.
+    // GT++ omits Machine Type on some singleblocks; their exported recipe-map
+    // membership supplies it (Basic/Chemical Dehydrator share that backend).
     const declaredType = tooltip
       .map((line) => /^Machine Type:\s*([^,]+)$/.exec(line)?.[1])
       .find(Boolean);
     const runtimeFamily =
       !multiblock && minimumTier && catalyst.sourceClass &&
-      declaredType && tooltip.some((line) => /^Voltage IN:/i.test(line));
+      tooltip.some((line) => /^Voltage IN:/i.test(line));
     const familyKey = runtimeFamily
-      ? `${catalyst.sourceClass}:${normalizeLabel(declaredType)}`
+      ? `${catalyst.sourceClass}:${normalizeLabel(declaredType ?? machineType)}`
       : normalizeLabel(label);
 
     const existing = families.get(familyKey);
@@ -333,6 +335,15 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
   if (templates.length === 0) {
     return [];
   }
+  // A controller can share a display name with a tiered singleblock (Ore
+  // Washing Plant). Keep the singleblock's saved ID and distinguish the
+  // controller consistently across every map in which it is registered.
+  const singleIds = new Set([...singleblockFamilyIds, ...templates.filter(t => t.kind === "single").map(t => t.id)]);
+  for (const template of templates) {
+    if (template.kind === "multiblock" && singleIds.has(template.id)) {
+      template.id += "-multiblock";
+    }
+  }
   for (const template of templates) {
     // Tier order, as a plain list; a family with one variant carries none
     // (its face already is that variant).
@@ -347,6 +358,7 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
     // not a block that exists, so the card's tier chip stops there.
     if (template.kind === "single" && variants.length > 0) {
       template.maximumTier = variants[variants.length - 1].tier;
+      template.availableTiers = variants.map((variant) => variant.tier);
     }
   }
 
@@ -1054,6 +1066,7 @@ export function instantiateRecipeMachineHandlers(templates, recipe) {
       machineType: template.label,
       minimumTier: VOLTAGE_TIER_NAMES[tierIndex] ?? recipe.minimumTier,
       ...(template.maximumTier ? { maximumTier: template.maximumTier } : {}),
+      ...(template.availableTiers ? { availableTiers: template.availableTiers } : {}),
     };
 
     if (Number.isFinite(template.durationMultiplier) && template.durationMultiplier !== 1) {
