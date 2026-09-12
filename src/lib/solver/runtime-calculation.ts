@@ -1,4 +1,9 @@
-import { getVoltageTierIndex, GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
+import {
+  getRecipeMaximumVoltageTier,
+  getVoltageTierIndex,
+  GT_VOLTAGE_TIERS,
+  resolveVoltageTier as resolveModelVoltageTier,
+} from "@/lib/model/tiers";
 import { getMachineBehaviour } from "@/lib/machines/machine-table";
 import { isFusionRecipe } from "@/lib/machines/fusion";
 import type {
@@ -33,7 +38,7 @@ export function prefersCuratedMachineMath(recipe: { machineType?: string }): boo
 
 export function selectRuntimeCalculationVariant(
   recipe: Pick<Recipe, "runtimeCalculation"> &
-    Partial<Pick<Recipe, "machineType" | "machineProfile">>,
+    Partial<Pick<Recipe, "machineType" | "machineProfile" | "maximumTier">>,
   node: Pick<
     FactoryNode,
     "machineHandlerId" | "overclockTier" | "coilTier" | "machineConfigTiers"
@@ -50,6 +55,17 @@ export function selectRuntimeCalculationVariant(
   )
     return undefined;
   if (node.hatchVoltageTier) node = { ...node, overclockTier: node.hatchVoltageTier };
+  // The generic runtime calculator exports voltage steps beyond the last
+  // registered singleblock. Use the same physical-machine cap as our solver,
+  // including when an old plan still stores MAX on a family ending at UMV.
+  const maximum = getRecipeMaximumVoltageTier(recipe);
+  if (
+    maximum &&
+    recipe.machineProfile?.kind !== "multiblock" &&
+    getVoltageTierIndex(resolveModelVoltageTier(node.overclockTier, maximum)) > getVoltageTierIndex(maximum)
+  ) {
+    node = { ...node, overclockTier: maximum };
+  }
   const variants = recipe.runtimeCalculation?.variants ?? [];
   if (recipe.runtimeCalculation?.status !== "computed" || variants.length === 0) {
     return undefined;

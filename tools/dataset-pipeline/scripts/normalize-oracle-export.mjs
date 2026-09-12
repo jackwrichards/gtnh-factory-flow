@@ -13,27 +13,12 @@ import {
   machineConfigResources,
   machineHandlerConfigResources,
   primaryMachineHandlerControls,
+  VOLTAGE_TIER_NAMES,
 } from "./machine-configs.mjs";
 
 const inputPath = process.argv[2];
 const outputPath = process.argv[3];
-const GT_VOLTAGE_NAMES = [
-  "ULV",
-  "LV",
-  "MV",
-  "HV",
-  "EV",
-  "IV",
-  "LuV",
-  "ZPM",
-  "UV",
-  "UHV",
-  "UEV",
-  "UIV",
-  "UXV",
-  "OpV",
-  "MAX",
-];
+const GT_VOLTAGE_NAMES = VOLTAGE_TIER_NAMES;
 if (!inputPath || !outputPath) {
   throw new Error("Usage: normalize-oracle-export.mjs <oracle.json> <recipes.json>");
 }
@@ -67,7 +52,7 @@ let furnaceCatalysts = [];
 // family appears in.
 const machineHandlerIcons = new Map();
 const machineHandlerTierIcons = new Map();
-const VOLTAGE_TIER_ORDER = ["ULV", "LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV", "UHV", "UEV", "UIV", "UMV", "UXV", "OpV", "MAX"];
+const VOLTAGE_TIER_ORDER = VOLTAGE_TIER_NAMES;
 
 function registerMachineHandlerIcons(templates) {
   for (const template of templates ?? []) {

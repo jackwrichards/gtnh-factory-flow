@@ -27,8 +27,8 @@ export const VOLTAGE_TIER_NAMES = [
   "UHV",
   "UEV",
   "UIV",
+  "UMV",
   "UXV",
-  "OpV",
   "MAX",
 ];
 
@@ -237,7 +237,7 @@ export function machineConfigControlsForOracleRecipe(machineType, specialValue, 
 // Machine handler templates from recipe map catalysts
 // ---------------------------------------------------------------------------
 
-const TIER_SUFFIX_PATTERN = /\s*\((ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UXV|OpV|MAX)\)\s*$/i;
+const TIER_SUFFIX_PATTERN = /\s*\((ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UMV|UXV|OpV|MAX)\)\s*$/i;
 const ROMAN_SUFFIX_PATTERN = /\s+(?:I|II|III|IV|V|VI|VII|VIII|IX|X)$/;
 const GRADE_PREFIX_PATTERN =
   /^(?:Basic|Advanced|Elite|Ultimate|Epic|MAX|Turbo|Quick|Instant|Universal)\s+/i;
@@ -268,13 +268,26 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
       // into one machine family, mirroring the app's family folding.
       label = label.replace(ROMAN_SUFFIX_PATTERN, "").replace(GRADE_PREFIX_PATTERN, "").trim();
     }
-    const familyKey = normalizeLabel(label);
-    if (!familyKey) {
+    if (!normalizeLabel(label)) {
       continue;
     }
 
     const minimumTier =
       normalizeVoltageTierName(tierSuffix) ?? voltageTierFromTooltip(tooltip) ?? undefined;
+
+    // Electric singleblocks rename themselves at high tiers (Chemical
+    // Reactor -> Chemical Performer). Their exported class and explicit
+    // Machine Type still identify the same family. Scope this to voltage
+    // input machines, so steam machines and multiblock controllers stay apart.
+    const declaredType = tooltip
+      .map((line) => /^Machine Type:\s*([^,]+)$/.exec(line)?.[1])
+      .find(Boolean);
+    const runtimeFamily =
+      !multiblock && minimumTier && catalyst.sourceClass &&
+      declaredType && tooltip.some((line) => /^Voltage IN:/i.test(line));
+    const familyKey = runtimeFamily
+      ? `${catalyst.sourceClass}:${normalizeLabel(declaredType)}`
+      : normalizeLabel(label);
 
     const existing = families.get(familyKey);
     if (existing) {
@@ -284,6 +297,8 @@ export function buildMachineHandlerTemplates(machineType, catalysts) {
           voltageTierIndex(minimumTier) < voltageTierIndex(existing.minimumTier))
       ) {
         existing.minimumTier = minimumTier;
+        existing.id = slug(label);
+        existing.label = label;
         // The family's face is its lowest-tier variant (Basic Electric
         // Furnace, not Epic Atom Stimulator IV).
         existing.catalystResource = catalyst.resource;
@@ -1016,7 +1031,12 @@ function fixedParallelControl(parallels, note = `Parallels: ${parallels}`) {
 }
 
 export function instantiateRecipeMachineHandlers(templates, recipe) {
-  if (!Array.isArray(templates) || templates.length < 2) {
+  // Even a lone electric singleblock needs its handler: otherwise its
+  // maximum tier disappears and the app invents an uncapped placeholder.
+  if (
+    !Array.isArray(templates) || templates.length === 0 ||
+    (templates.length === 1 && !templates[0].maximumTier)
+  ) {
     return undefined;
   }
 
@@ -1326,6 +1346,7 @@ function normalizeVoltageTierName(value) {
     return undefined;
   }
   const normalized = String(value).trim().toLowerCase();
+  if (normalized === "opv") return "UXV";
   return VOLTAGE_TIER_NAMES.find((tier) => tier.toLowerCase() === normalized);
 }
 
@@ -1335,7 +1356,7 @@ function voltageTierFromTooltip(tooltip) {
       continue;
     }
     const match =
-      /\b(ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UXV|OpV|MAX)\b/i.exec(
+      /\b(ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UMV|UXV|OpV|MAX)\b/i.exec(
         line.replace(/voltage/i, ""),
       );
     if (match) {

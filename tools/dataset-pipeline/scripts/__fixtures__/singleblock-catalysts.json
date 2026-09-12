@@ -1,0 +1,843 @@
+[
+  {
+    "id": "gt.recipe.canner",
+    "name": "Canner",
+    "catalysts": [
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11130",
+          "kind": "item",
+          "displayName": "Elite Canning Machine",
+          "tooltip": [
+            "Elite Canning Machine",
+            "Unmobile Food Canning Machine GTA4",
+            "Machine Type: Canner",
+            "Voltage IN: 32,768 (LuV)",
+            "Capacity: 2,097,152 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11131",
+          "kind": "item",
+          "displayName": "Elite Canning Machine II",
+          "tooltip": [
+            "Elite Canning Machine II",
+            "Unmobile Food Canning Machine GTA4",
+            "Machine Type: Canner",
+            "Voltage IN: 131,072 (ZPM)",
+            "Capacity: 8,388,608 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11132",
+          "kind": "item",
+          "displayName": "Ultimate Can Operator",
+          "tooltip": [
+            "Ultimate Can Operator",
+            "Unmobile Food Canning Machine GTA4",
+            "Machine Type: Canner",
+            "Voltage IN: 524,288 (UV)",
+            "Capacity: 33,554,432 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11133",
+          "kind": "item",
+          "displayName": "Epic Can Operator",
+          "tooltip": [
+            "Epic Can Operator",
+            "Unmobile Food Canning Machine GTA4",
+            "Machine Type: Canner",
+            "Voltage IN: 2,097,152 (UHV)",
+            "Capacity: 134,217,728 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11134",
+          "kind": "item",
+          "displayName": "Epic Can Operator II",
+          "tooltip": [
+            "Epic Can Operator II",
+            "Unmobile Food Canning Machine GTA4",
+            "Machine Type: Canner",
+            "Voltage IN: 8,388,608 (UEV)",
+            "Capacity: 536,870,912 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11135",
+          "kind": "item",
+          "displayName": "Epic Can Operator III",
+          "tooltip": [
+            "Epic Can Operator III",
+            "Unmobile Food Canning Machine GTA4",
+            "Machine Type: Canner",
+            "Voltage IN: 33,554,432 (UIV)",
+            "Capacity: 2,147,483,648 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11136",
+          "kind": "item",
+          "displayName": "Epic Can Operator IV",
+          "tooltip": [
+            "Epic Can Operator IV",
+            "Unmobile Food Canning Machine GTA4",
+            "Machine Type: Canner",
+            "Voltage IN: 134,217,728 (UMV)",
+            "Capacity: 8,589,934,592 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11180",
+          "kind": "item",
+          "displayName": "Elite Fluid Canner",
+          "tooltip": [
+            "Elite Fluid Canner",
+            "[DEPRECATED - Use Canning Machine]",
+            "Machine Type: Fluid Canner",
+            "Voltage IN: 32,768 (LuV)",
+            "Capacity: 2,097,152 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11181",
+          "kind": "item",
+          "displayName": "Elite Fluid Canner II",
+          "tooltip": [
+            "Elite Fluid Canner II",
+            "[DEPRECATED - Use Canning Machine]",
+            "Machine Type: Fluid Canner",
+            "Voltage IN: 131,072 (ZPM)",
+            "Capacity: 8,388,608 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11182",
+          "kind": "item",
+          "displayName": "Ultimate Liquid Can Actuator",
+          "tooltip": [
+            "Ultimate Liquid Can Actuator",
+            "[DEPRECATED - Use Canning Machine]",
+            "Machine Type: Fluid Canner",
+            "Voltage IN: 524,288 (UV)",
+            "Capacity: 33,554,432 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11183",
+          "kind": "item",
+          "displayName": "Epic Liquid Can Actuator",
+          "tooltip": [
+            "Epic Liquid Can Actuator",
+            "[DEPRECATED - Use Canning Machine]",
+            "Machine Type: Fluid Canner",
+            "Voltage IN: 2,097,152 (UHV)",
+            "Capacity: 134,217,728 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11184",
+          "kind": "item",
+          "displayName": "Epic Liquid Can Actuator II",
+          "tooltip": [
+            "Epic Liquid Can Actuator II",
+            "[DEPRECATED - Use Canning Machine]",
+            "Machine Type: Fluid Canner",
+            "Voltage IN: 8,388,608 (UEV)",
+            "Capacity: 536,870,912 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11185",
+          "kind": "item",
+          "displayName": "Epic Liquid Can Actuator III",
+          "tooltip": [
+            "Epic Liquid Can Actuator III",
+            "[DEPRECATED - Use Canning Machine]",
+            "Machine Type: Fluid Canner",
+            "Voltage IN: 33,554,432 (UIV)",
+            "Capacity: 2,147,483,648 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11186",
+          "kind": "item",
+          "displayName": "Epic Liquid Can Actuator IV",
+          "tooltip": [
+            "Epic Liquid Can Actuator IV",
+            "[DEPRECATED - Use Canning Machine]",
+            "Machine Type: Fluid Canner",
+            "Voltage IN: 134,217,728 (UMV)",
+            "Capacity: 8,589,934,592 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@231",
+          "kind": "item",
+          "displayName": "Basic Canning Machine",
+          "tooltip": [
+            "Basic Canning Machine",
+            "Unmobile Food Canning Machine GTA4",
+            "Machine Type: Canner",
+            "Voltage IN: 32 (LV)",
+            "Capacity: 2,048 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@232",
+          "kind": "item",
+          "displayName": "Advanced Canning Machine",
+          "tooltip": [
+            "Advanced Canning Machine",
+            "Unmobile Food Canning Machine GTA4",
+            "Machine Type: Canner",
+            "Voltage IN: 128 (MV)",
+            "Capacity: 8,192 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@233",
+          "kind": "item",
+          "displayName": "Advanced Canning Machine II",
+          "tooltip": [
+            "Advanced Canning Machine II",
+            "Unmobile Food Canning Machine GTA4",
+            "Machine Type: Canner",
+            "Voltage IN: 512 (HV)",
+            "Capacity: 32,768 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@234",
+          "kind": "item",
+          "displayName": "Advanced Canning Machine III",
+          "tooltip": [
+            "Advanced Canning Machine III",
+            "Unmobile Food Canning Machine GTA4",
+            "Machine Type: Canner",
+            "Voltage IN: 2,048 (EV)",
+            "Capacity: 131,072 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@235",
+          "kind": "item",
+          "displayName": "Advanced Canning Machine IV",
+          "tooltip": [
+            "Advanced Canning Machine IV",
+            "Unmobile Food Canning Machine GTA4",
+            "Machine Type: Canner",
+            "Voltage IN: 8,192 (IV)",
+            "Capacity: 524,288 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@431",
+          "kind": "item",
+          "displayName": "Basic Fluid Canner",
+          "tooltip": [
+            "Basic Fluid Canner",
+            "[DEPRECATED - Use Canning Machine]",
+            "Machine Type: Fluid Canner",
+            "Voltage IN: 32 (LV)",
+            "Capacity: 2,048 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@432",
+          "kind": "item",
+          "displayName": "Advanced Fluid Canner",
+          "tooltip": [
+            "Advanced Fluid Canner",
+            "[DEPRECATED - Use Canning Machine]",
+            "Machine Type: Fluid Canner",
+            "Voltage IN: 128 (MV)",
+            "Capacity: 8,192 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@433",
+          "kind": "item",
+          "displayName": "Quick Fluid Canner",
+          "tooltip": [
+            "Quick Fluid Canner",
+            "[DEPRECATED - Use Canning Machine]",
+            "Machine Type: Fluid Canner",
+            "Voltage IN: 512 (HV)",
+            "Capacity: 32,768 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@434",
+          "kind": "item",
+          "displayName": "Turbo Fluid Canner",
+          "tooltip": [
+            "Turbo Fluid Canner",
+            "[DEPRECATED - Use Canning Machine]",
+            "Machine Type: Fluid Canner",
+            "Voltage IN: 2,048 (EV)",
+            "Capacity: 131,072 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@435",
+          "kind": "item",
+          "displayName": "Instant Fluid Canner",
+          "tooltip": [
+            "Instant Fluid Canner",
+            "[DEPRECATED - Use Canning Machine]",
+            "Machine Type: Fluid Canner",
+            "Voltage IN: 8,192 (IV)",
+            "Capacity: 524,288 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.common.tileentities.machines.multi.MTEMultiCanner",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@360",
+          "kind": "item",
+          "displayName": "TurboCan Pro",
+          "tooltip": [
+            "TurboCan Pro",
+            "Machine Type: Canner, TCP",
+            "8 Parallels per Voltage Tier",
+            "200% Speed",
+            "100% EU Usage",
+            "It's uncanny!",
+            "-----------------------------------------",
+            "§!shift"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "gt.recipe.chemicalreactor",
+    "name": "Chemical Reactor",
+    "catalysts": [
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11150",
+          "kind": "item",
+          "displayName": "Elite Chemical Reactor",
+          "tooltip": [
+            "Elite Chemical Reactor",
+            "Letting Chemicals react with each other",
+            "Machine Type: Chemical Reactor",
+            "Voltage IN: 32,768 (LuV)",
+            "Capacity: 2,097,152 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11151",
+          "kind": "item",
+          "displayName": "Elite Chemical Reactor II",
+          "tooltip": [
+            "Elite Chemical Reactor II",
+            "Letting Chemicals react with each other",
+            "Machine Type: Chemical Reactor",
+            "Voltage IN: 131,072 (ZPM)",
+            "Capacity: 8,388,608 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11152",
+          "kind": "item",
+          "displayName": "Ultimate Chemical Performer",
+          "tooltip": [
+            "Ultimate Chemical Performer",
+            "Letting Chemicals react with each other",
+            "Machine Type: Chemical Reactor",
+            "Voltage IN: 524,288 (UV)",
+            "Capacity: 33,554,432 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11153",
+          "kind": "item",
+          "displayName": "Epic Chemical Performer",
+          "tooltip": [
+            "Epic Chemical Performer",
+            "Letting Chemicals react with each other",
+            "Machine Type: Chemical Reactor",
+            "Voltage IN: 2,097,152 (UHV)",
+            "Capacity: 134,217,728 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11154",
+          "kind": "item",
+          "displayName": "Epic Chemical Performer II",
+          "tooltip": [
+            "Epic Chemical Performer II",
+            "Letting Chemicals react with each other",
+            "Machine Type: Chemical Reactor",
+            "Voltage IN: 8,388,608 (UEV)",
+            "Capacity: 536,870,912 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11155",
+          "kind": "item",
+          "displayName": "Epic Chemical Performer III",
+          "tooltip": [
+            "Epic Chemical Performer III",
+            "Letting Chemicals react with each other",
+            "Machine Type: Chemical Reactor",
+            "Voltage IN: 33,554,432 (UIV)",
+            "Capacity: 2,147,483,648 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@11156",
+          "kind": "item",
+          "displayName": "Epic Chemical Performer IV",
+          "tooltip": [
+            "Epic Chemical Performer IV",
+            "Letting Chemicals react with each other",
+            "Machine Type: Chemical Reactor",
+            "Voltage IN: 134,217,728 (UMV)",
+            "Capacity: 8,589,934,592 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@421",
+          "kind": "item",
+          "displayName": "Basic Chemical Reactor",
+          "tooltip": [
+            "Basic Chemical Reactor",
+            "Letting Chemicals react with each other",
+            "Machine Type: Chemical Reactor",
+            "Voltage IN: 32 (LV)",
+            "Capacity: 2,048 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@422",
+          "kind": "item",
+          "displayName": "Advanced Chemical Reactor",
+          "tooltip": [
+            "Advanced Chemical Reactor",
+            "Letting Chemicals react with each other",
+            "Machine Type: Chemical Reactor",
+            "Voltage IN: 128 (MV)",
+            "Capacity: 8,192 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@423",
+          "kind": "item",
+          "displayName": "Advanced Chemical Reactor II",
+          "tooltip": [
+            "Advanced Chemical Reactor II",
+            "Letting Chemicals react with each other",
+            "Machine Type: Chemical Reactor",
+            "Voltage IN: 512 (HV)",
+            "Capacity: 32,768 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@424",
+          "kind": "item",
+          "displayName": "Advanced Chemical Reactor III",
+          "tooltip": [
+            "Advanced Chemical Reactor III",
+            "Letting Chemicals react with each other",
+            "Machine Type: Chemical Reactor",
+            "Voltage IN: 2,048 (EV)",
+            "Capacity: 131,072 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@425",
+          "kind": "item",
+          "displayName": "Advanced Chemical Reactor IV",
+          "tooltip": [
+            "Advanced Chemical Reactor IV",
+            "Letting Chemicals react with each other",
+            "Machine Type: Chemical Reactor",
+            "Voltage IN: 8,192 (IV)",
+            "Capacity: 524,288 EU"
+          ]
+        }
+      }
+    ]
+  },
+  {
+    "id": "gt.recipe.macerator",
+    "name": "Macerator",
+    "catalysts": [
+      {
+        "sourceClass": "gregtech.common.tileentities.machines.steam.MTESteamMaceratorBronze",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@106",
+          "kind": "item",
+          "displayName": "Steam Macerator",
+          "tooltip": [
+            "Steam Macerator",
+            "Macerating your Ores",
+            "Machine Type: Macerator"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.common.tileentities.machines.steam.MTESteamMaceratorSteel",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@107",
+          "kind": "item",
+          "displayName": "High Pressure Steam Macerator",
+          "tooltip": [
+            "High Pressure Steam Macerator",
+            "Macerating your Ores",
+            "Machine Type: Macerator"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@10940",
+          "kind": "item",
+          "displayName": "Elite Pulverizer",
+          "tooltip": [
+            "Elite Pulverizer",
+            "Schreddering your Ores",
+            "Machine Type: Macerator",
+            "Voltage IN: 32,768 (LuV)",
+            "Capacity: 2,097,152 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@10941",
+          "kind": "item",
+          "displayName": "Elite Pulverizer II",
+          "tooltip": [
+            "Elite Pulverizer II",
+            "Schreddering your Ores",
+            "Machine Type: Macerator",
+            "Voltage IN: 131,072 (ZPM)",
+            "Capacity: 8,388,608 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@10942",
+          "kind": "item",
+          "displayName": "Ultimate Shape Eliminator",
+          "tooltip": [
+            "Ultimate Shape Eliminator",
+            "Schreddering your Ores",
+            "Machine Type: Macerator",
+            "Voltage IN: 524,288 (UV)",
+            "Capacity: 33,554,432 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@10943",
+          "kind": "item",
+          "displayName": "Epic Shape Eliminator",
+          "tooltip": [
+            "Epic Shape Eliminator",
+            "Schreddering your Ores",
+            "Machine Type: Macerator",
+            "Voltage IN: 2,097,152 (UHV)",
+            "Capacity: 134,217,728 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@10944",
+          "kind": "item",
+          "displayName": "Epic Shape Eliminator II",
+          "tooltip": [
+            "Epic Shape Eliminator II",
+            "Schreddering your Ores",
+            "Machine Type: Macerator",
+            "Voltage IN: 8,388,608 (UEV)",
+            "Capacity: 536,870,912 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@10945",
+          "kind": "item",
+          "displayName": "Epic Shape Eliminator III",
+          "tooltip": [
+            "Epic Shape Eliminator III",
+            "Schreddering your Ores",
+            "Machine Type: Macerator",
+            "Voltage IN: 33,554,432 (UIV)",
+            "Capacity: 2,147,483,648 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@10946",
+          "kind": "item",
+          "displayName": "Epic Shape Eliminator IV",
+          "tooltip": [
+            "Epic Shape Eliminator IV",
+            "Schreddering your Ores",
+            "Machine Type: Macerator",
+            "Voltage IN: 134,217,728 (UMV)",
+            "Capacity: 8,589,934,592 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@301",
+          "kind": "item",
+          "displayName": "Basic Macerator",
+          "tooltip": [
+            "Basic Macerator",
+            "Schreddering your Ores",
+            "Machine Type: Macerator",
+            "Voltage IN: 32 (LV)",
+            "Capacity: 2,048 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@302",
+          "kind": "item",
+          "displayName": "Advanced Macerator",
+          "tooltip": [
+            "Advanced Macerator",
+            "Schreddering your Ores",
+            "Machine Type: Macerator",
+            "Voltage IN: 128 (MV)",
+            "Capacity: 8,192 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@303",
+          "kind": "item",
+          "displayName": "Universal Macerator",
+          "tooltip": [
+            "Universal Macerator",
+            "Schreddering your Ores",
+            "Machine Type: Macerator",
+            "Voltage IN: 512 (HV)",
+            "Capacity: 32,768 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@304",
+          "kind": "item",
+          "displayName": "Universal Pulverizer",
+          "tooltip": [
+            "Universal Pulverizer",
+            "Schreddering your Ores",
+            "Machine Type: Macerator",
+            "Voltage IN: 2,048 (EV)",
+            "Capacity: 131,072 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.api.metatileentity.implementations.MTEBasicMachineWithRecipe",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@305",
+          "kind": "item",
+          "displayName": "Blend-O-Matic 9001",
+          "tooltip": [
+            "Blend-O-Matic 9001",
+            "Schreddering your Ores",
+            "Machine Type: Macerator",
+            "Voltage IN: 8,192 (IV)",
+            "Capacity: 524,288 EU"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.common.tileentities.machines.multi.steam.MTESteamMacerator",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@31041",
+          "kind": "item",
+          "displayName": "Steam Grinder",
+          "tooltip": [
+            "Steam Grinder",
+            "Machine Type: Macerator",
+            "8 Parallels",
+            "125% Speed",
+            "62.5% Steam Usage",
+            "High-Pressure Doubles Speed and Steam Usage",
+            "-----------------------------------------",
+            "Structure by: Citrusss",
+            "§!shift"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gregtech.common.tileentities.machines.multi.MTEIndustrialMacerator",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@15539",
+          "kind": "item",
+          "displayName": "Industrial Maceration Stack",
+          "tooltip": [
+            "Industrial Maceration Stack",
+            "Machine Type: Macerator, IMS",
+            "Voltage Tier * n Parallels",
+            "n=2 initially. n=8 after inserting Maceration Upgrade Chip",
+            "Tier 1: 160% speed",
+            "Tier 2: 640% speed",
+            "400 Pollution per second",
+            "-----------------------------------------",
+            "Structure by: VorTex",
+            "§!shift"
+          ]
+        }
+      },
+      {
+        "sourceClass": "gtPlusPlus.xmod.gregtech.common.tileentities.machines.multi.processing.MTEIndustrialMaceratorLegacy",
+        "resource": {
+          "id": "gregtech:gt.blockmachines@797",
+          "kind": "item",
+          "displayName": "Industrial Maceration Stack",
+          "tooltip": [
+            "Industrial Maceration Stack",
+            "Machine Type: Macerator, IMS",
+            "DEPRECATED - Controller will be removed in next major update!",
+            "Check NEI for new Controller and conversion recipe",
+            "Voltage Tier * n Parallels",
+            "n=2 initially. n=8 after inserting Maceration Upgrade Chip",
+            "160% Speed",
+            "400 Pollution per second",
+            "-----------------------------------------",
+            "§!shift"
+          ]
+        }
+      }
+    ]
+  }
+]

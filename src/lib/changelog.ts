@@ -47,6 +47,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.1.9",
+    date: "2026-09-12",
+    headline: "Singleblock tiers match the game",
+    notes: [
+      "Singleblocks follow their full machine progression, including renamed Ultimate and Epic variants.",
+      "Tier controls and calculations stop at each machine's highest registered tier, including on older plans.",
+    ],
+  },
+  {
     version: "3.1.8",
     date: "2026-09-12",
     headline: "Mobile dropdown fixes and cleaner item icons",

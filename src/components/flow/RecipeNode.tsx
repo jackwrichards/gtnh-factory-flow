@@ -1130,7 +1130,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     : !isCustomRateNode
       ? // The same pick as the picture window: the tier's own block, the
         // family face, or the map's machine - the glance must mirror the card.
-        (machineIconAtTier(machineIconEntries.get(selectedMachineHandler.id), cropTierControl?.current.label ?? projectNode.overclockTier) ??
+        (machineIconAtTier(machineIconEntries.get(selectedMachineHandler.id), cropTierControl?.current.label ?? tierControl?.current ?? projectNode.overclockTier) ??
         recipeMapIcons.get(recipe.source?.recipeMap ?? recipe.machineType))
       : undefined;
   const previewHandler = hasMachinePicker
@@ -1146,7 +1146,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   // handler no family icon is keyed by (the Chemical Plant).
   // A crop card's tier is its harvester chip (Crop Manager tier, seed bed
   // tier), not a voltage tier on the node.
-  const pictureTier = cropTierControl?.current.label ?? projectNode.overclockTier;
+  const pictureTier = cropTierControl?.current.label ?? tierControl?.current ?? projectNode.overclockTier;
   const previewMachineIcon =
     machineIconAtTier(machineIconEntries.get(previewHandler.id), pictureTier) ??
     recipeMapIcons.get(recipe.source?.recipeMap ?? recipe.machineType);
@@ -4268,8 +4268,8 @@ function getNodeTierControl(recipe: Recipe, node: FactoryNode) {
   // is what says an underpowered build won't start, not a silent clamp. A
   // singleblock is floored: a lower machine does not exist to be built.
   const allowBelowMinimum = isMultiblockRecipe(recipe);
-  // ...and CAPPED at the family's last real machine (Jack, 2026-09-06): a
-  // UV Canning Machine is not a block, so the chip cannot ask for one.
+  // ...and capped at the family's last registered machine. Higher-tier
+  // names may change (Canning Machine -> Can Operator) within that family.
   const maximum = allowBelowMinimum ? undefined : getRecipeMaximumVoltageTier(recipe);
   const resolved = resolveVoltageTier(node.overclockTier, minimum);
   const floored =

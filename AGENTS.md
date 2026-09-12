@@ -270,6 +270,20 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Machine Configs And Multiblocks
 
+- Electric singleblock tiers come from the oracle's actual catalysts. Group
+  voltage-input singleblocks by exported Java class plus their explicit
+  `Machine Type` tooltip; use the lowest-tier item's family name. Display
+  names change within one family (Chemical Reactor becomes Chemical Performer
+  at UV), so stripping Basic/Elite/Epic alone splits the real progression.
+  The 2.9 export and GT5U registration code end that family at UMV's Epic
+  Chemical Performer IV, not ZPM and not MAX. GTNH's global ordinal sequence
+  is UIV, UMV, UXV, MAX; OpV is only a legacy spelling, not an extra ordinal.
+  `machine-configs.mjs` exports the pipeline's shared voltage list. Keep a
+  lone capped singleblock handler when normalizing, or its `maximumTier`
+  disappears. Both calculated and runtime-exported overclocks honor that cap;
+  the generic OverclockCalculator's longer ladder does not create machines.
+  See `tools/dataset-pipeline/scripts/singleblock-tiers.test.mjs` and its real
+  catalyst fixture. Multiblocks and steam machines keep separate identities.
 - Machine BEHAVIOUR (speed, EU discount, parallels, overclock style) comes from
   the curated table in `src/lib/machines/machine-table.ts`, transcribed from
   ShadowTheAge's MIT calculator (`https://github.com/ShadowTheAge/gtnh`,
