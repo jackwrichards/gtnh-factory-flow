@@ -1,6 +1,7 @@
 "use client";
 
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+import { focusDropdownFilter } from "@/lib/dropdown-focus";
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -180,7 +181,7 @@ export function CropPickerMenu({
       onWheel={(event) => event.stopPropagation()}
     >
       <input
-        autoFocus
+        ref={focusDropdownFilter}
         value={search}
         onChange={(event) => setSearch(event.target.value)}
         onKeyDown={(event) => {

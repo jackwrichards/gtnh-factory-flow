@@ -5,10 +5,7 @@ import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { FADE_GRACE, FADE_RANGE, useDropdownDismiss } from "./use-dropdown-dismiss";
-
-vi.mock("@/lib/board-camera-signal", () => ({
-  subscribeBoardCameraMove: () => () => {},
-}));
+import { emitBoardCameraMove } from "@/lib/board-camera-signal";
 
 /**
  * The shape every toolbar fold-out has: a small `relative` wrapper holding
@@ -23,6 +20,7 @@ function Foldout({ onClose }: { onClose: () => void }) {
     <div ref={rootRef} data-testid="wrapper">
       <button type="button">Open</button>
       <div data-testid="menu">
+        <input aria-label="Filter" />
         <button type="button">Row 1</button>
         <button type="button" data-testid="last-row">
           Row 8
@@ -96,6 +94,69 @@ describe("useDropdownDismiss fade", () => {
     expect(Number(wrapper.style.opacity)).toBeLessThan(1);
 
     move(800 - FADE_GRACE - FADE_RANGE - 1, 200);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("useDropdownDismiss focus and camera scrolling", () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it("keeps a focused filter open across keyboard height changes", () => {
+    const onClose = vi.fn();
+    const view = render(<Foldout onClose={onClose} />);
+    view.getByLabelText("Filter").focus();
+    expect(document.activeElement).toBe(view.getByLabelText("Filter"));
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(400);
+    window.dispatchEvent(new Event("resize"));
+    expect(onClose).not.toHaveBeenCalled();
+    document.dispatchEvent(new Event("scroll"));
+    expect(onClose).not.toHaveBeenCalled();
+    // Rotation / a different layout width still invalidates the anchor.
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(500);
+    window.dispatchEvent(new Event("resize"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores corrected native board scrolling but closes on real camera movement", () => {
+    const board = document.createElement("div");
+    board.setAttribute("data-scroll-camera", "");
+    const wrapper = document.createElement("div");
+    wrapper.className = "react-flow";
+    board.append(wrapper);
+    document.body.append(board);
+    try {
+      const onClose = vi.fn();
+      render(<Foldout onClose={onClose} />);
+      wrapper.dispatchEvent(new Event("scroll"));
+      expect(onClose).not.toHaveBeenCalled();
+      emitBoardCameraMove();
+      expect(onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      board.remove();
+    }
+  });
+
+  it.each(["pointerdown", "wheel", "scroll"])("still closes on an outside %s while filtering", (type) => {
+    const outside = document.createElement("div");
+    document.body.append(outside);
+    try {
+      const onClose = vi.fn();
+      const view = render(<Foldout onClose={onClose} />);
+      view.getByLabelText("Filter").focus();
+      outside.dispatchEvent(new Event(type, { bubbles: true }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it("closes on resize when no text field in the menu is focused", () => {
+    const onClose = vi.fn();
+    render(<Foldout onClose={onClose} />);
+    window.dispatchEvent(new Event("resize"));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

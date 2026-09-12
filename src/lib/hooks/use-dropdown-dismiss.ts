@@ -16,7 +16,7 @@ import { subscribeBoardCameraMove } from "@/lib/board-camera-signal";
  *   moved on to the page, and a fixed menu no longer points at anything;
  * - the board camera moving closes it, however the camera was moved (drag,
  *   wheel, WASD, pinch, a fly-to);
- * - a window resize closes it;
+ * - a window resize closes it, except a keyboard height change while typing;
  * - with `fade`, a MOUSE drifting away dims the panel with distance and
  *   closes it past `FADE_GRACE + FADE_RANGE` px from the panel or anchor.
  *   Re-entering restores it. Fingers never fade: a touch has no hover.
@@ -96,6 +96,12 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
       return;
     }
     const opts: DropdownDismissOptions = { refs, onClose, insideSelector, fade, ignoreCameraMove };
+    const openedWidth = window.innerWidth;
+    const editingInside = () => {
+      const active = document.activeElement;
+      return isInside(active, opts) && active instanceof HTMLElement &&
+        (active.matches("input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]), textarea") || active.isContentEditable);
+    };
     const panel = () => refs[0]?.current as HTMLElement | null | undefined;
     let closed = false;
     const close = () => {
@@ -121,9 +127,21 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
       if (!isInside(event.target, opts)) close();
     };
     const onScroll = (event: Event) => {
+      // ScrollCamera restores native focus/scrollIntoView accidents. Its
+      // wrapper scrolling is not evidence of a camera gesture; the explicit
+      // camera signal below already covers every real pan and zoom.
+      if (event.target instanceof Element &&
+          event.target.matches("[data-scroll-camera] .react-flow")) return;
+      // Mobile focus can scroll the document to reveal the keyboard. Keep
+      // the filter alive; outside presses/wheels and other scrollers still close.
+      if ((event.target === window || event.target === document ||
+           event.target === document.documentElement || event.target === document.body) && editingInside()) return;
       if (!isInside(event.target, opts)) close();
     };
-    const onResize = () => close();
+    const onResize = () => {
+      if (window.innerWidth === openedWidth && editingInside()) return;
+      close();
+    };
     const onPointerMove = (event: PointerEvent) => {
       if (event.pointerType !== "mouse") return;
       // Over the panel or its anchor, however deep: that is distance zero,

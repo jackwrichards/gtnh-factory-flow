@@ -1,6 +1,7 @@
 "use client";
 
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+import { focusDropdownFilter } from "@/lib/dropdown-focus";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, Search } from "lucide-react";
@@ -63,7 +64,7 @@ export function MinecraftSelect({
     if (isOpen) {
       selectedRef.current?.scrollIntoView({ block: "nearest" });
       if (searchable) {
-        filterRef.current?.focus();
+        focusDropdownFilter(filterRef.current);
       }
     }
   }, [isOpen, searchable]);

@@ -1007,6 +1007,15 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
   }, []);
   useEffect(() => () => window.clearTimeout(hideTimerRef.current), []);
 
+  // Keep the probe hook before the compact return: opening a keyboard or
+  // resizing the window can switch layouts without remounting this component.
+  const glance = !compact && measured ? layoutGlance(measured) : undefined;
+  useEffect(() => {
+    (window as unknown as { __gtnhHelpGlance?: unknown }).__gtnhHelpGlance = glance
+      ? { vw: measured?.vw, vh: measured?.vh, fits: glance.fits, boxes: glance.boxes, collisions: glance.collisions }
+      : undefined;
+  }, [glance, measured]);
+
   if (compact) {
     return (
       <div className="absolute bottom-3 left-3 z-30">
@@ -1038,15 +1047,6 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
   // board's spread actually land without cards on top of each other. The
   // second is the one that matters - a window can be wide and still have
   // both side columns open - and it used to be computed and dropped.
-  const glance = measured ? layoutGlance(measured) : undefined;
-  // Probe hook, the same shape as the board's other ones: what the fit was
-  // judged on and which stacks collided, so help-fit-probe.local.mjs can say
-  // WHY a window fell back to the panel instead of guessing from a picture.
-  useEffect(() => {
-    (window as unknown as { __gtnhHelpGlance?: unknown }).__gtnhHelpGlance = glance
-      ? { vw: measured?.vw, vh: measured?.vh, fits: glance.fits, boxes: glance.boxes, collisions: glance.collisions }
-      : undefined;
-  }, [glance, measured]);
   const fitsGlance =
     measured !== undefined &&
     glance !== undefined &&

@@ -1,6 +1,7 @@
 "use client";
 
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+import { focusDropdownFilter } from "@/lib/dropdown-focus";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -238,7 +239,7 @@ export function EnergySupplyMenu({
   return (
     <MenuShell anchor={anchor} width={360} maxHeight={500} onClose={onClose}>
       <input
-        autoFocus
+        ref={focusDropdownFilter}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {

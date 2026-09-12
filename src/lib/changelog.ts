@@ -47,6 +47,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.1.8",
+    date: "2026-09-12",
+    headline: "Recipe dropdowns stay open on touch",
+    notes: [
+      "Recipe dropdowns open without summoning the phone keyboard; tap the filter when you want to type.",
+      "Filtering keeps the menu open when the keyboard changes the screen height, and focusing a card control no longer dismisses menus through an accidental board scroll.",
+      "Fixed a board crash when resizing or opening the keyboard switches between desktop and compact layouts.",
+    ],
+  },
+  {
     version: "3.1.7",
     date: "2026-09-11",
     headline: "Whole item icons and consistent resource shadows",
