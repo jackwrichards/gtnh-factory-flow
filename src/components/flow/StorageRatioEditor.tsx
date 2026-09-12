@@ -2,20 +2,17 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
-import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
-import { getUiScale } from "@/lib/ui-scale";
+import { Split } from "lucide-react";
 import {
   formatRatioShare,
   getStorageRatioBranches,
   type StorageRatioBranch,
 } from "@/lib/model/storage-ratios";
-import type { StorageBufferMode } from "@/lib/model/types";
-import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
-import { formatSlotRate } from "./flow-explainers";
+import { useFactoryStore } from "@/store/factory-store";
 import { RATIO_EDITOR_EVENT, type RatioEditorRequest } from "./ratio-editor";
+import { ratioColor } from "./storage-ratio-presentation";
 
-/** One listener per board; closed drawers and wires acquire no project subscription. */
+/** One listener per board; closed drawers acquire no editor subscriptions. */
 export const StorageRatioEditor = memo(function StorageRatioEditor() {
   const [request, setRequest] = useState<RatioEditorRequest>();
   useEffect(() => {
@@ -28,49 +25,38 @@ export const StorageRatioEditor = memo(function StorageRatioEditor() {
     return () => window.removeEventListener(RATIO_EDITOR_EVENT, open);
   }, []);
   return request ? (
-    <RatioPanel
-      key={`${request.storageId}:${request.edgeId ?? ""}`}
-      request={request}
-      onClose={() => setRequest(undefined)}
-    />
+    <RatioPanel key={request.storageId} request={request} onClose={() => setRequest(undefined)} />
   ) : null;
 });
 
 function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose: () => void }) {
   const project = useFactoryStore((s) => s.project);
-  const readOnly = useFactoryStore((s) => s.isReadOnly);
-  const updateStorage = useFactoryStore((s) => s.updateStorage);
-  const setScope = useFactoryStore((s) => s.setHoveredFlowScope);
+  const readOnly = useFactoryStore((s) => s.isReadOnly || s.checklistMode);
   const storage = project.storages?.find((s) => s.id === request.storageId);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const anchorRef = useRef<Element | null>(request.anchor);
+  const rootRef = useRef<HTMLDialogElement>(null);
+  const doneRef = useRef<HTMLButtonElement>(null);
+  const [projectId] = useState(project.id);
+  const valid = Boolean(
+    storage?.bufferMode === "ratio" && !readOnly && !project.poolMode && project.id === projectId,
+  );
+  useEffect(() => {
+    if (!valid) onClose();
+  }, [valid, onClose]);
+  useEffect(() => {
+    const dialog = rootRef.current;
+    dialog?.showModal();
+    // Open on Done, not a number field: phones should not launch a keyboard.
+    doneRef.current?.focus({ preventScroll: true });
+    return () => dialog?.close();
+  }, []);
   const close = () => {
     if (
       document.activeElement instanceof HTMLElement &&
       rootRef.current?.contains(document.activeElement)
     )
       document.activeElement.blur();
-    setScope(undefined);
     onClose();
   };
-  useDropdownDismiss(true, { refs: [rootRef, anchorRef], onClose: close, fade: true });
-  useEffect(() => () => setScope(undefined), [setScope]);
-  const [position] = useState(() => {
-    const rect = request.anchor.getBoundingClientRect();
-    const scale = getUiScale();
-    const width = Math.min(410, (window.innerWidth - 16) / scale);
-    const above = window.innerHeight - rect.bottom < Math.min(300 * scale, rect.top - 8);
-    return {
-      width,
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - width * scale - 8)) / scale,
-      top: above ? undefined : Math.max(8, rect.bottom + 6) / scale,
-      bottom: above ? Math.max(8, window.innerHeight - rect.top + 6) / scale : undefined,
-      maxHeight: Math.max(
-        80,
-        (above ? rect.top - 14 : window.innerHeight - rect.bottom - 14) / scale,
-      ),
-    };
-  });
   const branches = useMemo(
     () => getStorageRatioBranches(project.edges.filter((e) => e.source === request.storageId)),
     [project.edges, request.storageId],
@@ -88,90 +74,73 @@ function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose
       ),
     ]);
   }, [project.nodes, project.recipes, project.storages]);
-  if (!storage || readOnly || project.poolMode) return null;
-  const mode = storage.bufferMode ?? "overflow";
   return createPortal(
-    <div
+    <dialog
       ref={rootRef}
-      role="dialog"
       aria-label="Drawer split"
       data-ratio-editor
       data-tooltip-stop
-      className="ui-zoom nodrag nowheel fixed z-[300] overflow-y-auto border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-3 text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),2px_3px_6px_rgba(0,0,0,0.3)]"
-      style={position}
-      onPointerDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-      onWheel={(e) => e.stopPropagation()}
+      className="ui-zoom nodrag nopan nowheel fixed inset-0 m-0 max-h-none max-w-none overflow-y-auto border-0 bg-[#10191e] p-0 text-[#e8f4f5] backdrop:bg-[#10191e]"
+      style={{ width: "calc(100 * var(--ui-vw, 1vw))", height: "calc(100 * var(--ui-dvh, 1dvh))" }}
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
+      }}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+      onWheel={(event) => event.stopPropagation()}
     >
-      <div className="mb-3 flex items-center justify-between gap-2 text-sm">
-        <strong className="min-w-0 truncate">
-          {storage.displayName ?? storage.resourceId} · split
-        </strong>
-        <button
-          type="button"
-          aria-label="Close split editor"
-          onClick={close}
-          className="shrink-0 p-1 hover:bg-[var(--mc-61)]"
-        >
-          <X size={16} />
-        </button>
-      </div>
-      <div className="mb-3 flex gap-1" aria-label="Drawer mode">
-        {(
-          [
-            ["overflow", "Non-strict"],
-            ["strict", "Strict"],
-            ["ratio", "Ratio"],
-          ] as [StorageBufferMode, string][]
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={mode === value}
-            onClick={() => updateStorage(storage.id, { bufferMode: value })}
-            className={`border px-2 py-1 text-xs ${mode === value ? "border-cyan-300 bg-cyan-950 text-white" : "border-[var(--mc-25)] hover:bg-[var(--mc-61)]"}`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {mode === "ratio" ? (
-        <>
-          <div className="mb-1 grid grid-cols-[minmax(0,1fr)_90px_70px] gap-2 text-[10px] uppercase text-[var(--mc-ink-muted)]">
-            <span>Outgoing wire</span>
-            <span className="text-right">Parts</span>
-            <span className="text-right">Share</span>
+      <div className="mx-auto flex min-h-full w-full max-w-[720px] flex-col px-5 py-6 sm:px-10 sm:py-12">
+        <header className="sticky top-0 z-10 mb-8 flex items-center justify-between gap-4 bg-[#10191e] py-2">
+          <div className="flex min-w-0 items-center gap-3">
+            <Split aria-hidden className="h-7 w-7 shrink-0 text-cyan-200" />
+            <div className="min-w-0">
+              <h2 className="text-xl font-bold">Split</h2>
+              <p className="truncate text-xs text-slate-400">
+                {storage?.displayName ?? storage?.resourceId}
+              </p>
+            </div>
           </div>
+          <button
+            ref={doneRef}
+            type="button"
+            onClick={close}
+            className="shrink-0 rounded border border-cyan-200/50 bg-cyan-200/10 px-4 py-2 text-sm font-bold text-cyan-100 hover:bg-cyan-200/20 focus-visible:outline-2 focus-visible:outline-cyan-200"
+          >
+            Done
+          </button>
+        </header>
+        <div aria-hidden className="mb-3 flex h-12 overflow-hidden rounded bg-white/5">
+          {branches.map((branch, index) => (
+            <div
+              key={branch.targetId + index}
+              className="flex min-w-0 items-center justify-center overflow-hidden text-sm font-bold text-[#10191e]"
+              style={{ width: `${branch.share * 100}%`, background: ratioColor(index) }}
+            >
+              {branch.share >= 0.13 ? formatRatioShare(branch.share) : null}
+            </div>
+          ))}
+        </div>
+        <p className="mb-7 text-xs text-slate-400">Type or scroll the parts. Percentages follow.</p>
+        <div className="flex flex-col gap-3">
           {branches.map((branch, index) => (
             <RatioBranchRow
               key={branch.edges.map((e) => e.id).join("|")}
               branch={branch}
-              storageId={storage.id}
+              storageId={request.storageId}
               name={names.get(branch.targetId) ?? "Machine"}
               index={index}
-              focus={Boolean(request.edgeId && branch.edges.some((e) => e.id === request.edgeId))}
             />
           ))}
-          {!branches.length ? (
-            <p className="py-2 text-xs">Connect an outgoing wire to set its share.</p>
-          ) : null}
-          <p className="mt-3 text-[11px] text-[var(--mc-ink-muted)]">
-            Type or scroll parts. Percentages update automatically.
-          </p>
-          <p className="mt-1 text-[11px] text-[var(--mc-ink-muted)]">
-            {branches.length && branches.every((b) => b.share === 0)
-              ? "All branches closed. Set a positive share to let flow through."
-              : "A blocked branch holds the split. Surplus backs up."}
-          </p>
-        </>
-      ) : (
-        <p className="text-xs text-[var(--mc-ink-muted)]">
-          {mode === "strict"
-            ? "Passes through what downstream accepts. Surplus backs up."
-            : "Stores surplus while supplying downstream machines."}
-        </p>
-      )}
-    </div>,
+        </div>
+        {!branches.length ? (
+          <p className="py-4 text-sm text-slate-400">Connect an output to set its share.</p>
+        ) : branches.every((branch) => branch.share === 0) ? (
+          <p className="mt-4 text-xs text-slate-400">All outputs closed.</p>
+        ) : null}
+      </div>
+    </dialog>,
     document.body,
   );
 }
@@ -181,23 +150,13 @@ function RatioBranchRow({
   storageId,
   name,
   index,
-  focus,
 }: {
   branch: StorageRatioBranch;
   storageId: string;
   name: string;
   index: number;
-  focus: boolean;
 }) {
   const setWeight = useFactoryStore((s) => s.setRatioBranchWeight);
-  const setScope = useFactoryStore((s) => s.setHoveredFlowScope);
-  const flow = useFactoryStore((s) =>
-    branch.edges.reduce(
-      (sum, edge) => sum + (s.lastResult?.edges[edge.id]?.transferredPerSecond ?? 0),
-      0,
-    ),
-  );
-  useRateDisplayUnits();
   const [draft, setDraft] = useState(String(branch.weight));
   const [editing, setEditing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -207,11 +166,11 @@ function RatioBranchRow({
     if (Number.isFinite(value) && value >= 0) setWeight(storageId, ids, value);
     setEditing(false);
   };
-  // A native non-passive wheel listener prevents both number-input double
-  // stepping and the board camera stealing the scroll gesture.
+  // Non-passive prevents native double-stepping and scrolling the dialog.
   const wheelRef = useRef<(event: WheelEvent) => void>(() => {});
   useEffect(() => {
     wheelRef.current = (event) => {
+      if (event.deltaY === 0) return;
       event.preventDefault();
       event.stopPropagation();
       const parsed = Number(editing ? draft : branch.weight);
@@ -229,31 +188,20 @@ function RatioBranchRow({
     const input = inputRef.current;
     const wheel = (event: WheelEvent) => wheelRef.current(event);
     input?.addEventListener("wheel", wheel, { passive: false });
-    if (focus) {
-      input?.focus({ preventScroll: true });
-      input?.select();
-    }
     return () => input?.removeEventListener("wheel", wheel);
-  }, [focus]);
-  const highlight = () =>
-    setScope({
-      edges: Object.fromEntries(ids.map((id) => [id, true as const])),
-      nodes: { [storageId]: true, [branch.targetId]: true },
-      ports: {},
-    });
+  }, []);
   return (
-    <div
-      className="grid grid-cols-[minmax(0,1fr)_90px_70px] items-center gap-2 border-t border-[var(--mc-33)] py-2"
-      onMouseEnter={highlight}
-      onMouseLeave={() => setScope(undefined)}
-    >
-      <label htmlFor={`ratio-parts-${index}`} className="min-w-0 text-xs">
-        <span className="block truncate" title={name}>
-          {name}
-        </span>
-        <span className="mt-1 block text-[10px] text-[var(--mc-ink-muted)]">
-          {formatSlotRate(flow, branch.edges[0].resourceKind)}
-        </span>
+    <div className="grid grid-cols-[minmax(0,1fr)_88px] items-center gap-x-4 gap-y-3 rounded border border-white/10 bg-white/[0.025] p-4 sm:grid-cols-[minmax(0,1fr)_100px_90px]">
+      <label
+        htmlFor={`ratio-parts-${index}`}
+        className="col-span-2 flex min-w-0 items-center gap-3 text-sm sm:col-span-1"
+      >
+        <span
+          aria-hidden
+          className="h-3 w-3 shrink-0 rounded-sm"
+          style={{ background: ratioColor(index) }}
+        />
+        <span className="min-w-0 break-words">{name}</span>
       </label>
       <input
         ref={inputRef}
@@ -263,12 +211,11 @@ function RatioBranchRow({
         inputMode="decimal"
         min="0"
         step="any"
-        className="min-w-0 w-full border border-[var(--mc-25)] bg-[var(--mc-15)] px-1 py-1.5 text-right text-xs focus:outline-cyan-300"
+        className="min-w-0 w-full rounded border border-white/20 bg-black/20 px-3 py-2 text-right text-base tabular-nums focus:outline-cyan-200"
         value={editing ? draft : String(branch.weight)}
         onFocus={() => {
           setDraft(String(branch.weight));
           setEditing(true);
-          highlight();
         }}
         onChange={(event) => {
           setDraft(event.target.value);
@@ -280,7 +227,12 @@ function RatioBranchRow({
           if (event.key === "Enter") event.currentTarget.blur();
         }}
       />
-      <output className="text-right text-xs tabular-nums">{formatRatioShare(branch.share)}</output>
+      <output
+        className="text-right text-base font-bold tabular-nums"
+        style={{ color: ratioColor(index) }}
+      >
+        {formatRatioShare(branch.share)}
+      </output>
     </div>
   );
 }

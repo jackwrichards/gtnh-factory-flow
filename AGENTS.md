@@ -1366,11 +1366,8 @@ Working notes for future agents on GTNH Factory Flow.
   edge. Old plans and view blobs carrying the keys parse (unknown keys
   strip); `lineLabelsMode` stays in the plan-view type as a historical
   field nothing reads. The ports carry the numbers.
-  Ratio drawers are the explicit exception (Jack, 2026-09-12): their outgoing
-  wires show the configured PERCENTAGE, never a rate pill. The badge opens
-  that branch in `StorageRatioEditor.tsx`, the same editor the RATIO header
-  opens. It uses the existing edge-label layer so wiring mode and camera
-  gestures retain their pointer protections.
+  Ratio drawers have NO exception (Jack, 2026-09-12): the split belongs
+  entirely on the drawer. Never draw percentages or editing controls on edges.
 - THE BOARD MENU (Jack, 2026-09-08): ONE right-click menu for the whole
   board, `src/components/flow/BoardContextMenu.tsx`, on React Flow's
   `onPaneContextMenu` / `onNodeContextMenu` / `onEdgeContextMenu`. The
@@ -1462,6 +1459,11 @@ Working notes for future agents on GTNH Factory Flow.
   away preserves weights; removing a wire renormalizes the remaining ones.
   Inserting another drawer on a branch carries its parts onto the upstream
   replacement wire. The editor changes a whole drawn channel in one undo step.
+  Ratio wears a cyan tint, double rim and fork, with its percentages and split
+  bar on the card. The separate pencil opens `StorageRatioEditor.tsx` as a
+  full-screen native dialog: destinations, editable parts, percentages, Done.
+  Switching modes NEVER opens the editor. Keep mode controls on the card;
+  don't add flow rates or more settings to the split editor.
 - The drain pill cycles THREE ways since 2026-08-23: product, byproduct,
   trash. A TRASH drawer is the byproduct's shape (free disposal, no demand)
   with the books voided (`applyTrashedOutputBalances` covers it alongside

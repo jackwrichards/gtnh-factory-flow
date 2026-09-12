@@ -52,7 +52,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "Choose your drawer's split",
     notes: [
       "Drawers and tanks have a third mode: Ratio, which divides incoming supply between outgoing wires in your chosen proportions.",
-      "Click RATIO or a wire's percentage to type or scroll each branch's parts, such as 1000:20 or 1:1.",
+      "Ratio drawers wear a fork and a split bar with percentages. Their pencil opens a full-screen editor: type or scroll parts such as 1000:20 or 1:1.",
       "Ratio mode holds the split when a branch backs up, in both Build and Solve.",
     ],
   },

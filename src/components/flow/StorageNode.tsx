@@ -34,11 +34,15 @@ import { GT_NODE_COLORS } from "./node-colors";
 import { getPaintBrushCursor } from "./paint-cursor";
 import { hasAnySolveNumbers } from "@/lib/solver/throughput";
 import { openRatioEditor } from "./ratio-editor";
+import { formatRatioShare } from "@/lib/model/storage-ratios";
+import { ratioColor } from "./storage-ratio-presentation";
 
 
 export interface StorageNodeData extends Record<string, unknown> {
   storage: FactoryStorage;
   result?: StorageThroughputResult;
+  /** Normalized outgoing shares, encoded for the flow node's shallow cache. */
+  ratioSharesKey?: string;
 }
 
 export type StorageFlowNode = Node<StorageNodeData, "storageNode">;
@@ -100,13 +104,14 @@ const ROLE_PRESENTATION: Record<
  */
 const POWER_STORAGE_TINT = "#c07c17";
 
-function storageTint(storage: Pick<FactoryStorage, "kind" | "colorTag">, role: StorageRole): string {
+function storageTint(storage: Pick<FactoryStorage, "kind" | "colorTag" | "bufferMode">, role: StorageRole): string {
   if (storage.colorTag) {
     return GT_NODE_COLORS[storage.colorTag].swatch;
   }
   if (storage.kind === "power") {
     return POWER_STORAGE_TINT;
   }
+  if (role === "buffer" && storage.bufferMode === "ratio") return "#5acbd4";
   return ROLE_TINTS[role];
 }
 
@@ -201,7 +206,7 @@ function storageIconPixelSize(
 }
 
 function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
-  const { storage, result } = data;
+  const { storage, result, ratioSharesKey } = data;
   const reactFlowStore = useStoreApi();
   // The invisible wire handles blanket the card body, and React Flow does not
   // select a node for clicks that land on a handle - so a plain click (no
@@ -412,6 +417,9 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             over a card that now keeps its SILHOUETTE at glance - the shaped
             fill underneath is already the role-coloured ground. */}
         <NodeGlanceIcon>
+          {storage.bufferMode === "ratio" && role === "buffer" ? (
+            <Split aria-hidden className="absolute right-0 top-0 z-20 h-7 w-7 rounded-sm bg-[#10272d] p-1 text-cyan-200" />
+          ) : null}
           {/* Deliberately bigger than the card it sits on.
               Zoomed out, WHAT is in the drawer is the only thing worth
               reading, and a sprite confined inside the frame is a few pixels
@@ -504,6 +512,11 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             </svg>
           ) : null}
           <StorageHeader storage={storage} isTank={isTank} tint={tint} role={role} />
+          {role === "buffer" && storage.bufferMode === "ratio" ? (
+            <svg aria-hidden data-ratio-rim className="pointer-events-none absolute inset-0 z-0" viewBox="0 0 100 80" width="100%" height="100%">
+              <polygon points="18,5 82,5 94,40 82,75 18,75 6,40" fill="none" stroke={tint} strokeWidth={1.5} />
+            </svg>
+          ) : null}
           {/* Everything under the header is the wire zone: drag from the
               left or right half to pull a wire. The header is plain card,
               so grabbing it (or the frame) moves the node. The handles
@@ -547,19 +560,22 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             />
             {/* No wood face, no glass box: the dark tinted card IS the
                 surface, and the item fills nearly the whole well. */}
-            <div className="grid min-h-0 w-full flex-1 place-items-center">
+            <div className="flex min-h-0 w-full flex-1 items-center justify-center gap-1">
               <ResourceIcon
                 resource={{ ...storage, id: storage.resourceId, amount: 1 }}
                 showAmount={false}
                 bare
                 iconPixelSize={storageIconPixelSize(
-                  isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
+                  role === "buffer" && storage.bufferMode === "ratio" ? 24 : isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
                   storage,
                 )}
-                className="!h-[36px] !w-[36px]"
+                className={role === "buffer" && storage.bufferMode === "ratio" ? "!h-[24px] !w-[24px]" : "!h-[36px] !w-[36px]"}
               />
+              {role === "buffer" && storage.bufferMode === "ratio" ? <Split aria-hidden className="h-5 w-5 text-cyan-200" /> : null}
             </div>
-            {solveMode && role === "product" ? (
+            {role === "buffer" && storage.bufferMode === "ratio" ? (
+              <RatioSplitButton storageId={storage.id} sharesKey={ratioSharesKey} />
+            ) : solveMode && role === "product" ? (
               <TargetLine storage={storage} result={result} />
             ) : (
               <NetLine net={net} kind={storage.kind} role={role} />
@@ -890,6 +906,27 @@ export function TargetLine({
   );
 }
 
+function RatioSplitButton({ storageId, sharesKey }: { storageId: string; sharesKey?: string }) {
+  const shares = sharesKey ? sharesKey.split(",").map(Number) : [];
+  const percentages = shares.map(formatRatioShare);
+  const summary = shares.length <= 2 ? percentages.join(" / ")
+    : shares.length === 3 ? `${percentages.map((value) => value.replace("%", "")).join("/")}%`
+    : `${percentages[0]} + ${shares.length - 1} more`;
+  return (
+    <button type="button" data-tooltip-stop data-ratio-split aria-label="Edit drawer ratios"
+      title={`${percentages.join(" / ")} · Edit split`}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => { event.stopPropagation(); openRatioEditor(storageId); }}
+      className="nodrag nopan relative z-40 mx-auto mb-0.5 flex w-[70px] shrink-0 flex-col gap-0.5 rounded-sm border border-cyan-200/40 bg-[#10272d] px-1 py-0.5 text-cyan-100 hover:bg-[#23505a]"
+    >
+      <span className="flex w-full items-center justify-center gap-1 whitespace-nowrap font-bold tabular-nums" style={{ fontSize: summary.length > 15 ? 5 : 7 }}><span>{summary || "Set split"}</span><Pencil aria-hidden className="board-edit-chrome h-2 w-2 shrink-0" /></span>
+      <span aria-hidden className="flex h-[3px] w-full overflow-hidden bg-white/10">
+        {shares.map((share, index) => <span key={index} style={{ width: `${share * 100}%`, background: ratioColor(index) }} />)}
+      </span>
+    </button>
+  );
+}
+
 function StorageHeader({
   storage,
   isTank,
@@ -950,8 +987,6 @@ function StorageHeader({
       >
         {word}
       </div>
-      {ratio ? <button type="button" data-tooltip-stop aria-label="Edit drawer ratios" onClick={event => { event.stopPropagation(); openRatioEditor(storageId, event.currentTarget); }}
-        className="board-edit-chrome nodrag absolute inset-y-0 left-5 right-5 z-10 cursor-pointer" /> : null}
       {isDrainRole(role) ? (
         <DrainModeSwap storageId={storageId} role={role} kind={storage.kind} />
       ) : null}
@@ -964,7 +999,7 @@ function StorageHeader({
  * The one thing about a BUFFER you choose, worn as its own icon so the tile
  * SAYS which one it is: an arrow dropping into a tray while the tank catches
  * overflow, left-right arrows for strict pass-through, a fork for ratios.
- * Clicking cycles all three; entering ratio opens its branch editor.
+ * Clicking cycles all three; ratio's separate pencil opens its editor.
  */
 function BufferModeSwap({ storageId, mode }: { storageId: string; mode: StorageBufferMode }) {
   const updateStorage = useFactoryStore((state) => state.updateStorage);
@@ -978,7 +1013,6 @@ function BufferModeSwap({ storageId, mode }: { storageId: string; mode: StorageB
       onClick={(event) => {
         event.stopPropagation();
         updateStorage(storageId, { bufferMode: next });
-        if (next === "ratio") openRatioEditor(storageId, event.currentTarget);
       }}
       aria-label={`Switch to ${next}`}
       className="board-edit-chrome nodrag relative z-40 ml-auto flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
