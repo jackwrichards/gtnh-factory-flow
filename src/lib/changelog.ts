@@ -49,12 +49,11 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "3.1.8",
     date: "2026-09-12",
-    headline: "Recipe dropdowns stay open on touch",
+    headline: "Mobile dropdown fixes and cleaner item icons",
     notes: [
-      "Recipe dropdowns open without summoning the phone keyboard; tap the filter when you want to type.",
-      "Filtering keeps the menu open when the keyboard changes the screen height, and focusing a card control no longer dismisses menus through an accidental board scroll.",
-      "Fixed a board crash when resizing or opening the keyboard switches between desktop and compact layouts.",
-      "Removed the cyan plus badges from item icons; ingredient alternatives remain available through the existing controls.",
+      "Dropdowns stay open while filtering, with the phone keyboard appearing only when you tap the filter.",
+      "Fixed a board crash when switching between desktop and compact layouts.",
+      "Removed cyan plus badges from item icons; alternative ingredient choices still work.",
     ],
   },
   {
