@@ -9653,6 +9653,7 @@ function ResourceEdgeComponent({
     : flowRate?.color === true && boardDetailLevel === NODE_DETAIL_GLANCE
       ? flowRampColor(flowRate.heat)
       : resolvedResourceColor;
+  const arrowFill = brightenHexColor(edgeColor, 0.55);
   // The board's motion switches. Move motion glides this wire onto a new
   // route; value motion eases its thickness and dash speed after the solver.
   const { moveMotion, valueMotion } = useBoardMotion();
@@ -9961,7 +9962,7 @@ function ResourceEdgeComponent({
     <>
       {ratioLabels.map((label) => (
         <EdgeLabelRenderer key={label.key}>
-          <RatioWireLabelControl edgeId={id} label={label} shares={data?.ratio ?? {}} />
+          <RatioWireLabelControl edgeId={id} label={label} shares={data?.ratio ?? {}} arrowFill={arrowFill} />
         </EdgeLabelRenderer>
       ))}
       {checklistMode && liveRoute.path ? (
@@ -10105,7 +10106,7 @@ function ResourceEdgeComponent({
               key={index}
               data-resource-edge-arrow={id}
               points={ratioLabels.find((label) => label.arrowIndex === index)?.polygon ?? arrow}
-              fill={brightenHexColor(edgeColor, 0.55)}
+              fill={arrowFill}
               stroke={darkenHexColor(edgeColor, 0.6)}
               strokeWidth={isGlobalView ? 2.5 : 1.5}
               strokeLinejoin="round"

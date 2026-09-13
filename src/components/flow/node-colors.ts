@@ -25,6 +25,14 @@ export function inkFor(panel: string): { ink: string; inkMuted: string } {
     : { ink: "#16161a", inkMuted: "rgba(22,22,26,0.66)" };
 }
 
+/** Small numbers on wire arrows use whichever ink has the greater contrast. */
+export function arrowInkFor(fill: string): "#000000" | "#ffffff" {
+  const luminance = relativeLuminance(fill);
+  const blackContrast = (luminance + 0.05) / 0.05;
+  const whiteContrast = 1.05 / (luminance + 0.05);
+  return blackContrast >= whiteContrast ? "#000000" : "#ffffff";
+}
+
 export const GT_NODE_COLORS: Record<
   FactoryNodeColorTag,
   { swatch: string; panel: string; header: string; border: string; shadow: string }

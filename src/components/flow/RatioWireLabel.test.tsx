@@ -6,6 +6,18 @@ import { getProjectRatioBranches } from "@/lib/model/storage-ratios";
 import { RatioSetupOutput, RatioWireLabel } from "./RatioWireLabel";
 
 const initial = useFactoryStore.getState();
+
+it("updates the number's contrast when the arrow fill changes", () => {
+  const props = {
+    edgeId: "wire",
+    label: { key: "output", text: "50%", ratio: 0.5, point: { x: 0, y: 0 } },
+    shares: { output: 0.5 },
+  };
+  const { container, rerender } = render(<RatioWireLabel {...props} arrowFill="#121212" />);
+  expect((container.firstElementChild as HTMLElement).style.color).toBe("rgb(255, 255, 255)");
+  rerender(<RatioWireLabel {...props} arrowFill="#eeeeee" />);
+  expect((container.firstElementChild as HTMLElement).style.color).toBe("rgb(0, 0, 0)");
+});
 beforeEach(() => {
   useFactoryStore.setState({
     isReadOnly: false,

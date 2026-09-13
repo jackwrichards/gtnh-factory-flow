@@ -9,15 +9,18 @@ import {
 import { ArrowUpRight } from "lucide-react";
 import { useFactoryStore } from "@/store/factory-store";
 import type { RatioWireLabel as Label } from "./ratio-label-layout";
+import { arrowInkFor } from "./node-colors";
 
 export const RatioWireLabel = memo(function RatioWireLabel({
   edgeId,
   label,
   shares,
+  arrowFill = "#d4d6df",
 }: {
   edgeId: string;
   label: Label & { point: { x: number; y: number }; rotation?: number };
   shares: { input?: number; output?: number };
+  arrowFill?: string;
 }) {
   const locked = useFactoryStore(
     (s) => s.isReadOnly || s.checklistMode || Boolean(s.project.poolMode),
@@ -28,10 +31,11 @@ export const RatioWireLabel = memo(function RatioWireLabel({
     <span
       data-ratio-edge={edgeId}
       data-ratio-side={label.key}
-      className={`${locked ? "pointer-events-none" : "pointer-events-auto"} nodrag nopan nowheel absolute flex flex-col justify-center whitespace-pre text-center text-[10px] font-bold tabular-nums leading-[10px] text-[#20242b]`}
+      className={`${locked ? "pointer-events-none" : "pointer-events-auto"} nodrag nopan nowheel absolute flex flex-col justify-center whitespace-pre text-center text-[10px] font-bold tabular-nums leading-[10px]`}
       style={{
         left: label.point.x,
         top: label.point.y,
+        color: arrowInkFor(arrowFill),
         transform: `translate(-50%, -50%) rotate(${label.rotation ?? 0}deg)`,
       }}
       onPointerDown={(event) => event.stopPropagation()}

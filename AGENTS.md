@@ -1374,7 +1374,9 @@ Working notes for future agents on GTNH Factory Flow.
   Each number sits directly on the nearest wire triangle, aligned with the wire
   and kept readable rather than upside down. Preserve the triangle's proportions
   and colour; fit its size to the text with padding, growing away from the nearest
-  drawer. Use flow geometry, never DOM measurement. No hover tooltip or special cursor. The drawer
+  drawer. Use flow geometry, never DOM measurement. Percentage ink chooses black
+  or white by contrast against the actual brightened arrow fill (`arrowInkFor`),
+  not the original resource colour. No hover tooltip or special cursor. The drawer
   itself shows a green scrollable Setup output percentage and its ordinary net rate.
   Between two ratio drawers,
   each end gets its own share; a short wire combines labelled In/Out values.
