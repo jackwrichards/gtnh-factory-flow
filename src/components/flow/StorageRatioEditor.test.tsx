@@ -145,3 +145,29 @@ it("steps the current draft with the buttons and arrow keys", () => {
   act(() => input.blur());
   expect(input.value).toBe("51");
 });
+
+it("zeros a branch, redistributes its share, and disables the zero button", () => {
+  render(<StorageRatioEditor />);
+  act(() => openRatioEditor("split"));
+  const input = screen.getByRole("spinbutton", {
+    name: "Product output percentage",
+  }) as HTMLInputElement;
+  const zero = screen.getByRole("button", {
+    name: "Zero Product output percentage",
+  }) as HTMLButtonElement;
+  expect(zero.disabled).toBe(false);
+  act(() => input.focus());
+  fireEvent.change(input, { target: { value: "80" } });
+  fireEvent.click(zero);
+  act(() => input.blur());
+  expect(input.value).toBe("0");
+  expect(zero.disabled).toBe(true);
+  expect(
+    (screen.getByRole("spinbutton", { name: "Byproduct output percentage" }) as HTMLInputElement)
+      .value,
+  ).toBe("100");
+  expect(
+    (screen.getByRole("button", { name: "Zero Setup output percentage" }) as HTMLButtonElement)
+      .disabled,
+  ).toBe(true);
+});

@@ -131,6 +131,8 @@ function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose
                       idle: "Drawer",
                     }[roles.get(s.id) as Exclude<StorageRole, "buffer">] ?? "Drawer"),
               drawerRole: roles.get(s.id),
+              icon:
+                roles.get(s.id) === "source" ? { ...s, id: s.resourceId, amount: 1 } : undefined,
             },
           ] as const,
       ),
@@ -282,7 +284,7 @@ function RatioBranchRow({
   }, []);
   return (
     <div
-      className={`grid grid-cols-[minmax(0,1fr)_100px] items-center gap-2 border-b border-[var(--mc-36)] py-1 last:border-b-0 ${!branch.edges.length ? "-mx-2 border-t border-t-[var(--flow-output)] bg-[color-mix(in_srgb,var(--flow-output)_10%,transparent)] px-2 text-[var(--flow-output)]" : ""}`}
+      className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-[var(--mc-36)] py-1 last:border-b-0 ${!branch.edges.length ? "-mx-4 border-t border-t-[var(--flow-output)] bg-[color-mix(in_srgb,var(--flow-output)_10%,transparent)] px-4 text-[var(--flow-output)]" : ""}`}
     >
       <label
         htmlFor={`ratio-percentage-${side}-${index}`}
@@ -309,60 +311,88 @@ function RatioBranchRow({
             <Factory className="h-5 w-5 text-[var(--mc-ink-muted)]" />
           )}
         </span>
+        {drawerRole === "source" && icon ? (
+          <ResourceIcon
+            resource={icon}
+            showAmount={false}
+            tooltip={false}
+            bare
+            iconPixelSize={40}
+            className="!h-5 !w-5 shrink-0"
+          />
+        ) : null}
         <span className="min-w-0 break-words">{name}</span>
       </label>
-      <div className="flex h-7 items-stretch overflow-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-25)] focus-within:outline focus-within:outline-1 focus-within:outline-[var(--mc-ink-muted)]">
-        <input
-          ref={inputRef}
-          id={`ratio-percentage-${side}-${index}`}
-          aria-label={fieldLabel}
-          type="text"
-          role="spinbutton"
-          inputMode="decimal"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={percentage}
-          title="Type or scroll the percentage"
-          className="min-h-0 min-w-0 w-full border-0 bg-transparent p-0 pl-1 text-right text-xs tabular-nums outline-none"
-          value={editing ? draft : String(percentage)}
-          onFocus={() => {
-            setDraft(String(percentage));
-            setEditing(true);
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          aria-label={`Zero ${fieldLabel}`}
+          title="Set to zero"
+          disabled={percentage === 0 && (!editing || Number(draft) === 0)}
+          onPointerDown={(event) => event.preventDefault()}
+          onClick={() => {
+            setDraft("0");
+            setEditing(false);
+            setPercentage(storageId, edgeId, 0, side);
           }}
-          onChange={(event) => {
-            setDraft(event.target.value);
-            setEditing(true);
-          }}
-          onBlur={(event) => commit(event.target.value)}
-          onKeyDown={(event) => {
-            event.stopPropagation();
-            if (event.key === "Enter") event.currentTarget.blur();
-            if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-              event.preventDefault();
-              step(event.key === "ArrowUp" ? 1 : -1, event.shiftKey);
-            }
-          }}
-        />
-        <span aria-hidden className="flex items-center px-1 text-xs">
-          %
-        </span>
-        <div className="grid w-4 shrink-0 grid-rows-2 border-l border-[var(--mc-15)] bg-[var(--mc-49)]">
-          {[1, -1].map((direction) => (
-            <button
-              key={direction}
-              type="button"
-              aria-label={`${direction === 1 ? "Increase" : "Decrease"} ${fieldLabel}`}
-              className="flex min-h-0 items-center justify-center p-0 hover:bg-[var(--mc-61)] first:border-b first:border-[var(--mc-15)]"
-              onPointerDown={(event) => event.preventDefault()}
-              onClick={(event) => step(direction, event.shiftKey)}
-            >
-              {direction === 1 ? (
-                <ChevronUp className="h-3 w-3" />
-              ) : (
-                <ChevronDown className="h-3 w-3" />
-              )}
-            </button>
-          ))}
+          className="flex h-5 w-5 shrink-0 items-center justify-center border border-[var(--mc-15)] bg-[var(--mc-49)] p-0 text-[var(--mc-ink-muted)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)] disabled:opacity-30"
+          style={{ fontSize: 10, lineHeight: "14px" }}
+        >
+          0
+        </button>
+        <div className="flex h-7 w-[76px] items-stretch overflow-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-25)] focus-within:outline focus-within:outline-1 focus-within:outline-[var(--mc-ink-muted)]">
+          <input
+            ref={inputRef}
+            id={`ratio-percentage-${side}-${index}`}
+            aria-label={fieldLabel}
+            type="text"
+            role="spinbutton"
+            inputMode="decimal"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percentage}
+            title="Type or scroll the percentage"
+            className="min-h-0 min-w-0 w-full border-0 bg-transparent p-0 pl-1 text-right text-xs tabular-nums outline-none"
+            value={editing ? draft : String(percentage)}
+            onFocus={() => {
+              setDraft(String(percentage));
+              setEditing(true);
+            }}
+            onChange={(event) => {
+              setDraft(event.target.value);
+              setEditing(true);
+            }}
+            onBlur={(event) => commit(event.target.value)}
+            onKeyDown={(event) => {
+              event.stopPropagation();
+              if (event.key === "Enter") event.currentTarget.blur();
+              if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+                event.preventDefault();
+                step(event.key === "ArrowUp" ? 1 : -1, event.shiftKey);
+              }
+            }}
+          />
+          <span aria-hidden className="flex items-center px-1 text-xs">
+            %
+          </span>
+          <div className="grid w-4 shrink-0 grid-rows-2 border-l border-[var(--mc-15)] bg-[var(--mc-49)]">
+            {[1, -1].map((direction) => (
+              <button
+                key={direction}
+                type="button"
+                aria-label={`${direction === 1 ? "Increase" : "Decrease"} ${fieldLabel}`}
+                className="flex min-h-0 items-center justify-center p-0 hover:bg-[var(--mc-61)] first:border-b first:border-[var(--mc-15)]"
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={(event) => step(direction, event.shiftKey)}
+              >
+                {direction === 1 ? (
+                  <ChevronUp className="h-3 w-3" />
+                ) : (
+                  <ChevronDown className="h-3 w-3" />
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

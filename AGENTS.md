@@ -1487,7 +1487,11 @@ Working notes for future agents on GTNH Factory Flow.
   and lighter border (55% role tint with #262b34). No inner symbol or Archive glyph.
   Header: resource icon, item name, split symbol. Peer rows name the selected
   machine only (no recipe/product suffix), with larger machine art; drawers
-  use their role name and a matching coloured drawer icon, not the item again.
+  use their role name and a matching coloured drawer icon. Source also shows
+  its resource icon immediately before its name. A small 0 button sits left
+  of each compact percentage field, disabled at zero. The green Setup output
+  highlight spans the popup's full inner width, with its contents aligned to
+  the other rows.
   no Parts column. Switching modes NEVER opens it. No full-screen editor,
   blue tint, coloured bars, flow rates or extra settings.
 - The drain pill cycles THREE ways since 2026-08-23: product, byproduct,
