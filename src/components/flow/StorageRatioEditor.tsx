@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUpRight, ChevronDown, ChevronUp, Factory, Split, X } from "lucide-react";
+import { Archive, ArrowUpRight, ChevronDown, ChevronUp, Factory, Split, X } from "lucide-react";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import type { ResourceAmount } from "@/lib/model/types";
 import { getSelectedMachineHandler } from "@/lib/model/recipe-rules";
@@ -316,13 +316,14 @@ function RatioBranchRow({
           ref={inputRef}
           id={`ratio-percentage-${side}-${index}`}
           aria-label={fieldLabel}
-          type="number"
+          type="text"
+          role="spinbutton"
           inputMode="decimal"
-          min="0"
-          max="100"
-          step="any"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percentage}
           title="Type or scroll the percentage"
-          className="min-h-0 min-w-0 w-full appearance-none border-0 bg-transparent p-0 pl-1 text-right text-xs tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+          className="min-h-0 min-w-0 w-full border-0 bg-transparent p-0 pl-1 text-right text-xs tabular-nums outline-none"
           value={editing ? draft : String(percentage)}
           onFocus={() => {
             setDraft(String(percentage));
@@ -376,21 +377,6 @@ function DrawerRoleIcon({ role }: { role: StorageRole }) {
         ? "var(--flow-output)"
         : "#8a93a6";
   return (
-    <svg viewBox="0 0 32 32" className="h-8 w-8" fill="none" aria-hidden>
-      <path
-        d={
-          role === "buffer"
-            ? "M8 4h16l6 12-6 12H8L2 16Z"
-            : role === "byproduct"
-              ? "M16 2 30 16 16 30 2 16Z"
-              : "M4 4h24v24H4Z"
-        }
-        fill="var(--mc-25)"
-        stroke={color}
-        strokeWidth="2"
-      />
-      <path d="M10 12h12v9H10z" fill={color} fillOpacity=".2" stroke={color} />
-      <path d="M14 15h4" stroke={color} strokeWidth="2" />
-    </svg>
+    <Archive className="h-6 w-6" style={{ color }} strokeWidth={1.5} aria-hidden />
   );
 }
