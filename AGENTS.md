@@ -1369,7 +1369,10 @@ Working notes for future agents on GTNH Factory Flow.
   Ratio drawers are the narrow exception (Jack's revision, 2026-09-12):
   incoming and outgoing shares have opaque, bevelled percentage labels ON
   the wire near the ratio drawer (60 flow pixels from its end, or the middle
-  of a short wire). They never intercept gestures. Between two ratio drawers,
+  of a short wire). Scroll a badge to edit that branch by 1% (Shift: 10%),
+  without zooming the board. Combined badges edit each side independently.
+  Arrowheads touching a badge are hidden using flow-space bounds; other arrows stay.
+  Between two ratio drawers,
   each end gets its own share; a short wire combines labelled In/Out values.
   Ratio percentages obey EDGE_DETAIL_LABELS and disappear at glance LOD.
   The ratio drawer's glance layer is only its item, with no split badge.

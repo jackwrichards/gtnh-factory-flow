@@ -8,7 +8,8 @@ import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { useViewerLock } from "./use-viewer-lock";
 import { StorageRatioEditor } from "./StorageRatioEditor";
 import { formatRatioShare, getProjectRatioBranches } from "@/lib/model/storage-ratios";
-import { layoutRatioLabels, type RatioWireLabel } from "./ratio-label-layout";
+import { arrowOverlapsRatioLabel, layoutRatioLabels, ratioLabelBounds, type RatioWireLabel } from "./ratio-label-layout";
+import { RatioWireLabel as RatioWireLabelControl } from "./RatioWireLabel";
 
 import {
   BaseEdge,
@@ -9809,6 +9810,7 @@ function ResourceEdgeComponent({
     const point = getPointAtPolylineRatio(liveRoute.points, label.ratio);
     return point ? [{ ...label, point }] : [];
   }) : [];
+  const ratioLabelRects = ratioLabels.map((label) => ratioLabelBounds(label.text, label.point));
   // The dots the user has pinned — the draft while one is mid-drag. Only
   // the DOT follows the pointer; the wire holds its route and takes the
   // real one on release. Live previews always guessed wrong.
@@ -9959,11 +9961,7 @@ function ResourceEdgeComponent({
     <>
       {ratioLabels.map((label) => (
         <EdgeLabelRenderer key={label.key}>
-          <span data-ratio-edge={id} data-ratio-side={label.key}
-            className="pointer-events-none absolute whitespace-pre border-2 border-[var(--mc-15)] bg-[var(--mc-49)] px-1.5 py-1 text-[12px] font-bold leading-3 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25),2px_2px_0_rgba(0,0,0,0.45)]"
-            style={{ left: label.point.x, top: label.point.y, transform: "translate(-50%, -50%)" }}>
-            {label.text}
-          </span>
+          <RatioWireLabelControl edgeId={id} label={label} shares={data?.ratio ?? {}} />
         </EdgeLabelRenderer>
       ))}
       {checklistMode && liveRoute.path ? (
@@ -10102,9 +10100,10 @@ function ResourceEdgeComponent({
           each end and one every few cells along a long run, never across a
           corner. At a glance they draw double size so they survive the zoom. */}
       {showArrowHead
-        ? getRouteArrows(liveRoute.points, coreStrokeWidth, isGlobalView).map((arrow, index) => (
+        ? getRouteArrows(liveRoute.points, coreStrokeWidth, isGlobalView).filter((arrow) => !arrowOverlapsRatioLabel(arrow, ratioLabelRects)).map((arrow, index) => (
             <polygon
               key={index}
+              data-resource-edge-arrow={id}
               points={arrow}
               fill={brightenHexColor(edgeColor, 0.55)}
               stroke={darkenHexColor(edgeColor, 0.6)}

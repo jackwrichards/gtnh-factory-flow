@@ -1,5 +1,14 @@
 import { expect, it } from "vitest";
-import { layoutRatioLabels } from "./ratio-label-layout";
+import { arrowOverlapsRatioLabel, layoutRatioLabels, ratioLabelBounds } from "./ratio-label-layout";
+
+it("clears horizontal, vertical and diagonal arrowheads from the entire badge", () => {
+  const labels = [ratioLabelBounds("50%", { x: 60, y: 60 })];
+  for (const arrow of ["80,60 64,68 64,52", "60,80 52,64 68,64", "80,80 60,65 65,60"])
+    expect(arrowOverlapsRatioLabel(arrow, labels)).toBe(true);
+  expect(arrowOverlapsRatioLabel("150,60 134,68 134,52", labels)).toBe(false);
+  expect(arrowOverlapsRatioLabel("60,60 44,68 44,52", [])).toBe(false);
+  expect(ratioLabelBounds("Out 50%\nIn 25%", { x: 0, y: 0 }).height).toBe(36);
+});
 
 it("places incoming and outgoing shares close to the corresponding drawer", () => {
   const labels = layoutRatioLabels([
