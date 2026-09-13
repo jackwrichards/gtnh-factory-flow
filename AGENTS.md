@@ -1478,8 +1478,10 @@ Working notes for future agents on GTNH Factory Flow.
   a distinct green Setup output row. Percentages are directly typed/scrolled;
   the number, percent sign and full-height up/down column form one control.
   Use a decimal text field with spinbutton semantics so native browser arrows
-  cannot duplicate that column. Drawer role icons are simple Archive glyphs
-  in their role colours, with no extra frame or nested drawer drawing.
+  cannot duplicate that column. Drawer role icons are plain filled silhouettes
+  in their role colours: red rounded square for Source, green square for
+  Product, gray hexagon for buffers, and the board's cut/taper for byproduct
+  and trash. No symbol inside, outline frame or Archive glyph.
   Header: resource icon, item name, split symbol. Peer rows name the selected
   machine only (no recipe/product suffix), with larger machine art; drawers
   use their role name and a matching coloured drawer icon, not the item again.

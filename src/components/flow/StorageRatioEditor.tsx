@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Archive, ArrowUpRight, ChevronDown, ChevronUp, Factory, Split, X } from "lucide-react";
+import { ArrowUpRight, ChevronDown, ChevronUp, Factory, Split, X } from "lucide-react";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import type { ResourceAmount } from "@/lib/model/types";
 import { getSelectedMachineHandler } from "@/lib/model/recipe-rules";
@@ -377,6 +377,16 @@ function DrawerRoleIcon({ role }: { role: StorageRole }) {
         ? "var(--flow-output)"
         : "#8a93a6";
   return (
-    <Archive className="h-6 w-6" style={{ color }} strokeWidth={1.5} aria-hidden />
+    <svg viewBox="0 0 24 24" className="h-6 w-6" fill={color} aria-hidden>
+      {role === "buffer" ? (
+        <path d="M6 3h12l5 9-5 9H6l-5-9Z" />
+      ) : role === "byproduct" ? (
+        <path d="M3 3h18v12l-6 6H9l-6-6Z" />
+      ) : role === "trash" ? (
+        <path d="M2 3h20l-4 18H6Z" />
+      ) : (
+        <rect x="3" y="3" width="18" height="18" rx={role === "source" ? 4 : 1} />
+      )}
+    </svg>
   );
 }
