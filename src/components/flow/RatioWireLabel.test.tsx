@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { useFactoryStore } from "@/store/factory-store";
 import { getProjectRatioBranches } from "@/lib/model/storage-ratios";
 import { RatioSetupOutput, RatioWireLabel } from "./RatioWireLabel";
@@ -69,6 +69,50 @@ function show() {
     />,
   );
 }
+
+it("previews the full split on hover and keeps every percentage live while scrolling", async () => {
+  show();
+  const output = screen.getByRole("spinbutton", { name: "Outgoing percentage" });
+  fireEvent.mouseMove(output, { clientX: 300, clientY: 300, buttons: 0 });
+  const preview = await screen.findByRole("tooltip", { name: "Ratio split" });
+  const incoming = within(preview).getByRole("region", { name: "Incoming" });
+  const outgoing = within(preview).getByRole("region", { name: "Outgoing" });
+  expect(within(incoming).getByText("Source")).toBeTruthy();
+  expect(within(incoming).getByText("100%")).toBeTruthy();
+  expect(within(outgoing).getAllByText("50%")).toHaveLength(2);
+  expect(within(outgoing).getByText("Setup output")).toBeTruthy();
+  expect(within(preview).getByRole("img", { name: "Mouse wheel" })).toBeTruthy();
+  expect(within(preview).getByText("↑ +1% · ↓ −1%")).toBeTruthy();
+  fireEvent.wheel(output, { deltaY: -100 });
+  expect(within(outgoing).getByText("51%")).toBeTruthy();
+  expect(within(outgoing).getByText("49%")).toBeTruthy();
+  expect(screen.getByRole("tooltip")).toBe(preview);
+  fireEvent.mouseLeave(output.closest("[data-tooltip-root]")!);
+  expect(screen.queryByRole("tooltip")).toBeNull();
+});
+
+it("shows the destination drawer's split when hovering an incoming percentage", async () => {
+  show();
+  const input = screen.getByRole("spinbutton", { name: "Incoming percentage" });
+  fireEvent.mouseMove(input, { clientX: 300, clientY: 300, buttons: 0 });
+  const preview = await screen.findByRole("tooltip");
+  expect(
+    within(within(preview).getByRole("region", { name: "Incoming" })).getAllByText("50%"),
+  ).toHaveLength(2);
+  expect(
+    within(within(preview).getByRole("region", { name: "Outgoing" })).getByText("100%"),
+  ).toBeTruthy();
+});
+
+it("opens the same overview from Setup output and updates it as export changes", async () => {
+  render(<RatioSetupOutput storageId="a" percentage={0} />);
+  const output = screen.getByRole("spinbutton", { name: "Setup output percentage" });
+  fireEvent.mouseMove(output, { clientX: 300, clientY: 300, buttons: 0 });
+  const preview = await screen.findByRole("tooltip");
+  fireEvent.wheel(output, { deltaY: -100, shiftKey: true });
+  expect(within(preview).getByText("10%")).toBeTruthy();
+  expect(within(preview).getAllByText("45%")).toHaveLength(2);
+});
 
 it("scrolls Setup output on the drawer and redistributes its wired outgoing shares", () => {
   render(<RatioSetupOutput storageId="a" percentage={0} />);

@@ -13,7 +13,7 @@ const GESTURE_NAME: Record<TooltipAction["gesture"], string> = {
  * the size the panel is actually read at. Left and right fill their half
  * of the top; wheel fills the wheel; drag adds the arrow under it.
  */
-function MouseIcon({ gesture }: { gesture: TooltipAction["gesture"] }) {
+export function MouseIcon({ gesture }: { gesture: TooltipAction["gesture"] }) {
   return (
     <svg aria-hidden="true" width="20" height="24" viewBox="0 0 20 24" fill="none" className="shrink-0 text-fg-muted">
       <rect x="3" y="1" width="14" height="16" rx="6" stroke="currentColor" strokeWidth="1.6" />

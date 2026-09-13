@@ -33,6 +33,7 @@ export function MinecraftTooltip({
   companion,
   children,
   placement = "pointer",
+  compact = false,
 }: {
   label?: string | string[];
   /**
@@ -47,6 +48,8 @@ export function MinecraftTooltip({
   children: ReactNode;
   /** Anchor readouts to their controls, flipping when the preferred side cannot fit. */
   placement?: "pointer" | "below" | "above" | "above-card";
+  /** Small canvas readouts use the same panel with tighter padding. */
+  compact?: boolean;
 }) {
   const lines = useMemo(
     () => (Array.isArray(label) ? label : label ? label.split("\n") : []),
@@ -323,7 +326,7 @@ export function MinecraftTooltip({
               <div
                 ref={panelRef}
                 data-minecraft-tooltip={companion ? undefined : "true"}
-                className={companion ? `fixed z-[9999] ui-zoom flex w-max flex-wrap gap-1 ${position.belowCard ? "items-start" : "items-end"}` : `${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[640px] px-3 py-2.5`}
+                className={companion ? `fixed z-[9999] ui-zoom flex w-max flex-wrap gap-1 ${position.belowCard ? "items-start" : "items-end"}` : `${TOOLTIP_PANEL_CLASS} ui-zoom max-w-[640px] ${compact ? "px-2 py-1.5" : "px-3 py-2.5"}`}
                 onMouseEnter={() => { if (leaveTimer.current !== undefined) clearTimeout(leaveTimer.current); }}
                 onMouseLeave={placement === "above-card" ? clearTooltip : undefined}
                 data-card-placement={placement === "above-card" ? (position.belowCard ? "below" : "above") : undefined}

@@ -10,6 +10,8 @@ import { ArrowUpRight } from "lucide-react";
 import { useFactoryStore } from "@/store/factory-store";
 import type { RatioWireLabel as Label } from "./ratio-label-layout";
 import { arrowInkFor } from "./node-colors";
+import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
+import { RatioSplitPreview } from "./RatioSplitPreview";
 
 export const RatioWireLabel = memo(function RatioWireLabel({
   edgeId,
@@ -31,7 +33,7 @@ export const RatioWireLabel = memo(function RatioWireLabel({
     <span
       data-ratio-edge={edgeId}
       data-ratio-side={label.key}
-      className={`${locked ? "pointer-events-none" : "pointer-events-auto"} nodrag nopan nowheel absolute flex flex-col justify-center whitespace-pre text-center text-[10px] font-bold tabular-nums leading-[10px]`}
+      className="pointer-events-auto nodrag nopan nowheel absolute flex flex-col justify-center whitespace-pre text-center text-[10px] font-bold tabular-nums leading-[10px]"
       style={{
         left: label.point.x,
         top: label.point.y,
@@ -156,30 +158,38 @@ function WirePercentage({
     return () => element.removeEventListener("wheel", wheel);
   }, [edgeId, side, locked, storageId]);
   return (
-    <span
-      ref={ref}
-      data-ratio-control={side}
-      role="spinbutton"
-      tabIndex={locked ? -1 : 0}
-      aria-label={`${side === "export" ? "Setup output" : side === "input" ? "Incoming" : "Outgoing"} percentage`}
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={share * 100}
-      aria-disabled={locked}
-      className="relative block focus-visible:outline focus-visible:outline-1"
-      onKeyDown={(event) => {
-        if (locked || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
-        event.preventDefault();
-        event.stopPropagation();
-        adjust(
-          edgeId,
-          side,
-          (event.key === "ArrowUp" ? 1 : -1) * (event.shiftKey ? 10 : 1),
-          storageId,
-        );
-      }}
+    <MinecraftTooltip
+      compact
+      placement="above"
+      content={() => (
+        <RatioSplitPreview edgeId={edgeId} storageId={storageId} side={side} locked={locked} />
+      )}
     >
-      {text}
-    </span>
+      <span
+        ref={ref}
+        data-ratio-control={side}
+        role="spinbutton"
+        tabIndex={locked ? -1 : 0}
+        aria-label={`${side === "export" ? "Setup output" : side === "input" ? "Incoming" : "Outgoing"} percentage`}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={share * 100}
+        aria-disabled={locked}
+        className="relative block focus-visible:outline focus-visible:outline-1"
+        onKeyDown={(event) => {
+          if (locked || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
+          event.preventDefault();
+          event.stopPropagation();
+          adjust(
+            edgeId,
+            side,
+            (event.key === "ArrowUp" ? 1 : -1) * (event.shiftKey ? 10 : 1),
+            storageId,
+          );
+        }}
+      >
+        {text}
+      </span>
+    </MinecraftTooltip>
   );
 }
