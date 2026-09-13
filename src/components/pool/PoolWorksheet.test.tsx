@@ -1,10 +1,22 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PoolWorksheet } from "./PoolWorksheet";
 import { useFactoryStore } from "@/store/factory-store";
 import { DEFAULT_WORKSPACE_VIEW, writeWorkspaceView } from "@/lib/workspace-view";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
+
+vi.mock("../ItemPickerPopover", () => ({
+  ItemPickerPopover: ({
+    onPick,
+  }: {
+    onPick: (entry: { kind: "item"; id: string; displayName: string }) => void;
+  }) => (
+    <button onClick={() => onPick({ kind: "item", id: "copper", displayName: "Copper Ingot" })}>
+      Pick Copper Ingot
+    </button>
+  ),
+}));
 
 function fixture(): FactoryProject {
   return {
@@ -64,6 +76,31 @@ afterEach(() => {
 });
 
 describe("Pool worksheet", () => {
+  it("adds a product directly from the Products plus button", () => {
+    render(<PoolWorksheet />);
+    fireEvent.click(screen.getByRole("button", { name: "Add product" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pick Copper Ingot" }));
+    expect(useFactoryStore.getState().project.storages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ resourceId: "copper", poolSide: "drain" }),
+      ]),
+    );
+    expect(screen.queryByRole("button", { name: "Pick Copper Ingot" })).toBeNull();
+    act(() => useFactoryStore.getState().undo());
+    expect(useFactoryStore.getState().project.storages).toHaveLength(1);
+  });
+
+  it("shows resources independently of the canvas's hidden and favourite preferences", () => {
+    writeWorkspaceView({
+      favouritesOnly: true,
+      favouriteResourceKeys: [],
+      hiddenResourceKeys: ["item:copper"],
+    });
+    render(<PoolWorksheet />);
+    const resources = screen.getByRole("table", { name: "Pool resource balance" });
+    expect(within(resources).getByRole("button", { name: "Copper Ingot" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Show only favourite resources" })).toBeNull();
+  });
   it("uses the canvas circuit slot and keeps the programmed circuit out of Takes", () => {
     const project = fixture();
     project.recipes[0].kind = "gregtech_machine";
@@ -87,7 +124,7 @@ describe("Pool worksheet", () => {
     ).not.toBeNull();
   });
 
-  it("renders the full multiblock picture and keeps enable/disable tied to production", () => {
+  it("renders the full multiblock picture without enable/disable controls", () => {
     const project = fixture();
     project.recipes[0].machineHandlers = [
       {
@@ -105,10 +142,29 @@ describe("Pool worksheet", () => {
         '.pool-picture-cell img[src="/power-art/electric-blast-furnace.png"]',
       ),
     ).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Disable machine" }));
-    expect(useFactoryStore.getState().project.nodes[0].enabled).toBe(false);
-    expect(screen.getByRole("button", { name: "Enable machine" }).textContent).toBe("Enable");
-    expect(container.querySelector(".pool-status")?.textContent).toBe("Disabled");
+    expect(screen.queryByRole("button", { name: "Disable machine" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Enable machine" })).toBeNull();
+  });
+  it("edits machine-specific settings through the canvas tiles in their own column", () => {
+    const project = fixture();
+    project.recipes[0].machineConfigControls = [{
+      id: "solenoidCoil",
+      label: "Solenoid",
+      defaultKey: "lv",
+      minimumKey: "lv",
+      tiers: [
+        { key: "lv", label: "LV", resource: { kind: "item", id: "lv-solenoid", amount: 1 } },
+        { key: "mv", label: "MV", resource: { kind: "item", id: "mv-solenoid", amount: 1 } },
+      ],
+    }];
+    useFactoryStore.getState().setProject(project);
+    const { container } = render(<PoolWorksheet />);
+    const settings = container.querySelector(".pool-settings-cell") as HTMLElement;
+    fireEvent.click(within(settings).getByRole("button", { name: "Next Solenoid" }));
+    expect(useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil).toBe("mv");
+    expect(container.querySelector(".pool-machine-cell")?.textContent).not.toContain("Solenoid");
+    act(() => useFactoryStore.getState().undo());
+    expect(useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil).toBeUndefined();
   });
   it("places product targets and resources together above recipe rows", () => {
     const { container } = render(<PoolWorksheet />);
@@ -123,7 +179,7 @@ describe("Pool worksheet", () => {
     ).toBeTruthy();
     expect(container.querySelector(".pool-editor-row")).toBeNull();
   });
-  it("filters and switches views without changing the plan, books or undo history", () => {
+  it("filters without changing the plan, books or undo history", () => {
     const { project, lastResult, undoHistory } = useFactoryStore.getState();
     render(<PoolWorksheet />);
     expect(screen.getByRole("table", { name: "Recipes running in the pool" })).toBeDefined();
@@ -131,14 +187,14 @@ describe("Pool worksheet", () => {
       target: { value: "not present" },
     });
     expect(screen.getByText("No recipes match this filter.")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+
     const after = useFactoryStore.getState();
     expect(after.project).toBe(project);
     expect(after.lastResult).toBe(lastResult);
     expect(after.undoHistory).toBe(undoHistory);
     expect(
       JSON.parse(localStorage.getItem("gtnh-factory-flow-workspace-view")!).poolWorksheet,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("edits the real product target and supports undo", () => {
@@ -160,6 +216,7 @@ describe("Pool worksheet", () => {
 
     expect(container.querySelector(".react-flow__handle")).toBeNull();
 
+    fireEvent.click(screen.getByRole("button", { name: "Pin a machine count" }));
     const pin = screen.getByRole("textbox", { name: "Pinned machine count" });
     fireEvent.change(pin, { target: { value: "1.25" } });
     fireEvent.blur(pin);
@@ -180,16 +237,17 @@ describe("Pool worksheet", () => {
     expect(useFactoryStore.getState().recipeBrowserMode).toBe("uses");
   });
 
-  it("keeps public views read-only while allowing inspection and view changes", () => {
+  it("keeps public views read-only while allowing inspection", () => {
     useFactoryStore.setState({ isReadOnly: true });
     const { project } = useFactoryStore.getState();
     const { container } = render(<PoolWorksheet />);
     expect(screen.queryByRole("button", { name: "Required amount" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Remove machine" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add product" })).toBeNull();
 
     expect((container.querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
     expect(useFactoryStore.getState().project).toBe(project);
-    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+
     expect(useFactoryStore.getState().project).toBe(project);
   });
 });

@@ -1,23 +1,18 @@
 "use client";
 
 import { memo, useMemo, useState, type ReactNode } from "react";
-import { Copy, Eye, EyeOff, LayoutGrid, RefreshCw, Search, Star, Trash2, X } from "lucide-react";
+import { Copy, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
-import {
-  useWorkspaceView,
-  writeWorkspaceView,
-  toggleResourceFavourite,
-  toggleResourceHidden,
-} from "@/lib/workspace-view";
 import { formatPowerValue, resourceLabel, isCropProductionRecipe } from "@/lib/model";
 import { isCustomRateRecipe } from "@/lib/model/custom-rate";
-import { formatMachineListCount, type MachineListEntry } from "@/lib/model/machine-list";
+import { type MachineListEntry } from "@/lib/model/machine-list";
 import type { ResourceAmount, ResourceBalance, FactoryStorage } from "@/lib/model/types";
 import { getStorageRoles } from "@/lib/model/storage-role";
 import { powerDisplayFromEuT, powerDisplaySuffix } from "@/lib/model/rate-unit";
 import { ResourceIcon } from "../nei/ResourceIcon";
 import { MinecraftTooltip } from "../nei/MinecraftTooltip";
-import { CircuitChip, RecipeNodeEditor } from "../flow/RecipeNode";
+import { CircuitChip, RecipeNodeEditor, SolvedMachinesStat } from "../flow/RecipeNode";
+import { ItemPickerPopover } from "../ItemPickerPopover";
 import { TargetLine } from "../flow/StorageNode";
 import { RecipeTooltip } from "../flow/RecipeTooltip";
 import { buildStatusTooltip, buildPortTooltip } from "../flow/recipe-tooltip-data";
@@ -35,14 +30,13 @@ import {
   type WorksheetGroup,
   type WorksheetSection,
 } from "./worksheet-model";
-import { WorksheetNumber } from "./WorksheetSetting";
+
 import "./pool-worksheet.css";
 
 export function PoolWorksheet() {
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
   const readOnly = useFactoryStore((state) => state.isReadOnly);
-  const workspace = useWorkspaceView();
   useRateDisplayUnits();
   const [query, setQuery] = useState("");
   const [internal, setInternal] = useState(false);
@@ -52,10 +46,6 @@ export function PoolWorksheet() {
   const products = (project.storages ?? []).filter(
     (storage) => roles.get(storage.id) === "product",
   );
-  const totals = groups.reduce(
-    (sum, group) => sum + (group.machine?.avgEuT ?? 0) - (group.machine?.avgMadeEuT ?? 0),
-    0,
-  );
   const boundaryKeys = new Set(
     [...result.externalInputs, ...result.unconsumedOutputs].map((entry) => entry.key),
   );
@@ -63,18 +53,11 @@ export function PoolWorksheet() {
     .filter(
       (balance) =>
         (internal || boundaryKeys.has(balance.key)) &&
-        (workspace.showHiddenResources || !workspace.hiddenResourceKeys.includes(balance.key)) &&
-        (!workspace.favouritesOnly || workspace.favouriteResourceKeys.includes(balance.key)) &&
         (balance.displayName ?? balance.resourceId)
           .toLowerCase()
           .includes(query.trim().toLowerCase()),
     )
-    .sort(
-      (a, b) =>
-        Number(workspace.favouriteResourceKeys.includes(b.key)) -
-          Number(workspace.favouriteResourceKeys.includes(a.key)) ||
-        (a.displayName ?? a.resourceId).localeCompare(b.displayName ?? b.resourceId),
-    );
+    .sort((a, b) => (a.displayName ?? a.resourceId).localeCompare(b.displayName ?? b.resourceId));
   return (
     <section
       data-viewer-inspect
@@ -85,47 +68,20 @@ export function PoolWorksheet() {
       onDoubleClick={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.stopPropagation()}
     >
-      <div className="pool-sheet-heading">
-        <h2>
-          Worksheet{" "}
-          <span>{groups.reduce((sum, group) => sum + group.sections.length, 0)} recipes</span>
-        </h2>
-        <label className="pool-sheet-search">
-          <Search className="h-3.5 w-3.5" />
-          <input
-            aria-label="Filter worksheet"
-            placeholder="Filter recipes, machines, resources…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <button
-          className="pool-sheet-button"
-          type="button"
-          onClick={() => writeWorkspaceView({ poolWorksheet: false })}
-        >
-          <LayoutGrid className="h-3.5 w-3.5" />
-          Canvas
-        </button>
-      </div>
       <div className="pool-sheet-scroll">
         <div className="pool-sheet-summary">
           <div className="pool-sheet-products">
-            <h3>Products</h3>
+            <div className="pool-products-heading">
+              <h3>Products</h3>
+              {!readOnly ? <AddPoolProduct /> : null}
+            </div>
             {products.map((storage) => (
               <Product key={storage.id} storage={storage} />
             ))}
-            {!products.length ? (
-              <p>
-                Choose a product with the product drawer key above, or pin a machine count below.
-              </p>
-            ) : null}
           </div>
           <div className="pool-sheet-balance">
             <div className="pool-sheet-resource-heading">
-              <h3>
-                Resources <span>{balances.length}</span>
-              </h3>
+              <h3>Resources</h3>
               <label>
                 <input
                   type="checkbox"
@@ -134,26 +90,6 @@ export function PoolWorksheet() {
                 />
                 Include internal
               </label>
-              <button
-                type="button"
-                className="pool-sheet-button"
-                aria-label="Show only favourite resources"
-                aria-pressed={workspace.favouritesOnly}
-                onClick={() => writeWorkspaceView({ favouritesOnly: !workspace.favouritesOnly })}
-              >
-                <Star className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                className="pool-sheet-button"
-                aria-label="Show hidden resources"
-                aria-pressed={workspace.showHiddenResources}
-                onClick={() =>
-                  writeWorkspaceView({ showHiddenResources: !workspace.showHiddenResources })
-                }
-              >
-                <Eye className="h-3.5 w-3.5" />
-              </button>
             </div>
             <table className="pool-sheet-resources" aria-label="Pool resource balance">
               <thead>
@@ -163,9 +99,6 @@ export function PoolWorksheet() {
                   <th>Outputs</th>
                   <th>Internal</th>
                   <th>Net</th>
-                  <th>
-                    <span className="sr-only">Resource preferences</span>
-                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -188,28 +121,31 @@ export function PoolWorksheet() {
           <colgroup>
             <col className="pool-col-picture" />
             <col className="pool-col-machine" />
+            <col className="pool-col-settings" />
             <col className="pool-col-circuit" />
             <col className="pool-col-io" />
             <col className="pool-col-io" />
-
-            <col className="pool-col-count" />
-            <col className="pool-col-power" />
           </colgroup>
           <thead>
             <tr>
               <th>
                 <span className="sr-only">Machine picture</span>
               </th>
-              <th>Machine / settings</th>
+              <th>
+                <label className="pool-sheet-search">
+                  <Search className="h-3.5 w-3.5" />
+                  <input
+                    aria-label="Filter worksheet"
+                    placeholder="Search machines or items"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                  />
+                </label>
+              </th>
+              <th>Settings</th>
               <th>Circuit</th>
               <th>Takes</th>
               <th>Makes</th>
-              <th title="Calculated machine capacity for this configuration. A fractional count uses part of one machine. Pin a count below to set it manually; Auto lets the solver choose.">
-                Machines
-              </th>
-              <th>
-                Power <small>{powerDisplaySuffix()}</small>
-              </th>
             </tr>
           </thead>
           {shown.map((group) => (
@@ -218,21 +154,52 @@ export function PoolWorksheet() {
         </table>
         {!shown.length ? (
           <div className="pool-sheet-empty">
-            {groups.length
-              ? "No recipes match this filter."
-              : "Add recipes from the item browser. They will appear here automatically."}
+            {groups.length ? "No recipes match this filter." : "Add recipes from the item browser."}
           </div>
         ) : null}
       </div>
-      <footer>
-        <span>
-          {shown.length} / {groups.length} machine entries
-        </span>
-        <span>
-          Average {formatPowerValue(powerDisplayFromEuT(totals))} {powerDisplaySuffix()}
-        </span>
-      </footer>
     </section>
+  );
+}
+
+function AddPoolProduct() {
+  const [open, setOpen] = useState(false);
+  const add = useFactoryStore((state) => state.addPoolStorage);
+  return (
+    <div className="pool-add-product">
+      <button
+        type="button"
+        className="pool-add-button"
+        aria-label="Add product"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+      {open ? (
+        <ItemPickerPopover
+          role="makes"
+          placement="below"
+          align="start"
+          onClose={() => setOpen(false)}
+          onPick={(entry) => {
+            if (entry.kind === "aspect") return;
+            add(
+              {
+                kind: entry.kind,
+                id: entry.id,
+                displayName: entry.displayName,
+                iconPath: entry.iconPath,
+                iconAtlas: entry.iconAtlas,
+                dominantColor: entry.dominantColor,
+              },
+              "drain",
+            );
+            setOpen(false);
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -251,13 +218,32 @@ const MachineRows = memo(function MachineRows({
   const required =
     machine?.count ??
     sections.reduce((sum, section) => sum + (section.result?.theoreticalMachinesRequired ?? 0), 0);
-  const machineCells = (controls: ReactNode, picture: ReactNode) => (
+  const machineCells = (controls: ReactNode, picture: ReactNode, settings: ReactNode) => (
     <>
       <td rowSpan={sections.length} className="pool-picture-cell">
         <div className="pool-machine-picture">{picture}</div>
       </td>
       <td rowSpan={sections.length} className="pool-shared-cell pool-machine-cell">
-        {controls}
+        <div className="pool-machine-main">
+          <fieldset disabled={readOnly} className="pool-machine-count">
+            {first.recipe && isCustomRateRecipe(first.recipe) ? null : (
+              <SolvedMachinesStat
+                label={first.recipe && isCropProductionRecipe(first.recipe) ? "Seeds" : "Machines"}
+                needed={
+                  first.recipe && isCropProductionRecipe(first.recipe)
+                    ? sections.reduce(
+                        (sum, section) => sum + (section.result?.theoreticalMachinesRequired ?? 0),
+                        0,
+                      )
+                    : required
+                }
+                pinned={owner.solvePin}
+                onPin={(solvePin) => updateNode(owner.id, { solvePin })}
+              />
+            )}
+          </fieldset>
+          <div className="pool-machine-details">{controls}</div>
+        </div>
         <div className="pool-machine-footer">
           <div className="pool-status-list">
             {sections.map((section, index) => (
@@ -283,21 +269,11 @@ const MachineRows = memo(function MachineRows({
               </div>
             ))}
           </div>
+          <div className="pool-machine-power">
+            <MachinePower entry={machine} />
+          </div>
           {!readOnly ? (
             <div className="pool-row-actions">
-              <button
-                type="button"
-                className="pool-enable-button"
-                aria-label={owner.enabled ? "Disable machine" : "Enable machine"}
-                title={
-                  owner.enabled
-                    ? "Disable this machine and exclude it from production"
-                    : "Enable this machine for production"
-                }
-                onClick={() => updateNode(owner.id, { enabled: !owner.enabled })}
-              >
-                {owner.enabled ? "Disable" : "Enable"}
-              </button>
               <button
                 type="button"
                 className="pool-sheet-icon-button"
@@ -326,6 +302,7 @@ const MachineRows = memo(function MachineRows({
           ) : null}
         </div>
       </td>
+      <td rowSpan={sections.length} className="pool-settings-cell">{settings}</td>
     </>
   );
   return (
@@ -342,12 +319,13 @@ const MachineRows = memo(function MachineRows({
                 render={machineCells}
               />
             ) : (
-              machineCells(<span>{label}</span>, null)
+              machineCells(<span>{label}</span>, null, null)
             )
           ) : null}
           <td className="pool-circuit-cell">
             <div className="pool-circuit-slot">
               <CircuitChip
+                bare
                 circuit={section.display ? (getRecipeProgrammedCircuit(section.display) ?? {}) : {}}
               />
             </div>
@@ -365,43 +343,6 @@ const MachineRows = memo(function MachineRows({
           <td>
             <PortList ports={section.ports.outputs} nodeId={owner.id} section={section} />
           </td>
-          {index === 0 ? (
-            <>
-              <td rowSpan={sections.length} className="pool-shared-cell">
-                <span className="pool-count" title="Calculated machine capacity at these settings">
-                  <span className="pool-count-label">Need</span> ×{formatMachineListCount(required)}
-                </span>
-                {first.recipe && isCustomRateRecipe(first.recipe) ? null : readOnly ? (
-                  <small>
-                    {owner.solvePin ? "Pinned " + formatMachineListCount(owner.solvePin) : "Auto"}
-                  </small>
-                ) : (
-                  <label className="pool-pin-count">
-                    <span className="pool-count-label">Pin</span>
-                    <WorksheetNumber
-                      key={owner.solvePin ?? "auto"}
-                      value={owner.solvePin}
-                      min={0}
-                      label={
-                        first.recipe && isCropProductionRecipe(first.recipe)
-                          ? "Pinned seed count"
-                          : "Pinned machine count"
-                      }
-                      placeholder={
-                        first.recipe && isCropProductionRecipe(first.recipe) ? "Seeds" : "Auto"
-                      }
-                      onCommit={(solvePin) =>
-                        updateNode(owner.id, { solvePin: solvePin || undefined })
-                      }
-                    />
-                  </label>
-                )}
-              </td>
-              <td rowSpan={sections.length} className="pool-shared-cell">
-                <MachinePower entry={machine} />
-              </td>
-            </>
-          ) : null}
         </tr>
       ))}
     </tbody>
@@ -447,7 +388,7 @@ function PortList({
   if (!ports.length && !nonConsumed.length) return <span className="pool-sheet-muted">—</span>;
   return (
     <div
-      className="pool-port-list"
+      className={`pool-port-list${ports.length + nonConsumed.length <= 2 ? " pool-port-list--single" : ""}`}
       tabIndex={ports.length + nonConsumed.length > 4 ? 0 : undefined}
       role="group"
       aria-label="Recipe items"
@@ -537,9 +478,10 @@ function ResourceLink({ resource, nodeId }: { resource: ResourceAmount; nodeId?:
           resource={resource}
           size="sm"
           bare
-          className="!h-5 !w-5"
-          iconPixelSize={20}
+          className="pool-item-icon !h-8 !w-8"
+          iconPixelSize={38}
           showAmount={false}
+          showConsumedState={false}
           tooltip={false}
         />
         <span title={resourceLabel(resource)}>{resourceLabel(resource)}</span>
@@ -551,36 +493,30 @@ function ResourceLink({ resource, nodeId }: { resource: ResourceAmount; nodeId?:
 
 function MachinePower({ entry }: { entry?: MachineListEntry }) {
   if (!entry) return <span className="pool-sheet-muted">—</span>;
-  if (entry.steamLs !== undefined)
-    return (
-      <>
-        <div className="pool-power-line">
-          {formatSlotRate(entry.avgSteamLs ?? 0, "fluid")}
-          <small>avg steam</small>
-        </div>
-        <div className="pool-power-line">
-          {formatSlotRate(entry.steamLs, "fluid")}
-          <small>peak steam</small>
-        </div>
-      </>
-    );
+  const steam = entry.steamLs !== undefined;
   const sign = entry.madeEuT !== undefined ? "+" : "";
-  const average = entry.avgMadeEuT ?? entry.avgEuT;
-  const peak = entry.madeEuT ?? entry.euT;
+  const average = steam ? entry.avgSteamLs : (entry.avgMadeEuT ?? entry.avgEuT);
+  const peak = steam ? entry.steamLs : (entry.madeEuT ?? entry.euT);
+  const format = (value: number) => steam
+    ? formatSlotRate(value, "fluid")
+    : `${sign}${formatPowerValue(powerDisplayFromEuT(value))} ${powerDisplaySuffix()}`;
+  if (average === peak && peak !== undefined) {
+    return <div className="pool-power-line" title="Average and peak are equal">
+      <small>{steam ? "Steam" : "Power"}</small><strong>{format(peak)}</strong>
+    </div>;
+  }
   return (
     <>
       {average !== undefined ? (
         <div className="pool-power-line">
-          {sign}
-          {formatPowerValue(powerDisplayFromEuT(average))}
-          <small>avg</small>
+          <small>{steam ? "Avg steam" : "Avg"}</small>
+          <strong>{format(average)}</strong>
         </div>
       ) : null}
       {peak !== undefined ? (
         <div className="pool-power-line">
-          {sign}
-          {formatPowerValue(powerDisplayFromEuT(peak))}
-          <small>peak</small>
+          <small>{steam ? "Peak steam" : "Peak"}</small>
+          <strong>{format(peak)}</strong>
         </div>
       ) : (
         <span className="pool-sheet-muted">—</span>
@@ -635,16 +571,13 @@ function Product({ storage }: { storage: FactoryStorage }) {
 }
 
 function BalanceRow({ balance }: { balance: ResourceBalance }) {
-  const workspace = useWorkspaceView();
   const dataset = useFactoryStore((state) => state.dataset);
   const resource = dataset?.resources.find(
     (entry) => entry.kind === balance.kind && entry.id === balance.resourceId,
   );
-  const star = workspace.favouriteResourceKeys.includes(balance.key);
-  const hidden = workspace.hiddenResourceKeys.includes(balance.key);
   const net = balance.surplusPerSecond - balance.deficitPerSecond;
   return (
-    <tr className={hidden ? "opacity-40" : undefined}>
+    <tr>
       <td>
         <ResourceLink
           resource={{
@@ -662,29 +595,6 @@ function BalanceRow({ balance }: { balance: ResourceBalance }) {
       <td>
         {net > 0 ? "+" : ""}
         {formatSlotRate(net, balance.kind)}
-      </td>
-      <td>
-        <div className="pool-row-actions">
-          <button
-            type="button"
-            className="pool-sheet-icon-button"
-            aria-label={`${star ? "Unstar" : "Star"} ${balance.displayName ?? balance.resourceId}`}
-            aria-pressed={star}
-            onClick={() => toggleResourceFavourite(balance.key)}
-          >
-            <Star />
-          </button>
-          {!star ? (
-            <button
-              type="button"
-              className="pool-sheet-icon-button"
-              aria-label={`${hidden ? "Show" : "Hide"} ${balance.displayName ?? balance.resourceId}`}
-              onClick={() => toggleResourceHidden(balance.key)}
-            >
-              {hidden ? <Eye /> : <EyeOff />}
-            </button>
-          ) : null}
-        </div>
       </td>
     </tr>
   );

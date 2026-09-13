@@ -20,11 +20,13 @@ import { ResourceIndexPane, type IndexedResource } from "./ResourceIndexPane";
 export function ItemPickerPopover({
   role,
   placement = "above",
+  align = "center",
   onPick,
   onClose,
 }: {
   role: RecipeQueryRole;
   placement?: "above" | "below";
+  align?: "center" | "start";
   onPick: (entry: DatasetResourceIndexEntry, role: RecipeQueryRole) => void;
   onClose: () => void;
   /** Kept for callers that still pass it; the pane queries the dataset itself. */
@@ -51,7 +53,7 @@ export function ItemPickerPopover({
     } else if (overLeft > 0) {
       setShift((current) => current + overLeft);
     }
-  }, [placement]);
+  }, [placement, align]);
 
   // The one dropdown rule (use-dropdown-dismiss.ts); its Escape is consumed
   // so the search behind the picker stays open.
@@ -75,7 +77,7 @@ export function ItemPickerPopover({
   return (
     <div
       ref={rootRef}
-      style={placement === "below" ? { transform: `translateX(calc(-50% + ${shift}px))` } : undefined}
+      style={placement === "below" ? { transform: `translateX(calc(${align === "start" ? "0px" : "-50%"} + ${shift}px))` } : undefined}
       // The items column's own shell: same ground, same border. Tall enough
       // for the paged grid to show a few rows; the pane sizes its page to it.
       className={[
@@ -83,7 +85,7 @@ export function ItemPickerPopover({
         // layers and the picker inherits that; nowheel/nodrag keep the wheel
         // paging the list instead of zooming the board under it.
         "pointer-events-auto nodrag nowheel absolute z-20 flex h-[min(560px,calc(100*var(--ui-vh)-120px))] w-full max-w-[calc(100*var(--ui-vw)-16px)] flex-col overflow-hidden border border-neutral-800 bg-[#25272c] text-neutral-100 shadow-[0_8px_24px_rgba(0,0,0,0.5)] sm:w-[380px] sm:max-w-[380px]",
-        placement === "above" ? "bottom-full left-1/2 mb-2 -translate-x-1/2" : "left-1/2 top-full mt-2",
+        placement === "above" ? "bottom-full left-1/2 mb-2 -translate-x-1/2" : `${align === "start" ? "left-0" : "left-1/2"} top-full mt-2`,
       ].join(" ")}
       data-item-picker={role}
     >

@@ -2,7 +2,6 @@
 
 import { isTreeGrowthSimulatorToolControl, applyTreeGrowthSimulatorToolInputs, getTreeGrowthSimulatorSlotResource, getTreeGrowthSimulatorSlotTiers } from "@/lib/model/recipe-tool-slots";
 import { industrialFarmCapacity } from "@/lib/model/full-farms";
-import { WorksheetSetting } from "../pool/WorksheetSetting";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import {
@@ -283,7 +282,7 @@ export interface RecipeNodeData extends Record<string, unknown> {
 
 export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 
-function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEditor }: Pick<NodeProps<RecipeFlowNode>, "data" | "selected"> & { controlsOnly?: boolean; renderEditor?: (controls: ReactNode, picture: ReactNode) => ReactNode }) {
+function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEditor }: Pick<NodeProps<RecipeFlowNode>, "data" | "selected"> & { controlsOnly?: boolean; renderEditor?: (controls: ReactNode, picture: ReactNode, settings: ReactNode) => ReactNode }) {
   const { projectNode, recipe, result } = data;
   const editorLocked = useFactoryStore((state) => state.isReadOnly || state.checklistMode);
   const [isCompareOpen, setCompareOpenState] = useState(false);
@@ -972,6 +971,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
   const machineConfigPanel =
     visibleMachineConfigControls.length > 0 || configFacts.length > 0 ? (
       <MachineConfigControlPanel
+        compact={controlsOnly}
         recipe={recipe}
         node={projectNode}
         controls={visibleMachineConfigControls}
@@ -1188,7 +1188,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
   if (controlsOnly) {
     const controls = (
       <fieldset disabled={editorLocked} className="pool-machine-editor min-w-0 border-0 p-0 text-[var(--mc-ink)]">
-        <div className="pool-editor-controls">
+        <div className="pool-editor-controls pool-editor-heading">
           <div className="relative min-w-0">
             <button type="button" data-machine-menu-toggle className="pool-sheet-button"
               disabled={!hasMachinePicker && !canShareMachine && !mayHaveTwins}
@@ -1201,6 +1201,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
               twins={isSharedMachine ? undefined : twins} mapIcons={recipeMapIcons} onUseTwin={useTwin}
               figures={!isSharedMachine} onAddRecipe={canShareMachine ? () => { setCompareOpen(false); browseMachineRecipes(projectNode.id); } : undefined} /> : null}
           </div>
+          <div className="pool-editor-power">
           {powerInfo ? <PowerTierChip nodeId={projectNode.id} sourceId={powerInfo.sourceId} values={projectNode.machineConfigTiers} /> : null}
           {cropTierControl && !tierControl && !powerInfo ? <CropTierChip control={cropTierControl} onPick={(key) => updateMachineConfigTier(cropTierControl.id, key)} /> : null}
           {powerReadout ? <HatchPowerControls {...powerReadout} locked={() => editorLocked}
@@ -1213,19 +1214,21 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
                 <button className="pool-sheet-button" type="button" disabled={tierControl.fixed} aria-label="Increase machine tier" onClick={() => updateTier(1)}>+</button>
               </div>
           ) : null}
+          </div>
           {isCropFarmNode ? <div className="relative"><button type="button" className="pool-sheet-button" data-crop-picker-toggle onClick={() => setCropMenuOpen((open) => !open)}><Sprout className="h-4 w-4" />{cropTitle ?? "Pick a crop"}</button>
             {isCropMenuOpen ? <CropPickerMenu nodeId={projectNode.id} onClose={() => setCropMenuOpen(false)} /> : null}</div> : null}
         </div>
+      </fieldset>
+    );
+    const settings = (
+      <fieldset disabled={editorLocked} className="pool-machine-settings min-w-0 border-0 p-0 text-[var(--mc-ink)]">
         {powerInfo ? <PowerConfigPanel nodeId={projectNode.id} sourceId={powerInfo.sourceId} values={projectNode.machineConfigTiers} stats={powerInfo.stats} warnings={powerInfo.warnings} /> : null}
-        <div className="pool-editor-controls">{visibleMachineConfigControls.map((control) => <WorksheetSetting key={control.id} control={control}
-          onSelect={(id, value) => { setPreviewConfigTier(undefined); if (id === "heatingCoil") updateCoilTier(value); else updateMachineConfigTier(id, value); }} />)}
-          {configFacts.map((fact) => <span key={fact.id} className="pool-sheet-muted">{fact.caption} {fact.value}</span>)}
-        </div>
+        {machineConfigPanel}
         {passiveProductionPanel}
         {isCustomRateNode && customRateDial ? <CustomRatePanel nodeId={projectNode.id} mode={customRateDial.mode} kind={customRateSlot?.resource.kind ?? "item"} perSecond={customRateDial.perSecond} /> : null}
       </fieldset>
     );
-    return renderEditor ? renderEditor(controls, hasPowerPicture ? <PowerStructureWindow art={powerArt} icon={powerMachineIcon ?? previewMachineIcon} inline bare /> : null) : controls;
+    return renderEditor ? renderEditor(controls, hasPowerPicture ? <PowerStructureWindow art={powerArt} icon={powerMachineIcon ?? previewMachineIcon} inline bare /> : null, settings) : <>{controls}{settings}</>;
   }
 
   // Outputs end in coupling chips at the node's right edge — inside the
@@ -2282,7 +2285,7 @@ function RenderedRecipeHandles({ nodeId, handleIds }: { nodeId: string; handleId
   return null;
 }
 
-export function RecipeNodeEditor({ data, render }: { data: RecipeNodeData; render?: (controls: ReactNode, picture: ReactNode) => ReactNode }) {
+export function RecipeNodeEditor({ data, render }: { data: RecipeNodeData; render?: (controls: ReactNode, picture: ReactNode, settings: ReactNode) => ReactNode }) {
   return <RecipeNodeComponent data={data} selected={false} controlsOnly renderEditor={render} />;
 }
 
@@ -2296,7 +2299,7 @@ export function RecipeNodeEditor({ data, render }: { data: RecipeNodeData; rende
  * and "runs on whatever the circuit is set to" are different builds and an
  * absent slot cannot tell them apart.
  */
-export function CircuitChip({ circuit, small = false }: { circuit: RecipeProgrammedCircuit; small?: boolean }) {
+export function CircuitChip({ circuit, small = false, bare = false }: { circuit: RecipeProgrammedCircuit; small?: boolean; bare?: boolean }) {
   const { setting, resource } = circuit;
   return (
     <MinecraftTooltip
@@ -2309,8 +2312,8 @@ export function CircuitChip({ circuit, small = false }: { circuit: RecipeProgram
         // the footer's type is measured.
         className={[
           "relative flex shrink-0 items-center justify-center overflow-hidden",
-          small ? "h-[22px] w-[22px]" : "w-9 self-stretch border",
-          small ? "" : resource
+          bare ? "h-11 w-11" : small ? "h-[22px] w-[22px]" : "w-9 self-stretch border",
+          small || bare ? "" : resource
             ? "border-[var(--mc-47)] bg-[var(--mc-71)] shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]"
             : // Empty reads as a hole in the card, the way an unfilled slot
               // does in the machine's own GUI.
@@ -2328,14 +2331,14 @@ export function CircuitChip({ circuit, small = false }: { circuit: RecipeProgram
             tooltip={false}
             showAmount={false}
             showConsumedState={false}
-            className={small ? "!h-[22px] !w-[22px]" : "!h-9 !w-9"}
+            className={bare ? "!h-11 !w-11" : small ? "!h-[22px] !w-[22px]" : "!h-9 !w-9"}
           />
         ) : (
           // Not an item, a silhouette: the same drawn circuit the recipe book
           // card wears, at a fraction of the ink. An empty slot with nothing
           // in it at all reads as art that failed to load rather than as a
           // machine that does not care what its circuit says.
-          <Cpu aria-hidden className={`${small ? "h-[22px] w-[22px]" : "h-5 w-5"} text-[var(--mc-ink-muted)] opacity-50`} />
+          <Cpu aria-hidden className={`${bare ? "h-9 w-9" : small ? "h-[22px] w-[22px]" : "h-5 w-5"} text-[var(--mc-ink-muted)] opacity-50`} />
         )}
       </div>
     </MinecraftTooltip>
@@ -4476,6 +4479,7 @@ function MachineConfigControlPanel({
   controls,
   facts = [],
   onSelect,
+  compact = false,
 }: {
   recipe: Recipe;
   node: FactoryNode;
@@ -4483,6 +4487,7 @@ function MachineConfigControlPanel({
   /** Read-only tiles after the settings, in the same grid. */
   facts?: Array<{ id: string; caption: string; value: string; help?: ReactNode | (() => ReactNode) }>;
   onSelect: (controlId: string, nextTier: string) => void;
+  compact?: boolean;
 }) {
   if (controls.length === 0 && facts.length === 0) {
     return null;
@@ -4498,8 +4503,7 @@ function MachineConfigControlPanel({
     Math.floor((RECIPE_RAIL_AREA_WIDTH + SETTING_TILE_GAP_PX) / (SETTING_TILE_MIN_WIDTH_PX + SETTING_TILE_GAP_PX)),
   );
   const rows = Math.ceil((controls.length + facts.length) / perRow);
-  return (
-    <GridBlock className="" minCells={(rows * SETTING_TILE_HEIGHT_PX) / BOARD_GRID}>
+  const tiles = (
       <div
         className="grid gap-1"
         style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${SETTING_TILE_MIN_WIDTH_PX}px, 1fr))` }}
@@ -4516,8 +4520,8 @@ function MachineConfigControlPanel({
           <FactTile key={fact.id} caption={fact.caption} value={fact.value} help={fact.help} />
         ))}
       </div>
-    </GridBlock>
   );
+  return compact ? tiles : <GridBlock className="" minCells={(rows * SETTING_TILE_HEIGHT_PX) / BOARD_GRID}>{tiles}</GridBlock>;
 }
 
 function PassiveProductionConfigPanel({
@@ -5655,7 +5659,7 @@ function formatSolvedMachines(value: number): string {
  * drawer's amount wears. A pinned count shows gold; emptying the field
  * unpins and hands the count back to the solver.
  */
-function SolvedMachinesStat({
+export function SolvedMachinesStat({
   label,
   needed,
   pinned,

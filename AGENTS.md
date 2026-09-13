@@ -1593,14 +1593,30 @@ Working notes for future agents on GTNH Factory Flow.
   recipes have separate rows but one machine/config/count/power group per
   real card. `RecipeNodeEditor` reuses the card's controls without mounting
   canvas handles; keep specialty machine behavior shared between views.
-  Keep this view dense: bare item icons, inline settings, and product
+  Keep this view dense: bare item icons, visible settings, and product
   targets beside resource balances ABOVE the recipes.
   The machine's full structure render (or its item) gets the far-left
-  picture column. Status badges sit under its name/settings, circuits have
-  their own column using the canvas's CircuitChip (including its blank).
+  picture column. Status badges sit under its name, circuits have
+  their own column using the canvas's CircuitChip (including its blank),
+  enlarged and WITHOUT its background in this view.
+  Settings have their own column BETWEEN Machine and Circuit, using the
+  canvas's MachineConfigControlPanel/setting tiles, including unique machine
+  controls, searchable choices, numeric edits, and rich tooltips. Do not
+  rebuild a separate set of tiny inline steppers. Amps/tier stay in Machine.
   Takes/Makes use two-by-two item grids with larger bare icons and fading
   names, never ellipses; extra entries scroll instead of stretching rows.
-  The enable/disable action is labelled, not a mysterious power glyph.
+  One or two items use the whole column width. Names and rates are snug
+  above/below each other, with the icon spanning both lines; no top clipping.
+  Count/pin and power belong INSIDE the machine cell; amps/tier sit at its
+  top right. No enable/disable action, heading/counter, duplicate Canvas
+  button, or resource favourite/hide controls. Search is in the table head.
+  Products have a direct + item picker. Resource-summary names do not fade,
+  and canvas resource visibility/favourite preferences do not filter them.
+  Count uses the canvas's SolvedMachinesStat, including its pencil and
+  clear-to-unpin behavior. Never rebuild a "Need / Pin / Auto" text stack.
+  Keep rows compact: item names and rates fit tightly beside the large icon.
+  Power is readable on its own line, actions at bottom right. Equal average
+  and peak figures display once; differing figures keep their Avg/Peak labels.
 
 - The board-wide POWER DISPLAY selector is restored (Jack, 2026-09-11):
   beside the rate key, EU/t or amps of a chosen voltage tier, with click
