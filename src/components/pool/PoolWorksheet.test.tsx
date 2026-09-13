@@ -145,7 +145,7 @@ describe("Pool worksheet", () => {
     expect(screen.queryByRole("button", { name: "Disable machine" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Enable machine" })).toBeNull();
   });
-  it("edits machine-specific settings through the canvas tiles in their own column", () => {
+  it("edits machine-specific settings below the machine and omits empty settings sections", () => {
     const project = fixture();
     project.recipes[0].machineConfigControls = [{
       id: "solenoidCoil",
@@ -159,12 +159,15 @@ describe("Pool worksheet", () => {
     }];
     useFactoryStore.getState().setProject(project);
     const { container } = render(<PoolWorksheet />);
-    const settings = container.querySelector(".pool-settings-cell") as HTMLElement;
+    const settings = container.querySelector(".pool-settings-section") as HTMLElement;
     fireEvent.click(within(settings).getByRole("button", { name: "Next Solenoid" }));
     expect(useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil).toBe("mv");
-    expect(container.querySelector(".pool-machine-cell")?.textContent).not.toContain("Solenoid");
+    expect(container.querySelector(".pool-machine-cell")?.contains(settings)).toBe(true);
+    expect(screen.queryByRole("columnheader", { name: "Settings" })).toBeNull();
     act(() => useFactoryStore.getState().undo());
     expect(useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil).toBeUndefined();
+    act(() => useFactoryStore.getState().setProject(fixture()));
+    expect(container.querySelector(".pool-settings-section")).toBeNull();
   });
   it("places product targets and resources together above recipe rows", () => {
     const { container } = render(<PoolWorksheet />);

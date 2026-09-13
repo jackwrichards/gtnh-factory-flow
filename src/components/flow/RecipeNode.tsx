@@ -1220,14 +1220,14 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
         </div>
       </fieldset>
     );
-    const settings = (
+    const settings = powerInfo || machineConfigPanel || passiveProductionPanel || (isCustomRateNode && customRateDial) ? (
       <fieldset disabled={editorLocked} className="pool-machine-settings min-w-0 border-0 p-0 text-[var(--mc-ink)]">
         {powerInfo ? <PowerConfigPanel nodeId={projectNode.id} sourceId={powerInfo.sourceId} values={projectNode.machineConfigTiers} stats={powerInfo.stats} warnings={powerInfo.warnings} /> : null}
         {machineConfigPanel}
         {passiveProductionPanel}
         {isCustomRateNode && customRateDial ? <CustomRatePanel nodeId={projectNode.id} mode={customRateDial.mode} kind={customRateSlot?.resource.kind ?? "item"} perSecond={customRateDial.perSecond} /> : null}
       </fieldset>
-    );
+    ) : null;
     return renderEditor ? renderEditor(controls, hasPowerPicture ? <PowerStructureWindow art={powerArt} icon={powerMachineIcon ?? previewMachineIcon} inline bare /> : null, settings) : <>{controls}{settings}</>;
   }
 
@@ -5664,11 +5664,13 @@ export function SolvedMachinesStat({
   needed,
   pinned,
   onPin,
+  inline = false,
 }: {
   label: string;
   needed: number | undefined;
   pinned: number | undefined;
   onPin: (machines: number | undefined) => void;
+  inline?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -5687,7 +5689,7 @@ export function SolvedMachinesStat({
   return (
     <MinecraftTooltip content={() => <RecipeTooltip view={{ ...buildCountTooltip(needed, pinned), ...(editing ? { actions: [], reason: "Clear the field to unpin." } : {}) }} />} >
     <div
-      className="min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)]"
+      className={`min-w-0 border border-[var(--mc-47)] bg-[var(--mc-71)] px-1 shadow-[inset_1px_1px_0_var(--mc-93),inset_-1px_-1px_0_var(--mc-47)] ${inline ? "flex h-6 items-center gap-2 whitespace-nowrap" : ""}`}
     >
       {/* The label stays MACHINES either way - it never stops being one.
           The gold value is what says the count is pinned. */}
@@ -5714,7 +5716,7 @@ export function SolvedMachinesStat({
           onClick={(event) => event.stopPropagation()}
           inputMode="decimal"
           aria-label="Pinned machine count"
-          className="nodrag h-5 w-full min-w-0 border border-[var(--mc-47)] bg-[var(--mc-85)] px-1 text-center text-[13px] font-medium leading-4 text-[var(--mc-ink)] outline-none focus:border-cyan-700 focus:ring-1 focus:ring-cyan-400"
+          className={`nodrag h-5 ${inline ? "w-16" : "w-full"} min-w-0 border border-[var(--mc-47)] bg-[var(--mc-85)] px-1 text-center text-[13px] font-medium leading-4 text-[var(--mc-ink)] outline-none focus:border-cyan-700 focus:ring-1 focus:ring-cyan-400`}
         />
       ) : (
         <button
@@ -5726,7 +5728,7 @@ export function SolvedMachinesStat({
           }}
           onPointerDown={(event) => event.stopPropagation()}
           aria-label={isPinned ? "Change the pinned machine count" : "Pin a machine count"}
-          className="group/pin flex w-full min-w-0 items-center gap-[3px] text-left"
+          className={`group/pin flex ${inline ? "w-auto shrink-0" : "w-full"} min-w-0 items-center gap-[3px] text-left`}
         >
           <span
             className={[

@@ -1599,10 +1599,12 @@ Working notes for future agents on GTNH Factory Flow.
   picture column. Status badges sit under its name, circuits have
   their own column using the canvas's CircuitChip (including its blank),
   enlarged and WITHOUT its background in this view.
-  Settings have their own column BETWEEN Machine and Circuit, using the
-  canvas's MachineConfigControlPanel/setting tiles, including unique machine
-  controls, searchable choices, numeric edits, and rich tooltips. Do not
-  rebuild a separate set of tiny inline steppers. Amps/tier stay in Machine.
+  Settings sit in an INDENTED SECTION BELOW the machine's name and stats,
+  using the canvas's MachineConfigControlPanel/setting tiles, including unique
+  controls, searchable choices, numeric edits, and rich tooltips. They wrap
+  naturally and grow only that machine's row: no settings column, height cap,
+  or scrolling settings list. Machines without settings omit the section.
+  Do not rebuild a separate set of tiny inline steppers. Amps/tier stay in Machine.
   Takes/Makes use two-by-two item grids with larger bare icons and fading
   names, never ellipses; extra entries scroll instead of stretching rows.
   One or two items use the whole column width. Names and rates are snug
@@ -1614,8 +1616,11 @@ Working notes for future agents on GTNH Factory Flow.
   and canvas resource visibility/favourite preferences do not filter them.
   Count uses the canvas's SolvedMachinesStat, including its pencil and
   clear-to-unpin behavior. Never rebuild a "Need / Pin / Auto" text stack.
+  The name and chevron are first; the next row keeps Machines/count/pencil
+  in ONE horizontal tile, then status with the same background, then power
+  (which may wrap below when needed). The canvas keeps its original tile layout.
   Keep rows compact: item names and rates fit tightly beside the large icon.
-  Power is readable on its own line, actions at bottom right. Equal average
+  Power stays readable beside the stats or wraps below; actions sit at right. Equal average
   and peak figures display once; differing figures keep their Avg/Peak labels.
 
 - The board-wide POWER DISPLAY selector is restored (Jack, 2026-09-11):

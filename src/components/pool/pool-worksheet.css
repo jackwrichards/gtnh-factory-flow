@@ -147,16 +147,13 @@
   width: 5%;
 }
 .pool-col-machine {
-  width: 32%;
-}
-.pool-col-settings {
-  width: 15%;
+  width: 42%;
 }
 .pool-col-circuit {
   width: 5%;
 }
 .pool-col-io {
-  width: 21.5%;
+  width: 24%;
 }
 .pool-sheet-table thead,
 .pool-sheet-resources thead {
@@ -235,12 +232,8 @@
   align-items: center;
   min-height: 44px;
 }
-.pool-machine-main {
-  display: grid;
-  grid-template-columns: 70px minmax(0, 1fr);
-  gap: 8px;
-}
 .pool-machine-count {
+  flex-shrink: 0;
   padding: 0;
   min-width: 0;
   border: 0;
@@ -291,13 +284,15 @@
   font-size: 14px;
 }
 .pool-machine-settings {
-  max-height: 80px;
-  overflow: auto;
-  scrollbar-width: thin;
+  width: 100%;
 }
-.pool-machine-settings:empty::after {
-  content: "—";
-  color: var(--mc-ink-muted);
+.pool-machine-settings > * {
+  max-width: 100%;
+}
+.pool-settings-section {
+  margin: 7px 0 3px 10px;
+  padding-left: 10px;
+  border-left: 2px solid var(--mc-61);
 }
 .pool-sheet-button {
   display: inline-flex;
@@ -332,8 +327,6 @@
 .pool-machine-power {
   display: flex;
   flex-wrap: wrap;
-  grid-row: 2;
-  grid-column: 1;
   gap: 0 12px;
   color: var(--mc-ink);
   font-size: 12px;
@@ -350,14 +343,13 @@
   color: var(--mc-ink-muted);
 }
 .pool-machine-footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0 6px;
-  margin: 2px 0 0;
+  gap: 4px 6px;
+  margin: 4px 0 0;
 }
 .pool-status-list {
-  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -368,11 +360,13 @@
   gap: 3px;
 }
 .pool-status {
-  display: inline-block;
-  padding: 1px 5px;
-  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
-  border-radius: 3px;
-  background: color-mix(in srgb, currentColor 8%, transparent);
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 5px;
+  border: 1px solid var(--mc-47);
+  background: var(--mc-71);
+  box-shadow: inset 1px 1px 0 var(--mc-93), inset -1px -1px 0 var(--mc-47);
   font-size: 12px;
   line-height: 17px;
   color: var(--mc-ink);
@@ -399,9 +393,8 @@
   align-items: center;
 }
 .pool-machine-footer .pool-row-actions {
-  grid-column: 2;
-  grid-row: 2;
-  align-self: end;
+  margin-left: auto;
+  align-self: flex-end;
 }
 .pool-sheet-icon-button {
   display: inline-flex;
@@ -519,7 +512,7 @@
     font-size: 16px;
   }
 }
-.pool-sheet-table th:nth-child(4) {
+.pool-sheet-table th:nth-child(3) {
   padding-inline: 2px;
   text-align: center;
   font-size: 10px;

@@ -121,7 +121,6 @@ export function PoolWorksheet() {
           <colgroup>
             <col className="pool-col-picture" />
             <col className="pool-col-machine" />
-            <col className="pool-col-settings" />
             <col className="pool-col-circuit" />
             <col className="pool-col-io" />
             <col className="pool-col-io" />
@@ -142,7 +141,6 @@ export function PoolWorksheet() {
                   />
                 </label>
               </th>
-              <th>Settings</th>
               <th>Circuit</th>
               <th>Takes</th>
               <th>Makes</th>
@@ -224,10 +222,12 @@ const MachineRows = memo(function MachineRows({
         <div className="pool-machine-picture">{picture}</div>
       </td>
       <td rowSpan={sections.length} className="pool-shared-cell pool-machine-cell">
-        <div className="pool-machine-main">
+        <div className="pool-machine-details">{controls}</div>
+        <div className="pool-machine-footer">
           <fieldset disabled={readOnly} className="pool-machine-count">
             {first.recipe && isCustomRateRecipe(first.recipe) ? null : (
               <SolvedMachinesStat
+                inline
                 label={first.recipe && isCropProductionRecipe(first.recipe) ? "Seeds" : "Machines"}
                 needed={
                   first.recipe && isCropProductionRecipe(first.recipe)
@@ -242,9 +242,6 @@ const MachineRows = memo(function MachineRows({
               />
             )}
           </fieldset>
-          <div className="pool-machine-details">{controls}</div>
-        </div>
-        <div className="pool-machine-footer">
           <div className="pool-status-list">
             {sections.map((section, index) => (
               <div key={section.section} className="pool-section-status">
@@ -301,8 +298,8 @@ const MachineRows = memo(function MachineRows({
             </div>
           ) : null}
         </div>
+        {settings ? <div className="pool-settings-section">{settings}</div> : null}
       </td>
-      <td rowSpan={sections.length} className="pool-settings-cell">{settings}</td>
     </>
   );
   return (
