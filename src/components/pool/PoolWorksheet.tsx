@@ -1,18 +1,7 @@
 "use client";
 
-import { memo, useMemo, useState } from "react";
-import {
-  Copy,
-  Eye,
-  EyeOff,
-  LayoutGrid,
-  Power,
-  RefreshCw,
-  Search,
-  Star,
-  Trash2,
-  X,
-} from "lucide-react";
+import { memo, useMemo, useState, type ReactNode } from "react";
+import { Copy, Eye, EyeOff, LayoutGrid, RefreshCw, Search, Star, Trash2, X } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import {
   useWorkspaceView,
@@ -28,12 +17,16 @@ import { getStorageRoles } from "@/lib/model/storage-role";
 import { powerDisplayFromEuT, powerDisplaySuffix } from "@/lib/model/rate-unit";
 import { ResourceIcon } from "../nei/ResourceIcon";
 import { MinecraftTooltip } from "../nei/MinecraftTooltip";
-import { RecipeNodeEditor } from "../flow/RecipeNode";
+import { CircuitChip, RecipeNodeEditor } from "../flow/RecipeNode";
 import { TargetLine } from "../flow/StorageNode";
 import { RecipeTooltip } from "../flow/RecipeTooltip";
 import { buildStatusTooltip, buildPortTooltip } from "../flow/recipe-tooltip-data";
 import { formatPortRate, formatSlotRate } from "../flow/flow-explainers";
 import type { RailPort } from "../flow/node-verdict";
+import {
+  getRecipeProgrammedCircuit,
+  isProgrammedCircuitResource,
+} from "@/lib/model/programmed-circuit";
 import { getSelectedMachineHandler } from "@/lib/model/recipe-rules";
 import { useBrowseMenu, type BrowseMode } from "../browse-menu";
 import {
@@ -193,8 +186,9 @@ export function PoolWorksheet() {
         ) : null}
         <table className="pool-sheet-table" aria-label="Recipes running in the pool">
           <colgroup>
-            <col className="pool-col-status" />
+            <col className="pool-col-picture" />
             <col className="pool-col-machine" />
+            <col className="pool-col-circuit" />
             <col className="pool-col-io" />
             <col className="pool-col-io" />
 
@@ -203,8 +197,11 @@ export function PoolWorksheet() {
           </colgroup>
           <thead>
             <tr>
-              <th>Status</th>
+              <th>
+                <span className="sr-only">Machine picture</span>
+              </th>
               <th>Machine / settings</th>
+              <th>Circuit</th>
               <th>Takes</th>
               <th>Makes</th>
               <th title="Calculated machine capacity for this configuration. A fractional count uses part of one machine. Pin a count below to set it manually; Auto lets the solver choose.">
@@ -254,6 +251,83 @@ const MachineRows = memo(function MachineRows({
   const required =
     machine?.count ??
     sections.reduce((sum, section) => sum + (section.result?.theoreticalMachinesRequired ?? 0), 0);
+  const machineCells = (controls: ReactNode, picture: ReactNode) => (
+    <>
+      <td rowSpan={sections.length} className="pool-picture-cell">
+        <div className="pool-machine-picture">{picture}</div>
+      </td>
+      <td rowSpan={sections.length} className="pool-shared-cell pool-machine-cell">
+        {controls}
+        <div className="pool-machine-footer">
+          <div className="pool-status-list">
+            {sections.map((section, index) => (
+              <div key={section.section} className="pool-section-status">
+                <Status section={section} />
+                {sections.length > 1 ? (
+                  <span className="pool-shared-label" title={section.recipe?.name}>
+                    #{index + 1}
+                    {!readOnly ? (
+                      <button
+                        type="button"
+                        className="pool-sheet-icon-button"
+                        aria-label={"Remove recipe " + (index + 1) + " from shared machine"}
+                        onClick={() =>
+                          useFactoryStore.getState().removeRecipeSection(owner.id, section.section)
+                        }
+                      >
+                        <X />
+                      </button>
+                    ) : null}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+          {!readOnly ? (
+            <div className="pool-row-actions">
+              <button
+                type="button"
+                className="pool-enable-button"
+                aria-label={owner.enabled ? "Disable machine" : "Enable machine"}
+                title={
+                  owner.enabled
+                    ? "Disable this machine and exclude it from production"
+                    : "Enable this machine for production"
+                }
+                onClick={() => updateNode(owner.id, { enabled: !owner.enabled })}
+              >
+                {owner.enabled ? "Disable" : "Enable"}
+              </button>
+              <button
+                type="button"
+                className="pool-sheet-icon-button"
+                aria-label="Duplicate machine"
+                onClick={() => useFactoryStore.getState().duplicateNode(owner.id)}
+              >
+                <Copy />
+              </button>
+              <button
+                type="button"
+                className="pool-sheet-icon-button"
+                aria-label="Replace recipe"
+                onClick={() => useFactoryStore.getState().beginRecipeRefactor(owner.id)}
+              >
+                <RefreshCw />
+              </button>
+              <button
+                type="button"
+                className="pool-sheet-icon-button"
+                aria-label="Remove machine"
+                onClick={() => useFactoryStore.getState().deleteNode(owner.id)}
+              >
+                <Trash2 />
+              </button>
+            </div>
+          ) : null}
+        </div>
+      </td>
+    </>
+  );
   return (
     <tbody
       data-worksheet-node={owner.id}
@@ -261,83 +335,31 @@ const MachineRows = memo(function MachineRows({
     >
       {sections.map((section, index) => (
         <tr key={section.section}>
-          <td>
-            <div className="pool-recipe-identity">
-              <Status section={section} />
-            </div>
-            {sections.length > 1 ? (
-              <div className="pool-shared-label">
-                Recipe {index + 1} / {sections.length}
-                {!readOnly ? (
-                  <button
-                    className="pool-sheet-icon-button"
-                    type="button"
-                    aria-label={`Remove recipe ${index + 1} from shared machine`}
-                    onClick={() =>
-                      useFactoryStore.getState().removeRecipeSection(owner.id, section.section)
-                    }
-                  >
-                    <X />
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </td>
           {index === 0 ? (
-            <td rowSpan={sections.length} className="pool-shared-cell">
-              {first.recipe ? (
-                <RecipeNodeEditor
-                  data={{ projectNode: owner, recipe: first.recipe, result: first.result }}
-                />
-              ) : (
-                <span>{label}</span>
-              )}
-              <div className="pool-row-actions">
-                {!readOnly ? (
-                  <>
-                    <button
-                      type="button"
-                      className="pool-sheet-icon-button"
-                      aria-label={owner.enabled ? "Disable machine" : "Enable machine"}
-                      onClick={() => updateNode(owner.id, { enabled: !owner.enabled })}
-                    >
-                      <Power />
-                    </button>
-                    <button
-                      type="button"
-                      className="pool-sheet-icon-button"
-                      aria-label="Duplicate machine"
-                      onClick={() => useFactoryStore.getState().duplicateNode(owner.id)}
-                    >
-                      <Copy />
-                    </button>
-                    <button
-                      type="button"
-                      className="pool-sheet-icon-button"
-                      aria-label="Replace recipe"
-                      onClick={() => useFactoryStore.getState().beginRecipeRefactor(owner.id)}
-                    >
-                      <RefreshCw />
-                    </button>
-                    <button
-                      type="button"
-                      className="pool-sheet-icon-button"
-                      aria-label="Remove machine"
-                      onClick={() => useFactoryStore.getState().deleteNode(owner.id)}
-                    >
-                      <Trash2 />
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            </td>
+            first.recipe ? (
+              <RecipeNodeEditor
+                data={{ projectNode: owner, recipe: first.recipe, result: first.result }}
+                render={machineCells}
+              />
+            ) : (
+              machineCells(<span>{label}</span>, null)
+            )
           ) : null}
+          <td className="pool-circuit-cell">
+            <div className="pool-circuit-slot">
+              <CircuitChip
+                circuit={section.display ? (getRecipeProgrammedCircuit(section.display) ?? {}) : {}}
+              />
+            </div>
+          </td>
           <td>
             <PortList
               ports={section.ports.inputs}
               nodeId={owner.id}
               section={section}
-              nonConsumed={section.nonConsumed}
+              nonConsumed={section.nonConsumed.filter(
+                (resource) => !isProgrammedCircuitResource(resource),
+              )}
             />
           </td>
           <td>
@@ -351,7 +373,7 @@ const MachineRows = memo(function MachineRows({
                 </span>
                 {first.recipe && isCustomRateRecipe(first.recipe) ? null : readOnly ? (
                   <small>
-                    {owner.solvePin ? `Pinned ${formatMachineListCount(owner.solvePin)}` : "Auto"}
+                    {owner.solvePin ? "Pinned " + formatMachineListCount(owner.solvePin) : "Auto"}
                   </small>
                 ) : (
                   <label className="pool-pin-count">
@@ -424,7 +446,12 @@ function PortList({
 }) {
   if (!ports.length && !nonConsumed.length) return <span className="pool-sheet-muted">—</span>;
   return (
-    <div className="pool-port-list">
+    <div
+      className="pool-port-list"
+      tabIndex={ports.length + nonConsumed.length > 4 ? 0 : undefined}
+      role="group"
+      aria-label="Recipe items"
+    >
       {ports.map((port) => (
         <div className="pool-port" key={port.handleId}>
           <MinecraftTooltip
@@ -510,12 +537,12 @@ function ResourceLink({ resource, nodeId }: { resource: ResourceAmount; nodeId?:
           resource={resource}
           size="sm"
           bare
-          className="!h-4 !w-4"
-          iconPixelSize={16}
+          className="!h-5 !w-5"
+          iconPixelSize={20}
           showAmount={false}
           tooltip={false}
         />
-        <span>{resourceLabel(resource)}</span>
+        <span title={resourceLabel(resource)}>{resourceLabel(resource)}</span>
       </button>
       {menu}
     </>

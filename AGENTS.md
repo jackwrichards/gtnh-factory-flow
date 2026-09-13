@@ -1593,8 +1593,14 @@ Working notes for future agents on GTNH Factory Flow.
   recipes have separate rows but one machine/config/count/power group per
   real card. `RecipeNodeEditor` reuses the card's controls without mounting
   canvas handles; keep specialty machine behavior shared between views.
-  Keep this view dense: bare item icons and rates on one line, settings
-  inline, and product targets beside resource balances ABOVE the recipes.
+  Keep this view dense: bare item icons, inline settings, and product
+  targets beside resource balances ABOVE the recipes.
+  The machine's full structure render (or its item) gets the far-left
+  picture column. Status badges sit under its name/settings, circuits have
+  their own column using the canvas's CircuitChip (including its blank).
+  Takes/Makes use two-by-two item grids with larger bare icons and fading
+  names, never ellipses; extra entries scroll instead of stretching rows.
+  The enable/disable action is labelled, not a mysterious power glyph.
 
 - The board-wide POWER DISPLAY selector is restored (Jack, 2026-09-11):
   beside the rate key, EU/t or amps of a chosen voltage tier, with click

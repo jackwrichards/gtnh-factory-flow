@@ -64,6 +64,52 @@ afterEach(() => {
 });
 
 describe("Pool worksheet", () => {
+  it("uses the canvas circuit slot and keeps the programmed circuit out of Takes", () => {
+    const project = fixture();
+    project.recipes[0].kind = "gregtech_machine";
+    project.recipes[0].programmedCircuit = "11";
+    project.recipes[0].inputs.push({
+      kind: "item",
+      id: "gregtech:gt.integrated_circuit@11",
+      displayName: "Programmed Circuit",
+      amount: 1,
+      consumed: false,
+    });
+    useFactoryStore.getState().setProject(project);
+    const { container } = render(<PoolWorksheet />);
+    expect(
+      container.querySelector('.pool-circuit-cell [aria-label="Programmed circuit 11"]'),
+    ).not.toBeNull();
+    expect(container.querySelector('.pool-port-list [title="Programmed Circuit"]')).toBeNull();
+    act(() => useFactoryStore.getState().setProject(fixture()));
+    expect(
+      container.querySelector('.pool-circuit-cell [aria-label="No circuit setting"]'),
+    ).not.toBeNull();
+  });
+
+  it("renders the full multiblock picture and keeps enable/disable tied to production", () => {
+    const project = fixture();
+    project.recipes[0].machineHandlers = [
+      {
+        id: "electric-blast-furnace",
+        label: "Electric Blast Furnace",
+        machineType: "Electric Blast Furnace",
+        kind: "multiblock",
+        minimumTier: "LV",
+      },
+    ];
+    useFactoryStore.getState().setProject(project);
+    const { container } = render(<PoolWorksheet />);
+    expect(
+      container.querySelector(
+        '.pool-picture-cell img[src="/power-art/electric-blast-furnace.png"]',
+      ),
+    ).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Disable machine" }));
+    expect(useFactoryStore.getState().project.nodes[0].enabled).toBe(false);
+    expect(screen.getByRole("button", { name: "Enable machine" }).textContent).toBe("Enable");
+    expect(container.querySelector(".pool-status")?.textContent).toBe("Disabled");
+  });
   it("places product targets and resources together above recipe rows", () => {
     const { container } = render(<PoolWorksheet />);
     const summary = container.querySelector(".pool-sheet-summary")!;

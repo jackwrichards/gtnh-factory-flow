@@ -283,7 +283,7 @@ export interface RecipeNodeData extends Record<string, unknown> {
 
 export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 
-function RecipeNodeComponent({ data, selected, controlsOnly = false }: Pick<NodeProps<RecipeFlowNode>, "data" | "selected"> & { controlsOnly?: boolean }) {
+function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEditor }: Pick<NodeProps<RecipeFlowNode>, "data" | "selected"> & { controlsOnly?: boolean; renderEditor?: (controls: ReactNode, picture: ReactNode) => ReactNode }) {
   const { projectNode, recipe, result } = data;
   const editorLocked = useFactoryStore((state) => state.isReadOnly || state.checklistMode);
   const [isCompareOpen, setCompareOpenState] = useState(false);
@@ -1186,14 +1186,13 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false }: Pick<Node
   // handles or geometry registration. There is only one editing path for
   // machine math, specialized farms, generators, and shared recipe settings.
   if (controlsOnly) {
-    return (
+    const controls = (
       <fieldset disabled={editorLocked} className="pool-machine-editor min-w-0 border-0 p-0 text-[var(--mc-ink)]">
         <div className="pool-editor-controls">
           <div className="relative min-w-0">
             <button type="button" data-machine-menu-toggle className="pool-sheet-button"
               disabled={!hasMachinePicker && !canShareMachine && !mayHaveTwins}
               onClick={() => setCompareOpen((open) => !open)} aria-expanded={isCompareOpen}>
-              {previewMachineIcon ? <ResourceIcon resource={{ ...previewMachineIcon, amount: 1 }} bare size="sm" className="!h-4 !w-4" iconPixelSize={16} showAmount={false} tooltip={false} /> : null}
               <span className="pool-machine-title" title={machineDisplayName}>{machineDisplayName}</span><ChevronDown className="h-3 w-3 shrink-0" />
             </button>
             {isCompareOpen ? <MachineMenu recipe={recipe} node={projectNode} handlers={machineHandlers}
@@ -1226,6 +1225,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false }: Pick<Node
         {isCustomRateNode && customRateDial ? <CustomRatePanel nodeId={projectNode.id} mode={customRateDial.mode} kind={customRateSlot?.resource.kind ?? "item"} perSecond={customRateDial.perSecond} /> : null}
       </fieldset>
     );
+    return renderEditor ? renderEditor(controls, hasPowerPicture ? <PowerStructureWindow art={powerArt} icon={powerMachineIcon ?? previewMachineIcon} inline bare /> : null) : controls;
   }
 
   // Outputs end in coupling chips at the node's right edge — inside the
@@ -2282,8 +2282,8 @@ function RenderedRecipeHandles({ nodeId, handleIds }: { nodeId: string; handleId
   return null;
 }
 
-export function RecipeNodeEditor({ data }: { data: RecipeNodeData }) {
-  return <RecipeNodeComponent data={data} selected={false} controlsOnly />;
+export function RecipeNodeEditor({ data, render }: { data: RecipeNodeData; render?: (controls: ReactNode, picture: ReactNode) => ReactNode }) {
+  return <RecipeNodeComponent data={data} selected={false} controlsOnly renderEditor={render} />;
 }
 
 /**
@@ -2296,7 +2296,7 @@ export function RecipeNodeEditor({ data }: { data: RecipeNodeData }) {
  * and "runs on whatever the circuit is set to" are different builds and an
  * absent slot cannot tell them apart.
  */
-function CircuitChip({ circuit, small = false }: { circuit: RecipeProgrammedCircuit; small?: boolean }) {
+export function CircuitChip({ circuit, small = false }: { circuit: RecipeProgrammedCircuit; small?: boolean }) {
   const { setting, resource } = circuit;
   return (
     <MinecraftTooltip
@@ -3270,6 +3270,7 @@ function PowerStructureWindow({
   tint = "#d99a2b",
   pickedFor,
   inline = false,
+  bare = false,
 }: {
   art?: string;
   icon?: { id: string; displayName?: string; iconPath?: string; dominantColor?: string };
@@ -3279,6 +3280,7 @@ function PowerStructureWindow({
   pickedFor?: string;
   /** Between the rails: fill the column the card gives it, no band height. */
   inline?: boolean;
+  bare?: boolean;
 }) {
   if (!art && !icon?.iconPath) {
     return null;
@@ -3291,10 +3293,11 @@ function PowerStructureWindow({
       data-machine-picture={art ?? icon?.id}
       data-picked-for={pickedFor}
       className={[
-        "box-border flex items-center justify-center overflow-hidden border-2 border-[var(--mc-47)] p-1 shadow-[inset_2px_2px_0_rgba(0,0,0,0.3),inset_-2px_-2px_0_rgba(255,255,255,0.04)]",
+        "box-border flex items-center justify-center overflow-hidden p-1",
+        bare ? "" : "border-2 border-[var(--mc-47)] shadow-[inset_2px_2px_0_rgba(0,0,0,0.3),inset_-2px_-2px_0_rgba(255,255,255,0.04)]",
         inline ? "h-full w-full" : "mb-2 h-[112px] w-full",
       ].join(" ")}
-      style={{ backgroundColor: `color-mix(in srgb, var(--mc-33) 92%, ${tint} 8%)` }}
+      style={bare ? undefined : { backgroundColor: `color-mix(in srgb, var(--mc-33) 92%, ${tint} 8%)` }}
     >
       {art ? (
         // eslint-disable-next-line @next/next/no-img-element
