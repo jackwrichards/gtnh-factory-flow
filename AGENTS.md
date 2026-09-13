@@ -1473,7 +1473,11 @@ Working notes for future agents on GTNH Factory Flow.
   other shares proportionally, in one undo step. Equal split acts on each side
   separately and preserves Setup output when equalizing connected outlets.
   Ratio keeps the ordinary drawer colour, with a double rim and fork. No
-  combined percentage or bar on the card. The bottom-centre pencil opens
+  generic adjustment tap for mode changes: drawerOverflow is a soft sliding
+  release, drawerStrict a dry latch, drawerRatio three measured taps. The
+  project sound watcher chooses the destination mode's voice (undo/redo too),
+  one voice per switch; bulk mode changes use sweep. Master mute/volume apply.
+  No combined percentage or bar on the card. The bottom-centre pencil opens
   `StorageRatioEditor.tsx`, a compact grey NON-MODAL panel (`dialog.show`,
   never `showModal`). No backdrop, dim, blur or focus trap: rate controls and
   the canvas stay interactive. It uses useDropdownDismiss with fade: mouse-away

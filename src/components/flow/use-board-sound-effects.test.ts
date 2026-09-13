@@ -91,6 +91,34 @@ describe("playProjectDiff", () => {
     expect(diff(drawerBefore, drawerAfter)).toEqual(["adjust"]);
   });
 
+  it("gives each drawer mode one distinct sound, including undo and redo", () => {
+    const drawer = { id: "s", kind: "item" as const, resourceId: "x", position: { x: 0, y: 0 } };
+    const overflow = project({ storages: [drawer] });
+    const strict = project({ storages: [{ ...drawer, bufferMode: "strict" }] });
+    const ratio = project({ storages: [{ ...drawer, bufferMode: "ratio" }] });
+    expect(diff(overflow, strict)).toEqual(["drawerStrict"]);
+    expect(diff(strict, ratio)).toEqual(["drawerRatio"]);
+    expect(diff(ratio, overflow)).toEqual(["drawerOverflow"]);
+    expect(diff(ratio, strict)).toEqual(["drawerStrict"]);
+    expect(diff(strict, ratio)).toEqual(["drawerRatio"]);
+    expect(diff(ratio, structuredClone(ratio))).toEqual([]);
+  });
+
+  it("keeps bulk drawer mode changes to one sound", () => {
+    const drawers = ["a", "b"].map((id) => ({
+      id,
+      kind: "fluid" as const,
+      resourceId: "water",
+      position: { x: 0, y: 0 },
+    }));
+    expect(
+      diff(
+        project({ storages: drawers }),
+        project({ storages: drawers.map((s) => ({ ...s, bufferMode: "ratio" })) }),
+      ),
+    ).toEqual(["sweep"]);
+  });
+
   it("zaps for a power wire, even when the gesture spawned a drawer too", () => {
     const powerEdge = { ...edge("pz"), resourceKind: "power" as const, resourceId: "eu" };
     const before = project({ nodes: [node("a"), node("b")] });

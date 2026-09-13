@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import type { FactoryProject } from "@/lib/model/types";
+import type { FactoryProject, StorageBufferMode } from "@/lib/model/types";
 import { playBoardSound, primeBoardSounds } from "@/lib/board-sounds";
 import { useFactoryStore } from "@/store/factory-store";
 
@@ -37,6 +37,7 @@ interface ProjectSoundSnapshot {
   openPocketIds: Set<string>;
   /** Drawer ids, to tell a supply spawn from a catch spawn. */
   storageIds: Set<string>;
+  storageModes: Map<string, StorageBufferMode>;
   /** Edge endpoints, to see which way a freshly spawned drawer faces. */
   edgeEnds: Map<string, { source: string; target: string }>;
   /** POWER wires, for the zap: connecting electricity sounds electric. */
@@ -77,9 +78,11 @@ export function snapshotProject(project: FactoryProject): ProjectSoundSnapshot {
     signatureParts.push(JSON.stringify(node, signatureReplacer));
   }
   const storageIds = new Set<string>();
+  const storageModes = new Map<string, StorageBufferMode>();
   for (const storage of project.storages ?? []) {
     nodeIds.add(storage.id);
     storageIds.add(storage.id);
+    storageModes.set(storage.id, storage.bufferMode ?? "overflow");
     signatureParts.push(JSON.stringify(storage, signatureReplacer));
   }
   const edgeIds = new Set<string>();
@@ -104,6 +107,7 @@ export function snapshotProject(project: FactoryProject): ProjectSoundSnapshot {
     edgeIds,
     openPocketIds,
     storageIds,
+    storageModes,
     edgeEnds,
     powerEdgeIds,
     configSignature: signatureParts.join("\n"),
@@ -194,7 +198,13 @@ export function playProjectDiff(prev: ProjectSoundSnapshot, next: ProjectSoundSn
     } else if (countMissing(prev.openPocketIds, next.openPocketIds) > 0) {
       playBoardSound("close");
     } else if (next.configSignature !== prev.configSignature) {
-      playBoardSound("adjust");
+      const modes = [...next.storageModes].filter(([id, mode]) => prev.storageModes.get(id) !== mode);
+      if (modes.length === 1) {
+        const sound = { overflow: "drawerOverflow", strict: "drawerStrict", ratio: "drawerRatio" } as const;
+        playBoardSound(sound[modes[0][1]]);
+      } else {
+        playBoardSound(modes.length > 1 ? "sweep" : "adjust");
+      }
     }
     return;
   }

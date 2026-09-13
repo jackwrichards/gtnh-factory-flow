@@ -143,6 +143,9 @@ export type BoardSoundKind =
   | "open" // a board window unfolds from its summary card
   | "close" // a board window folds to its summary card
   | "adjust" // a setting on a card changed: machine count, drain pill, config
+  | "drawerOverflow" // non-strict: a soft sliding release
+  | "drawerStrict" // strict: a firm, dry latch
+  | "drawerRatio" // ratio: three measured taps opening into a split
   | "sweep" // one sound for a bulk change (paste, arrange, import)
   | "solveOn" // the board shifts into solve mode: a relay engaging, short and dry
   | "solveOff" // and back to plan mode: the same shimmer, settling home
@@ -595,6 +598,24 @@ function schedule(kind: BoardSoundKind, ctx: AudioContext, out: AudioNode, step 
     case "adjust":
       // A neutral mid tap: a knob turned, a pill cycled, a count stepped.
       blip(ctx, out, { from: 523, to: 523, duration: 0.08, peak: 0.2 });
+      break;
+    case "drawerOverflow":
+      // A gate sliding free: mostly air, with a soft low body. No impact.
+      puff(ctx, out, { frequency: 650, q: 0.7, duration: 0.22, peak: 0.17 });
+      blip(ctx, out, { from: 220, to: 277, duration: 0.18, peak: 0.1, delay: 0.025 });
+      break;
+    case "drawerStrict":
+      // One definite stop: a short wooden body and a crisp latch together.
+      blip(ctx, out, { from: 294, to: 294, duration: 0.085, peak: 0.24 });
+      puff(ctx, out, { frequency: 2300, q: 2.5, duration: 0.025, peak: 0.16 });
+      break;
+    case "drawerRatio":
+      // A measured split: one tap followed by two lighter, separated taps.
+      // Distinct rhythm as well as pitch; quiet enough to cycle repeatedly.
+      blip(ctx, out, { from: 330, to: 330, duration: 0.06, peak: 0.17 });
+      blip(ctx, out, { from: 440, to: 440, duration: 0.055, peak: 0.12, delay: 0.075 });
+      blip(ctx, out, { from: 554, to: 554, duration: 0.07, peak: 0.1, delay: 0.15 });
+      puff(ctx, out, { frequency: 1400, q: 1, duration: 0.04, peak: 0.055 });
       break;
     case "sweep":
       // One broad soft brush for a bulk change, however big it was.
