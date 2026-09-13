@@ -1474,8 +1474,12 @@ Working notes for future agents on GTNH Factory Flow.
   separately and preserves Setup output when equalizing connected outlets.
   Ratio keeps the ordinary drawer colour, with a double rim and fork. No
   combined percentage or bar on the card. The bottom-centre pencil opens
-  `StorageRatioEditor.tsx`, a compact grey sheet with a CLEAR backdrop (no dim
-  or blur). Large INCOMING / OUTGOING headings, no redundant 100% totals,
+  `StorageRatioEditor.tsx`, a compact grey NON-MODAL panel (`dialog.show`,
+  never `showModal`). No backdrop, dim, blur or focus trap: rate controls and
+  the canvas stay interactive. It stays open after outside clicks or pointer
+  movement; X/Escape close it. It renders inside the board's stacking context,
+  above cards but below open toolbar menus, so an overlapping rate menu stays
+  clickable. Large INCOMING / OUTGOING headings, no redundant 100% totals,
   compact icon/name/percentage rows, an Equal split button per section, and
   a distinct green Setup output row. Percentages are directly typed/scrolled;
   the number, percent sign and full-height up/down column form one control.
@@ -1491,9 +1495,13 @@ Working notes for future agents on GTNH Factory Flow.
   its resource icon immediately before its name. A small 0 button sits left
   of each compact percentage field, disabled at zero. The green Setup output
   highlight spans the popup's full inner width, with its contents aligned to
-  the other rows.
-  no Parts column. Switching modes NEVER opens it. No full-screen editor,
-  blue tint, coloured bars, flow rates or extra settings.
+  the other rows. A small muted current rate sits between each name and its
+  percentage: sum actual transferredPerSecond for that branch's wires, and
+  actual positive drawer netPerSecond for Setup output. Never project a rate
+  from capacity or the configured percentage; a stopped branch reads zero.
+  Follow useRateDisplayUnits and the ordinary kind-aware rate formatter.
+  No Parts column. Switching modes NEVER opens it. No full-screen editor,
+  blue tint, coloured bars or extra settings.
 - The drain pill cycles THREE ways since 2026-08-23: product, byproduct,
   trash. A TRASH drawer is the byproduct's shape (free disposal, no demand)
   with the books voided (`applyTrashedOutputBalances` covers it alongside

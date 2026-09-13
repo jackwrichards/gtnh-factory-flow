@@ -1,7 +1,6 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, ChevronDown, ChevronUp, Factory, Split, X } from "lucide-react";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import type { ResourceAmount } from "@/lib/model/types";
@@ -18,7 +17,8 @@ import {
   ratioExportShare,
   type StorageRatioBranch,
 } from "@/lib/model/storage-ratios";
-import { useFactoryStore } from "@/store/factory-store";
+import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
+import { formatSlotRate } from "./flow-explainers";
 import { RATIO_EDITOR_EVENT, type RatioEditorRequest } from "./ratio-editor";
 
 /** One listener per board; closed drawers acquire no editor subscriptions. */
@@ -42,6 +42,8 @@ function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose
   const project = useFactoryStore((s) => s.project);
   const readOnly = useFactoryStore((s) => s.isReadOnly || s.checklistMode);
   const equalize = useFactoryStore((s) => s.equalizeRatioBranches);
+  const result = useFactoryStore((s) => s.lastResult);
+  useRateDisplayUnits();
   const machineIcons = useMachineHandlerIconEntries();
   const mapIcons = useRecipeMapIcons();
   const storage = project.storages?.find((s) => s.id === request.storageId);
@@ -56,19 +58,27 @@ function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose
   }, [valid, onClose]);
   useEffect(() => {
     const dialog = rootRef.current;
-    dialog?.showModal();
+    // A floating panel: the canvas and its rate controls remain interactive.
+    dialog?.show();
     // Open on Close, not a number field: phones should not launch a keyboard.
     doneRef.current?.focus({ preventScroll: true });
     return () => dialog?.close();
   }, []);
-  const close = () => {
+  const close = useCallback(() => {
     if (
       document.activeElement instanceof HTMLElement &&
       rootRef.current?.contains(document.activeElement)
     )
       document.activeElement.blur();
     onClose();
-  };
+  }, [onClose]);
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) close();
+    };
+    document.addEventListener("keydown", escape);
+    return () => document.removeEventListener("keydown", escape);
+  }, [close]);
   const branches = useMemo(() => {
     const exported = ratioExportShare(storage);
     return [
@@ -138,20 +148,24 @@ function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose
       ),
     ]);
   }, [project, machineIcons, mapIcons]);
-  return createPortal(
+  // Share the board's stacking layer so its open toolbar menus can sit above us.
+  return (
     <dialog
       ref={rootRef}
       aria-label="Drawer split"
       data-ratio-editor
       data-tooltip-stop
-      className="ui-zoom nodrag nopan nowheel fixed inset-0 m-auto max-h-[calc(88*var(--ui-vh))] w-[calc(100*var(--ui-vw)-32px)] max-w-sm flex-col overflow-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-0 text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),4px_4px_0_rgba(0,0,0,0.45)] open:flex backdrop:bg-transparent backdrop:[backdrop-filter:none]"
+      className="nodrag nopan nowheel fixed inset-0 z-[35] m-auto max-h-[calc(88*var(--ui-vh))] w-[calc(100*var(--ui-vw)-32px)] max-w-sm flex-col overflow-hidden border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-0 text-[var(--mc-ink)] shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25),4px_4px_0_rgba(0,0,0,0.45)] open:flex"
       onCancel={(event) => {
         event.preventDefault();
         close();
       }}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
-      onKeyDown={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Escape") close();
+      }}
       onWheel={(event) => event.stopPropagation()}
     >
       <header className="flex shrink-0 items-center justify-between gap-3 border-b-2 border-[var(--mc-15)] px-4 py-2.5">
@@ -214,6 +228,15 @@ function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose
                 }
                 icon={peers.get(branch.targetId)?.icon}
                 drawerRole={peers.get(branch.targetId)?.drawerRole}
+                currentRate={formatSlotRate(
+                  branch.edges.length
+                    ? branch.edges.reduce(
+                        (sum, edge) => sum + (result.edges[edge.id]?.transferredPerSecond ?? 0),
+                        0,
+                      )
+                    : Math.max(0, result.storages[request.storageId]?.netPerSecond ?? 0),
+                  storage?.kind ?? "item",
+                )}
                 index={index}
                 side={side}
               />
@@ -221,8 +244,7 @@ function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose
           </section>
         ))}
       </div>
-    </dialog>,
-    document.body,
+    </dialog>
   );
 }
 
@@ -234,6 +256,7 @@ function RatioBranchRow({
   side,
   icon,
   drawerRole,
+  currentRate,
 }: {
   branch: StorageRatioBranch;
   storageId: string;
@@ -242,6 +265,7 @@ function RatioBranchRow({
   side: "input" | "output";
   icon?: ResourceAmount;
   drawerRole?: StorageRole;
+  currentRate: string;
 }) {
   const setPercentage = useFactoryStore((s) => s.setRatioBranchPercentage);
   const percentage = Number((branch.share * 100).toFixed(4));
@@ -284,7 +308,7 @@ function RatioBranchRow({
   }, []);
   return (
     <div
-      className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-[var(--mc-36)] py-1 last:border-b-0 ${!branch.edges.length ? "-mx-4 border-t border-t-[var(--flow-output)] bg-[color-mix(in_srgb,var(--flow-output)_10%,transparent)] px-4 text-[var(--flow-output)]" : ""}`}
+      className={`grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 border-b border-[var(--mc-36)] py-1 last:border-b-0 ${!branch.edges.length ? "-mx-4 border-t border-t-[var(--flow-output)] bg-[color-mix(in_srgb,var(--flow-output)_10%,transparent)] px-4 text-[var(--flow-output)]" : ""}`}
     >
       <label
         htmlFor={`ratio-percentage-${side}-${index}`}
@@ -323,6 +347,14 @@ function RatioBranchRow({
         ) : null}
         <span className="min-w-0 break-words">{name}</span>
       </label>
+      <span
+        data-ratio-rate
+        aria-label={`${name} current ${side === "input" ? "incoming" : "outgoing"} rate`}
+        title="Current flow"
+        className="whitespace-nowrap text-right text-[10px] tabular-nums text-[var(--mc-ink-muted)] opacity-70"
+      >
+        {currentRate}
+      </span>
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -364,6 +396,7 @@ function RatioBranchRow({
             }}
             onBlur={(event) => commit(event.target.value)}
             onKeyDown={(event) => {
+              if (event.key === "Escape") return;
               event.stopPropagation();
               if (event.key === "Enter") event.currentTarget.blur();
               if (event.key === "ArrowUp" || event.key === "ArrowDown") {

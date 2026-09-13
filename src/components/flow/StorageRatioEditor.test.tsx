@@ -37,7 +37,7 @@ function board(): FactoryProject {
   };
 }
 beforeEach(() => {
-  HTMLDialogElement.prototype.showModal = function () {
+  HTMLDialogElement.prototype.show = function () {
     this.setAttribute("open", "");
   };
   HTMLDialogElement.prototype.close = function () {
@@ -47,7 +47,71 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  useFactoryStore.getState().setRateUnit(initial.rateUnit);
   useFactoryStore.setState(initial);
+});
+
+it("shows actual transfers including stopped branches, and follows the rate unit", () => {
+  const project = board();
+  const edgeResults = Object.fromEntries(
+    project.edges.map((edge) => [
+      edge.id,
+      {
+        edgeId: edge.id,
+        resource: {
+            key: "item:iron" as const,
+          kind: "item" as const,
+          resourceId: "iron",
+          amountPerSecond: 100,
+        },
+        transferredPerSecond: edge.id === "feed" ? 8 : edge.id === "Rod" ? 6 : 0,
+        demandPerSecond: 100,
+        nameplateDemandPerSecond: 100,
+        sourceCapacityPerSecond: 100,
+        isLimited: true,
+        constraint: "supply" as const,
+      },
+    ]),
+  );
+  useFactoryStore.setState({
+    project,
+    lastResult: {
+      ...initial.lastResult,
+      edges: edgeResults,
+      storages: {
+        split: {
+          storageId: "split",
+          kind: "item",
+          resourceId: "iron",
+          storedAmount: 0,
+          capacity: 100,
+          producedPerSecond: 8,
+          consumedPerSecond: 6,
+          netPerSecond: 2,
+          status: "filling",
+        },
+      },
+    },
+  });
+  useFactoryStore.getState().setRateUnit("second");
+  render(<StorageRatioEditor />);
+  act(() => openRatioEditor("split"));
+  expect(screen.getByLabelText("Product current outgoing rate").textContent).toBe("0/s");
+  expect(screen.getByLabelText("Byproduct current outgoing rate").textContent).toBe("6/s");
+  expect(screen.getByLabelText("Source current incoming rate").textContent).toBe("8/s");
+  expect(screen.getByLabelText("Setup output current outgoing rate").textContent).toBe("2/s");
+  act(() => useFactoryStore.getState().setRateUnit("minute"));
+  expect(screen.getByLabelText("Source current incoming rate").textContent).toBe("480/min");
+  expect(screen.getByLabelText("Product current outgoing rate").textContent).toBe("0/min");
+  act(() =>
+    useFactoryStore.setState({
+      lastResult: {
+        ...useFactoryStore.getState().lastResult,
+        edges: { ...edgeResults, Plate: { ...edgeResults.Plate, transferredPerSecond: 1 } },
+      },
+    }),
+  );
+  expect(screen.getByLabelText("Product current outgoing rate").textContent).toBe("60/min");
 });
 
 it("only opens explicitly, commits on Close, and reopens saved percentages", () => {
@@ -94,7 +158,7 @@ it("scrolls percentages within 0–100, rejects invalid input, and closes on Esc
   fireEvent.change(input, { target: { value: "-5" } });
   fireEvent.blur(input);
   expect(input.value).toBe("0");
-  fireEvent(screen.getByRole("dialog"), new Event("cancel", { cancelable: true }));
+  fireEvent.keyDown(input, { key: "Escape" });
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
