@@ -193,20 +193,23 @@ export function PoolWorksheet() {
         ) : null}
         <table className="pool-sheet-table" aria-label="Recipes running in the pool">
           <colgroup>
-            <col className="pool-col-recipe" />
-            <col className="pool-col-io" />
-            <col className="pool-col-io" />
+            <col className="pool-col-status" />
             <col className="pool-col-machine" />
+            <col className="pool-col-io" />
+            <col className="pool-col-io" />
+
             <col className="pool-col-count" />
             <col className="pool-col-power" />
           </colgroup>
           <thead>
             <tr>
-              <th>Recipe</th>
+              <th>Status</th>
+              <th>Machine / settings</th>
               <th>Takes</th>
               <th>Makes</th>
-              <th>Machine / configuration</th>
-              <th>Required</th>
+              <th title="Calculated machine capacity for this configuration. A fractional count uses part of one machine. Pin a count below to set it manually; Auto lets the solver choose.">
+                Machines
+              </th>
               <th>
                 Power <small>{powerDisplaySuffix()}</small>
               </th>
@@ -260,7 +263,6 @@ const MachineRows = memo(function MachineRows({
         <tr key={section.section}>
           <td>
             <div className="pool-recipe-identity">
-              <span title={section.recipe?.name}>{section.recipe?.name ?? "Missing recipe"}</span>
               <Status section={section} />
             </div>
             {sections.length > 1 ? (
@@ -281,6 +283,55 @@ const MachineRows = memo(function MachineRows({
               </div>
             ) : null}
           </td>
+          {index === 0 ? (
+            <td rowSpan={sections.length} className="pool-shared-cell">
+              {first.recipe ? (
+                <RecipeNodeEditor
+                  data={{ projectNode: owner, recipe: first.recipe, result: first.result }}
+                />
+              ) : (
+                <span>{label}</span>
+              )}
+              <div className="pool-row-actions">
+                {!readOnly ? (
+                  <>
+                    <button
+                      type="button"
+                      className="pool-sheet-icon-button"
+                      aria-label={owner.enabled ? "Disable machine" : "Enable machine"}
+                      onClick={() => updateNode(owner.id, { enabled: !owner.enabled })}
+                    >
+                      <Power />
+                    </button>
+                    <button
+                      type="button"
+                      className="pool-sheet-icon-button"
+                      aria-label="Duplicate machine"
+                      onClick={() => useFactoryStore.getState().duplicateNode(owner.id)}
+                    >
+                      <Copy />
+                    </button>
+                    <button
+                      type="button"
+                      className="pool-sheet-icon-button"
+                      aria-label="Replace recipe"
+                      onClick={() => useFactoryStore.getState().beginRecipeRefactor(owner.id)}
+                    >
+                      <RefreshCw />
+                    </button>
+                    <button
+                      type="button"
+                      className="pool-sheet-icon-button"
+                      aria-label="Remove machine"
+                      onClick={() => useFactoryStore.getState().deleteNode(owner.id)}
+                    >
+                      <Trash2 />
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            </td>
+          ) : null}
           <td>
             <PortList
               ports={section.ports.inputs}
@@ -295,75 +346,33 @@ const MachineRows = memo(function MachineRows({
           {index === 0 ? (
             <>
               <td rowSpan={sections.length} className="pool-shared-cell">
-                {first.recipe ? (
-                  <RecipeNodeEditor
-                    data={{ projectNode: owner, recipe: first.recipe, result: first.result }}
-                  />
-                ) : (
-                  <span>{label}</span>
-                )}
-                <div className="pool-row-actions">
-                  {!readOnly ? (
-                    <>
-                      <button
-                        type="button"
-                        className="pool-sheet-icon-button"
-                        aria-label={owner.enabled ? "Disable machine" : "Enable machine"}
-                        onClick={() => updateNode(owner.id, { enabled: !owner.enabled })}
-                      >
-                        <Power />
-                      </button>
-                      <button
-                        type="button"
-                        className="pool-sheet-icon-button"
-                        aria-label="Duplicate machine"
-                        onClick={() => useFactoryStore.getState().duplicateNode(owner.id)}
-                      >
-                        <Copy />
-                      </button>
-                      <button
-                        type="button"
-                        className="pool-sheet-icon-button"
-                        aria-label="Replace recipe"
-                        onClick={() => useFactoryStore.getState().beginRecipeRefactor(owner.id)}
-                      >
-                        <RefreshCw />
-                      </button>
-                      <button
-                        type="button"
-                        className="pool-sheet-icon-button"
-                        aria-label="Remove machine"
-                        onClick={() => useFactoryStore.getState().deleteNode(owner.id)}
-                      >
-                        <Trash2 />
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-              </td>
-              <td rowSpan={sections.length} className="pool-shared-cell">
-                <span className="pool-count">{formatMachineListCount(required)}</span>
+                <span className="pool-count" title="Calculated machine capacity at these settings">
+                  <span className="pool-count-label">Need</span> ×{formatMachineListCount(required)}
+                </span>
                 {first.recipe && isCustomRateRecipe(first.recipe) ? null : readOnly ? (
                   <small>
                     {owner.solvePin ? `Pinned ${formatMachineListCount(owner.solvePin)}` : "Auto"}
                   </small>
                 ) : (
-                  <WorksheetNumber
-                    key={owner.solvePin ?? "auto"}
-                    value={owner.solvePin}
-                    min={0}
-                    label={
-                      first.recipe && isCropProductionRecipe(first.recipe)
-                        ? "Pinned seed count"
-                        : "Pinned machine count"
-                    }
-                    placeholder={
-                      first.recipe && isCropProductionRecipe(first.recipe) ? "Seeds" : "Auto"
-                    }
-                    onCommit={(solvePin) =>
-                      updateNode(owner.id, { solvePin: solvePin || undefined })
-                    }
-                  />
+                  <label className="pool-pin-count">
+                    <span className="pool-count-label">Pin</span>
+                    <WorksheetNumber
+                      key={owner.solvePin ?? "auto"}
+                      value={owner.solvePin}
+                      min={0}
+                      label={
+                        first.recipe && isCropProductionRecipe(first.recipe)
+                          ? "Pinned seed count"
+                          : "Pinned machine count"
+                      }
+                      placeholder={
+                        first.recipe && isCropProductionRecipe(first.recipe) ? "Seeds" : "Auto"
+                      }
+                      onCommit={(solvePin) =>
+                        updateNode(owner.id, { solvePin: solvePin || undefined })
+                      }
+                    />
+                  </label>
                 )}
               </td>
               <td rowSpan={sections.length} className="pool-shared-cell">
@@ -391,11 +400,13 @@ function Status({ section }: { section: WorksheetSection }) {
     <MinecraftTooltip
       content={() => <RecipeTooltip view={buildStatusTooltip(section.verdict, "pool")} />}
     >
-      <small className={`pool-status pool-status--${section.verdict.kind}`}>
+      <span
+        className={`pool-status pool-status--${section.result?.powerStalled ? "power-stalled" : section.verdict.kind}`}
+      >
         {section.result?.powerStalled
           ? "Power stalled"
           : (labels[section.verdict.kind] ?? section.verdict.kind)}
-      </small>
+      </span>
     </MinecraftTooltip>
   );
 }
