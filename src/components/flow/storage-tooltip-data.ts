@@ -137,7 +137,7 @@ export function buildDrainKeyTooltip(role: StorageRole, next: string): RecipeToo
 }
 
 export function buildBufferKeyTooltip(mode: StorageBufferMode): RecipeTooltipView {
-  if (mode === "ratio") return { title: "Ratio", subtitle: "Fixed output shares", rows: [], actions: NEXT_ACTION("overflow") };
+  if (mode === "ratio") return { title: "Ratio", subtitle: "Incoming, outgoing and setup output", rows: [], actions: NEXT_ACTION("overflow") };
   return mode === "strict"
     ? { title: "Strict", subtitle: "Surplus stalls the feeder", rows: [], actions: NEXT_ACTION("ratio") }
     : { title: "Non-strict", subtitle: "Surplus stored", rows: [], actions: NEXT_ACTION("strict") };

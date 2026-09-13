@@ -51,8 +51,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-09-12",
     headline: "Choose your drawer's split",
     notes: [
-      "Drawers and tanks have a third mode: Ratio, which divides incoming supply between outgoing wires in your chosen proportions.",
-      "Each output shows its percentage where the wire leaves the drawer. The bottom pencil opens a compact split editor: type or scroll parts such as 1000:20 or 1:1.",
+      "Drawers and tanks have a third mode: Ratio, with separate incoming and outgoing percentages and a Setup output share for unwired surplus.",
+      "The bottom pencil opens a compact editor with machine icons, directly editable percentages and Equal split buttons. Wire percentages stay readable beside the drawer.",
       "Ratio mode holds the split when a branch backs up, in both Build and Solve.",
     ],
   },

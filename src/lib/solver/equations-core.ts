@@ -160,7 +160,7 @@ export function solveEquationsCore(
     if (role === "product" || role === "byproduct" || role === "trash") {
       return "sink";
     }
-    return storage.bufferMode === "strict" || storage.bufferMode === "ratio" ? "strict-buffer" : "buffer";
+    return storage.bufferMode === "strict" || (storage.bufferMode === "ratio" && (storage.ratioExportPercent ?? 0) <= 0) ? "strict-buffer" : "buffer";
   };
 
   const flowVar = new Map<string, number>();

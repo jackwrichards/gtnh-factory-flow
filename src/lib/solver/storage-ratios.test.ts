@@ -7,7 +7,11 @@ import {
 } from "@/lib/model/types";
 import { factoryProjectSchema, factoryEdgeSchema } from "@/lib/model/schemas";
 import { normalizeLoadedProject } from "@/lib/model/project-normalize";
-import { formatRatioShare, getProjectRatioBranches } from "@/lib/model/storage-ratios";
+import {
+  formatRatioShare,
+  getProjectRatioBranches,
+  setStorageRatioPercentage,
+} from "@/lib/model/storage-ratios";
 import { calculateThroughput } from "./throughput";
 import { useFactoryStore } from "@/store/factory-store";
 
@@ -69,6 +73,171 @@ function board(weights = [1, 1], kind: ResourceKind = "item"): FactoryProject {
 }
 
 const run = (project: FactoryProject) => calculateThroughput(project, { generatedAt: "fixed" });
+
+describe("input percentages and export", () => {
+  it("equalizes each side in one undo step while preserving Setup output", () => {
+    let project = setStorageRatioPercentage(twoFeeds(), "split", "in", 80, "input");
+    project = setStorageRatioPercentage(project, "split", "branch0", 75);
+    project = setStorageRatioPercentage(project, "split", undefined, 20);
+    useFactoryStore.getState().setProject(project);
+    const history = useFactoryStore.getState().undoHistory.length;
+    useFactoryStore.getState().equalizeRatioBranches("split", "output");
+    const equal = useFactoryStore.getState().project;
+    expect(
+      getProjectRatioBranches(equal)
+        .get("split")!
+        .map((branch) => branch.share),
+    ).toEqual([0.4, 0.4]);
+    expect(equal.storages!.find((storage) => storage.id === "split")!.ratioExportPercent).toBe(20);
+    expect(useFactoryStore.getState().undoHistory.length).toBe(history + 1);
+    expect(getProjectRatioBranches(equal, "input").get("split")![0].share).toBeCloseTo(0.8);
+    useFactoryStore.getState().undo();
+    expect(
+      getProjectRatioBranches(useFactoryStore.getState().project).get("split")![0].share,
+    ).toBeCloseTo(0.6);
+    useFactoryStore.getState().equalizeRatioBranches("split", "input");
+    expect(
+      getProjectRatioBranches(useFactoryStore.getState().project, "input")
+        .get("split")!
+        .map((branch) => branch.share),
+    ).toEqual([0.5, 0.5]);
+  });
+  it("reopens zeroed wired branches without enabling Setup output implicitly", () => {
+    const closed = setStorageRatioPercentage(board(), "split", "branch0", 100);
+    const restored = setStorageRatioPercentage(closed, "split", "branch0", 75);
+    expect(restored.storages!.find((storage) => storage.id === "split")!.ratioExportPercent).toBe(
+      0,
+    );
+    expect(
+      getProjectRatioBranches(restored)
+        .get("split")!
+        .map((branch) => branch.share),
+    ).toEqual([0.75, 0.25]);
+  });
+  function twoFeeds() {
+    const project = board();
+    project.nodes.push({ ...project.nodes[0], id: "maker2" });
+    project.edges.push(
+      { ...project.edges[0], id: "feed2", target: "maker2" },
+      { ...project.edges[1], id: "in2", source: "maker2" },
+    );
+    return project;
+  }
+  it.each(["item", "fluid"] as const)("exports exactly half the incoming %s flow", (kind) => {
+    const project = setStorageRatioPercentage(board([1, 1], kind), "split", undefined, 50);
+    const result = run(project);
+    expect(result.edges.in.transferredPerSecond).toBeCloseTo(100, 3);
+    expect(result.edges.branch0.transferredPerSecond).toBeCloseTo(25, 3);
+    expect(result.edges.branch1.transferredPerSecond).toBeCloseTo(25, 3);
+    expect(result.storages.split.netPerSecond).toBeCloseTo(50, 3);
+  });
+  it("uses input ratios independently of output ratios", () => {
+    let project = setStorageRatioPercentage(twoFeeds(), "split", "in", 80, "input");
+    project = setStorageRatioPercentage(project, "split", "branch0", 60);
+    const result = run(project);
+    expect(result.edges.in.transferredPerSecond).toBeCloseTo(100, 3);
+    expect(result.edges.in2.transferredPerSecond).toBeCloseTo(25, 3);
+    expect(result.edges.branch0.transferredPerSecond).toBeCloseTo(75, 3);
+    expect(result.edges.branch1.transferredPerSecond).toBeCloseTo(50, 3);
+  });
+  it("a blocked input holds the required mix even with Export enabled", () => {
+    let project = setStorageRatioPercentage(twoFeeds(), "split", "in", 80, "input");
+    project = setStorageRatioPercentage(project, "split", undefined, 50);
+    project.nodes.find((node) => node.id === "maker2")!.enabled = false;
+    const result = run(project);
+    expect(result.edges.in.transferredPerSecond).toBeCloseTo(0, 3);
+    expect(result.storages.split.netPerSecond).toBeCloseTo(0, 3);
+  });
+  it("a backed-up output holds its share rather than becoming extra export", () => {
+    const project = setStorageRatioPercentage(board(), "split", undefined, 50);
+    project.nodes.find((node) => node.id === "line0")!.machineCount = 0.1;
+    const result = run(project);
+    expect(result.edges.in.transferredPerSecond).toBeCloseTo(40, 3);
+    expect(result.edges.branch1.transferredPerSecond).toBeCloseTo(10, 3);
+    expect(result.storages.split.netPerSecond).toBeCloseTo(20, 3);
+  });
+  it("100% Export closes the wired outputs and can return to an ordinary split", () => {
+    let project = setStorageRatioPercentage(board(), "split", undefined, 100);
+    const result = run(project);
+    expect(result.edges.branch0.transferredPerSecond).toBeCloseTo(0, 3);
+    expect(result.storages.split.netPerSecond).toBeCloseTo(100, 3);
+    project = setStorageRatioPercentage(project, "split", undefined, 20);
+    expect(
+      getProjectRatioBranches(project)
+        .get("split")!
+        .map((branch) => branch.share),
+    ).toEqual([0.4, 0.4]);
+  });
+  it("Solve provisions the selected mix and exported surplus", () => {
+    const project = setStorageRatioPercentage(twoFeeds(), "split", "in", 75, "input");
+    const exported = setStorageRatioPercentage(project, "split", undefined, 50);
+    exported.solveMode = true;
+    exported.storages!.find((storage) => storage.id === "out1")!.targetPerSecond = 10;
+    const result = run(exported);
+    expect(result.edges.in.transferredPerSecond).toBeCloseTo(30, 3);
+    expect(result.edges.in2.transferredPerSecond).toBeCloseTo(10, 3);
+    expect(result.storages.split.netPerSecond).toBeCloseTo(20, 3);
+    expect(result.nodes.maker.theoreticalMachinesRequired).toBeCloseTo(0.3, 3);
+  });
+  it("preserves other shares, groups shared-machine channels, and normalizes both totals", () => {
+    const project = board([1, 1, 2]);
+    project.edges.find((edge) => edge.id === "branch1")!.target = "line0#r1";
+    const updated = setStorageRatioPercentage(project, "split", "branch0", 75);
+    expect(
+      getProjectRatioBranches(updated)
+        .get("split")!
+        .map((branch) => branch.share),
+    ).toEqual([0.75, 0.25]);
+    expect(updated.edges.find((edge) => edge.id === "branch0")!.ratioWeight).toBe(37.5);
+    expect(updated.edges.find((edge) => edge.id === "branch1")!.ratioWeight).toBe(37.5);
+    expect(setStorageRatioPercentage(updated, "split", "branch0", 101)).toBe(updated);
+    expect(setStorageRatioPercentage(updated, "split", "gone", 50)).toBe(updated);
+    expect(setStorageRatioPercentage(updated, "split", "branch0", 75)).toBe(updated);
+  });
+  it("saves both sides and export, edits all weights in one undo step, and protects locked plans", () => {
+    useFactoryStore.getState().setProject(twoFeeds());
+    const original = useFactoryStore.getState().project;
+    const history = useFactoryStore.getState().undoHistory.length;
+    useFactoryStore.getState().setRatioBranchPercentage("split", undefined, 25);
+    expect(useFactoryStore.getState().undoHistory.length).toBe(history + 1);
+    useFactoryStore.getState().undo();
+    expect(useFactoryStore.getState().project.edges).toEqual(original.edges);
+    useFactoryStore.getState().redo();
+    useFactoryStore.getState().setRatioBranchPercentage("split", "in", 80, "input");
+    const saved = factoryProjectSchema.parse(
+      JSON.parse(JSON.stringify(useFactoryStore.getState().project)),
+    );
+    expect(saved.storages!.find((storage) => storage.id === "split")!.ratioExportPercent).toBe(25);
+    expect(
+      getProjectRatioBranches(saved, "input")
+        .get("split")!
+        .map((branch) => branch.share),
+    ).toEqual([expect.closeTo(0.8), expect.closeTo(0.2)]);
+    const current = useFactoryStore.getState().project;
+    for (const lock of ["isReadOnly", "checklistMode"] as const) {
+      useFactoryStore.setState({ [lock]: true });
+      try {
+        useFactoryStore.getState().setRatioBranchPercentage("split", undefined, 75);
+        expect(useFactoryStore.getState().project).toBe(current);
+      } finally {
+        useFactoryStore.setState({ [lock]: false });
+      }
+    }
+  });
+  it("inserting a drawer preserves the target's input percentage", () => {
+    const project = setStorageRatioPercentage(twoFeeds(), "split", "in", 80, "input");
+    useFactoryStore.getState().setProject(project);
+    useFactoryStore
+      .getState()
+      .insertStorageOnEdge(["in"], { x: 200, y: 200 }, { kind: "item", id: "iron" });
+    expect(
+      getProjectRatioBranches(useFactoryStore.getState().project, "input")
+        .get("split")!
+        .map((branch) => branch.share)
+        .sort(),
+    ).toEqual([expect.closeTo(0.2), expect.closeTo(0.8)]);
+  });
+});
 
 describe("ratio drawers", () => {
   it.each(["item", "fluid"] as const)(

@@ -8,7 +8,7 @@ import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { useViewerLock } from "./use-viewer-lock";
 import { StorageRatioEditor } from "./StorageRatioEditor";
 import { formatRatioShare, getProjectRatioBranches } from "@/lib/model/storage-ratios";
-import { ratioExitLabel } from "./ratio-exit-label";
+import { layoutRatioLabels, type RatioWireLabel } from "./ratio-label-layout";
 
 import {
   BaseEdge,
@@ -757,7 +757,7 @@ const EXPORT_PNG_PIXEL_RATIO = 2;
 const EXPORT_PNG_MAX_PIXEL_SIDE = 8192;
 const FLOW_EDGE_LABEL_SELECT_EVENT = "gtnh-flow.edge-label-select";
 type ResourceEdgeData = {
-  ratio?: { share: number; index: number };
+  ratio?: { input?: number; output?: number };
   resource: Pick<
     ResourceAmount,
     "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
@@ -3318,11 +3318,15 @@ export function FactoryFlow() {
     // What the grid solve needs about every wire, collected as the edge
     // objects are built and published in one shot below.
     const gridRouteInputs: GridRouteEdgeInput[] = [];
-    const ratioByEdge = new Map<string, { share: number; index: number }>();
+    const ratioByEdge = new Map<string, number>();
     for (const branches of getProjectRatioBranches(project).values()) {
-      branches.forEach((branch, index) => {
-        for (const edge of branch.edges) ratioByEdge.set(edge.id, { share: branch.share / branch.edges.length, index });
+      branches.forEach((branch) => {
+        for (const edge of branch.edges) ratioByEdge.set(edge.id, branch.share / branch.edges.length);
       });
+    }
+    const inputRatioByEdge = new Map<string, number>();
+    for (const branches of getProjectRatioBranches(project, "input").values()) {
+      for (const branch of branches) for (const edge of branch.edges) inputRatioByEdge.set(edge.id, branch.share / branch.edges.length);
     }
     const builtEdges = project.edges.flatMap((edge, edgeIndex) => {
       // The pocket view remap. A wire whose endpoint is collapsed inside a
@@ -3458,9 +3462,9 @@ export function FactoryFlow() {
         type: "resourceEdge",
         data: {
           resource,
-          ratio: sourceIsPocket || !ratioByEdge.has(edge.id) ? undefined : {
-            share: (channelEdgeIdsByRepresentative.get(edge.id) ?? [edge.id]).reduce((sum, id) => sum + (ratioByEdge.get(id)?.share ?? 0), 0),
-            index: ratioByEdge.get(edge.id)!.index,
+          ratio: (sourceIsPocket || !ratioByEdge.has(edge.id)) && (targetIsPocket || !inputRatioByEdge.has(edge.id)) ? undefined : {
+            output: sourceIsPocket || !ratioByEdge.has(edge.id) ? undefined : (channelEdgeIdsByRepresentative.get(edge.id) ?? [edge.id]).reduce((sum, id) => sum + (ratioByEdge.get(id) ?? 0), 0),
+            input: targetIsPocket || !inputRatioByEdge.has(edge.id) ? undefined : (channelEdgeIdsByRepresentative.get(edge.id) ?? [edge.id]).reduce((sum, id) => sum + (inputRatioByEdge.get(id) ?? 0), 0),
           },
           color: edgeColor,
           demand,
@@ -3528,6 +3532,7 @@ export function FactoryFlow() {
     });
 
     publishGridRouteEdges(gridRouteInputs);
+    publishRatioLabelInputs(builtEdges.flatMap((edge) => edge.data?.ratio ? [{ id: edge.id, ...edge.data.ratio }] : []));
 
     // Paint order IS depth, and it has to be the SAME order hop rendering
     // uses — otherwise a line hops over something that is drawn on top of it
@@ -9800,7 +9805,10 @@ function ResourceEdgeComponent({
     [isPowerEdge, liveRoute.points],
   );
   const drawnPath = lightningPath ?? liveRoute.path;
-  const ratioLabel = data?.ratio ? ratioExitLabel(liveRoute.points, data.ratio.index) : undefined;
+  const ratioLabels = data?.ratio ? getRatioLabelsForEdge(id).flatMap((label) => {
+    const point = getPointAtPolylineRatio(liveRoute.points, label.ratio);
+    return point ? [{ ...label, point }] : [];
+  }) : [];
   // The dots the user has pinned — the draft while one is mid-drag. Only
   // the DOT follows the pointer; the wire holds its route and takes the
   // real one on release. Live previews always guessed wrong.
@@ -9949,15 +9957,15 @@ function ResourceEdgeComponent({
 
   return (
     <>
-      {data?.ratio && ratioLabel ? (
-        <EdgeLabelRenderer>
-          <span data-ratio-edge={id}
-            className="pointer-events-none absolute whitespace-nowrap text-[10px] font-bold leading-3 text-[#e8e9ee] [text-shadow:1px_0_2px_#101318,-1px_0_2px_#101318,0_1px_2px_#101318,0_-1px_2px_#101318]"
-            style={{ left: ratioLabel.x, top: ratioLabel.y, transform: ratioLabel.transform }}>
-            {formatRatioShare(data.ratio.share)}
+      {ratioLabels.map((label) => (
+        <EdgeLabelRenderer key={label.key}>
+          <span data-ratio-edge={id} data-ratio-side={label.key}
+            className="pointer-events-none absolute whitespace-pre border-2 border-[var(--mc-15)] bg-[var(--mc-49)] px-1.5 py-1 text-[12px] font-bold leading-3 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25),2px_2px_0_rgba(0,0,0,0.45)]"
+            style={{ left: label.point.x, top: label.point.y, transform: "translate(-50%, -50%)" }}>
+            {label.text}
           </span>
         </EdgeLabelRenderer>
-      ) : null}
+      ))}
       {checklistMode && liveRoute.path ? (
         <ViewportPortal>
           {/* Only the invisible hit target clears port hit boxes. The visible
@@ -11503,6 +11511,31 @@ function pointsToHoppedSvgPath(
   return path;
 }
 
+// Shares and published routes are stable across camera frames. Cache the joint
+// label layout, then each edge follows its live wire using the chosen fraction.
+let ratioLabelInputs: { id: string; input?: number; output?: number }[] = [];
+let ratioLabelInputsKey = "";
+let ratioLabelLayoutKey = "";
+let ratioLabelLayout = new Map<string, RatioWireLabel[]>();
+function publishRatioLabelInputs(inputs: typeof ratioLabelInputs) {
+  const key = JSON.stringify(inputs);
+  if (key === ratioLabelInputsKey) return;
+  ratioLabelInputs = inputs;
+  ratioLabelInputsKey = key;
+}
+function getRatioLabelsForEdge(edgeId: string): RatioWireLabel[] {
+  const key = `${gridSolveSignature}|${ratioLabelInputsKey}`;
+  if (key !== ratioLabelLayoutKey) {
+    ratioLabelLayoutKey = key;
+    ratioLabelLayout = layoutRatioLabels(ratioLabelInputs.map((entry) => ({
+      id: entry.id,
+      points: getLastDirectEdgePoints(entry.id) ?? [],
+      input: entry.input === undefined ? undefined : formatRatioShare(entry.input),
+      output: entry.output === undefined ? undefined : formatRatioShare(entry.output),
+    })));
+  }
+  return ratioLabelLayout.get(edgeId) ?? [];
+}
 function getPointAtPolylineRatio(points: Array<{ x: number; y: number }>, ratio: number) {
   const segments = getPolylineSegments(points);
   const totalLength = segments.reduce((sum, segment) => sum + segment.length, 0);

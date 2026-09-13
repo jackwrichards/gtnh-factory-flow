@@ -390,6 +390,7 @@ export const factoryStorageSchema = z.object({
   // Absent means `overflow`: every buffer catches surplus unless the player
   // deliberately sets it strict.
   bufferMode: z.enum(["overflow", "strict", "ratio"]).optional(),
+  ratioExportPercent: z.number().min(0).max(100).optional(),
   // Pool mode: which side of the shared pool an unwired drawer sits on.
   poolSide: z.enum(["source", "drain"]).optional(),
   // Solve mode's requirement on a product drawer; absent = unconstrained.
@@ -477,6 +478,7 @@ export const factoryEdgeSchema = z.object({
   label: z.string().optional(),
   ratePerSecond: z.number().positive().optional(),
   ratioWeight: z.number().nonnegative().optional(),
+  ratioInputWeight: z.number().nonnegative().optional(),
   waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
   // A loose cell wire's Canner ratio; see FactoryEdge.crossForm.
   crossForm: z.object({ litresPerCell: z.number().positive() }).optional(),

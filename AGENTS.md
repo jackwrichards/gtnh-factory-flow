@@ -1367,8 +1367,12 @@ Working notes for future agents on GTNH Factory Flow.
   strip); `lineLabelsMode` stays in the plan-view type as a historical
   field nothing reads. The ports carry the numbers.
   Ratio drawers are the narrow exception (Jack's revision, 2026-09-12):
-  every outgoing wire shows its share right beside the source exit, never
-  midway down the wire. These are plain percentages, not editable pills.
+  incoming and outgoing shares have opaque, bevelled percentage labels ON
+  the wire near the ratio drawer (60 flow pixels from its end, or the middle
+  of a short wire). They never intercept gestures. Between two ratio drawers,
+  each end gets its own share; a short wire combines labelled In/Out values.
+  Crowded labels slide along their own wires using a joint layout cached by
+  route/configuration signature; no DOM measurements or route changes.
 - THE BOARD MENU (Jack, 2026-09-08): ONE right-click menu for the whole
   board, `src/components/flow/BoardContextMenu.tsx`, on React Flow's
   `onPaneContextMenu` / `onNodeContextMenu` / `onEdgeContextMenu`. The
@@ -1449,23 +1453,35 @@ Working notes for future agents on GTNH Factory Flow.
   a demand-driven one does not.
 - RATIO is the buffer's third mode (Jack, 2026-09-12), after non-strict
   (`overflow`) and strict. Same card size and any-side wiring. `ratioWeight`
-  on each outgoing edge stores nonnegative parts (absent = 1, zero closes a
-  branch); percentages normalize across the current outgoing connections.
+  owns an outgoing allocation, `ratioInputWeight` independently owns the
+  destination drawer's incoming allocation (nonnegative; absent = 1).
+  Incoming totals 100%; outgoing wires plus `ratioExportPercent` total a
+  separate 100%. The latter is called SETUP OUTPUT in the UI, defaults to 0,
+  and is the unwired surplus, reported through ordinary buffer fill/net flow.
   One drawn channel is one branch: shared-recipe slot edges to the same card
   share a combined allocation, not a fixed internal recipe mix. The model
   helper is `model/storage-ratios.ts`; both Build and Solve use the same
-  equality rows in `solver/storage-ratios.ts`. Ratio buffers cannot bank:
-  a saturated/blocked positive branch holds the split and throttles upstream.
+  equality rows in `solver/storage-ratios.ts`. Only the chosen Setup output
+  fraction may bank: outflow = inflow × (1 - export). A saturated/blocked
+  positive branch on either side holds the split and throttles upstream.
   Pool ignores the saved manual split, like its other manual wires. Switching
   away preserves weights; removing a wire renormalizes the remaining ones.
-  Inserting another drawer on a branch carries its parts onto the upstream
-  replacement wire. The editor changes a whole drawn channel in one undo step.
+  Inserting another drawer keeps outgoing weights on its upstream wire and
+  incoming weights on its downstream wire. Percentage edits redistribute the
+  other shares proportionally, in one undo step. Equal split acts on each side
+  separately and preserves Setup output when equalizing connected outlets.
   Ratio keeps the ordinary drawer colour, with a double rim and fork. No
-  combined percentage or bar on the card: EVERY outgoing share is printed at
-  its wire's exit. The bottom-centre pencil opens `StorageRatioEditor.tsx`, a
-  compact sheet matching Settings (grey plate, bevels, output/parts/share rows).
-  Switching modes NEVER opens it. No full-screen editor, blue tint, coloured
-  bars, flow rates or extra settings.
+  combined percentage or bar on the card. The bottom-centre pencil opens
+  `StorageRatioEditor.tsx`, a compact grey sheet with a CLEAR backdrop (no dim
+  or blur). Large INCOMING / OUTGOING headings, no redundant 100% totals,
+  compact icon/name/percentage rows, an Equal split button per section, and
+  a distinct green Setup output row. Percentages are directly typed/scrolled;
+  the number, percent sign and full-height up/down column form one control.
+  Header: resource icon, item name, split symbol. Peer rows name the selected
+  machine only (no recipe/product suffix), with larger machine art; drawers
+  use their role name and a matching coloured drawer icon, not the item again.
+  no Parts column. Switching modes NEVER opens it. No full-screen editor,
+  blue tint, coloured bars, flow rates or extra settings.
 - The drain pill cycles THREE ways since 2026-08-23: product, byproduct,
   trash. A TRASH drawer is the byproduct's shape (free disposal, no demand)
   with the books voided (`applyTrashedOutputBalances` covers it alongside

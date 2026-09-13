@@ -101,7 +101,7 @@ import type {
 } from "@/lib/model/types";
 import { nearestFreeSpot, type PlacementRect } from "@/components/flow/board-placement";
 import { getStorageRoles } from "@/lib/model/storage-role";
-import { edgeRatioWeight } from "@/lib/model/storage-ratios";
+import { edgeRatioWeight, setStorageRatioPercentage, equalizeStorageRatioPercentages } from "@/lib/model/storage-ratios";
 import { collectPocketMembers, expandPocketSelection } from "@/lib/model/pocket-connections";
 import { paperForBoardId, pickBoardPaper } from "@/lib/model/board-paper";
 import type { BoardCamera } from "@/lib/designs/design-camera";
@@ -737,6 +737,8 @@ interface FactoryStore {
   ) => void;
   updateEdge: (edgeId: string, patch: Partial<FactoryEdge>) => void;
   setRatioBranchWeight: (storageId: string, edgeIds: string[], weight: number) => void;
+  setRatioBranchPercentage: (storageId: string, edgeId: string | undefined, percentage: number, side?: "input" | "output") => void;
+  equalizeRatioBranches: (storageId: string, side: "input" | "output") => void;
   autoConnectNode: (nodeId: string) => void;
   optimizeMachineCount: (nodeId: string) => void;
   optimizeMachineCounts: () => void;
@@ -2686,12 +2688,17 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
           sourceHandle: outHandle,
           targetHandle: edge.targetHandle,
         });
-        if (outOf && !findDuplicateEdge(project.edges, outOf)) {
-          project = applyEdgeInputOverride(
-            { ...project, edges: [...project.edges, outOf] },
-            outOf,
-            resource,
-          );
+        if (outOf) {
+          const duplicate = findDuplicateEdge(project.edges, outOf);
+          const keepsInputRatio = edge.ratioInputWeight !== undefined || state.project.storages?.some(s => s.id === edge.target && s.bufferMode === "ratio");
+          const weight = edge.ratioInputWeight ?? 1;
+          if (!duplicate) {
+            project = applyEdgeInputOverride(
+              { ...project, edges: [...project.edges, keepsInputRatio ? { ...outOf, ratioInputWeight: weight } : outOf] }, outOf, resource,
+            );
+          } else if (keepsInputRatio) {
+            project = { ...project, edges: project.edges.map(e => e.id === duplicate.id ? { ...e, ratioInputWeight: Math.min(Number.MAX_VALUE, (e.ratioInputWeight ?? 1) + weight) } : e) };
+          }
         }
       }
       const finalProject = touchProject(pruneOrphanStorages(project));
@@ -4305,6 +4312,24 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         project,
         lastResult: solveBooks(project),
       });
+    });
+  },
+  setRatioBranchPercentage: (storageId, edgeId, percentage, side = "output") => {
+    set((state) => {
+      if (state.isReadOnly || state.checklistMode) return state;
+      const updated = setStorageRatioPercentage(state.project, storageId, edgeId, percentage, side);
+      if (updated === state.project) return state;
+      const project = touchProject(updated);
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  equalizeRatioBranches: (storageId, side) => {
+    set((state) => {
+      if (state.isReadOnly || state.checklistMode) return state;
+      const updated = equalizeStorageRatioPercentages(state.project, storageId, side);
+      if (updated === state.project) return state;
+      const project = touchProject(updated);
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
     });
   },
   setRatioBranchWeight: (storageId, edgeIds, weight) => {
