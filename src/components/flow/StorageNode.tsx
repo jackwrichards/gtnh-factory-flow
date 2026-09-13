@@ -34,6 +34,8 @@ import { GT_NODE_COLORS } from "./node-colors";
 import { getPaintBrushCursor } from "./paint-cursor";
 import { hasAnySolveNumbers } from "@/lib/solver/throughput";
 import { openRatioEditor } from "./ratio-editor";
+import { RatioSetupOutput } from "./RatioWireLabel";
+import { ratioExportShare } from "@/lib/model/storage-ratios";
 
 
 export interface StorageNodeData extends Record<string, unknown> {
@@ -563,10 +565,13 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
                 )}
                 className={role === "buffer" && storage.bufferMode === "ratio" ? "!h-[24px] !w-[24px]" : "!h-[36px] !w-[36px]"}
               />
-              {role === "buffer" && storage.bufferMode === "ratio" ? <Split aria-hidden className="h-5 w-5 text-[#e8e9ee]" /> : null}
+              {role === "buffer" && storage.bufferMode === "ratio" ? <RatioSetupOutput storageId={storage.id} percentage={ratioExportShare(storage) * 100} /> : null}
             </div>
             {role === "buffer" && storage.bufferMode === "ratio" ? (
-              <RatioSplitButton storageId={storage.id} />
+              <div className="relative mx-auto flex w-[76px] items-center justify-center gap-1">
+                <NetLine net={net} kind={storage.kind} role={role} />
+                <RatioSplitButton storageId={storage.id} />
+              </div>
             ) : solveMode && role === "product" ? (
               <TargetLine storage={storage} result={result} />
             ) : (
@@ -903,7 +908,7 @@ function RatioSplitButton({ storageId }: { storageId: string }) {
     <button type="button" data-tooltip-stop aria-label="Edit drawer ratios" title="Edit split"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => { event.stopPropagation(); openRatioEditor(storageId); }}
-      className="board-edit-chrome nodrag nopan relative z-40 mx-auto mb-0.5 flex h-4 w-6 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+      className="board-edit-chrome nodrag nopan relative z-40 mb-0.5 flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
     >
       <Pencil aria-hidden className="h-2.5 w-2.5" />
     </button>

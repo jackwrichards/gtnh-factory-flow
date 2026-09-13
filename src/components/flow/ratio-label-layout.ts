@@ -16,29 +16,39 @@ export function ratioLabelBounds(text: string, point: Point) {
   };
 }
 
-/** Suppress the whole arrowhead when it would touch a badge, in flow coordinates. */
-export function arrowOverlapsRatioLabel(
-  polygon: string,
-  labels: readonly ReturnType<typeof ratioLabelBounds>[],
+/** Write on the existing triangle nearest the drawer. Never change the arrows. */
+export function labelRatioArrows(
+  arrows: readonly string[],
+  labels: readonly (RatioWireLabel & { point: Point })[],
 ) {
-  if (!labels.length) return false;
-  const vertices = polygon
-    .trim()
-    .split(/\s+/)
-    .map((point) => point.split(",").map(Number));
-  const xs = vertices.map(([x]) => x),
-    ys = vertices.map(([, y]) => y);
-  const left = Math.min(...xs),
-    right = Math.max(...xs),
-    top = Math.min(...ys),
-    bottom = Math.max(...ys);
-  return labels.some(
-    (label) =>
-      right >= label.x - label.width / 2 - 4 &&
-      left <= label.x + label.width / 2 + 4 &&
-      bottom >= label.y - label.height / 2 - 4 &&
-      top <= label.y + label.height / 2 + 4,
-  );
+  if (!arrows.length || !labels.length) return [];
+  const centers = arrows.map((arrow) => {
+    const vertices = arrow
+      .trim()
+      .split(/\s+/)
+      .map((point) => point.split(",").map(Number));
+    return {
+      x: vertices.reduce((sum, [x]) => sum + x, 0) / vertices.length,
+      y: vertices.reduce((sum, [, y]) => sum + y, 0) / vertices.length,
+    };
+  });
+  const placed = new Map<number, RatioWireLabel & { point: Point }>();
+  for (const label of labels) {
+    let nearest = 0;
+    for (let i = 1; i < centers.length; i++)
+      if (
+        Math.hypot(centers[i].x - label.point.x, centers[i].y - label.point.y) <
+        Math.hypot(centers[nearest].x - label.point.x, centers[nearest].y - label.point.y)
+      )
+        nearest = i;
+    const previous = placed.get(nearest);
+    placed.set(nearest, {
+      ...label,
+      point: centers[nearest],
+      ...(previous ? { key: "both", text: `${previous.text}\n${label.text}` } : {}),
+    });
+  }
+  return [...placed.values()];
 }
 
 /** One layout per published route/configuration change. No DOM or viewport inputs.

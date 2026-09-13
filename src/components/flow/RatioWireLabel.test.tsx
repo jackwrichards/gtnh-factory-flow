@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useFactoryStore } from "@/store/factory-store";
 import { getProjectRatioBranches } from "@/lib/model/storage-ratios";
-import { RatioWireLabel } from "./RatioWireLabel";
+import { RatioSetupOutput, RatioWireLabel } from "./RatioWireLabel";
 
 const initial = useFactoryStore.getState();
 beforeEach(() => {
@@ -57,6 +57,20 @@ function show() {
     />,
   );
 }
+
+it("scrolls Setup output on the drawer and redistributes its wired outgoing shares", () => {
+  render(<RatioSetupOutput storageId="a" percentage={0} />);
+  const control = screen.getByRole("spinbutton", { name: "Setup output percentage" });
+  expect(control.hasAttribute("title")).toBe(false);
+  fireEvent.wheel(control, { deltaY: -100, shiftKey: true });
+  expect(
+    useFactoryStore.getState().project.storages?.find((s) => s.id === "a")?.ratioExportPercent,
+  ).toBe(10);
+  expect(share("a", "output")).toBeCloseTo(45);
+  expect(share("b", "input")).toBe(50);
+  act(() => useFactoryStore.getState().undo());
+  expect(share("a", "output")).toBe(50);
+});
 it("edits both sides independently, consumes wheel events, and reads fresh percentages during a burst", () => {
   show();
   const output = screen.getByRole("spinbutton", { name: "Outgoing percentage" });

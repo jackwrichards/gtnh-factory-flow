@@ -1,13 +1,19 @@
 import { expect, it } from "vitest";
-import { arrowOverlapsRatioLabel, layoutRatioLabels, ratioLabelBounds } from "./ratio-label-layout";
+import { labelRatioArrows, layoutRatioLabels } from "./ratio-label-layout";
 
-it("clears horizontal, vertical and diagonal arrowheads from the entire badge", () => {
-  const labels = [ratioLabelBounds("50%", { x: 60, y: 60 })];
-  for (const arrow of ["80,60 64,68 64,52", "60,80 52,64 68,64", "80,80 60,65 65,60"])
-    expect(arrowOverlapsRatioLabel(arrow, labels)).toBe(true);
-  expect(arrowOverlapsRatioLabel("150,60 134,68 134,52", labels)).toBe(false);
-  expect(arrowOverlapsRatioLabel("60,60 44,68 44,52", [])).toBe(false);
-  expect(ratioLabelBounds("Out 50%\nIn 25%", { x: 0, y: 0 }).height).toBe(36);
+it("puts percentages on the existing arrows without changing their shapes or positions", () => {
+  const arrows = ["90,0 60,15 60,-15", "210,0 180,15 180,-15"];
+  const original = [...arrows];
+  const labels = labelRatioArrows(arrows, [
+    { key: "output", text: "Out 50%", ratio: 0.2, point: { x: 60, y: 0 } },
+    { key: "input", text: "In 25%", ratio: 0.8, point: { x: 210, y: 0 } },
+  ]);
+  expect(labels.map((label) => label.point)).toEqual([
+    { x: 70, y: 0 },
+    { x: 190, y: 0 },
+  ]);
+  expect(arrows).toEqual(original);
+  expect(labelRatioArrows(arrows.slice(0, 1), labels)[0].text).toBe("Out 50%\nIn 25%");
 });
 
 it("places incoming and outgoing shares close to the corresponding drawer", () => {

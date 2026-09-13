@@ -1371,7 +1371,9 @@ Working notes for future agents on GTNH Factory Flow.
   the wire near the ratio drawer (60 flow pixels from its end, or the middle
   of a short wire). Scroll a badge to edit that branch by 1% (Shift: 10%),
   without zooming the board. Combined badges edit each side independently.
-  Arrowheads touching a badge are hidden using flow-space bounds; other arrows stay.
+  Each number sits directly on the nearest existing wire triangle. Keep its
+  original shape, colour and position. No hover tooltip or special cursor. The drawer
+  itself shows a green scrollable Setup output percentage and its ordinary net rate.
   Between two ratio drawers,
   each end gets its own share; a short wire combines labelled In/Out values.
   Ratio percentages obey EDGE_DETAIL_LABELS and disappear at glance LOD.

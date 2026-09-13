@@ -1,7 +1,12 @@
 "use client";
 
 import { memo, useEffect, useRef } from "react";
-import { getProjectRatioBranches } from "@/lib/model/storage-ratios";
+import {
+  formatRatioShare,
+  getProjectRatioBranches,
+  ratioExportShare,
+} from "@/lib/model/storage-ratios";
+import { ArrowUpRight } from "lucide-react";
 import { useFactoryStore } from "@/store/factory-store";
 import type { RatioWireLabel as Label } from "./ratio-label-layout";
 
@@ -23,8 +28,12 @@ export const RatioWireLabel = memo(function RatioWireLabel({
     <span
       data-ratio-edge={edgeId}
       data-ratio-side={label.key}
-      className={`${locked ? "pointer-events-none" : "pointer-events-auto"} nodrag nopan nowheel absolute whitespace-pre border-2 border-[var(--mc-15)] bg-[var(--mc-49)] px-1.5 py-1 text-[12px] font-bold leading-3 text-[var(--mc-ink)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25),2px_2px_0_rgba(0,0,0,0.45)]`}
-      style={{ left: label.point.x, top: label.point.y, transform: "translate(-50%, -50%)" }}
+      className={`${locked ? "pointer-events-none" : "pointer-events-auto"} nodrag nopan nowheel absolute flex flex-col justify-center whitespace-pre text-center text-[10px] font-bold leading-[10px] text-[#20242b]`}
+      style={{
+        left: label.point.x,
+        top: label.point.y,
+        transform: "translate(-50%, -50%)",
+      }}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
@@ -47,10 +56,56 @@ export const RatioWireLabel = memo(function RatioWireLabel({
   );
 });
 
-function adjust(edgeId: string, side: "input" | "output", delta: number) {
+export function RatioSetupOutput({
+  storageId,
+  percentage,
+}: {
+  storageId: string;
+  percentage: number;
+}) {
+  const locked = useFactoryStore(
+    (s) => s.isReadOnly || s.checklistMode || Boolean(s.project.poolMode),
+  );
+  return (
+    <span
+      data-ratio-setup-output={storageId}
+      data-tooltip-stop
+      className="nodrag nopan nowheel relative z-40 flex h-5 items-center gap-0.5 border border-[var(--flow-output)]/40 bg-[var(--flow-output)]/10 px-1 text-[10px] font-bold leading-4 text-[var(--flow-output)]"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+    >
+      <ArrowUpRight aria-hidden className="h-3 w-3" />
+      <WirePercentage
+        storageId={storageId}
+        side="export"
+        text={formatRatioShare(percentage / 100)}
+        share={percentage / 100}
+        locked={locked}
+      />
+    </span>
+  );
+}
+
+function adjust(
+  edgeId: string | undefined,
+  side: "input" | "output" | "export",
+  delta: number,
+  exportStorageId?: string,
+) {
   // Read the current branch on each gesture, including rapid wheel events before React renders.
   const state = useFactoryStore.getState();
   if (state.isReadOnly || state.checklistMode || state.project.poolMode) return;
+  if (side === "export") {
+    const storage = state.project.storages?.find((storage) => storage.id === exportStorageId);
+    if (storage)
+      state.setRatioBranchPercentage(
+        storage.id,
+        undefined,
+        Math.max(0, Math.min(100, ratioExportShare(storage) * 100 + delta)),
+      );
+    return;
+  }
   const edge = state.project.edges.find((edge) => edge.id === edgeId);
   if (!edge) return;
   const storageId = side === "input" ? edge.target : edge.source;
@@ -72,9 +127,11 @@ function WirePercentage({
   text,
   share,
   locked,
+  storageId,
 }: {
-  edgeId: string;
-  side: "input" | "output";
+  edgeId?: string;
+  storageId?: string;
+  side: "input" | "output" | "export";
   text: string;
   share: number;
   locked: boolean;
@@ -87,29 +144,33 @@ function WirePercentage({
       event.preventDefault();
       event.stopPropagation();
       if (event.deltaY)
-        adjust(edgeId, side, (event.deltaY < 0 ? 1 : -1) * (event.shiftKey ? 10 : 1));
+        adjust(edgeId, side, (event.deltaY < 0 ? 1 : -1) * (event.shiftKey ? 10 : 1), storageId);
     };
     element.addEventListener("wheel", wheel, { passive: false });
     return () => element.removeEventListener("wheel", wheel);
-  }, [edgeId, side, locked]);
+  }, [edgeId, side, locked, storageId]);
   return (
     <span
       ref={ref}
       data-ratio-control={side}
       role="spinbutton"
       tabIndex={locked ? -1 : 0}
-      aria-label={`${side === "input" ? "Incoming" : "Outgoing"} percentage`}
+      aria-label={`${side === "export" ? "Setup output" : side === "input" ? "Incoming" : "Outgoing"} percentage`}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={share * 100}
       aria-disabled={locked}
-      title={locked ? undefined : "Scroll to adjust · Shift for 10%"}
-      className={`block ${locked ? "" : "cursor-ns-resize hover:text-white focus-visible:outline focus-visible:outline-1"}`}
+      className="relative block focus-visible:outline focus-visible:outline-1"
       onKeyDown={(event) => {
         if (locked || (event.key !== "ArrowUp" && event.key !== "ArrowDown")) return;
         event.preventDefault();
         event.stopPropagation();
-        adjust(edgeId, side, (event.key === "ArrowUp" ? 1 : -1) * (event.shiftKey ? 10 : 1));
+        adjust(
+          edgeId,
+          side,
+          (event.key === "ArrowUp" ? 1 : -1) * (event.shiftKey ? 10 : 1),
+          storageId,
+        );
       }}
     >
       {text}

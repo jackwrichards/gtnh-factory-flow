@@ -8,7 +8,7 @@ import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { useViewerLock } from "./use-viewer-lock";
 import { StorageRatioEditor } from "./StorageRatioEditor";
 import { formatRatioShare, getProjectRatioBranches } from "@/lib/model/storage-ratios";
-import { arrowOverlapsRatioLabel, layoutRatioLabels, ratioLabelBounds, type RatioWireLabel } from "./ratio-label-layout";
+import { labelRatioArrows, layoutRatioLabels, type RatioWireLabel } from "./ratio-label-layout";
 import { RatioWireLabel as RatioWireLabelControl } from "./RatioWireLabel";
 
 import {
@@ -9747,10 +9747,10 @@ function ResourceEdgeComponent({
   });
   const visualSource = visualSourceCandidates[0];
   const visualTarget = visualTargetCandidates[0];
-  // Direction has one voice: the marching dashes when pulse mode is on,
-  // arrows when it is off - at every zoom, larger at a glance.
+  // Ratio percentages use the ordinary triangles as their canvas controls,
+  // including in pulse mode. Other wires use dashes or arrows, never both.
   const showArrowHead =
-    flowRate?.pulse !== true &&
+    (flowRate?.pulse !== true || (data?.ratio && hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS))) &&
     (isHighlighted || hasEdgeDetail(detailLevel, EDGE_DETAIL_ARROWS));
   // Every wire routes individually through the board-wide grid solve — the
   // solve's lane sharing is what makes a fan-out ride as one ribbon, which
@@ -9806,11 +9806,11 @@ function ResourceEdgeComponent({
     [isPowerEdge, liveRoute.points],
   );
   const drawnPath = lightningPath ?? liveRoute.path;
-  const ratioLabels = data?.ratio && hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS) ? getRatioLabelsForEdge(id).flatMap((label) => {
+  const routeArrows = showArrowHead ? getRouteArrows(liveRoute.points, coreStrokeWidth, isGlobalView) : [];
+  const ratioLabels = data?.ratio && hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS) ? labelRatioArrows(routeArrows, getRatioLabelsForEdge(id).flatMap((label) => {
     const point = getPointAtPolylineRatio(liveRoute.points, label.ratio);
     return point ? [{ ...label, point }] : [];
-  }) : [];
-  const ratioLabelRects = ratioLabels.map((label) => ratioLabelBounds(label.text, label.point));
+  })) : [];
   // The dots the user has pinned — the draft while one is mid-drag. Only
   // the DOT follows the pointer; the wire holds its route and takes the
   // real one on release. Live previews always guessed wrong.
@@ -10100,7 +10100,7 @@ function ResourceEdgeComponent({
           each end and one every few cells along a long run, never across a
           corner. At a glance they draw double size so they survive the zoom. */}
       {showArrowHead
-        ? getRouteArrows(liveRoute.points, coreStrokeWidth, isGlobalView).filter((arrow) => !arrowOverlapsRatioLabel(arrow, ratioLabelRects)).map((arrow, index) => (
+        ? routeArrows.map((arrow, index) => (
             <polygon
               key={index}
               data-resource-edge-arrow={id}
