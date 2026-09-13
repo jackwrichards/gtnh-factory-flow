@@ -18,6 +18,8 @@ import { isCompactViewport } from "./compact-view";
  * never wants to see it on any board.
  */
 export interface WorkspaceView {
+  /** Pool's worksheet is a personal view, never a different solve or saved plan. */
+  poolWorksheet: boolean;
   /** The recipe browser / pockets / setups column on the left. */
   leftPanelOpen: boolean;
   /** The resource flow panel on the right. */
@@ -48,6 +50,7 @@ export interface WorkspaceView {
 const WORKSPACE_VIEW_STORAGE_KEY = "gtnh-factory-flow-workspace-view";
 
 export const DEFAULT_WORKSPACE_VIEW: WorkspaceView = {
+  poolWorksheet: false,
   leftPanelOpen: true,
   rightPanelOpen: true,
   showHiddenResources: false,
@@ -105,6 +108,7 @@ function readWorkspaceView(): WorkspaceView {
     const starred = new Set(favouriteResourceKeys);
 
     return {
+      poolWorksheet: flag(parsed.poolWorksheet, false),
       favouriteResourceKeys,
       hiddenResourceKeys: keys(parsed.hiddenResourceKeys).filter((key) => !starred.has(key)),
       leftPanelOpen: flag(parsed.leftPanelOpen, defaultPanelsOpen()),

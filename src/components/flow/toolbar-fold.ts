@@ -23,7 +23,7 @@ export function toolbarFoldFor(boardWidth: number, compact: boolean, textScale =
   const foldedPaintWidth = 40 * scale + 4;
   const margin = 12 * scale;
   const gap = 16 * scale;
-  const poolWidth = 52;
+  const poolWidth = 104;
   const labelModesWidth = 296 + 8 * scale;
   const iconModesWidth = 140 + 8 * scale;
   const centerFits = (modesWidth: number, rightWidth: number) =>

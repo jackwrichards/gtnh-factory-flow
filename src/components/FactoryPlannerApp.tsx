@@ -406,7 +406,9 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
   // duration, WITHOUT writing the workspace view, so stepping off Welcome
   // brings it back exactly as it was left.
   const covering = useCoveringPage();
-  const rightPanelShown = workspace.rightPanelOpen && !covering;
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
+  const worksheet = poolMode && workspace.poolWorksheet;
+  const rightPanelShown = workspace.rightPanelOpen && !covering && !worksheet;
 
   return (
     <>
@@ -422,7 +424,7 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
             "minmax(0,1fr)",
             // With a page over the board the resource column is not folded, it is
             // GONE: nothing to open, no rail to hint that there is.
-            rightPanelShown ? "234px" : covering ? "0px" : `${RAIL_WIDTH}px`,
+            rightPanelShown ? "234px" : covering || worksheet ? "0px" : `${RAIL_WIDTH}px`,
           ].join(" "),
         }}
       >
@@ -438,7 +440,7 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
         <BoardColumn />
         {rightPanelShown ? (
           <InspectorPanel />
-        ) : covering ? null : (
+        ) : covering || worksheet ? null : (
           <PanelRail side="right" label="Resources" />
         )}
       </main>
@@ -456,6 +458,8 @@ function CompactWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
   // The resource drawer reads the board's books; under a covering page it
   // is not there at all, handle included.
   const covering = useCoveringPage();
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
+  const worksheet = poolMode && workspace.poolWorksheet;
   const openLeft = () => writeWorkspaceView({ leftPanelOpen: true, rightPanelOpen: false });
   const openRight = () => writeWorkspaceView({ leftPanelOpen: false, rightPanelOpen: true });
 
@@ -471,7 +475,7 @@ function CompactWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
       >
         <ViewerAwareBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
       </PanelDrawer>
-      {covering ? null : (
+      {covering || worksheet ? null : (
         <PanelDrawer
           side="right"
           label="resources"

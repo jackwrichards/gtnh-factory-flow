@@ -7,6 +7,8 @@ import { emitBoardCameraMove } from "@/lib/board-camera-signal";
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { useViewerLock } from "./use-viewer-lock";
 import { StorageRatioEditor } from "./StorageRatioEditor";
+import { useWorkspaceView, writeWorkspaceView } from "@/lib/workspace-view";
+import { PoolWorksheet } from "../pool/PoolWorksheet";
 import { formatRatioShare, getProjectRatioBranches } from "@/lib/model/storage-ratios";
 import { labelRatioArrows, layoutRatioLabels, type RatioWireLabel } from "./ratio-label-layout";
 import { RatioWireLabel as RatioWireLabelControl } from "./RatioWireLabel";
@@ -51,6 +53,7 @@ import {
   Focus,
   Gauge,
   Grid3x3,
+  TableProperties,
   Grip,
   Hammer,
   Hexagon,
@@ -2343,6 +2346,7 @@ export function FactoryFlow() {
   const [isNodeDragging, setNodeDragging] = useState(false);
   // Pool mode: the wire layers fade out (globals.css, factory-flow-board--pool).
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
+  const worksheet = useWorkspaceView().poolWorksheet && poolMode;
   const [annotationTool, setAnnotationTool] = useState<BoardDrawTool | undefined>(undefined);
   // Shared by the brush and the annotation tools: the last colour picked in
   // the palette is what a new box/arrow/note is created with. Blue to start:
@@ -5190,6 +5194,8 @@ export function FactoryFlow() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // A worksheet never edits an invisible canvas selection.
+      if (useFactoryStore.getState().project.poolMode && document.querySelector("[data-pool-worksheet]")) return;
       if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
         const key = event.key.toLowerCase();
         if (key === "c" || key === "x") {
@@ -6479,6 +6485,7 @@ export function FactoryFlow() {
         checklistMode ? "checklist-active" : "",
         isNodeDragging ? "factory-flow-board--dragging" : "",
         poolMode ? "factory-flow-board--pool" : "",
+        worksheet ? "factory-flow-board--worksheet" : "",
         paintCursor ? "factory-flow-board--painting" : "",
         annotationTool ? "factory-flow-board--annotating" : "",
         isDeleteMode ? "factory-flow-board--deleting" : "",
@@ -6533,7 +6540,7 @@ export function FactoryFlow() {
             : undefined),
         } as CSSProperties
       }
-      onPointerDownCapture={(event) => { if (!checklistCapture(event) && !viewerCapture(event) && !isReadOnly) handleAnnotationPointerDown(event); }}
+      onPointerDownCapture={(event) => { if (!worksheet && !checklistCapture(event) && !viewerCapture(event) && !isReadOnly) handleAnnotationPointerDown(event); }}
       onMouseDownCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
       onTouchStartCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
       onClickCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
@@ -6712,6 +6719,7 @@ export function FactoryFlow() {
         className="pointer-events-none absolute inset-0 z-10 shadow-[inset_0_0_60px_10px_rgba(0,0,0,0.35)]"
       />
       <SolvingBooksOverlay />
+      {worksheet ? <PoolWorksheet /> : null}
       {!isReadOnly ? <PaintToolbar
         paintMode={nodeColorPaintMode}
         onPaintModeChange={handlePaintModeChange}
@@ -7885,13 +7893,14 @@ const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: b
  */
 const PoolSpawnKeys = memo(function PoolSpawnKeys() {
   const on = useFactoryStore((state) => state.project.poolMode === true);
+  const readOnly = useFactoryStore((state) => state.isReadOnly);
+  const worksheet = useWorkspaceView().poolWorksheet;
   const addPoolStorage = useFactoryStore((state) => state.addPoolStorage);
   const datasetManifestUrl = useFactoryStore((state) => state.datasetManifestUrl);
   const datasetManifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
-  // ONE key: the product drawer, where a typed amount goes. There is no
-  // source key any more (Jack, 2026-09-05): the pool imports whatever
-  // nobody makes by itself, so a source drawer had nothing left to say.
+  // Product target and worksheet view. The pool imports whatever nobody
+  // makes by itself, so it needs no source key.
   const [picking, setPicking] = useState(false);
   const selectedDatasetVersion = useMemo(
     () => datasetManifest?.versions.find((entry) => entry.id === selectedDatasetVersionId),
@@ -7950,13 +7959,13 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
         aria-hidden={!on}
         className={[
           "overflow-hidden transition-[width] duration-500 ease-out",
-          on ? "w-[52px]" : "pointer-events-none w-0",
+          on ? "w-[104px]" : "pointer-events-none w-0",
         ].join(" ")}
       >
         <div
           className={[
-            "flex w-[52px] items-center pl-2 transition-transform duration-500 ease-out",
-            on ? "translate-x-0" : "-translate-x-[52px]",
+            "flex w-[104px] items-center gap-2 pl-2 transition-transform duration-500 ease-out",
+            on ? "translate-x-0" : "-translate-x-[104px]",
           ].join(" ")}
         >
           <ToolTray>
@@ -7988,10 +7997,21 @@ const PoolSpawnKeys = memo(function PoolSpawnKeys() {
                 picking ? TOOL_FACE_ON : TOOL_FACE_OFF,
               ].join(" ")}
               aria-label="Add a product drawer"
+              disabled={readOnly}
             >
               <Upload className={picking ? "h-4 w-4 text-[#6f9cff]" : "h-4 w-4"} />
             </button>
             </MinecraftTooltip>
+            </ToolTray>
+            <ToolTray>
+              <button type="button" tabIndex={on ? 0 : -1}
+                aria-label={worksheet ? "Show Pool canvas" : "Show Pool worksheet"}
+                title={worksheet ? "Canvas view" : "Worksheet view"}
+                aria-pressed={worksheet}
+                onClick={() => { setPicking(false); writeWorkspaceView({ poolWorksheet: !worksheet }); }}
+                className={`pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] ${worksheet ? TOOL_FACE_ON : TOOL_FACE_OFF}`}>
+                <TableProperties className={`h-4 w-4 ${worksheet ? "text-[#6f9cff]" : ""}`} />
+              </button>
             </ToolTray>
         </div>
       </div>
@@ -8120,9 +8140,9 @@ const SourceToolbar = memo(function SourceToolbar({
         label="build tools"
         side="left"
       >
-      {folded && !readOnly && (
+      {(folded || readOnly) && (
         <>
-          <ToolTray helpAnchor="rules"><ModeKeys forceIcons /></ToolTray>
+          {!readOnly ? <ToolTray helpAnchor="rules"><ModeKeys forceIcons /></ToolTray> : null}
           <PoolSpawnKeys />
         </>
       )}

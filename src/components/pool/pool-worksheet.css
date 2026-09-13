@@ -1,0 +1,447 @@
+.factory-flow-board--worksheet > .react-flow {
+  visibility: hidden;
+  pointer-events: none;
+}
+.factory-flow-board--worksheet > [data-board-toolbar]:not([data-help-anchor="build"]) {
+  display: none;
+}
+.pool-worksheet {
+  position: absolute;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  padding-top: 62px;
+  background: var(--surface, #24272c);
+  color: var(--mc-ink);
+  font-family: var(--font-minecraft), monospace;
+  font-size: 11px;
+  line-height: 16px;
+}
+.pool-sheet-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 10px;
+  border-block: 1px solid var(--line);
+  background: var(--mc-49);
+}
+.pool-sheet-heading h2 {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.pool-sheet-heading h2 span,
+.pool-sheet-resource-heading h3 span {
+  font-size: 10px;
+  color: var(--mc-ink-muted);
+  margin-left: 6px;
+}
+.pool-sheet-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 22px;
+  padding: 1px 4px;
+  color: var(--mc-ink);
+  cursor: pointer;
+}
+.pool-sheet-button:hover:not(:disabled) {
+  background: var(--mc-61);
+}
+.pool-sheet-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.pool-sheet-button[aria-pressed="true"] {
+  color: #adc7ff;
+}
+.pool-sheet-search {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 120px;
+  max-width: 330px;
+  margin-left: auto;
+  padding: 2px 5px;
+  border-bottom: 1px solid var(--mc-61);
+  color: var(--mc-ink-muted);
+}
+.pool-sheet-search input {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  color: var(--mc-ink);
+  outline: none;
+}
+.pool-sheet-search:focus-within {
+  border-color: #6f9cff;
+}
+.pool-sheet-scroll {
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  flex: 1;
+  scrollbar-gutter: stable;
+  padding: 0 10px 10px;
+}
+.pool-sheet-summary {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(430px, 2fr);
+  gap: 16px;
+  padding: 7px 0 10px;
+  align-items: start;
+}
+.pool-sheet-products {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+}
+.pool-sheet-products h3,
+.pool-sheet-resource-heading h3 {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+}
+.pool-sheet-products h3 {
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+}
+.pool-sheet-products p {
+  color: var(--mc-ink-muted);
+  max-width: 270px;
+}
+.pool-product {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px 6px;
+  min-height: 24px;
+}
+.pool-product-target {
+  min-width: 78px;
+  position: relative;
+}
+.pool-product > span {
+  font-size: 10px;
+}
+.pool-sheet-table {
+  width: 100%;
+  min-width: 740px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.pool-col-recipe {
+  width: 15%;
+}
+.pool-col-io {
+  width: 22%;
+}
+.pool-col-machine {
+  width: 25%;
+}
+.pool-col-count {
+  width: 8%;
+}
+.pool-col-power {
+  width: 8%;
+}
+.pool-sheet-table thead,
+.pool-sheet-resources thead {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--mc-49);
+  box-shadow: 0 1px var(--mc-61);
+}
+.pool-sheet-table th,
+.pool-sheet-resources th {
+  padding: 3px 5px;
+  font-size: 10px;
+  font-weight: 400;
+  text-align: left;
+  color: var(--mc-ink-muted);
+}
+.pool-sheet-table td {
+  padding: 4px 5px;
+  border-bottom: 1px solid var(--mc-49);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.pool-sheet-table small {
+  color: var(--mc-ink-muted);
+  font-size: 10px;
+  margin-left: 4px;
+}
+.pool-sheet-table .pool-status {
+  display: block;
+  margin: 0;
+  text-transform: capitalize;
+}
+.pool-sheet-table .pool-status--balanced {
+  color: #94d5b7;
+}
+.pool-sheet-table .pool-status--blocked,
+.pool-sheet-table .pool-status--starved,
+.pool-sheet-table .pool-status--bottleneck,
+.pool-sheet-table .pool-status--dead-loop,
+.pool-sheet-table .pool-status--clog-lock {
+  color: #f0b0a4;
+}
+.pool-sheet-icon-button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  color: var(--mc-ink-muted);
+  cursor: pointer;
+}
+.pool-sheet-icon-button svg {
+  width: 11px;
+  height: 11px;
+}
+.pool-sheet-icon-button:hover {
+  color: var(--mc-ink);
+  background: var(--mc-49);
+}
+.pool-sheet-icon-button[aria-pressed="true"] {
+  color: #f2cc6b;
+}
+.pool-worksheet button:focus-visible,
+.pool-worksheet input:focus-visible {
+  outline: 1px solid #6f9cff;
+  outline-offset: 1px;
+}
+.pool-shared-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mc-ink-muted);
+  font-size: 10px;
+}
+.pool-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  vertical-align: middle;
+}
+.pool-count {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+.pool-machine-off .pool-recipe-identity,
+.pool-machine-off .pool-port-list {
+  opacity: 0.5;
+}
+.pool-machine-editor {
+  display: inline;
+  min-width: 0;
+}
+.pool-editor-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+}
+.pool-editor-controls:empty {
+  display: none;
+}
+.pool-editor-controls .pool-sheet-button {
+  padding: 0;
+  min-height: 20px;
+  text-align: left;
+}
+.pool-inline-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  color: var(--mc-ink-muted);
+}
+.pool-inline-setting button {
+  width: 14px;
+  flex-shrink: 0;
+  color: var(--mc-ink);
+}
+.pool-inline-setting button:disabled {
+  opacity: 0.25;
+}
+.pool-inline-setting button:hover:enabled {
+  background: var(--mc-61);
+}
+.pool-setting-value {
+  color: var(--mc-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pool-number-input {
+  display: block;
+  width: 54px;
+  max-width: 100%;
+  height: 18px;
+  background: transparent;
+  border-bottom: 1px dotted var(--mc-ink-muted);
+  color: var(--mc-ink);
+  font-variant-numeric: tabular-nums;
+}
+.pool-port-list {
+  display: grid;
+  gap: 1px;
+}
+.pool-port {
+  min-width: 0;
+}
+.pool-port-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: 19px;
+}
+.pool-resource-link {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-align: left;
+  cursor: pointer;
+  max-width: 100%;
+  min-width: 0;
+}
+.pool-resource-link > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pool-resource-link:hover {
+  color: #adc7ff;
+}
+.pool-port-rate {
+  flex-shrink: 0;
+  white-space: nowrap;
+  color: var(--mc-ink-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.pool-sheet-muted,
+.pool-sheet-empty {
+  color: var(--mc-ink-muted);
+}
+.pool-sheet-empty {
+  padding: 8px 5px;
+}
+.pool-sheet-notice {
+  color: #e0cc93;
+  padding: 4px 0;
+}
+.pool-sheet-resource-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+}
+.pool-sheet-resource-heading h3 {
+  margin-right: auto;
+}
+.pool-sheet-resource-heading label {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  font-size: 10px;
+  color: var(--mc-ink-muted);
+}
+.pool-sheet-balance {
+  min-width: 0;
+  max-height: 190px;
+  overflow: auto;
+}
+.pool-sheet-resources {
+  width: 100%;
+  border-collapse: collapse;
+}
+.pool-sheet-resources td {
+  padding: 1px 5px;
+  border-bottom: 1px solid var(--mc-49);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pool-sheet-resources th:not(:first-child),
+.pool-sheet-resources td:not(:first-child) {
+  text-align: right;
+}
+.pool-sheet-resources td:last-child {
+  width: 38px;
+}
+.pool-worksheet > footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 10px;
+  border-top: 1px solid var(--mc-61);
+  color: var(--mc-ink-muted);
+  background: var(--mc-33);
+  font-size: 10px;
+}
+@media (max-width: 900px) {
+  .pool-sheet-summary {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .pool-sheet-products {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    align-items: center;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .factory-flow-board--worksheet * {
+    scroll-behavior: auto;
+  }
+}
+@media (pointer: coarse) {
+  .pool-sheet-button,
+  .pool-sheet-icon-button,
+  .pool-inline-setting button {
+    min-height: 30px;
+    min-width: 26px;
+  }
+  .pool-sheet-search input {
+    font-size: 16px;
+  }
+}
+.pool-power-line {
+  white-space: nowrap;
+}
+.pool-sheet-table td:last-child {
+  overflow-wrap: normal;
+}
+.pool-editor-controls > .flex > span {
+  padding: 0 3px;
+  font-size: 11px;
+  line-height: 18px;
+}
+.factory-flow-board--worksheet [data-board-toolbar]:not([data-help-anchor="build"]) {
+  display: none;
+}
+.pool-recipe-identity > span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.pool-machine-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+.factory-flow-board--worksheet [data-help-anchor="glance"] {
+  display: none;
+}

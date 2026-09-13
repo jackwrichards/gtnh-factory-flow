@@ -1583,6 +1583,19 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## The Three Modes (Build, Solve, Pool) And The Rules That Went
 
+- Pool's WORKSHEET (Jack, 2026-09-13) is a VIEW, never a fourth mode.
+  `WorkspaceView.poolWorksheet` is a browser preference outside the plan.
+  The second slide-out key beside Pool's product key toggles it; both keys
+  occupy 104 shell pixels. Build/Solve always show the canvas. The worksheet
+  covers the mounted canvas and temporarily absorbs the inspector's width,
+  preserving its open preference and the canvas positions/wires/camera.
+  `components/pool/` reads the same books and machine-list figures. Shared
+  recipes have separate rows but one machine/config/count/power group per
+  real card. `RecipeNodeEditor` reuses the card's controls without mounting
+  canvas handles; keep specialty machine behavior shared between views.
+  Keep this view dense: bare item icons and rates on one line, settings
+  inline, and product targets beside resource balances ABOVE the recipes.
+
 - The board-wide POWER DISPLAY selector is restored (Jack, 2026-09-11):
   beside the rate key, EU/t or amps of a chosen voltage tier, with click
   selection and wheel stepping. It is separate from each machine's hatch

@@ -1,6 +1,8 @@
 "use client";
 
+import { isTreeGrowthSimulatorToolControl, applyTreeGrowthSimulatorToolInputs, getTreeGrowthSimulatorSlotResource, getTreeGrowthSimulatorSlotTiers } from "@/lib/model/recipe-tool-slots";
 import { industrialFarmCapacity } from "@/lib/model/full-farms";
+import { WorksheetSetting } from "../pool/WorksheetSetting";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import {
@@ -281,8 +283,9 @@ export interface RecipeNodeData extends Record<string, unknown> {
 
 export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 
-function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
+function RecipeNodeComponent({ data, selected, controlsOnly = false }: Pick<NodeProps<RecipeFlowNode>, "data" | "selected"> & { controlsOnly?: boolean }) {
   const { projectNode, recipe, result } = data;
+  const editorLocked = useFactoryStore((state) => state.isReadOnly || state.checklistMode);
   const [isCompareOpen, setCompareOpenState] = useState(false);
   // The machine menu's open and close SOUND, the search's leaf lifted and
   // laid down; a switch made from the list closes it with the same sound.
@@ -862,9 +865,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   // and a custom rate node shows its two universal sockets instead. Handing
   // the list to React Flow keeps its handle bounds honest when the set changes
   // without the card changing size — see use-rendered-handles.ts.
-  useRenderedHandles(
-    projectNode.id,
-    isCropFarmPlaceholder
+  const renderedHandleIds = isCropFarmPlaceholder
       ? EMPTY_HANDLE_IDS
       : isCustomRatePlaceholder
         ? CUSTOM_RATE_UNIVERSAL_HANDLE_IDS
@@ -877,8 +878,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               ...entry.rails.inputs.filter((port) => !port.free).map((port) => port.handleId),
               ...entry.rails.outputs.map((port) => port.handleId),
             ]),
-          ],
-  );
+          ];
   const updateTier = (direction: -1 | 1) => {
     if (!tierControl) {
       return;
@@ -1182,6 +1182,52 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     ...(isSearchHighlighted ? [{ width: 4, color: "#7dd3fc" }] : []),
   ];
 
+  // The worksheet mounts the SAME controls and derivation without canvas
+  // handles or geometry registration. There is only one editing path for
+  // machine math, specialized farms, generators, and shared recipe settings.
+  if (controlsOnly) {
+    return (
+      <fieldset disabled={editorLocked} className="pool-machine-editor min-w-0 border-0 p-0 text-[var(--mc-ink)]">
+        <div className="pool-editor-controls">
+          <div className="relative min-w-0">
+            <button type="button" data-machine-menu-toggle className="pool-sheet-button"
+              disabled={!hasMachinePicker && !canShareMachine && !mayHaveTwins}
+              onClick={() => setCompareOpen((open) => !open)} aria-expanded={isCompareOpen}>
+              {previewMachineIcon ? <ResourceIcon resource={{ ...previewMachineIcon, amount: 1 }} bare size="sm" className="!h-4 !w-4" iconPixelSize={16} showAmount={false} tooltip={false} /> : null}
+              <span className="pool-machine-title" title={machineDisplayName}>{machineDisplayName}</span><ChevronDown className="h-3 w-3 shrink-0" />
+            </button>
+            {isCompareOpen ? <MachineMenu recipe={recipe} node={projectNode} handlers={machineHandlers}
+              selectedId={selectedMachineHandler.id} iconsById={machineIcons} onHover={setPreviewHandlerId}
+              onUse={updateMachineHandler} onClose={() => setCompareOpen(false)}
+              twins={isSharedMachine ? undefined : twins} mapIcons={recipeMapIcons} onUseTwin={useTwin}
+              figures={!isSharedMachine} onAddRecipe={canShareMachine ? () => { setCompareOpen(false); browseMachineRecipes(projectNode.id); } : undefined} /> : null}
+          </div>
+          {powerInfo ? <PowerTierChip nodeId={projectNode.id} sourceId={powerInfo.sourceId} values={projectNode.machineConfigTiers} /> : null}
+          {cropTierControl && !tierControl && !powerInfo ? <CropTierChip control={cropTierControl} onPick={(key) => updateMachineConfigTier(cropTierControl.id, key)} /> : null}
+          {powerReadout ? <HatchPowerControls {...powerReadout} locked={() => editorLocked}
+            onChange={(hatchVoltageTier, hatchAmps, powerInputMode) => updateNode(projectNode.id, {
+              hatchVoltageTier, hatchAmps, powerInputMode, powerEuT: hatchAmps * getVoltageTierMaxEuT(hatchVoltageTier),
+            })} /> : tierControl && tierColor ? (
+              <div className="flex items-center gap-1">
+                <button className="pool-sheet-button" type="button" disabled={tierControl.fixed} aria-label="Decrease machine tier" onClick={() => updateTier(-1)}>−</button>
+                <span className="px-2 py-1 text-xs" style={{ background: tierColor.background, color: tierColor.text }}>{tierControl.current}</span>
+                <button className="pool-sheet-button" type="button" disabled={tierControl.fixed} aria-label="Increase machine tier" onClick={() => updateTier(1)}>+</button>
+              </div>
+          ) : null}
+          {isCropFarmNode ? <div className="relative"><button type="button" className="pool-sheet-button" data-crop-picker-toggle onClick={() => setCropMenuOpen((open) => !open)}><Sprout className="h-4 w-4" />{cropTitle ?? "Pick a crop"}</button>
+            {isCropMenuOpen ? <CropPickerMenu nodeId={projectNode.id} onClose={() => setCropMenuOpen(false)} /> : null}</div> : null}
+        </div>
+        {powerInfo ? <PowerConfigPanel nodeId={projectNode.id} sourceId={powerInfo.sourceId} values={projectNode.machineConfigTiers} stats={powerInfo.stats} warnings={powerInfo.warnings} /> : null}
+        <div className="pool-editor-controls">{visibleMachineConfigControls.map((control) => <WorksheetSetting key={control.id} control={control}
+          onSelect={(id, value) => { setPreviewConfigTier(undefined); if (id === "heatingCoil") updateCoilTier(value); else updateMachineConfigTier(id, value); }} />)}
+          {configFacts.map((fact) => <span key={fact.id} className="pool-sheet-muted">{fact.caption} {fact.value}</span>)}
+        </div>
+        {passiveProductionPanel}
+        {isCustomRateNode && customRateDial ? <CustomRatePanel nodeId={projectNode.id} mode={customRateDial.mode} kind={customRateSlot?.resource.kind ?? "item"} perSecond={customRateDial.perSecond} /> : null}
+      </fieldset>
+    );
+  }
+
   // Outputs end in coupling chips at the node's right edge — inside the
   // card, like inputs — so the node's box is the machine's box again and
   // wires reach the chips the same way they reach input chips.
@@ -1232,6 +1278,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
         ...(paintCursor ? { cursor: paintCursor } : undefined),
       }}
     >
+      <RenderedRecipeHandles nodeId={projectNode.id} handleIds={renderedHandleIds} />
       {/* No tab zone any more: the machine is chosen from the name bar's
           chevron (MachineMenu), so the card starts at its painted window. */}
       {/* The window: the painted card. The 2px frame is an INSET shadow, not
@@ -2229,6 +2276,15 @@ export const RecipeNode = memo(
   RecipeNodeComponent,
   (previous, next) => previous.data === next.data && previous.selected === next.selected,
 );
+
+function RenderedRecipeHandles({ nodeId, handleIds }: { nodeId: string; handleIds: readonly string[] }) {
+  useRenderedHandles(nodeId, handleIds);
+  return null;
+}
+
+export function RecipeNodeEditor({ data }: { data: RecipeNodeData }) {
+  return <RecipeNodeComponent data={data} selected={false} controlsOnly />;
+}
 
 /**
  * The machine's circuit slot, in the footer beside the machine count.
@@ -4339,27 +4395,9 @@ function resolveDatasetMachineConfigResource(
   };
 }
 
-function isTreeGrowthSimulatorToolControl(control: MachineConfigTierControl) {
-  return (
-    /^tgsToolSlot\d+$/.test(control.id) ||
-    (control.id.startsWith("tgs") && control.id.endsWith("Tool"))
-  );
-}
-
 function isDisplayOnlyParallelControl(control: MachineConfigTierControl) {
   return /^machineParallel/.test(control.id) && control.tiers.length <= 1;
 }
-
-const TREE_GROWTH_SIMULATOR_TOOL_SLOTS: Record<string, { x: number; y: number }> = {
-  tgsToolSlot1: { x: 36, y: 36 },
-  tgsToolSlot2: { x: 54, y: 36 },
-  tgsToolSlot3: { x: 36, y: 54 },
-  tgsToolSlot4: { x: 54, y: 54 },
-  tgsLogTool: { x: 36, y: 36 },
-  tgsSaplingTool: { x: 54, y: 36 },
-  tgsLeavesTool: { x: 36, y: 54 },
-  tgsFruitTool: { x: 54, y: 54 },
-};
 
 const BEE_FRAME_SLOTS: Record<string, { x: number; y: number }> = {
   beeFrameSlot1: { x: 66, y: 23 },
@@ -4392,38 +4430,6 @@ function getBeePanelControls(controls: MachineConfigTierControl[]): MachineConfi
   });
 }
 
-function applyTreeGrowthSimulatorToolInputs(
-  recipe: Recipe,
-  controls: MachineConfigTierControl[],
-): Recipe {
-  if (controls.length === 0) {
-    return recipe;
-  }
-
-  const inputs = recipe.inputs.map((input) => {
-    const matchingControl = controls.find((control) => {
-      const position = TREE_GROWTH_SIMULATOR_TOOL_SLOTS[control.id];
-      return position?.x === input.neiSlot?.x && position.y === input.neiSlot?.y;
-    });
-
-    if (!matchingControl) {
-      return input;
-    }
-    const resource = getTreeGrowthSimulatorSlotResource(matchingControl);
-
-    return {
-      ...input,
-      ...resource,
-      amount: 1,
-      optional: true,
-      consumed: false,
-      neiSlot: input.neiSlot,
-    };
-  });
-
-  return { ...recipe, inputs };
-}
-
 function stripBeeFrameSlotInputs(recipe: Recipe): Recipe {
   const inputs = recipe.inputs.filter((input) => !isBeeFrameSlotInput(input));
   const neiSlots = recipe.nei?.slots?.filter((slot) => !isBeeFrameSlotPosition(slot));
@@ -4453,57 +4459,6 @@ function isBeeFrameSlotInput(input: Recipe["inputs"][number]) {
 function isBeeFrameSlotPosition(slot: NonNullable<NonNullable<Recipe["nei"]>["slots"]>[number]) {
   return Object.values(BEE_FRAME_SLOTS).some(
     (position) => position.x === slot.x && position.y === slot.y,
-  );
-}
-
-function isTreeGrowthSimulatorEmptyTool(control: MachineConfigTierControl) {
-  return (
-    control.current.key === "none" ||
-    getTreeGrowthSimulatorToolCategory(control.current.key) !==
-      getTreeGrowthSimulatorSlotCategory(control.id)
-  );
-}
-
-function getTreeGrowthSimulatorSlotResource(control: MachineConfigTierControl) {
-  if (!isTreeGrowthSimulatorEmptyTool(control)) {
-    return control.resource;
-  }
-
-  return control.tiers.find((tier) => tier.key === "none")?.resource ?? control.resource;
-}
-
-function getTreeGrowthSimulatorToolCategory(key: string): string | undefined {
-  const [category] = key.split(":");
-  return category && category !== "none" ? category : undefined;
-}
-
-function getTreeGrowthSimulatorSlotCategory(controlId: string): string | undefined {
-  switch (controlId) {
-    case "tgsToolSlot1":
-    case "tgsLogTool":
-      return "log";
-    case "tgsToolSlot2":
-    case "tgsSaplingTool":
-      return "sapling";
-    case "tgsToolSlot3":
-    case "tgsLeavesTool":
-      return "leaves";
-    case "tgsToolSlot4":
-    case "tgsFruitTool":
-      return "fruit";
-    default:
-      return undefined;
-  }
-}
-
-function getTreeGrowthSimulatorSlotTiers(control: MachineConfigTierControl) {
-  const category = getTreeGrowthSimulatorSlotCategory(control.id);
-  if (!category) {
-    return control.tiers;
-  }
-
-  return control.tiers.filter(
-    (tier) => tier.key === "none" || getTreeGrowthSimulatorToolCategory(tier.key) === category,
   );
 }
 
