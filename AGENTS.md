@@ -1476,8 +1476,11 @@ Working notes for future agents on GTNH Factory Flow.
   combined percentage or bar on the card. The bottom-centre pencil opens
   `StorageRatioEditor.tsx`, a compact grey NON-MODAL panel (`dialog.show`,
   never `showModal`). No backdrop, dim, blur or focus trap: rate controls and
-  the canvas stay interactive. It stays open after outside clicks or pointer
-  movement; X/Escape close it. It renders inside the board's stacking context,
+  the canvas stay interactive. It uses useDropdownDismiss with fade: mouse-away
+  dims then closes, returning restores it; touch never hover-fades. Outside
+  presses/camera movement and X/Escape close it. The board toolbar counts as
+  inside so unit controls remain usable. Opening/closing play pageOpen/pageClose,
+  once per transition, like the machine menu. It renders inside the board's stacking context,
   above cards but below open toolbar menus, so an overlapping rate menu stays
   clickable. Large INCOMING / OUTGOING headings, no redundant 100% totals,
   compact icon/name/percentage rows, an Equal split button per section, and

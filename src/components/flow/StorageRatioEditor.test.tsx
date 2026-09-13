@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { FactoryProject } from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
 import { StorageRatioEditor } from "./StorageRatioEditor";
 import { openRatioEditor } from "./ratio-editor";
+import * as boardSounds from "@/lib/board-sounds";
 
 const initial = useFactoryStore.getState();
 function board(): FactoryProject {
@@ -37,6 +38,7 @@ function board(): FactoryProject {
   };
 }
 beforeEach(() => {
+  vi.spyOn(boardSounds, "playBoardSound").mockImplementation(() => {});
   HTMLDialogElement.prototype.show = function () {
     this.setAttribute("open", "");
   };
@@ -49,6 +51,52 @@ afterEach(() => {
   cleanup();
   useFactoryStore.getState().setRateUnit(initial.rateUnit);
   useFactoryStore.setState(initial);
+  vi.restoreAllMocks();
+});
+
+it("uses the shared mouse fade and page sounds without fading touch or the rate toolbar", () => {
+  render(
+    <>
+      <div data-board-toolbar>
+        <button>Rate menu</button>
+      </div>
+      <StorageRatioEditor />
+    </>,
+  );
+  act(() => openRatioEditor("split"));
+  expect(boardSounds.playBoardSound).toHaveBeenCalledWith("pageOpen");
+  const panel = screen.getByRole("dialog");
+  panel.getBoundingClientRect = () => ({
+    left: 100,
+    top: 100,
+    right: 500,
+    bottom: 500,
+    width: 400,
+    height: 400,
+    x: 100,
+    y: 100,
+    toJSON: () => ({}),
+  });
+  const move = (x: number, pointerType: string, target: Element = document.body) => {
+    const event = new MouseEvent("pointermove", { clientX: x, clientY: 200, bubbles: true });
+    Object.defineProperty(event, "pointerType", { value: pointerType });
+    fireEvent(target, event);
+  };
+  move(800, "touch");
+  expect(panel.style.opacity).toBe("");
+  move(580, "mouse");
+  expect(Number(panel.style.opacity)).toBeGreaterThan(0);
+  expect(Number(panel.style.opacity)).toBeLessThan(1);
+  move(800, "mouse", screen.getByRole("button", { name: "Rate menu" }));
+  expect(panel.style.opacity).toBe("");
+  fireEvent.pointerDown(screen.getByRole("button", { name: "Rate menu" }));
+  expect(screen.getByRole("dialog")).toBe(panel);
+  move(720, "mouse");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(vi.mocked(boardSounds.playBoardSound).mock.calls.map(([kind]) => kind)).toEqual([
+    "pageOpen",
+    "pageClose",
+  ]);
 });
 
 it("shows actual transfers including stopped branches, and follows the rate unit", () => {
@@ -59,7 +107,7 @@ it("shows actual transfers including stopped branches, and follows the rate unit
       {
         edgeId: edge.id,
         resource: {
-            key: "item:iron" as const,
+          key: "item:iron" as const,
           kind: "item" as const,
           resourceId: "iron",
           amountPerSecond: 100,

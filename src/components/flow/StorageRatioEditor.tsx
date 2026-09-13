@@ -19,6 +19,8 @@ import {
 } from "@/lib/model/storage-ratios";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { formatSlotRate } from "./flow-explainers";
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+import { playBoardSound } from "@/lib/board-sounds";
 import { RATIO_EDITOR_EVENT, type RatioEditorRequest } from "./ratio-editor";
 
 /** One listener per board; closed drawers acquire no editor subscriptions. */
@@ -49,36 +51,45 @@ function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose
   const storage = project.storages?.find((s) => s.id === request.storageId);
   const rootRef = useRef<HTMLDialogElement>(null);
   const doneRef = useRef<HTMLButtonElement>(null);
+  const openedRef = useRef(false);
+  const closedRef = useRef(false);
   const [projectId] = useState(project.id);
   const valid = Boolean(
     storage?.bufferMode === "ratio" && !readOnly && !project.poolMode && project.id === projectId,
   );
-  useEffect(() => {
-    if (!valid) onClose();
-  }, [valid, onClose]);
   useEffect(() => {
     const dialog = rootRef.current;
     // A floating panel: the canvas and its rate controls remain interactive.
     dialog?.show();
     // Open on Close, not a number field: phones should not launch a keyboard.
     doneRef.current?.focus({ preventScroll: true });
+    if (!openedRef.current) {
+      openedRef.current = true;
+      playBoardSound("pageOpen");
+    }
     return () => dialog?.close();
   }, []);
   const close = useCallback(() => {
+    if (closedRef.current) return;
+    closedRef.current = true;
     if (
       document.activeElement instanceof HTMLElement &&
       rootRef.current?.contains(document.activeElement)
     )
       document.activeElement.blur();
+    playBoardSound("pageClose");
     onClose();
   }, [onClose]);
   useEffect(() => {
-    const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.defaultPrevented) close();
-    };
-    document.addEventListener("keydown", escape);
-    return () => document.removeEventListener("keydown", escape);
-  }, [close]);
+    if (!valid) close();
+  }, [valid, close]);
+  useDropdownDismiss(true, {
+    refs: [rootRef],
+    onClose: close,
+    fade: true,
+    // The board's unit menus remain usable alongside the current-rate column.
+    insideSelector: "[data-board-toolbar]",
+  });
   const branches = useMemo(() => {
     const exported = ratioExportShare(storage);
     return [
