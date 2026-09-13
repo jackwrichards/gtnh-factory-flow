@@ -16,7 +16,7 @@ export const RatioWireLabel = memo(function RatioWireLabel({
   shares,
 }: {
   edgeId: string;
-  label: Label & { point: { x: number; y: number } };
+  label: Label & { point: { x: number; y: number }; rotation?: number };
   shares: { input?: number; output?: number };
 }) {
   const locked = useFactoryStore(
@@ -28,11 +28,11 @@ export const RatioWireLabel = memo(function RatioWireLabel({
     <span
       data-ratio-edge={edgeId}
       data-ratio-side={label.key}
-      className={`${locked ? "pointer-events-none" : "pointer-events-auto"} nodrag nopan nowheel absolute flex flex-col justify-center whitespace-pre text-center text-[10px] font-bold leading-[10px] text-[#20242b]`}
+      className={`${locked ? "pointer-events-none" : "pointer-events-auto"} nodrag nopan nowheel absolute flex flex-col justify-center whitespace-pre text-center text-[10px] font-bold tabular-nums leading-[10px] text-[#20242b]`}
       style={{
         left: label.point.x,
         top: label.point.y,
-        transform: "translate(-50%, -50%)",
+        transform: `translate(-50%, -50%) rotate(${label.rotation ?? 0}deg)`,
       }}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
@@ -66,20 +66,22 @@ export function RatioSetupOutput({
   const locked = useFactoryStore(
     (s) => s.isReadOnly || s.checklistMode || Boolean(s.project.poolMode),
   );
+  const text = formatRatioShare(percentage / 100);
   return (
     <span
       data-ratio-setup-output={storageId}
       data-tooltip-stop
-      className="nodrag nopan nowheel relative z-40 flex h-5 items-center gap-0.5 border border-[var(--flow-output)]/40 bg-[var(--flow-output)]/10 px-1 text-[10px] font-bold leading-4 text-[var(--flow-output)]"
+      className="nodrag nopan nowheel relative z-40 flex h-[18px] w-[46px] shrink-0 items-center justify-center gap-0.5 border border-[var(--flow-output)]/40 bg-[var(--flow-output)]/10 px-0.5 font-bold tabular-nums leading-4 text-[var(--flow-output)]"
+      style={{ fontSize: text.length > 4 ? 8 : 10 }}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
-      <ArrowUpRight aria-hidden className="h-3 w-3" />
+      <ArrowUpRight aria-hidden className="h-2.5 w-2.5 shrink-0" />
       <WirePercentage
         storageId={storageId}
         side="export"
-        text={formatRatioShare(percentage / 100)}
+        text={text}
         share={percentage / 100}
         locked={locked}
       />

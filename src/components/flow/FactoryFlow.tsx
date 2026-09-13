@@ -10104,7 +10104,7 @@ function ResourceEdgeComponent({
             <polygon
               key={index}
               data-resource-edge-arrow={id}
-              points={arrow}
+              points={ratioLabels.find((label) => label.arrowIndex === index)?.polygon ?? arrow}
               fill={brightenHexColor(edgeColor, 0.55)}
               stroke={darkenHexColor(edgeColor, 0.6)}
               strokeWidth={isGlobalView ? 2.5 : 1.5}

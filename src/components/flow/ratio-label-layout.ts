@@ -16,7 +16,45 @@ export function ratioLabelBounds(text: string, point: Point) {
   };
 }
 
-/** Write on the existing triangle nearest the drawer. Never change the arrows. */
+/** Keep the existing triangle style; grow only a labelled head enough to contain its text. */
+export function fitRatioArrow(arrow: string, text: string, side = "output") {
+  const vertices = arrow
+    .trim()
+    .split(/\s+/)
+    .map((point) => point.split(",").map(Number));
+  const [tip, wingA, wingB] = vertices;
+  const base = { x: (wingA[0] + wingB[0]) / 2, y: (wingA[1] + wingB[1]) / 2 };
+  const length = Math.hypot(tip[0] - base.x, tip[1] - base.y);
+  const halfWing = Math.hypot(wingA[0] - wingB[0], wingA[1] - wingB[1]) / 2;
+  const dx = (tip[0] - base.x) / length,
+    dy = (tip[1] - base.y) / length;
+  const lines = text.split("\n");
+  // Conservative bounds for bold 10px tabular text, independent of the DOM/zoom.
+  const halfWidth = (Math.max(...lines.map((line) => line.length)) * 7) / 2;
+  const halfHeight = (lines.length * 10) / 2;
+  const inset = 2;
+  const requiredLength = 2 * (halfWidth + inset) + ((halfHeight + inset) * length) / halfWing;
+  const scale = Math.max(1, requiredLength / length);
+  // Grow away from the drawer: keep the incoming tip or outgoing base in place.
+  const anchor = side === "input" ? { x: tip[0], y: tip[1] } : base;
+  const grownBase = {
+    x: anchor.x + (base.x - anchor.x) * scale,
+    y: anchor.y + (base.y - anchor.y) * scale,
+  };
+  const textOffset = halfWidth + inset + (length * scale - requiredLength) / 2;
+  let rotation = (Math.atan2(dy, dx) * 180) / Math.PI;
+  if (rotation > 90) rotation -= 180;
+  if (rotation < -90) rotation += 180;
+  return {
+    point: { x: grownBase.x + dx * textOffset, y: grownBase.y + dy * textOffset },
+    rotation,
+    polygon: vertices
+      .map(([x, y]) => `${anchor.x + (x - anchor.x) * scale},${anchor.y + (y - anchor.y) * scale}`)
+      .join(" "),
+  };
+}
+
+/** Put each percentage on the triangle nearest its drawer. */
 export function labelRatioArrows(
   arrows: readonly string[],
   labels: readonly (RatioWireLabel & { point: Point })[],
@@ -32,7 +70,7 @@ export function labelRatioArrows(
       y: vertices.reduce((sum, [, y]) => sum + y, 0) / vertices.length,
     };
   });
-  const placed = new Map<number, RatioWireLabel & { point: Point }>();
+  const placed = new Map<number, RatioWireLabel & { point: Point; arrowIndex: number }>();
   for (const label of labels) {
     let nearest = 0;
     for (let i = 1; i < centers.length; i++)
@@ -45,10 +83,18 @@ export function labelRatioArrows(
     placed.set(nearest, {
       ...label,
       point: centers[nearest],
+      arrowIndex: nearest,
       ...(previous ? { key: "both", text: `${previous.text}\n${label.text}` } : {}),
     });
   }
-  return [...placed.values()];
+  return [...placed.values()].map((label) => ({
+    ...label,
+    ...fitRatioArrow(
+      arrows[label.arrowIndex],
+      label.text,
+      arrows.length > 1 && label.arrowIndex === arrows.length - 1 ? "input" : label.key,
+    ),
+  }));
 }
 
 /** One layout per published route/configuration change. No DOM or viewport inputs.

@@ -560,16 +560,16 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
                 showAmount={false}
                 bare
                 iconPixelSize={storageIconPixelSize(
-                  role === "buffer" && storage.bufferMode === "ratio" ? 24 : isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
+                  role === "buffer" && storage.bufferMode === "ratio" ? 20 : isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
                   storage,
                 )}
-                className={role === "buffer" && storage.bufferMode === "ratio" ? "!h-[24px] !w-[24px]" : "!h-[36px] !w-[36px]"}
+                className={role === "buffer" && storage.bufferMode === "ratio" ? "!h-[20px] !w-[20px] shrink-0" : "!h-[36px] !w-[36px]"}
               />
               {role === "buffer" && storage.bufferMode === "ratio" ? <RatioSetupOutput storageId={storage.id} percentage={ratioExportShare(storage) * 100} /> : null}
             </div>
             {role === "buffer" && storage.bufferMode === "ratio" ? (
-              <div className="relative mx-auto flex w-[76px] items-center justify-center gap-1">
-                <NetLine net={net} kind={storage.kind} role={role} />
+              <div className="relative mx-auto mb-0.5 grid w-[72px] grid-cols-[52px_16px] items-center gap-1">
+                <NetLine net={net} kind={storage.kind} role={role} width={52} />
                 <RatioSplitButton storageId={storage.id} />
               </div>
             ) : solveMode && role === "product" ? (
@@ -692,8 +692,7 @@ const NET_LINE_FIT_STEPS = [
   { className: "text-[7px]", perChar: 4.7 },
 ] as const;
 
-function rateFitClass(label: string, role: StorageRole): string {
-  const width = NET_LINE_WIDTH_BY_ROLE[role];
+function rateFitClass(label: string, role: StorageRole, width = NET_LINE_WIDTH_BY_ROLE[role]): string {
   for (const step of NET_LINE_FIT_STEPS) {
     if (label.length * step.perChar <= width) {
       return step.className;
@@ -703,7 +702,7 @@ function rateFitClass(label: string, role: StorageRole): string {
 }
 
 /** The tile's one line of news: the net rate, sized to fit its silhouette. */
-function NetLine({ net, kind, role }: { net: number; kind: string; role: StorageRole }) {
+function NetLine({ net, kind, role, width }: { net: number; kind: string; role: StorageRole; width?: number }) {
   // The fit class and the colour read the TARGET value: the size and tone
   // land immediately, and only the digits ease their way there.
   const label = `${net >= 0 ? "+" : ""}${formatCompactRate(net, kind)}`;
@@ -713,7 +712,7 @@ function NetLine({ net, kind, role }: { net: number; kind: string; role: Storage
         // No "Net" word: the sign and the colour already say it, and
         // the number is the thing worth reading.
         "storage-net-line relative z-10 h-4 whitespace-nowrap text-center font-bold leading-4 tabular-nums",
-        rateFitClass(label, role),
+        rateFitClass(label, role, width),
         net > 0.005 ? "text-[var(--flow-output)]" : net < -0.005 ? "text-[var(--flow-input)]" : "text-[#a8afbb]",
       ].join(" ")}
     >
