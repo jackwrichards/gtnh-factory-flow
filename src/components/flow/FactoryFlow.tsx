@@ -9805,7 +9805,7 @@ function ResourceEdgeComponent({
     [isPowerEdge, liveRoute.points],
   );
   const drawnPath = lightningPath ?? liveRoute.path;
-  const ratioLabels = data?.ratio ? getRatioLabelsForEdge(id).flatMap((label) => {
+  const ratioLabels = data?.ratio && hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS) ? getRatioLabelsForEdge(id).flatMap((label) => {
     const point = getPointAtPolylineRatio(liveRoute.points, label.ratio);
     return point ? [{ ...label, point }] : [];
   }) : [];

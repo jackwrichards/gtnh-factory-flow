@@ -412,9 +412,6 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             over a card that now keeps its SILHOUETTE at glance - the shaped
             fill underneath is already the role-coloured ground. */}
         <NodeGlanceIcon>
-          {storage.bufferMode === "ratio" && role === "buffer" ? (
-            <Split aria-hidden className="absolute right-0 top-0 z-20 h-7 w-7 bg-[#252a33] p-1 text-[#e8e9ee]" />
-          ) : null}
           {/* Deliberately bigger than the card it sits on.
               Zoomed out, WHAT is in the drawer is the only thing worth
               reading, and a sprite confined inside the frame is a few pixels

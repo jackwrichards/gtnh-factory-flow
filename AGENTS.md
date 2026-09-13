@@ -1371,6 +1371,8 @@ Working notes for future agents on GTNH Factory Flow.
   the wire near the ratio drawer (60 flow pixels from its end, or the middle
   of a short wire). They never intercept gestures. Between two ratio drawers,
   each end gets its own share; a short wire combines labelled In/Out values.
+  Ratio percentages obey EDGE_DETAIL_LABELS and disappear at glance LOD.
+  The ratio drawer's glance layer is only its item, with no split badge.
   Crowded labels slide along their own wires using a joint layout cached by
   route/configuration signature; no DOM measurements or route changes.
 - THE BOARD MENU (Jack, 2026-09-08): ONE right-click menu for the whole
@@ -1478,10 +1480,11 @@ Working notes for future agents on GTNH Factory Flow.
   a distinct green Setup output row. Percentages are directly typed/scrolled;
   the number, percent sign and full-height up/down column form one control.
   Use a decimal text field with spinbutton semantics so native browser arrows
-  cannot duplicate that column. Drawer role icons are plain filled silhouettes
+  cannot duplicate that column. Drawer role icons are plain silhouettes
   in their role colours: red rounded square for Source, green square for
   Product, gray hexagon for buffers, and the board's cut/taper for byproduct
-  and trash. No symbol inside, outline frame or Archive glyph.
+  and trash. Match the actual drawer's dark fill (24% role tint with #101318)
+  and lighter border (55% role tint with #262b34). No inner symbol or Archive glyph.
   Header: resource icon, item name, split symbol. Peer rows name the selected
   machine only (no recipe/product suffix), with larger machine art; drawers
   use their role name and a matching coloured drawer icon, not the item again.

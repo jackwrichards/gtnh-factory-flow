@@ -377,7 +377,14 @@ function DrawerRoleIcon({ role }: { role: StorageRole }) {
         ? "var(--flow-output)"
         : "#8a93a6";
   return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6" fill={color} aria-hidden>
+    <svg
+      viewBox="0 0 24 24"
+      className="h-6 w-6"
+      fill={`color-mix(in srgb, ${color} 24%, #101318)`}
+      stroke={`color-mix(in srgb, ${color} 55%, #262b34)`}
+      strokeWidth={1.5}
+      aria-hidden
+    >
       {role === "buffer" ? (
         <path d="M6 3h12l5 9-5 9H6l-5-9Z" />
       ) : role === "byproduct" ? (
