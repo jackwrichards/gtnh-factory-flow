@@ -1618,9 +1618,17 @@ Working notes for future agents on GTNH Factory Flow.
   themselves open by being hovered: pointer-events-none throughout, immediate
   close when the pointer leaves the control, no delayed bridge to the panel.
   Do not rebuild a separate set of tiny inline steppers. Amps/tier stay in Machine.
-  Picture/Machine/Status/Circuit columns have FIXED widths (72/352/128/60 shell px),
+  On wide screens Picture/Machine/Status/Circuit columns have FIXED widths
+  (72/352/128/60 shell px),
   and the artwork has a fixed 52px frame, independent of row height or window
-  width. The picture's padding is removed and its shadow softened ONLY in
+  width. Pool NEVER imposes a minimum table width or horizontal scrollbar.
+  At 1080px of worksheet width, each machine header sits above its recipe
+  rows, with status/circuit/takes/makes below; at 660px, status/circuit and
+  takes/makes use separate two-column rows. Narrow machine controls wrap
+  naturally. Observe an actual Takes cell for the shared item-column count,
+  since the desktop headings disappear in the stacked layout. Summary numbers
+  may wrap their unit on very small screens. Verify 320–2700px in both engines.
+  The picture's padding is removed and its shadow softened ONLY in
   the worksheet; never change other artwork shadows. ALL extra horizontal
   space goes to Takes/Makes. Their item
   grids share ONE column count and ONE row count across both sides and all

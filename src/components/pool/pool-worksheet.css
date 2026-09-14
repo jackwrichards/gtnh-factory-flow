@@ -212,7 +212,7 @@
 }
 .pool-sheet-table {
   width: 100%;
-  min-width: 1240px;
+  min-width: 0;
   table-layout: fixed;
   border-collapse: collapse;
 }
@@ -695,4 +695,125 @@
   background: color-mix(in srgb, #78a7bc 12%, var(--surface, #24272c));
   outline: 2px solid #78a7bc;
   outline-offset: -2px;
+}
+
+/* Reflow whole machine groups before fixed controls squeeze the recipe items.
+   Keep every control in normal flow rather than clipping horizontal overflow. */
+@container (max-width: 1080px) {
+  .pool-sheet-table,
+  .pool-sheet-table thead {
+    display: block;
+  }
+  .pool-sheet-table colgroup {
+    display: none;
+  }
+  .pool-sheet-table thead tr {
+    display: block;
+    height: auto;
+  }
+  .pool-sheet-table thead th {
+    display: none;
+  }
+  .pool-sheet-table thead th:nth-child(2) {
+    display: block;
+    padding-block: 4px;
+  }
+  .pool-sheet-table tbody {
+    display: grid;
+    grid-template-columns: 128px 60px minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .pool-sheet-table tbody tr {
+    display: contents;
+  }
+  .pool-sheet-table td {
+    min-width: 0;
+  }
+  .pool-picture-cell {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .pool-machine-cell {
+    grid-column: 2 / -1;
+    grid-row: 1;
+  }
+  .pool-machine-layout {
+    padding-bottom: 4px;
+  }
+  .pool-status-cell { grid-column: 1; }
+  .pool-circuit-cell { grid-column: 2; }
+  .pool-takes-cell { grid-column: 3; }
+  .pool-makes-cell { grid-column: 4; }
+  .pool-section-status,
+  .pool-circuit-slot {
+    height: 100%;
+    justify-content: center;
+  }
+  .pool-takes-cell::before,
+  .pool-makes-cell::before {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--mc-ink-muted);
+    font-size: 10px;
+    line-height: 14px;
+  }
+  .pool-takes-cell::before { content: "Takes"; }
+  .pool-makes-cell::before { content: "Makes"; }
+}
+@container (max-width: 660px) {
+  .pool-sheet-table tbody {
+    position: relative;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .pool-sheet-table .pool-picture-cell {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 64px;
+    height: 64px;
+    border: 0;
+  }
+  .pool-sheet-table .pool-machine-cell {
+    grid-column: 1 / -1;
+    padding-left: 72px;
+    border-left: 0;
+    min-height: 64px;
+  }
+  .pool-editor-heading {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pool-editor-power {
+    justify-content: flex-start;
+    padding-top: 0;
+  }
+  .pool-machine-stats {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .pool-machine-count { grid-column: 1; }
+  .pool-machine-stats .pool-row-actions { grid-column: 2; grid-row: 1; }
+  .pool-machine-power { grid-column: 1 / -1; }
+  .pool-machine-settings { min-width: 0; }
+  .pool-settings-section { min-width: 0; }
+  .pool-power-line { white-space: normal; }
+  .pool-status-cell { grid-column: 1; }
+  .pool-circuit-cell { grid-column: 2; }
+  .pool-takes-cell { grid-column: 1; }
+  .pool-makes-cell { grid-column: 2; }
+  .pool-sheet-resources th:first-child { width: 34%; }
+  .pool-sheet-resources th,
+  .pool-sheet-resources td { padding-inline: 3px; }
+  .pool-sheet-resources th { font-size: 10px; }
+}
+
+@container (max-width: 400px) {
+  .pool-machine-stats {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .pool-machine-power { flex-basis: 100%; order: 2; }
+  .pool-machine-stats .pool-row-actions { margin-left: auto; order: 1; }
+  .pool-sheet-resources th:first-child { width: 30%; }
+  .pool-sheet-resources th,
+  .pool-sheet-resources td { padding-inline: 2px; }
+  .pool-sheet-resources .pool-balance-rate { white-space: normal; }
+  .pool-sheet-resources .inspector-unit { display: inline-block; }
 }

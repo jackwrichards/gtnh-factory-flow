@@ -59,15 +59,7 @@ import {
 import "./pool-worksheet.css";
 
 export function PoolWorksheet() {
-  const ioHeaderRef = useRef<HTMLTableCellElement>(null);
   const [ioWidth, setIoWidth] = useState(232);
-  useEffect(() => {
-    const header = ioHeaderRef.current;
-    if (!header || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) => setIoWidth(entry.contentRect.width));
-    observer.observe(header);
-    return () => observer.disconnect();
-  }, []);
   const rootRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const root = rootRef.current;
@@ -101,6 +93,14 @@ export function PoolWorksheet() {
     (group) => group.owner.id,
   );
   const shown = filterWorksheetGroups(orderedGroups, query);
+  const firstShownId = shown[0]?.owner.id;
+  useEffect(() => {
+    const cell = rootRef.current?.querySelector(".pool-takes-cell");
+    if (!cell || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => setIoWidth(entry.contentRect.width));
+    observer.observe(cell);
+    return () => observer.disconnect();
+  }, [firstShownId]);
   const maxItems = Math.max(
     1,
     ...shown.flatMap((group) =>
@@ -279,7 +279,7 @@ export function PoolWorksheet() {
                 </th>
                 <th>Status</th>
                 <th>Circuit</th>
-                <th ref={ioHeaderRef}>Takes</th>
+                <th>Takes</th>
                 <th>Makes</th>
               </tr>
             </thead>
@@ -518,7 +518,7 @@ const MachineRows = memo(function MachineRows({
               />
             </div>
           </td>
-          <td>
+          <td className="pool-takes-cell">
             <PortList
               columns={columns}
               ports={section.ports.inputs}
@@ -529,7 +529,7 @@ const MachineRows = memo(function MachineRows({
               )}
             />
           </td>
-          <td>
+          <td className="pool-makes-cell">
             <PortList
               columns={columns}
               ports={section.ports.outputs}
