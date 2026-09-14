@@ -2,6 +2,12 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PoolWorksheet } from "./PoolWorksheet";
+import { playBoardSound } from "@/lib/board-sounds";
+vi.mock("@/lib/board-sounds", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/board-sounds")>(),
+  playBoardSound: vi.fn(),
+}));
+const dragSounds = () => vi.mocked(playBoardSound).mock.calls.map(([kind]) => kind);
 import { useFactoryStore } from "@/store/factory-store";
 import { DEFAULT_WORKSPACE_VIEW, writeWorkspaceView } from "@/lib/workspace-view";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
@@ -30,6 +36,8 @@ function pointerDrop(source: HTMLElement, target: Element, cancel = false) {
   try {
     pointer("pointerdown", source, 1, 1);
     pointer("pointermove", window, 30, 20);
+    pointer("pointermove", window, 32, 22);
+    pointer("pointermove", window, 34, 24);
     expect(document.querySelector(".pool-drag-preview")).not.toBeNull();
     if (cancel) fireEvent.keyDown(window, { key: "Escape" });
     pointer("pointerup", window, 30, 20);
@@ -92,6 +100,7 @@ beforeEach(() => {
   writeWorkspaceView({ ...DEFAULT_WORKSPACE_VIEW });
   useFactoryStore.setState({ isReadOnly: false, checklistMode: false });
   useFactoryStore.getState().setProject(fixture());
+  vi.mocked(playBoardSound).mockClear();
 });
 afterEach(() => {
   cleanup();
@@ -202,14 +211,22 @@ describe("Pool worksheet", () => {
     const item = within(row).getByRole("button", { name: "Copper Ingot" });
     const products = screen.getByLabelText("Products drop zone");
     pointerDrop(item, products, true);
+    expect(dragSounds()).toEqual(["pageOpen", "snap", "pageClose"]);
+    vi.mocked(playBoardSound).mockClear();
     expect(useFactoryStore.getState().project.storages).toHaveLength(1);
     pointerDrop(item, products);
+    expect(dragSounds()).toEqual(["pageOpen", "snap", "shuffle"]);
+    vi.mocked(playBoardSound).mockClear();
     expect(useFactoryStore.getState().project.storages).toHaveLength(2);
     expect(useFactoryStore.getState().project.storages?.[1]).toMatchObject({
       resourceId: "copper",
       poolSide: "drain",
     });
     pointerDrop(item, products);
+    expect(dragSounds()).toEqual(["pageOpen", "snap", "error"]);
+    vi.mocked(playBoardSound).mockClear();
+    pointerDrop(item, row);
+    expect(dragSounds()).toEqual(["pageOpen", "error"]);
     expect(useFactoryStore.getState().project.storages).toHaveLength(2);
     act(() => useFactoryStore.getState().undo());
     expect(useFactoryStore.getState().project.storages).toHaveLength(1);
@@ -223,6 +240,7 @@ describe("Pool worksheet", () => {
     const { container } = render(<PoolWorksheet />);
     const target = container.querySelector('[data-worksheet-node="machine"]')!;
     pointerDrop(screen.getAllByRole("button", { name: /Reorder machine/ })[1], target);
+    expect(dragSounds()).toEqual(["pageOpen", "snap", "shuffle"]);
     expect(
       [...container.querySelectorAll("[data-worksheet-node]")].map((row) =>
         row.getAttribute("data-worksheet-node"),

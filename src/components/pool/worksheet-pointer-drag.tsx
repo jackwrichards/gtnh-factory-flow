@@ -15,6 +15,7 @@ import { createPortal } from "react-dom";
 import { GripVertical } from "lucide-react";
 import type { ResourceAmount } from "@/lib/model/types";
 import { resourceLabel } from "@/lib/model";
+import { playBoardSound, suppressBoardSound } from "@/lib/board-sounds";
 import { useFactoryStore } from "@/store/factory-store";
 import { ResourceIcon } from "../nei/ResourceIcon";
 import { WorksheetOrderContext } from "./worksheet-drag";
@@ -64,6 +65,8 @@ export function WorksheetPointerDrag({ children }: { children: ReactNode }) {
         target = undefined;
       };
       const locate = () => {
+        const previousTarget = target;
+        const previousAfter = after;
         clearTarget();
         const hit = document.elementFromPoint(x, y);
         if ("resource" in payload) {
@@ -87,6 +90,9 @@ export function WorksheetPointerDrag({ children }: { children: ReactNode }) {
             after = y > rect.top + rect.height / 2;
             target.dataset.orderDrop = after ? "after" : "before";
           }
+        }
+        if (target && (target !== previousTarget || after !== previousAfter)) {
+          playBoardSound("snap", { gain: 0.35 });
         }
       };
       const tick = () => {
@@ -112,11 +118,15 @@ export function WorksheetPointerDrag({ children }: { children: ReactNode }) {
         if (source.hasPointerCapture?.(pointerId)) source.releasePointerCapture(pointerId);
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
-        window.removeEventListener("pointercancel", finish);
+        window.removeEventListener("pointercancel", cancelGesture);
         window.removeEventListener("keydown", onKey);
-        window.removeEventListener("blur", finish);
+        window.removeEventListener("blur", cancelGesture);
         setPreview(undefined);
         cancel.current = undefined;
+      };
+      const cancelGesture = () => {
+        if (active) playBoardSound("pageClose", { gain: 0.45 });
+        finish();
       };
       const onMove = (next: PointerEvent) => {
         if (next.pointerId !== pointerId) return;
@@ -125,6 +135,7 @@ export function WorksheetPointerDrag({ children }: { children: ReactNode }) {
         if (!active && Math.hypot(x - startX, y - startY) < 6) return;
         if (!active) {
           active = true;
+          playBoardSound("pageOpen", { gain: 0.45 });
           draggedSource.current = source;
           source.setPointerCapture?.(pointerId);
           source.dataset.poolDragSource = "true";
@@ -137,30 +148,40 @@ export function WorksheetPointerDrag({ children }: { children: ReactNode }) {
       };
       const onUp = (next: PointerEvent) => {
         if (next.pointerId !== pointerId) return;
-        if (active && !useFactoryStore.getState().isReadOnly) {
-          x = next.clientX;
-          y = next.clientY;
-          locate();
-          if (target) {
-            if ("resource" in payload)
-              useFactoryStore.getState().addPoolStorage(payload.resource, "drain");
-            else move(payload.kind, payload.id, target.dataset.poolOrderId!, after);
+        if (active) {
+          let changed = false;
+          if (!useFactoryStore.getState().isReadOnly) {
+            x = next.clientX;
+            y = next.clientY;
+            locate();
+            if (target) {
+              if ("resource" in payload) {
+                const before = useFactoryStore.getState().project;
+                // The gesture owns this landing sound; avoid the board watcher's echo.
+                suppressBoardSound("place", 150);
+                useFactoryStore.getState().addPoolStorage(payload.resource, "drain");
+                changed = useFactoryStore.getState().project !== before;
+              } else {
+                changed = move(payload.kind, payload.id, target.dataset.poolOrderId!, after);
+              }
+            }
           }
+          playBoardSound(changed ? "shuffle" : "error", { gain: 0.5 });
         }
         finish();
       };
       const onKey = (next: KeyboardEvent) => {
         if (next.key === "Escape") {
           next.preventDefault();
-          finish();
+          cancelGesture();
         }
       };
       cancel.current = finish;
       window.addEventListener("pointermove", onMove, { passive: false });
       window.addEventListener("pointerup", onUp);
-      window.addEventListener("pointercancel", finish);
+      window.addEventListener("pointercancel", cancelGesture);
       window.addEventListener("keydown", onKey);
-      window.addEventListener("blur", finish);
+      window.addEventListener("blur", cancelGesture);
     },
     [readOnly, move],
   );

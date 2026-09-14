@@ -9,11 +9,11 @@ type ListKind = "machines" | "products" | "resources";
 export const WorksheetOrderContext = createContext<{
   readOnly: boolean;
   ids: Record<ListKind, string[]>;
-  move: (kind: ListKind, from: string, to: string, after: boolean) => void;
+  move: (kind: ListKind, from: string, to: string, after: boolean) => boolean;
 }>({
   readOnly: true,
   ids: { machines: [], products: [], resources: [] },
-  move: () => {},
+  move: () => false,
 });
 
 export function orderWorksheetEntries<T>(

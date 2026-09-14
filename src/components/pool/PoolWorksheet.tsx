@@ -193,8 +193,9 @@ export function PoolWorksheet() {
           readOnly,
           ids,
           move: (kind, from, to, after) => {
-            if (readOnly) return;
+            if (readOnly) return false;
             const next = moveWorksheetEntry(ids[kind], from, to, after);
+            if (next.every((id, index) => id === ids[kind][index])) return false;
             writeWorkspaceView({
               poolWorksheetOrder: {
                 ...workspace.poolWorksheetOrder,
@@ -204,6 +205,7 @@ export function PoolWorksheet() {
                 ],
               },
             });
+            return true;
           },
         }}
       >

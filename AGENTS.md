@@ -1673,6 +1673,11 @@ Working notes for future agents on GTNH Factory Flow.
   Incoming native resource drags from the item panel remain supported. The
   drag/collapse strip stays beside the machine artwork, with clearance for the
   mobile sidebar handle. Pointer moves update only the preview, not row context.
+  Drag sounds use the existing board engine and its mute/volume controls: quiet
+  pageOpen on lift, snap on a changed highlighted destination, shuffle only
+  after a real drop change, error for invalid/duplicate/unchanged drops, and
+  pageClose for Escape/pointer cancellation. Holding a target repeats nothing.
+  Pool product drags suppress the board watcher's placement echo.
   Drag recipe items or resources
   (including the item browser) into Products: use the existing addPoolStorage
   action, preserving duplicate handling and undo. Grip handles reorder machine
