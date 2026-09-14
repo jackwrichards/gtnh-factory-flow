@@ -1628,7 +1628,7 @@ Working notes for future agents on GTNH Factory Flow.
   reserve two everywhere (and likewise for larger counts). Never auto-fit
   each recipe independently, which spreads sparse rows differently. Additional
   rows show every item; no scrolling item list. Names fade, never ellipses.
-  Prefer 160px item widths, but allow 112px cards before reserving a third
+  Prefer 192px item widths, but allow 144px cards before reserving a third
   row. Cards are 36px tall and reuse the canvas's `flow-port` surface, border,
   and inset highlights, distinct from the alternating row wash. Subtle item
   column dividers are quieter than the Takes/Makes boundary.
@@ -1667,6 +1667,8 @@ Working notes for future agents on GTNH Factory Flow.
   the title and stats. Use natural content height with no percentage-height
   cell/flex workaround; settings grow only their own machine group.
   Pool hatch labels are nowrap with compact padding so EU/t stays in its key.
+  Hatch controls have a 6px top inset inside the cell padding. Item-name fades
+  begin 22px from the end and finish 6px before the edge, visibly clearing it.
   MachineMenu anchors to the worksheet's
   data-machine-editor-anchor cell when no canvas card exists.
   Status labels stay on one line inside their tiles, including Power stalled.

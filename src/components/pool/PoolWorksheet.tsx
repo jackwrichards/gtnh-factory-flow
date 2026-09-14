@@ -112,8 +112,8 @@ export function PoolWorksheet() {
     ),
   );
   // One ruler for both sides of every recipe: empty slots keep their place.
-  const comfortableColumns = Math.max(1, Math.floor((ioWidth + 9) / 169));
-  const compactColumns = Math.max(1, Math.floor((ioWidth + 9) / 121));
+  const comfortableColumns = Math.max(1, Math.floor((ioWidth + 9) / 201));
+  const compactColumns = Math.max(1, Math.floor((ioWidth + 9) / 153));
   // Prefer readable widths, but narrow cards before reserving a third row.
   const itemColumns = Math.min(
     maxItems,
