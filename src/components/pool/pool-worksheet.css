@@ -66,7 +66,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 28px;
+  min-height: 22px;
   padding: 0 7px;
   border-bottom: 1px solid color-mix(in srgb, var(--mc-ink) 14%, transparent);
   background: color-mix(in srgb, var(--mc-ink) 3%, transparent);
@@ -94,8 +94,8 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  width: 26px;
-  height: 26px;
+  width: 20px;
+  height: 20px;
   border: 1px solid var(--mc-61);
   color: var(--mc-ink-muted);
   cursor: pointer;
@@ -117,8 +117,9 @@
   display: grid;
   grid-template-columns: 16px minmax(0, 1fr) 78px 72px 21px;
   gap: 4px;
-  padding: 3px 6px;
+  padding: 0 6px;
   font-size: 10px;
+  line-height: 12px;
   color: var(--mc-ink-muted);
   border-bottom: 1px solid color-mix(in srgb, var(--mc-ink) 14%, transparent);
 }
@@ -154,12 +155,14 @@
   color: var(--mc-ink-muted);
   font-size: 10px;
   font-weight: 400;
-  padding: 3px 6px;
+  padding: 0 6px;
+  line-height: 12px;
 }
 .pool-sheet-resources td {
-  padding: 2px 6px;
+  padding: 0 6px;
   border-bottom: 1px solid color-mix(in srgb, var(--mc-ink) 8%, transparent);
   font-size: 11px;
+  line-height: 16px;
   font-variant-numeric: tabular-nums;
 }
 .pool-sheet-resources th + th,
@@ -191,9 +194,8 @@
 .pool-sheet-resources .pool-resource-link {
   min-width: 170px;
 }
-.pool-sheet-resources .pool-item-icon {
-  height: 28px !important;
-  width: 28px !important;
+.pool-sheet-resources .pool-order-handle {
+  height: 16px;
 }
 .pool-sheet-table {
   width: 100%;
@@ -221,7 +223,7 @@
   background: var(--surface, #24272c);
 }
 .pool-sheet-table th {
-  padding: 5px 8px;
+  padding: 1px 8px;
   font-size: 11px;
   font-weight: 400;
   text-align: left;
@@ -242,7 +244,7 @@
   min-width: 0;
   outline: none;
   color: var(--mc-ink);
-  height: 25px;
+  height: 18px;
   font-size: 11px;
 }
 .pool-sheet-search:focus-within {

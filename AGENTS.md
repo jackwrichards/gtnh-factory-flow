@@ -1645,6 +1645,9 @@ Working notes for future agents on GTNH Factory Flow.
   groups, products, resources, and summary panels; arrow keys also reorder.
   `WorkspaceView.poolWorksheetOrder` saves per-plan browser order only, without
   changing canvas positions, the solver, or undo. Read-only views cannot drag.
+  Keep column headers tight (12px summary labels, 20px recipe header). Resource
+  balance rows use 16px icon frames and no vertical cell padding, about 17px
+  per single-line row; long names can still wrap. Recipe item art stays larger.
   Count uses the canvas's SolvedMachinesStat, including its pencil and
   clear-to-unpin behavior. Never rebuild a "Need / Pin / Auto" text stack.
   The name and chevron are first; the next row keeps Machines/count/pencil

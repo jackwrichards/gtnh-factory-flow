@@ -667,7 +667,15 @@ function PortRate({ port }: { port: RailPort }) {
   );
 }
 
-function ResourceLink({ resource, nodeId }: { resource: ResourceAmount; nodeId?: string }) {
+function ResourceLink({
+  resource,
+  nodeId,
+  compact = false,
+}: {
+  resource: ResourceAmount;
+  nodeId?: string;
+  compact?: boolean;
+}) {
   const readOnly = useFactoryStore((state) => state.isReadOnly);
   const browse = (mode: BrowseMode) => {
     if (resource.kind === "power") return;
@@ -711,8 +719,8 @@ function ResourceLink({ resource, nodeId }: { resource: ResourceAmount; nodeId?:
           resource={resource}
           size="sm"
           bare
-          className="pool-item-icon !h-8 !w-8"
-          iconPixelSize={44}
+          className={compact ? "pool-item-icon !h-4 !w-4" : "pool-item-icon !h-8 !w-8"}
+          iconPixelSize={compact ? 22 : 44}
           showAmount={false}
           showConsumedState={false}
           tooltip={false}
@@ -830,6 +838,7 @@ function BalanceRow({ balance }: { balance: ResourceBalance }) {
             label={`resource ${balance.displayName ?? balance.resourceId}`}
           />
           <ResourceLink
+            compact
             resource={{
               ...resource,
               kind: balance.kind,
