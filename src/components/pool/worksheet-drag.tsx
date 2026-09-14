@@ -1,10 +1,11 @@
 "use client";
 
-import { createContext, useContext, type DragEvent } from "react";
+import { createContext, useContext } from "react";
 import { GripVertical } from "lucide-react";
+import { useWorksheetPointerDrag } from "./worksheet-pointer-drag";
 
 type ListKind = "machines" | "products" | "resources";
-const ORDER_TYPE = "application/x-gtnh-pool-order";
+
 export const WorksheetOrderContext = createContext<{
   readOnly: boolean;
   ids: Record<ListKind, string[]>;
@@ -40,27 +41,17 @@ export function moveWorksheetEntry(
 
 export function OrderHandle({ kind, id, label }: { kind: ListKind; id: string; label: string }) {
   const { readOnly, ids, move } = useContext(WorksheetOrderContext);
+  const { begin } = useWorksheetPointerDrag();
   if (readOnly) return null;
   return (
     <button
       type="button"
-      draggable
+      draggable={false}
       className="pool-order-handle"
       aria-label={`Reorder ${label}`}
       title="Drag to reorder · Arrow keys move up or down"
-      onDragStart={(event) => {
-        event.stopPropagation();
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData(ORDER_TYPE, JSON.stringify({ kind, id }));
-      }}
-      onDragEnd={(event) => {
-        event.currentTarget
-          .closest(".pool-worksheet")
-          ?.querySelectorAll<HTMLElement>("[data-order-drop]")
-          .forEach((target) => {
-            delete target.dataset.orderDrop;
-          });
-      }}
+      onPointerDown={(event) => begin(event, { kind, id, label })}
+      onDragStart={(event) => event.preventDefault()}
       onKeyDown={(event) => {
         if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
         event.preventDefault();
@@ -77,32 +68,5 @@ export function OrderHandle({ kind, id, label }: { kind: ListKind; id: string; l
 }
 
 export function useOrderTarget(kind: ListKind, id: string) {
-  const { readOnly, move } = useContext(WorksheetOrderContext);
-  const mark = (event: DragEvent<HTMLElement>) => {
-    if (readOnly || !event.dataTransfer.types.includes(ORDER_TYPE)) return;
-    event.preventDefault();
-    const box = event.currentTarget.getBoundingClientRect();
-    event.currentTarget.dataset.orderDrop =
-      event.clientY > box.y + box.height / 2 ? "after" : "before";
-  };
-  return {
-    onDragOver: mark,
-    onDragLeave: (event: DragEvent<HTMLElement>) => {
-      delete event.currentTarget.dataset.orderDrop;
-    },
-    onDrop: (event: DragEvent<HTMLElement>) => {
-      const after = event.currentTarget.dataset.orderDrop === "after";
-      delete event.currentTarget.dataset.orderDrop;
-      if (readOnly) return;
-      try {
-        const source = JSON.parse(event.dataTransfer.getData(ORDER_TYPE));
-        if (source.kind !== kind || typeof source.id !== "string") return;
-        event.preventDefault();
-        event.stopPropagation();
-        move(kind, source.id, id, after);
-      } catch {
-        /* A resource drop belongs to the Products zone. */
-      }
-    },
-  };
+  return { "data-pool-order-kind": kind, "data-pool-order-id": id };
 }

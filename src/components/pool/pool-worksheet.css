@@ -962,3 +962,51 @@ tbody[data-collapsed] .pool-machine-picture > [data-machine-picture] { width: 28
   tbody[data-collapsed] .pool-makes-cell::before { display: none; }
   .pool-collapsed-machine { gap: 4px; }
 }
+
+/* Keep the controls off the artwork, including in short machine rows. */
+.pool-machine-row-tools {
+  flex-direction: column;
+  width: 20px;
+  background: var(--surface, #24272c);
+  border-right: 1px solid color-mix(in srgb, var(--mc-ink) 15%, transparent);
+}
+.pool-machine-row-tools .pool-order-handle { opacity: 0.9; }
+.pool-machine-picture { left: 20px; }
+.pool-sheet-table tbody[data-collapsed] .pool-machine-row-tools {
+  flex-direction: row;
+  width: 36px;
+}
+.pool-order-handle { touch-action: none; }
+.pool-drag-preview {
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 240px;
+  max-width: calc(100vw - 16px);
+  min-height: 36px;
+  padding: 3px 7px 3px 3px;
+  border: 2px solid var(--mc-61);
+  background: var(--mc-47);
+  box-shadow: 4px 4px 0 rgb(0 0 0 / 45%);
+  color: var(--mc-ink);
+  font-family: var(--app-font);
+  font-size: 14px;
+  font-weight: 600;
+}
+.pool-drag-preview > :first-child { flex-shrink: 0; }
+.pool-drag-preview > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+[data-pool-drag-source] { opacity: 0.35; }
+body[data-pool-dragging], body[data-pool-dragging] * { cursor: grabbing !important; user-select: none; }
+body[data-pool-dragging] [data-minecraft-tooltip],
+body[data-pool-dragging] [data-tooltip-companion] { visibility: hidden; pointer-events: none; }
+.pool-summary-toggles [data-resource-drop] { outline: 2px solid #78a7bc; outline-offset: -2px; }
+@container (max-width: 660px) {
+  .pool-sheet-table tbody:not([data-collapsed]) .pool-picture-cell { width: 72px; }
+}
+@container (max-width: 660px) {
+  /* The edge drawer's touch handle owns the first 24px on compact screens. */
+  .pool-sheet-scroll { padding-left: 24px; }
+}

@@ -42,7 +42,7 @@ import {
 import { getSelectedMachineHandler } from "@/lib/model/recipe-rules";
 import { useBrowseMenu, type BrowseMode } from "../browse-menu";
 import { useWorkspaceView, writeWorkspaceView } from "@/lib/workspace-view";
-import { RESOURCE_DRAG_TYPE, readResourceDrag, writeResourceDrag } from "@/lib/resource-drag";
+import { RESOURCE_DRAG_TYPE, readResourceDrag } from "@/lib/resource-drag";
 import {
   OrderHandle,
   WorksheetOrderContext,
@@ -57,6 +57,7 @@ import {
   type WorksheetSection,
 } from "./worksheet-model";
 
+import { WorksheetPointerDrag, useWorksheetPointerDrag } from "./worksheet-pointer-drag";
 import "./pool-worksheet.css";
 
 export function PoolWorksheet() {
@@ -206,6 +207,7 @@ export function PoolWorksheet() {
           },
         }}
       >
+        <WorksheetPointerDrag>
         <div className="pool-sheet-summary" data-mobile-summary={mobileSummary ?? "closed"}>
           <div className="pool-summary-toggles" aria-label="Pool summaries">
             {["Products", "Resources", "Power"].map((label) => {
@@ -214,6 +216,7 @@ export function PoolWorksheet() {
                 <button
                   key={section}
                   type="button"
+                  data-pool-products-toggle={section === "products" || undefined}
                   aria-expanded={mobileSummary === section}
                   aria-controls={`${summaryId}-${section}`}
                   onClick={() => setMobileSummary((current) => current === section ? null : section)}
@@ -355,6 +358,7 @@ export function PoolWorksheet() {
             </div>
           ) : null}
         </div>
+        </WorksheetPointerDrag>
       </WorksheetOrderContext.Provider>
     </section>
   );
@@ -765,7 +769,7 @@ function ResourceLink({
   nameTooltip?: boolean;
   iconsOnly?: boolean;
 }) {
-  const readOnly = useFactoryStore((state) => state.isReadOnly);
+  const { begin, suppressClick } = useWorksheetPointerDrag();
   const browse = (mode: BrowseMode) => {
     if (resource.kind === "power") return;
     useFactoryStore.getState().browseResource({ ...resource, anchorNodeId: nodeId }, mode);
@@ -780,14 +784,15 @@ function ResourceLink({
         type="button"
         className="pool-resource-link"
         aria-label={iconsOnly ? resourceLabel(resource) : undefined}
-        draggable={!readOnly}
-        onDragStart={(event) => {
-          event.stopPropagation();
-          writeResourceDrag(event.dataTransfer, resource);
-        }}
+        draggable={false}
+        onDragStart={(event) => event.preventDefault()}
         {...pressHandlers}
+        onPointerDown={(event) => {
+          pressHandlers.onPointerDown(event);
+          begin(event, { resource });
+        }}
         onClick={(event) => {
-          if (wasDragged()) return;
+          if (suppressClick(event.currentTarget) || wasDragged()) return;
           if (wasTouch()) {
             openFromTap({ x: event.clientX, y: event.clientY });
             return;

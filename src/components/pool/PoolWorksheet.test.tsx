@@ -18,6 +18,29 @@ vi.mock("../ItemPickerPopover", () => ({
   ),
 }));
 
+function pointerDrop(source: HTMLElement, target: Element, cancel = false) {
+  const original = Object.getOwnPropertyDescriptor(document, "elementFromPoint");
+  Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => target });
+  const box = vi.spyOn(target, "getBoundingClientRect").mockReturnValue({ top: 0, height: 100 } as DOMRect);
+  const pointer = (type: string, receiver: HTMLElement | Window, x: number, y: number) => {
+    const event = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: x, clientY: y });
+    Object.defineProperties(event, { pointerId: { value: 1 }, pointerType: { value: "mouse" } });
+    fireEvent(receiver, event);
+  };
+  try {
+    pointer("pointerdown", source, 1, 1);
+    pointer("pointermove", window, 30, 20);
+    expect(document.querySelector(".pool-drag-preview")).not.toBeNull();
+    if (cancel) fireEvent.keyDown(window, { key: "Escape" });
+    pointer("pointerup", window, 30, 20);
+    expect(document.querySelector(".pool-drag-preview")).toBeNull();
+    fireEvent.click(source);
+  } finally {
+    box.mockRestore();
+    if (original) Object.defineProperty(document, "elementFromPoint", original);
+    else Reflect.deleteProperty(document, "elementFromPoint");
+  }
+}
 function fixture(): FactoryProject {
   return {
     schemaVersion: PROJECT_SCHEMA_VERSION,
@@ -175,27 +198,18 @@ describe("Pool worksheet", () => {
 
   it("drags a recipe item into Products using the normal drawer action and undo", () => {
     const { container } = render(<PoolWorksheet />);
-    const values = new Map<string, string>();
-    const transfer = {
-      get types() {
-        return [...values.keys()];
-      },
-      setData: (kind: string, value: string) => values.set(kind, value),
-      getData: (kind: string) => values.get(kind) ?? "",
-    };
     const row = container.querySelector('[data-worksheet-node="machine"]') as HTMLElement;
-    fireEvent.dragStart(within(row).getByRole("button", { name: "Copper Ingot" }), {
-      dataTransfer: transfer,
-    });
+    const item = within(row).getByRole("button", { name: "Copper Ingot" });
     const products = screen.getByLabelText("Products drop zone");
-    fireEvent.dragOver(products, { dataTransfer: transfer });
-    fireEvent.drop(products, { dataTransfer: transfer });
+    pointerDrop(item, products, true);
+    expect(useFactoryStore.getState().project.storages).toHaveLength(1);
+    pointerDrop(item, products);
     expect(useFactoryStore.getState().project.storages).toHaveLength(2);
     expect(useFactoryStore.getState().project.storages?.[1]).toMatchObject({
       resourceId: "copper",
       poolSide: "drain",
     });
-    fireEvent.drop(products, { dataTransfer: transfer });
+    pointerDrop(item, products);
     expect(useFactoryStore.getState().project.storages).toHaveLength(2);
     act(() => useFactoryStore.getState().undo());
     expect(useFactoryStore.getState().project.storages).toHaveLength(1);
@@ -207,20 +221,8 @@ describe("Pool worksheet", () => {
     useFactoryStore.getState().setProject(project);
     const before = useFactoryStore.getState();
     const { container } = render(<PoolWorksheet />);
-    const values = new Map<string, string>();
-    const transfer = {
-      get types() {
-        return [...values.keys()];
-      },
-      setData: (kind: string, value: string) => values.set(kind, value),
-      getData: (kind: string) => values.get(kind) ?? "",
-    };
-    fireEvent.dragStart(screen.getAllByRole("button", { name: /Reorder machine/ })[1], {
-      dataTransfer: transfer,
-    });
     const target = container.querySelector('[data-worksheet-node="machine"]')!;
-    fireEvent.dragOver(target, { dataTransfer: transfer, clientY: 10 });
-    fireEvent.drop(target, { dataTransfer: transfer });
+    pointerDrop(screen.getAllByRole("button", { name: /Reorder machine/ })[1], target);
     expect(
       [...container.querySelectorAll("[data-worksheet-node]")].map((row) =>
         row.getAttribute("data-worksheet-node"),

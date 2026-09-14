@@ -1666,6 +1666,13 @@ Working notes for future agents on GTNH Factory Flow.
   Icon strips never wrap and fade at the right edge; their browse/hover actions
   still work. `WorkspaceView.poolCollapsedMachines` remembers node IDs per plan,
   separately from project data and undo. Read-only viewers can fold rows too.
+  Pool uses pointer dragging (`worksheet-pointer-drag.tsx`) for row grips and
+  mouse resource drags: an app-drawn preview, insertion/drop highlights, edge
+  auto-scroll and Escape/cancel cleanup. Do not restore native browser drag
+  images for these. Grips support touch; item swipes keep scroll/long-press.
+  Incoming native resource drags from the item panel remain supported. The
+  drag/collapse strip stays beside the machine artwork, with clearance for the
+  mobile sidebar handle. Pointer moves update only the preview, not row context.
   Drag recipe items or resources
   (including the item browser) into Products: use the existing addPoolStorage
   action, preserving duplicate handling and undo. Grip handles reorder machine
