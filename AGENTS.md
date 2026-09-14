@@ -1648,7 +1648,12 @@ Working notes for future agents on GTNH Factory Flow.
   Products have a direct + item picker. Resource-summary names do not fade,
   and canvas resource visibility/favourite preferences do not filter them.
   Products/Resources/Power stay above the recipe scroller in that fixed order,
-  with bounded scroll areas and separated headings/columns. Power moves below
+  with bounded scroll areas and separated headings/columns. Summary height is
+  content-driven: Products/Resources start at the three-row Net baseline
+  (122px including headings/borders), grow up to seven rows (218px), then
+  scroll independently. Power stays at its natural height, without stretching
+  or a scrollbar. On phones the summary also caps at 50vh to leave recipe room.
+  Power moves below
   the other sections on narrow screens. Summary sections are NOT draggable.
   Drag recipe items or resources
   (including the item browser) into Products: use the existing addPoolStorage

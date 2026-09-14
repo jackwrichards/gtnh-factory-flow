@@ -34,7 +34,7 @@
   display: grid;
   grid-template-columns: minmax(240px, 0.8fr) minmax(420px, 1.5fr) 230px;
   gap: 8px;
-  height: clamp(140px, 23vh, 200px);
+  align-items: stretch;
   flex-shrink: 0;
   margin: 0 12px 8px;
   padding: 5px 0 8px;
@@ -52,6 +52,18 @@
 .pool-sheet-power {
   min-height: 0;
   border: 1px solid color-mix(in srgb, var(--mc-ink) 14%, transparent);
+}
+/* Three baseline rows line up with Power's Net; allow four more before scrolling. */
+.pool-sheet-products,
+.pool-sheet-balance {
+  min-height: 122px;
+  max-height: 218px;
+}
+.pool-sheet-power {
+  align-self: start;
+}
+.pool-sheet-power .pool-resources-scroll {
+  flex: none;
 }
 .pool-products-scroll,
 .pool-resources-scroll {
@@ -627,18 +639,19 @@
 @container (max-width: 960px) {
   .pool-sheet-summary {
     grid-template-columns: minmax(240px, 0.8fr) minmax(380px, 1.5fr);
-    grid-template-rows: minmax(0, 1fr) auto;
-    height: 300px;
+    grid-template-rows: auto auto;
   }
   .pool-sheet-power {
     grid-column: 1 / -1;
   }
 }
 @container (max-width: 660px) {
+  .pool-sheet-products,
+  .pool-sheet-balance { min-height: 0; }
   .pool-sheet-summary {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr 1fr auto;
-    height: 350px;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto;
+    max-height: 50vh;
     gap: 6px;
   }
 }
