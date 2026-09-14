@@ -411,8 +411,7 @@ const MachineRows = memo(function MachineRows({
       >
         <div className="pool-machine-layout">
           <div className="pool-machine-details">{controls}</div>
-          {settings ? <div className="pool-settings-section">{settings}</div> : null}
-          <div className="pool-machine-footer">
+          <div className="pool-machine-stats">
             <fieldset disabled={readOnly} className="pool-machine-count">
               {first.recipe && isCustomRateRecipe(first.recipe) ? null : (
                 <SolvedMachinesStat
@@ -466,6 +465,7 @@ const MachineRows = memo(function MachineRows({
               </div>
             ) : null}
           </div>
+          {settings ? <div className="pool-settings-section">{settings}</div> : null}
         </div>
       </td>
     </>

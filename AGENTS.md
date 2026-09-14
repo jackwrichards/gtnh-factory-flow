@@ -1600,7 +1600,7 @@ Working notes for future agents on GTNH Factory Flow.
   before Circuit, with one cell per recipe (including shared machines). Circuits have
   their own column using the canvas's CircuitChip (including its blank),
   enlarged and WITHOUT its background in this view.
-  Settings sit in an INDENTED SECTION BELOW the machine's name,
+  Settings sit in an INDENTED SECTION BELOW the machine's count/power/actions row,
   using the canvas's MachineConfigControlPanel/setting tiles, including unique
   controls, searchable choices, numeric edits, and rich tooltips. They wrap
   naturally and grow only that machine's row: no settings column, height cap,
@@ -1660,16 +1660,12 @@ Working notes for future agents on GTNH Factory Flow.
   automatic connection. Power totals obey the power display dial.
   Count uses the canvas's SolvedMachinesStat, including its pencil and
   clear-to-unpin behavior. Never rebuild a "Need / Pin / Auto" text stack.
-  The name and chevron are first; settings follow, and a footer at the BOTTOM
-  of the machine cell keeps Machines/count/pencil
-  in ONE horizontal tile, then power
-  (which may wrap below when needed). The canvas keeps its original tile layout.
-  The cell's flex column absorbs existing spare height; do not increase row
-  height to push the footer down. The inner flex layout uses natural height
-  plus min-height:100%; do not restore height:100% + min-content (Firefox
-  ignores the intrinsic floor and settings overlap the following row). Gecko
-  needs height:100% on the outer spanning cell, Blink a definite 1px; keep
-  the scoped @supports rule and verify both engines with shared/settings rows.
+  The name/chevron and hatch controls are first; immediately below is one
+  machine-wide count/power/actions row, then the indented settings section.
+  All three stay grouped at the TOP even for a machine spanning several
+  recipe rows. Never pin the stats to the bottom or put settings between
+  the title and stats. Use natural content height with no percentage-height
+  cell/flex workaround; settings grow only their own machine group.
   Pool hatch labels are nowrap with compact padding so EU/t stays in its key.
   MachineMenu anchors to the worksheet's
   data-machine-editor-anchor cell when no canvas card exists.
