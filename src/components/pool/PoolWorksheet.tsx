@@ -397,84 +397,95 @@ const MachineRows = memo(function MachineRows({
         <OrderHandle kind="machines" id={owner.id} label={`machine ${label}`} />
         <div className="pool-machine-picture">{picture}</div>
       </td>
-      <td rowSpan={sections.length} className="pool-shared-cell pool-machine-cell">
-        <div className="pool-machine-details">{controls}</div>
-        <div className="pool-machine-footer">
-          <fieldset disabled={readOnly} className="pool-machine-count">
-            {first.recipe && isCustomRateRecipe(first.recipe) ? null : (
-              <SolvedMachinesStat
-                inline
-                label={first.recipe && isCropProductionRecipe(first.recipe) ? "Seeds" : "Machines"}
-                needed={
-                  first.recipe && isCropProductionRecipe(first.recipe)
-                    ? sections.reduce(
-                        (sum, section) => sum + (section.result?.theoreticalMachinesRequired ?? 0),
-                        0,
-                      )
-                    : required
-                }
-                pinned={owner.solvePin}
-                onPin={(solvePin) => updateNode(owner.id, { solvePin })}
-              />
-            )}
-          </fieldset>
-          <div className="pool-status-list">
-            {sections.map((section, index) => (
-              <div key={section.section} className="pool-section-status">
-                <Status section={section} />
-                {sections.length > 1 ? (
-                  <span className="pool-shared-label" title={section.recipe?.name}>
-                    #{index + 1}
-                    {!readOnly ? (
-                      <button
-                        type="button"
-                        className="pool-sheet-icon-button"
-                        aria-label={"Remove recipe " + (index + 1) + " from shared machine"}
-                        onClick={() =>
-                          useFactoryStore.getState().removeRecipeSection(owner.id, section.section)
-                        }
-                      >
-                        <X />
-                      </button>
-                    ) : null}
-                  </span>
-                ) : null}
-              </div>
-            ))}
-          </div>
-          <div className="pool-machine-power">
-            <MachinePower entry={machine} />
-          </div>
-          {!readOnly ? (
-            <div className="pool-row-actions">
-              <button
-                type="button"
-                className="pool-sheet-icon-button"
-                aria-label="Duplicate machine"
-                onClick={() => useFactoryStore.getState().duplicateNode(owner.id)}
-              >
-                <Copy />
-              </button>
-              <button
-                type="button"
-                className="pool-sheet-icon-button"
-                aria-label="Replace recipe"
-                onClick={() => useFactoryStore.getState().beginRecipeRefactor(owner.id)}
-              >
-                <RefreshCw />
-              </button>
-              <button
-                type="button"
-                className="pool-sheet-icon-button"
-                aria-label="Remove machine"
-                onClick={() => useFactoryStore.getState().deleteNode(owner.id)}
-              >
-                <Trash2 />
-              </button>
+      <td
+        rowSpan={sections.length}
+        className="pool-shared-cell pool-machine-cell"
+        data-machine-editor-anchor
+      >
+        <div className="pool-machine-layout">
+          <div className="pool-machine-details">{controls}</div>
+          {settings ? <div className="pool-settings-section">{settings}</div> : null}
+          <div className="pool-machine-footer">
+            <fieldset disabled={readOnly} className="pool-machine-count">
+              {first.recipe && isCustomRateRecipe(first.recipe) ? null : (
+                <SolvedMachinesStat
+                  inline
+                  label={
+                    first.recipe && isCropProductionRecipe(first.recipe) ? "Seeds" : "Machines"
+                  }
+                  needed={
+                    first.recipe && isCropProductionRecipe(first.recipe)
+                      ? sections.reduce(
+                          (sum, section) =>
+                            sum + (section.result?.theoreticalMachinesRequired ?? 0),
+                          0,
+                        )
+                      : required
+                  }
+                  pinned={owner.solvePin}
+                  onPin={(solvePin) => updateNode(owner.id, { solvePin })}
+                />
+              )}
+            </fieldset>
+            <div className="pool-status-list">
+              {sections.map((section, index) => (
+                <div key={section.section} className="pool-section-status">
+                  <Status section={section} />
+                  {sections.length > 1 ? (
+                    <span className="pool-shared-label" title={section.recipe?.name}>
+                      #{index + 1}
+                      {!readOnly ? (
+                        <button
+                          type="button"
+                          className="pool-sheet-icon-button"
+                          aria-label={"Remove recipe " + (index + 1) + " from shared machine"}
+                          onClick={() =>
+                            useFactoryStore
+                              .getState()
+                              .removeRecipeSection(owner.id, section.section)
+                          }
+                        >
+                          <X />
+                        </button>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </div>
+              ))}
             </div>
-          ) : null}
+            <div className="pool-machine-power">
+              <MachinePower entry={machine} />
+            </div>
+            {!readOnly ? (
+              <div className="pool-row-actions">
+                <button
+                  type="button"
+                  className="pool-sheet-icon-button"
+                  aria-label="Duplicate machine"
+                  onClick={() => useFactoryStore.getState().duplicateNode(owner.id)}
+                >
+                  <Copy />
+                </button>
+                <button
+                  type="button"
+                  className="pool-sheet-icon-button"
+                  aria-label="Replace recipe"
+                  onClick={() => useFactoryStore.getState().beginRecipeRefactor(owner.id)}
+                >
+                  <RefreshCw />
+                </button>
+                <button
+                  type="button"
+                  className="pool-sheet-icon-button"
+                  aria-label="Remove machine"
+                  onClick={() => useFactoryStore.getState().deleteNode(owner.id)}
+                >
+                  <Trash2 />
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
-        {settings ? <div className="pool-settings-section">{settings}</div> : null}
       </td>
     </>
   );

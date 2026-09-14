@@ -1599,7 +1599,7 @@ Working notes for future agents on GTNH Factory Flow.
   picture column. Status badges sit under its name, circuits have
   their own column using the canvas's CircuitChip (including its blank),
   enlarged and WITHOUT its background in this view.
-  Settings sit in an INDENTED SECTION BELOW the machine's name and stats,
+  Settings sit in an INDENTED SECTION BELOW the machine's name,
   using the canvas's MachineConfigControlPanel/setting tiles, including unique
   controls, searchable choices, numeric edits, and rich tooltips. They wrap
   naturally and grow only that machine's row: no settings column, height cap,
@@ -1658,9 +1658,13 @@ Working notes for future agents on GTNH Factory Flow.
   automatic connection. Power totals obey the power display dial.
   Count uses the canvas's SolvedMachinesStat, including its pencil and
   clear-to-unpin behavior. Never rebuild a "Need / Pin / Auto" text stack.
-  The name and chevron are first; the next row keeps Machines/count/pencil
+  The name and chevron are first; settings follow, and a footer at the BOTTOM
+  of the machine cell keeps Machines/count/pencil
   in ONE horizontal tile, then status with the same background, then power
   (which may wrap below when needed). The canvas keeps its original tile layout.
+  The cell's flex column absorbs existing spare height; do not increase row
+  height to push the footer down. MachineMenu anchors to the worksheet's
+  data-machine-editor-anchor cell when no canvas card exists.
   Status labels stay on one line inside their tiles, including Power stalled.
   Keep rows compact: item names and rates fit tightly beside the large icon.
   The ordinary row floor is 54px, growing only for shared item rows/settings.

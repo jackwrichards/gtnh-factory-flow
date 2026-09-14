@@ -365,6 +365,18 @@
   align-items: flex-start;
   min-width: 0;
 }
+.pool-sheet-table .pool-machine-cell {
+  height: 1px;
+}
+.pool-machine-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: min-content;
+}
+.pool-machine-layout > * {
+  flex-shrink: 0;
+}
 .pool-machine-editor {
   display: block;
   min-width: 0;
@@ -471,7 +483,8 @@
   grid-template-columns: 128px 128px minmax(0, 1fr) 63px;
   align-items: center;
   gap: 2px 6px;
-  margin: 2px 0 0;
+  margin: auto 0 0;
+  padding-top: 2px;
 }
 .pool-status-list {
   display: flex;

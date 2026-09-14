@@ -233,7 +233,9 @@ export function MachineMenu({
   const [anchorAt, setAnchorAt] = useState<{ left: number; top?: number; bottom?: number; width: number; maxHeight: number }>();
   useEffect(() => {
     const bar = anchorRef.current?.parentElement;
-    const card = anchorRef.current?.closest("[data-node-glance-root]");
+    // The worksheet reuses this chooser without a canvas card. Its cell is
+    // the window to align to; other standalone controls can use their bar.
+    const card = anchorRef.current?.closest("[data-node-glance-root], [data-machine-editor-anchor]") ?? bar;
     if (bar && card) {
       // Real px throughout (rects, innerWidth); the menu box wears ui-zoom,
       // so the numbers are divided by the scale where the style reads them.

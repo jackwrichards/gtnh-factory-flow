@@ -76,6 +76,33 @@ afterEach(() => {
 });
 
 describe("Pool worksheet", () => {
+  it("opens the machine chooser outside the canvas and applies the selected machine", async () => {
+    const project = fixture();
+    project.recipes[0].machineHandlers = [
+      {
+        id: "basic",
+        label: "Basic Bender",
+        machineType: "Bender",
+        kind: "single",
+        minimumTier: "LV",
+      },
+      {
+        id: "industrial",
+        label: "Industrial Bender",
+        machineType: "Industrial Bender",
+        kind: "multiblock",
+        minimumTier: "LV",
+      },
+    ];
+    useFactoryStore.getState().setProject(project);
+    const { container } = render(<PoolWorksheet />);
+    fireEvent.click(container.querySelector("[data-machine-menu-toggle]")!);
+    const menu = await screen.findByRole("listbox", { name: "Machine" });
+    fireEvent.click(within(menu).getByRole("option", { name: /Industrial Bender/ }));
+    expect(useFactoryStore.getState().project.nodes[0].machineHandlerId).toBe("industrial");
+    expect(screen.queryByRole("listbox", { name: "Machine" })).toBeNull();
+  });
+
   it("keeps summary sections fixed, uses signed inspector rates, and separates power", () => {
     const { container } = render(<PoolWorksheet />);
     expect(screen.queryByRole("button", { name: /Reorder .* panel/ })).toBeNull();
