@@ -53,11 +53,23 @@
   min-height: 0;
   border: 1px solid color-mix(in srgb, var(--mc-ink) 14%, transparent);
 }
-/* Three baseline rows line up with Power's Net; allow four more before scrolling. */
+/* Three baseline rows line up with Net; show seven rows and a half-row preview. */
 .pool-sheet-products,
 .pool-sheet-balance {
+  position: relative;
   min-height: 122px;
-  max-height: 218px;
+  max-height: 230px;
+}
+.pool-sheet-summary [data-more-below]::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  bottom: 0;
+  left: 0;
+  right: 10px;
+  height: 12px;
+  background: linear-gradient(transparent, var(--surface, #24272c));
 }
 .pool-sheet-power {
   align-self: start;
@@ -71,7 +83,6 @@
   flex: 1;
   overflow: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
 }
 .pool-products-heading,
 .pool-sheet-resource-heading {

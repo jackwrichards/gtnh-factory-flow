@@ -105,13 +105,3 @@
 .inspector-machine-build { padding-left: 4px; padding-right: 4px; }
 .inspector-machine-build > span:first-child > span:first-child { left: 4px; width: 16px; }
 .inspector-machine-build > span:first-child > span:nth-child(2) { width: 20px; }
-
-/* Quiet scrollbars keep the content prominent, with a stronger hover target. */
-.inspector-panel * { scrollbar-width: thin; scrollbar-color: #ffffff26 transparent; }
-@supports selector(::-webkit-scrollbar) {
-  .inspector-panel * { scrollbar-width: auto; scrollbar-color: auto; }
-  .inspector-panel *::-webkit-scrollbar { width: 4px; height: 4px; }
-  .inspector-panel *::-webkit-scrollbar-track { background: transparent; }
-  .inspector-panel *::-webkit-scrollbar-thumb { background: #ffffff26; border-radius: 4px; }
-  .inspector-panel *::-webkit-scrollbar-thumb:hover { background: #ffffff50; }
-}

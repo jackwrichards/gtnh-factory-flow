@@ -1373,23 +1373,22 @@ img {
   z-index: auto;
 }
 
-.nei-tab-scroll {
-  scrollbar-color: var(--mc-54) var(--mc-82);
+/* Visible at rest: a solid thumb and recessed track across app scrollers. */
+* {
+  scrollbar-color: var(--mc-ink-muted) var(--mc-25);
   scrollbar-width: thin;
 }
-
-.nei-tab-scroll::-webkit-scrollbar {
-  height: 12px;
-}
-
-.nei-tab-scroll::-webkit-scrollbar-track {
-  background: var(--mc-82);
-}
-
-.nei-tab-scroll::-webkit-scrollbar-thumb {
-  background: var(--mc-54);
-  border: 2px solid var(--mc-82);
-  border-radius: 8px;
+@supports selector(::-webkit-scrollbar) {
+  * { scrollbar-color: auto; scrollbar-width: auto; }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: var(--mc-25); }
+  *::-webkit-scrollbar-thumb {
+    background: var(--mc-ink-muted);
+    border: 2px solid var(--mc-25);
+    border-radius: 4px;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: var(--mc-ink); }
+  *::-webkit-scrollbar-corner { background: var(--mc-25); }
 }
 
 /*
@@ -1400,7 +1399,7 @@ img {
    webkit sizing below applies.
 */
 .recipe-search-scroll {
-  scrollbar-color: var(--mc-100) var(--mc-25);
+  scrollbar-color: var(--mc-ink-muted) var(--mc-25);
 }
 
 @supports selector(::-webkit-scrollbar) {
@@ -1418,12 +1417,12 @@ img {
   }
 
   .recipe-search-scroll::-webkit-scrollbar-thumb {
-    background: var(--mc-100);
+    background: var(--mc-ink-muted);
     border: 2px solid var(--mc-33);
   }
 
   .recipe-search-scroll::-webkit-scrollbar-thumb:hover {
-    background: #71747e;
+    background: var(--mc-ink);
   }
 }
 

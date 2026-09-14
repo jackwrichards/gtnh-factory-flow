@@ -83,6 +83,29 @@ export function PoolWorksheet() {
   const readOnly = useFactoryStore((state) => state.isReadOnly);
   useRateDisplayUnits();
   const [query, setQuery] = useState("");
+  useEffect(() => {
+    const scrollers = rootRef.current?.querySelectorAll<HTMLElement>(
+      ".pool-products-scroll, .pool-sheet-balance .pool-resources-scroll",
+    );
+    if (!scrollers) return;
+    const update = () => {
+      for (const scroller of scrollers) {
+        scroller.parentElement?.toggleAttribute("data-more-below",
+          scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop > 1);
+      }
+    };
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(update);
+    for (const scroller of scrollers) {
+      scroller.addEventListener("scroll", update, { passive: true });
+      observer?.observe(scroller);
+      if (scroller.firstElementChild) observer?.observe(scroller.firstElementChild);
+    }
+    update();
+    return () => {
+      observer?.disconnect();
+      for (const scroller of scrollers) scroller.removeEventListener("scroll", update);
+    };
+  }, []);
   const [internal, setInternal] = useState(false);
   const workspace = useWorkspaceView();
   const savedOrder = (kind: string) => workspace.poolWorksheetOrder[`${project.id}:${kind}`] ?? [];

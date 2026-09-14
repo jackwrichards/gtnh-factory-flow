@@ -1650,8 +1650,11 @@ Working notes for future agents on GTNH Factory Flow.
   Products/Resources/Power stay above the recipe scroller in that fixed order,
   with bounded scroll areas and separated headings/columns. Summary height is
   content-driven: Products/Resources start at the three-row Net baseline
-  (122px including headings/borders), grow up to seven rows (218px), then
-  scroll independently. Power stays at its natural height, without stretching
+  (122px including headings/borders), grow up to seven and a half rows (230px),
+  then scroll independently. A bottom fade previews further rows and clears
+  when scrolled to the end. App scrollers use brighter, persistent thumbs and
+  recessed tracks; intentional scrollbar-free tab strips remain unchanged.
+  Power stays at its natural height, without stretching
   or a scrollbar. On phones the summary also caps at 50vh to leave recipe room.
   Power moves below
   the other sections on narrow screens. Summary sections are NOT draggable.
