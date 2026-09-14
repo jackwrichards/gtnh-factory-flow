@@ -191,10 +191,10 @@
   color: #adc7ff;
 }
 .pool-sheet-table tbody tr {
-  height: 78px;
+  height: max(54px, calc(var(--pool-io-rows, 1) * 32px + 4px));
 }
 .pool-sheet-table td {
-  padding: 3px 8px;
+  padding: 2px 8px;
   vertical-align: top;
   border-bottom: 1px solid color-mix(in srgb, var(--mc-ink) 10%, transparent);
 }
@@ -222,9 +222,13 @@
   justify-content: center;
 }
 .pool-machine-picture > [data-machine-picture] {
-  height: 72px;
-  width: 72px;
+  height: 52px;
+  width: 52px;
   flex-shrink: 0;
+}
+.pool-machine-picture > [data-machine-picture] > * {
+  max-height: 100%;
+  max-width: 100%;
 }
 .pool-sheet-table .pool-circuit-cell {
   vertical-align: middle;
@@ -241,6 +245,9 @@
   padding: 0;
   min-width: 0;
   border: 0;
+}
+.pool-machine-count > div {
+  height: 22px;
 }
 .pool-machine-details {
   display: flex;
@@ -264,7 +271,7 @@
 .pool-editor-heading {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
   gap: 4px 8px;
 }
 .pool-editor-power {
@@ -278,12 +285,12 @@
 }
 .pool-editor-power > .flex > span {
   padding: 0 3px;
-  line-height: 28px;
+  line-height: 22px;
   font-size: 13px;
 }
 .pool-editor-power [data-power-controls] > button,
 .pool-editor-power [data-power-controls] > input {
-  height: 32px;
+  height: 24px;
   width: 46px;
   font-size: 14px;
 }
@@ -352,8 +359,8 @@
   display: grid;
   grid-template-columns: 128px 128px minmax(0, 1fr) 63px;
   align-items: center;
-  gap: 4px 6px;
-  margin: 4px 0 0;
+  gap: 2px 6px;
+  margin: 2px 0 0;
 }
 .pool-status-list {
   display: flex;
@@ -368,7 +375,7 @@
 .pool-status {
   display: inline-flex;
   align-items: center;
-  height: 24px;
+  height: 22px;
   padding: 0 5px;
   border: 1px solid var(--mc-47);
   background: var(--mc-71);
@@ -423,10 +430,11 @@
 }
 .pool-port-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(180px, 100%), 1fr));
+  grid-template-columns: repeat(var(--pool-io-columns, 1), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--pool-io-rows, 1), 32px);
   grid-auto-rows: 32px;
   align-content: start;
-  gap: 2px 9px;
+  gap: 0 9px;
 }
 .pool-port {
   min-width: 0;
@@ -434,7 +442,7 @@
 .pool-port-line {
   position: relative;
   display: grid;
-  grid-template-rows: 16px 16px;
+  grid-template-rows: 13px 17px;
   align-items: start;
   height: 32px;
   min-width: 0;
@@ -459,7 +467,8 @@
   height: 32px;
 }
 .pool-port-list .pool-resource-link > span {
-  line-height: 16px;
+  font-size: 10px;
+  line-height: 13px;
   mask-image: linear-gradient(to right, #000 calc(100% - 7px), transparent);
 }
 .pool-resource-link:hover {
@@ -471,11 +480,19 @@
 .pool-port-rate {
   padding-left: 39px;
   pointer-events: none;
-  line-height: 16px;
+  line-height: 17px;
   color: var(--mc-ink-muted);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+.pool-port-rate strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.pool-port-rate small {
+  margin-left: 2px;
+  font-size: 9px;
 }
 .pool-machine-off .pool-port-list {
   opacity: 0.5;

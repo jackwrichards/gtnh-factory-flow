@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Copy, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { formatPowerValue, resourceLabel, isCropProductionRecipe } from "@/lib/model";
@@ -8,7 +8,7 @@ import { isCustomRateRecipe } from "@/lib/model/custom-rate";
 import { type MachineListEntry } from "@/lib/model/machine-list";
 import type { ResourceAmount, ResourceBalance, FactoryStorage } from "@/lib/model/types";
 import { getStorageRoles } from "@/lib/model/storage-role";
-import { powerDisplayFromEuT, powerDisplaySuffix } from "@/lib/model/rate-unit";
+import { powerDisplayFromEuT, powerDisplaySuffix, rateSuffixForKind } from "@/lib/model/rate-unit";
 import { ResourceIcon } from "../nei/ResourceIcon";
 import { MinecraftTooltip } from "../nei/MinecraftTooltip";
 import { CircuitChip, RecipeNodeEditor, SolvedMachinesStat } from "../flow/RecipeNode";
@@ -16,7 +16,7 @@ import { ItemPickerPopover } from "../ItemPickerPopover";
 import { TargetLine } from "../flow/StorageNode";
 import { RecipeTooltip } from "../flow/RecipeTooltip";
 import { buildStatusTooltip, buildPortTooltip } from "../flow/recipe-tooltip-data";
-import { formatPortRate, formatSlotRate } from "../flow/flow-explainers";
+import { formatEnergyPerUnitParts, formatSlotRate, formatSlotRateBare, portReadsEnergy } from "../flow/flow-explainers";
 import type { RailPort } from "../flow/node-verdict";
 import {
   getRecipeProgrammedCircuit,
@@ -34,6 +34,15 @@ import {
 import "./pool-worksheet.css";
 
 export function PoolWorksheet() {
+  const ioHeaderRef = useRef<HTMLTableCellElement>(null);
+  const [ioWidth, setIoWidth] = useState(232);
+  useEffect(() => {
+    const header = ioHeaderRef.current;
+    if (!header || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => setIoWidth(entry.contentRect.width));
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
   const rootRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const root = rootRef.current;
@@ -56,6 +65,13 @@ export function PoolWorksheet() {
   const [internal, setInternal] = useState(false);
   const groups = useMemo(() => buildWorksheetGroups(project, result), [project, result]);
   const shown = useMemo(() => filterWorksheetGroups(groups, query), [groups, query]);
+  const maxItems = Math.max(1, ...shown.flatMap((group) => group.sections.flatMap((section) => [
+    section.ports.outputs.length,
+    section.ports.inputs.length + section.nonConsumed.filter((resource) => !isProgrammedCircuitResource(resource)).length,
+  ])));
+  // One ruler for both sides of every recipe: empty slots keep their place.
+  const itemColumns = Math.min(maxItems, Math.max(1, Math.floor((ioWidth + 9) / 169)));
+  const itemRows = Math.ceil(maxItems / itemColumns);
   const roles = useMemo(() => getStorageRoles(project), [project]);
   const products = (project.storages ?? []).filter(
     (storage) => roles.get(storage.id) === "product",
@@ -132,7 +148,8 @@ export function PoolWorksheet() {
               : "Calculating… Showing the previous results."}
           </p>
         ) : null}
-        <table className="pool-sheet-table" aria-label="Recipes running in the pool">
+        <table className="pool-sheet-table" aria-label="Recipes running in the pool"
+          style={{ "--pool-io-columns": itemColumns, "--pool-io-rows": itemRows } as CSSProperties}>
           <colgroup>
             <col className="pool-col-picture" />
             <col className="pool-col-machine" />
@@ -157,7 +174,7 @@ export function PoolWorksheet() {
                 </label>
               </th>
               <th>Circuit</th>
-              <th>Takes</th>
+              <th ref={ioHeaderRef}>Takes</th>
               <th>Makes</th>
             </tr>
           </thead>
@@ -223,6 +240,7 @@ const MachineRows = memo(function MachineRows({
   group: WorksheetGroup;
   readOnly: boolean;
 }) {
+  useRateDisplayUnits();
   const { owner, machine, sections } = group;
   const updateNode = useFactoryStore((state) => state.updateNode);
   const first = sections[0];
@@ -435,7 +453,7 @@ function PortList({
                 nodeId={nodeId}
               />
               <span className="pool-port-rate">
-                {port.free ? "Free" : formatPortRate(port, port.currentPerSecond)}
+                <PortRate port={port} />
               </span>
             </div>
           </MinecraftTooltip>
@@ -449,6 +467,17 @@ function PortList({
       ))}
     </div>
   );
+}
+
+function PortRate({ port }: { port: RailPort }) {
+  if (port.free) return <>Free</>;
+  const energy = portReadsEnergy(port);
+  const parts = energy
+    ? formatEnergyPerUnitParts(port.energyPerUnit!, port.kind)
+    : { value: formatSlotRateBare(port.currentPerSecond, port.kind), unit: rateSuffixForKind(port.kind).trim() };
+  return <span className={energy ? "text-amber-300" : undefined}>
+    <strong>{parts.value}</strong><small>{parts.unit}</small>
+  </span>;
 }
 
 function ResourceLink({ resource, nodeId }: { resource: ResourceAmount; nodeId?: string }) {

@@ -1612,11 +1612,14 @@ Working notes for future agents on GTNH Factory Flow.
   listener), while the existing control handlers still perform the adjustment.
   Do not rebuild a separate set of tiny inline steppers. Amps/tier stay in Machine.
   Picture/Machine/Circuit columns have FIXED widths (72/480/60 shell px),
-  and the artwork has a fixed 72px frame, independent of row height or window
+  and the artwork has a fixed 52px frame, independent of row height or window
   width. ALL extra horizontal space goes to Takes/Makes. Their bare item
-  grids fit more columns as space permits and grow to show every item in
-  additional rows; no two-by-two cap or scrolling item list. Names fade,
-  never ellipses. Names and rates are snug
+  grids share ONE column count and ONE row count across both sides and all
+  displayed recipes. Fit one row when possible; when any recipe needs two,
+  reserve two everywhere (and likewise for larger counts). Never auto-fit
+  each recipe independently, which spreads sparse rows differently. Additional
+  rows show every item; no scrolling item list. Names fade, never ellipses.
+  Names and rates are snug, with larger numbers and small unit suffixes,
   above/below each other, with the icon spanning both lines; no top clipping.
   Count/pin and power belong INSIDE the machine cell; amps/tier sit at its
   top right. No enable/disable action, heading/counter, duplicate Canvas
@@ -1630,6 +1633,7 @@ Working notes for future agents on GTNH Factory Flow.
   (which may wrap below when needed). The canvas keeps its original tile layout.
   Status labels stay on one line inside their tiles, including Power stalled.
   Keep rows compact: item names and rates fit tightly beside the large icon.
+  The ordinary row floor is 54px, growing only for shared item rows/settings.
   Power stays readable beside the stats or wraps below; actions sit at right. Equal average
   and peak figures display once; differing figures keep their Avg/Peak labels.
 
