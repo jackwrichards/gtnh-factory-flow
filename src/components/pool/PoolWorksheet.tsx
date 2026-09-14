@@ -400,8 +400,7 @@ function PortList({
   if (!ports.length && !nonConsumed.length) return <span className="pool-sheet-muted">—</span>;
   return (
     <div
-      className={`pool-port-list${ports.length + nonConsumed.length <= 2 ? " pool-port-list--single" : ""}`}
-      tabIndex={ports.length + nonConsumed.length > 4 ? 0 : undefined}
+      className="pool-port-list"
       role="group"
       aria-label="Recipe items"
     >

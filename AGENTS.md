@@ -1611,9 +1611,12 @@ Working notes for future agents on GTNH Factory Flow.
   and hatch power controls cancel native scrolling (a non-passive capture
   listener), while the existing control handlers still perform the adjustment.
   Do not rebuild a separate set of tiny inline steppers. Amps/tier stay in Machine.
-  Takes/Makes use two-by-two item grids with larger bare icons and fading
-  names, never ellipses; extra entries scroll instead of stretching rows.
-  One or two items use the whole column width. Names and rates are snug
+  Picture/Machine/Circuit columns have FIXED widths (72/480/60 shell px),
+  and the artwork has a fixed 72px frame, independent of row height or window
+  width. ALL extra horizontal space goes to Takes/Makes. Their bare item
+  grids fit more columns as space permits and grow to show every item in
+  additional rows; no two-by-two cap or scrolling item list. Names fade,
+  never ellipses. Names and rates are snug
   above/below each other, with the icon spanning both lines; no top clipping.
   Count/pin and power belong INSIDE the machine cell; amps/tier sit at its
   top right. No enable/disable action, heading/counter, duplicate Canvas
@@ -1625,6 +1628,7 @@ Working notes for future agents on GTNH Factory Flow.
   The name and chevron are first; the next row keeps Machines/count/pencil
   in ONE horizontal tile, then status with the same background, then power
   (which may wrap below when needed). The canvas keeps its original tile layout.
+  Status labels stay on one line inside their tiles, including Power stalled.
   Keep rows compact: item names and rates fit tightly beside the large icon.
   Power stays readable beside the stats or wraps below; actions sit at right. Equal average
   and peak figures display once; differing figures keep their Avg/Peak labels.
