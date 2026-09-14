@@ -621,6 +621,7 @@ function PortList({
                   }
                 }
                 nodeId={nodeId}
+                nameTooltip={false}
               />
               <span className="pool-port-rate">
                 <PortRate port={port} />
@@ -660,10 +661,12 @@ function ResourceLink({
   resource,
   nodeId,
   compact = false,
+  nameTooltip = true,
 }: {
   resource: ResourceAmount;
   nodeId?: string;
   compact?: boolean;
+  nameTooltip?: boolean;
 }) {
   const readOnly = useFactoryStore((state) => state.isReadOnly);
   const browse = (mode: BrowseMode) => {
@@ -714,7 +717,7 @@ function ResourceLink({
           showConsumedState={false}
           tooltip={false}
         />
-        <span title={resourceLabel(resource)}>{resourceLabel(resource)}</span>
+        <span title={nameTooltip ? resourceLabel(resource) : undefined}>{resourceLabel(resource)}</span>
       </button>
       {menu}
     </>
