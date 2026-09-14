@@ -80,6 +80,18 @@ export interface ReleaseSpotlight {
 
 export const RELEASE_SPOTLIGHTS: ReleaseSpotlight[] = [
   {
+    version: "3.2.0",
+    release: "3.2.0",
+    title: "Pool workspace and splitters",
+    items: [
+      { icon: "board", title: "Pool recipe table", tint: "blue" },
+      { icon: "wires", title: "Ratio splitters", tint: "cyan" },
+      { icon: "power", title: "Resource and power summaries", tint: "amber" },
+      { icon: "menu", title: "Collapsible mobile summaries", tint: "violet" },
+      { icon: "size", title: "Compact workspace controls", tint: "green" },
+    ],
+  },
+  {
     version: "3.0.0",
     release: "3.0",
     title: "The biggest update yet",

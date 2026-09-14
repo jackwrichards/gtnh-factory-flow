@@ -48,13 +48,17 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "3.2.0",
-    date: "2026-09-12",
-    headline: "Pool worksheet and drawer splits",
+    date: "2026-09-13",
+    headline: "Pool workspace and ratio splitters",
     notes: [
-      "Pool now opens as a compact table of recipes and machine controls, with matching Products, Resources and Power summaries above. Add targets with the Products + button; Build and Solve keep your canvas.",
-      "Drawers and tanks have a third mode: Ratio, with separate incoming and outgoing percentages and a Setup output share for unwired surplus.",
-      "The bottom pencil opens a compact editor with current flow rates, editable percentages and Equal split buttons. Hover a percentage for a compact view of the whole split, or scroll it to adjust directly on the canvas.",
-      "Ratio mode holds the split when a branch backs up, in both Build and Solve.",
+      "Pool workspace: compact recipe table with machine settings, circuits, per-recipe status, and aligned inputs and outputs. Build and Solve retain the canvas.",
+      "Pool summaries: product targets, resource balances, and average/peak power totals. Narrow screens use collapsible sections to preserve machine-list space.",
+      "Pool organization: search machines or items, reorder machines and products, and drag resources into Products to add targets.",
+      "Ratio splitters: drawers and tanks gain separate input/output percentages and a Setup share for unwired surplus; splits hold when branches back up in Build and Solve.",
+      "Split controls: editable percentages, Equal split, current branch rates, hover previews, and direct scroll adjustment on wire arrows.",
+      "Machine controls: shared canvas tier controls in Pool, dedicated settings below each machine, and separate status/circuit rows for shared recipes.",
+      "Interface: smaller toolbars, stable mode-button positions, clearer scrollbars and overflow previews, and power tooltips that dismiss when leaving the control.",
+      "Hatch supplies (since 3.1.6): water and air intake toggles on eligible multiblock inputs provide the required fluid without an external supply chain.",
     ],
   },
   {
