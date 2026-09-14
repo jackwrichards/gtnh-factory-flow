@@ -7600,8 +7600,8 @@ const SolveModeNotice = memo(function SolveModeNotice({
  *   reports what flows.
  * - SOLVE: you set the machines and the wires and type what you want; the
  *   board counts the machines.
- * - POOL: you set the machines and type what you want; the board counts,
- *   wires and imports for you.
+ * - POOL: you add recipes to the list and type what you want; the planner
+ *   counts machines, shares resources and imports missing inputs for you.
  *
  * The lit key takes no click. Under the hood build is both flags off, solve
  * is solveMode, pool is solveMode plus poolMode, so old plans open in the
@@ -7647,10 +7647,10 @@ const MODE_KEYS: Array<{
   {
     mode: "pool",
     label: "Pool mode",
-    setup: "Select recipes and set target production rates.",
+    setup: "Add recipes to the list and set target production rates.",
     result: "Required machine counts.",
     details: ["Resources are shared without wires.", "Inputs with no producer are imported automatically."],
-    note: "For simple production calculations, as in traditional GTNH planners.",
+    note: "For AE2, as in traditional GTNH planners.",
     Icon: Waves,
     ink: "text-[#6f9cff]",
     dim: "text-[#5273b8]",
@@ -7812,11 +7812,8 @@ const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: b
                 </ul>
               )}
               {note && <p className="border-t border-line pt-2.5 text-fg-muted">{note}</p>}
-              {/* The mode's picture, last and centred: the same flow drawn
-                  three ways, so the difference between the modes is seen
-                  before it is read. Exported at 640px wide for the 2x
-                  screens the tooltip is mostly read on. */}
-              <div className="border-t border-line pt-3">
+              {/* Canvas modes keep their flow picture; Pool uses the list. */}
+              {key !== "pool" && <div className="border-t border-line pt-3">
                 <img
                   src={`/mode-art/${key}.webp`}
                   alt=""
@@ -7827,7 +7824,7 @@ const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: b
                   // full colour shouted next to the tooltip's grey text.
                   style={{ filter: "saturate(0.45) brightness(0.88)" }}
                 />
-              </div>
+              </div>}
             </div>
           }
         >
