@@ -522,7 +522,7 @@
 .pool-resource-link {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 3px;
   min-width: 0;
   max-width: 100%;
   text-align: left;
@@ -551,7 +551,7 @@
   flex-shrink: 0;
 }
 .pool-port-rate {
-  padding-left: 39px;
+  padding-left: 35px;
   pointer-events: none;
   line-height: 12px;
   color: var(--mc-ink-muted);

@@ -1610,6 +1610,12 @@ Working notes for future agents on GTNH Factory Flow.
   Count/status/power use consistent grid tracks. Wheel gestures over settings
   and hatch power controls cancel native scrolling (a non-passive capture
   listener), while the existing control handlers still perform the adjustment.
+  Above-card tooltips anchor to their own control when no React Flow card
+  exists (the worksheet), including after wheel updates. Never let their
+  panels fall back over the pointer and obscure the dial.
+  Tooltips, including power readouts and their companion legends, never keep
+  themselves open by being hovered: pointer-events-none throughout, immediate
+  close when the pointer leaves the control, no delayed bridge to the panel.
   Do not rebuild a separate set of tiny inline steppers. Amps/tier stay in Machine.
   Picture/Machine/Circuit columns have FIXED widths (72/480/60 shell px),
   and the artwork has a fixed 52px frame, independent of row height or window
