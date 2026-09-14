@@ -7,7 +7,6 @@ import { emitBoardCameraMove } from "@/lib/board-camera-signal";
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { useViewerLock } from "./use-viewer-lock";
 import { StorageRatioEditor } from "./StorageRatioEditor";
-import { useWorkspaceView, writeWorkspaceView } from "@/lib/workspace-view";
 import { PoolWorksheet } from "../pool/PoolWorksheet";
 import { formatRatioShare, getProjectRatioBranches } from "@/lib/model/storage-ratios";
 import { labelRatioArrows, layoutRatioLabels, type RatioWireLabel } from "./ratio-label-layout";
@@ -40,7 +39,6 @@ import {
 } from "@xyflow/react";
 import { toBlob, toSvg } from "html-to-image";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
-import { RecipeTooltip } from "./RecipeTooltip";
 import {
   Activity,
   AlignJustify,
@@ -53,7 +51,6 @@ import {
   Focus,
   Gauge,
   Grid3x3,
-  TableProperties,
   Grip,
   Hammer,
   Hexagon,
@@ -75,7 +72,6 @@ import {
   Blocks,
   Check,
   Sigma,
-  Upload,
   Waves,
   X,
   Zap,
@@ -114,10 +110,6 @@ import {
 } from "@/lib/model";
 import { getCrossFormCellMatch } from "@/lib/model/resources";
 import { fetchLitresPerCell } from "@/lib/datasets/cell-ratio";
-import { queryRecipeDatasetResources } from "@/lib/datasets/browser-loader";
-import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets/remote";
-import type { DatasetResourceIndexEntry } from "@/lib/datasets/types";
-import { ItemPickerPopover } from "@/components/ItemPickerPopover";
 import { BoardContextMenu, type BoardMenuTarget } from "./BoardContextMenu";
 import { listPoolCellPairs } from "@/lib/solver/pool-mode";
 import "./pool-mode.css";
@@ -2346,7 +2338,7 @@ export function FactoryFlow() {
   const [isNodeDragging, setNodeDragging] = useState(false);
   // Pool mode: the wire layers fade out (globals.css, factory-flow-board--pool).
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
-  const worksheet = useWorkspaceView().poolWorksheet && poolMode;
+  const worksheet = poolMode;
   const [annotationTool, setAnnotationTool] = useState<BoardDrawTool | undefined>(undefined);
   // Shared by the brush and the annotation tools: the last colour picked in
   // the palette is what a new box/arrow/note is created with. Blue to start:
@@ -7882,162 +7874,6 @@ const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: b
   );
 });
 
-/**
- * Pool mode's two declarations, on the build tray right after the crop
- * farm: a SOURCE drawer (the plan imports this) and a PRODUCT drawer (the
- * plan makes this). With no wires there is no port to drag a drawer off, so
- * these are where drawers come from. Orange like the mode, and they fade
- * and slide in when the mode comes on rather than sitting greyed on every
- * board. Each drops the recipe search's item picker centred under itself;
- * the pick lands on clear floor and the camera goes to it.
- */
-const PoolSpawnKeys = memo(function PoolSpawnKeys() {
-  const on = useFactoryStore((state) => state.project.poolMode === true);
-  const readOnly = useFactoryStore((state) => state.isReadOnly);
-  const worksheet = useWorkspaceView().poolWorksheet;
-  const addPoolStorage = useFactoryStore((state) => state.addPoolStorage);
-  const datasetManifestUrl = useFactoryStore((state) => state.datasetManifestUrl);
-  const datasetManifest = useFactoryStore((state) => state.datasetManifest);
-  const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
-  // Product target and worksheet view. The pool imports whatever nobody
-  // makes by itself, so it needs no source key.
-  const [picking, setPicking] = useState(false);
-  const selectedDatasetVersion = useMemo(
-    () => datasetManifest?.versions.find((entry) => entry.id === selectedDatasetVersionId),
-    [datasetManifest?.versions, selectedDatasetVersionId],
-  );
-  const searchPickerResources = useCallback(
-    async (pickerQuery: string, signal: AbortSignal) => {
-      if (!selectedDatasetVersion) {
-        return [];
-      }
-      const result = await queryRecipeDatasetResources(
-        datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
-        selectedDatasetVersion,
-        { query: pickerQuery, offset: 0, limit: 48 },
-        { signal },
-      );
-      return result.resources;
-    },
-    [datasetManifestUrl, selectedDatasetVersion],
-  );
-  const closePicker = useCallback(() => setPicking(false), []);
-  const onPick = useCallback(
-    (entry: DatasetResourceIndexEntry) => {
-      if (entry.kind === "aspect") {
-        return;
-      }
-      addPoolStorage(
-        {
-          kind: entry.kind,
-          id: entry.id,
-          displayName: entry.displayName,
-          iconPath: entry.iconPath,
-          iconAtlas: entry.iconAtlas,
-          dominantColor: entry.dominantColor,
-        },
-        "drain",
-      );
-      playBoardSound("shuffle");
-      setPicking(false);
-    },
-    [addPoolStorage],
-  );
-  useEffect(() => {
-    if (!on) {
-      setPicking(false);
-    }
-  }, [on]);
-  // ONE motion. The clip grows from nothing to the key's width while the
-  // key slides the same distance the other way, on the same curve and the
-  // same clock, so it comes out from under the crop farm key like a
-  // drawer: the tray only ever shows the part that has emerged. No fade,
-  // no stagger - anything else here read as two animations disagreeing.
-  return (
-    <div className="relative flex items-center">
-      <div
-        aria-hidden={!on}
-        className={[
-          "overflow-hidden transition-[width] duration-500 ease-out",
-          on ? "w-[104px]" : "pointer-events-none w-0",
-        ].join(" ")}
-      >
-        <div
-          className={[
-            "flex w-[104px] items-center gap-2 pl-2 transition-transform duration-500 ease-out",
-            on ? "translate-x-0" : "-translate-x-[104px]",
-          ].join(" ")}
-        >
-          <ToolTray>
-            <MinecraftTooltip
-              content={
-                picking ? undefined : () => (
-                  <RecipeTooltip
-                    view={{
-                      title: "Product drawer",
-                      mode: "pool",
-                      rows: [],
-                      bullets: [
-                        "Pool mode has no wires, so you need a way to create product cards.",
-                        "Create one with this button, or drag one off an output.",
-                      ],
-                      actions: [{ gesture: "left", label: "Choose a product" }],
-                    }}
-                  />
-                )
-              }
-            >
-            <button
-              type="button"
-              onClick={() => setPicking((was) => !was)}
-              aria-pressed={picking}
-              tabIndex={on ? 0 : -1}
-              className={[
-                "pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)]",
-                picking ? TOOL_FACE_ON : TOOL_FACE_OFF,
-              ].join(" ")}
-              aria-label="Add a product drawer"
-              disabled={readOnly}
-            >
-              <Upload className={picking ? "h-4 w-4 text-[#6f9cff]" : "h-4 w-4"} />
-            </button>
-            </MinecraftTooltip>
-            </ToolTray>
-            <ToolTray>
-              <button type="button" tabIndex={on ? 0 : -1}
-                aria-label={worksheet ? "Show Pool canvas" : "Show Pool worksheet"}
-                title={worksheet ? "Canvas view" : "Worksheet view"}
-                aria-pressed={worksheet}
-                onClick={() => { setPicking(false); writeWorkspaceView({ poolWorksheet: !worksheet }); }}
-                className={`pointer-events-auto relative z-10 flex h-8 w-8 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] ${worksheet ? TOOL_FACE_ON : TOOL_FACE_OFF}`}>
-                <TableProperties className={`h-4 w-4 ${worksheet ? "text-[#6f9cff]" : ""}`} />
-              </button>
-            </ToolTray>
-        </div>
-      </div>
-      {picking ? (
-        // Outside the clip, centred under the key that opened it.
-        <div
-          className="absolute top-full z-30 mt-1 -translate-x-1/2"
-          style={{ left: 24 }}
-        >
-          <ItemPickerPopover
-            role="makes"
-            placement="below"
-            onPick={onPick}
-            onClose={closePicker}
-            searchPickerResources={searchPickerResources}
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-});
-
-
-
-
-
 const SourceToolbar = memo(function SourceToolbar({
   readOnly = false,
   folded,
@@ -8140,12 +7976,7 @@ const SourceToolbar = memo(function SourceToolbar({
         label="build tools"
         side="left"
       >
-      {(folded || readOnly) && (
-        <>
-          {!readOnly ? <ToolTray helpAnchor="rules"><ModeKeys forceIcons /></ToolTray> : null}
-          <PoolSpawnKeys />
-        </>
-      )}
+      {folded && !readOnly ? <ToolTray helpAnchor="rules"><ModeKeys forceIcons /></ToolTray> : null}
       {/* How the numbers read: ONE key wearing the current unit, opening the
           four units as a named list. Four permanent keys spent three slots
           saying nothing but "not this one", and a blind cycle made you walk
@@ -9563,15 +9394,6 @@ const PaintToolbar = memo(function PaintToolbar({
       <ToolTray helpAnchor="rules">
         <ModeKeys forceIcons={modeIconsOnly} />
       </ToolTray>
-      {/* Pool mode's product key: its OWN plate that appears to the right of
-          the switch while that mode is on (Jack, 2026-09-06). Absolutely
-          placed, so the switch never moves for it - it is not one of the
-          three, it only turns up when Pool does. */}
-      {/* The mask starts AT the switch's edge, so the plate comes out from
-          under Pool; the gap it settles at is inside the slide. */}
-      <div className="absolute left-full top-0">
-        <PoolSpawnKeys />
-      </div>
     </div>
     )}
     <div

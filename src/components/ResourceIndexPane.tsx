@@ -3,7 +3,6 @@
 import { Search, X, ChevronLeft, ChevronRight, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { DragEvent, PointerEvent, RefObject, WheelEvent } from "react";
-import { useWorkspaceView } from "@/lib/workspace-view";
 import { writeResourceDrag } from "@/lib/resource-drag";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
 import {
@@ -1044,8 +1043,7 @@ function ResourcePager({
 function useResourceBrowseMenu(
   browse: (resource: IndexedResource, mode: "recipes" | "uses") => void,
 ) {
-  const { poolWorksheet } = useWorkspaceView();
-  const canDrag = useFactoryStore((state) => state.project.poolMode && !state.isReadOnly) && poolWorksheet;
+  const canDrag = useFactoryStore((state) => state.project.poolMode && !state.isReadOnly);
   const pressedRef = useRef<IndexedResource | undefined>(undefined);
   const [pressedName, setPressedName] = useState("");
   const menu = useBrowseMenu({

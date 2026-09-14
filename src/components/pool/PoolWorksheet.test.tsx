@@ -66,7 +66,7 @@ function fixture(): FactoryProject {
 }
 
 beforeEach(() => {
-  writeWorkspaceView({ ...DEFAULT_WORKSPACE_VIEW, poolWorksheet: true });
+  writeWorkspaceView({ ...DEFAULT_WORKSPACE_VIEW });
   useFactoryStore.setState({ isReadOnly: false, checklistMode: false });
   useFactoryStore.getState().setProject(fixture());
 });
@@ -323,9 +323,7 @@ describe("Pool worksheet", () => {
     expect(after.project).toBe(project);
     expect(after.lastResult).toBe(lastResult);
     expect(after.undoHistory).toBe(undoHistory);
-    expect(
-      JSON.parse(localStorage.getItem("gtnh-factory-flow-workspace-view")!).poolWorksheet,
-    ).toBe(true);
+    expect(JSON.parse(localStorage.getItem("gtnh-factory-flow-workspace-view")!)).toEqual(DEFAULT_WORKSPACE_VIEW);
   });
 
   it("edits the real product target and supports undo", () => {

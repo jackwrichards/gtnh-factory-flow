@@ -5,7 +5,7 @@ import { useLayoutEffect, useState, type RefObject } from "react";
 /** Responsive board chrome: labeled modes, icon modes, then folded tools.
  * Measurements are shell pixels. Only rem-sized parts grow with Firefox text
  * zoom; the 76px power key and 96/44px mode keys keep their fixed widths.
- * Reserve manual recalculate and the Pool product key in every mode so a
+ * Reserve manual recalculate in every mode so a
  * button becoming visible never creates an overlap.
  */
 export interface ToolbarFold {
@@ -23,11 +23,10 @@ export function toolbarFoldFor(boardWidth: number, compact: boolean, textScale =
   const foldedPaintWidth = 40 * scale + 4;
   const margin = 12 * scale;
   const gap = 16 * scale;
-  const poolWidth = 104;
   const labelModesWidth = 296 + 8 * scale;
   const iconModesWidth = 140 + 8 * scale;
   const centerFits = (modesWidth: number, rightWidth: number) =>
-    boardWidth >= 2 * Math.max(buildWidth + margin + gap, rightWidth + poolWidth + margin + gap) + modesWidth;
+    boardWidth >= 2 * Math.max(buildWidth + margin + gap, rightWidth + margin + gap) + modesWidth;
   const modeIconsOnly = compact || !centerFits(labelModesWidth, paintWidth);
   const build = compact || !centerFits(iconModesWidth, foldedPaintWidth);
   const paint = compact || (build

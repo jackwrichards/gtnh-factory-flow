@@ -21,7 +21,7 @@ export function WorksheetPower({ entries }: { entries: MachineListEntry[] }) {
         <h3>Power</h3>
       </div>
       <div className="pool-resources-scroll">
-        <table className="pool-power-table" aria-label="Pool power totals">
+        <table className="pool-summary-table pool-power-table" aria-label="Pool power totals">
           <thead>
             <tr>
               <th />

@@ -18,9 +18,7 @@ import { isCompactViewport } from "./compact-view";
  * never wants to see it on any board.
  */
 export interface WorkspaceView {
-  /** Pool's worksheet is a personal view, never a different solve or saved plan. */
-  poolWorksheet: boolean;
-  /** Per-plan list/panel order in the Pool view, independent of canvas order. */
+  /** Per-plan list order in the Pool view, independent of canvas order. */
   poolWorksheetOrder: Record<string, string[]>;
   /** The recipe browser / pockets / setups column on the left. */
   leftPanelOpen: boolean;
@@ -52,7 +50,6 @@ export interface WorkspaceView {
 const WORKSPACE_VIEW_STORAGE_KEY = "gtnh-factory-flow-workspace-view";
 
 export const DEFAULT_WORKSPACE_VIEW: WorkspaceView = {
-  poolWorksheet: false,
   poolWorksheetOrder: {},
   leftPanelOpen: true,
   rightPanelOpen: true,
@@ -111,7 +108,6 @@ function readWorkspaceView(): WorkspaceView {
     const starred = new Set(favouriteResourceKeys);
 
     return {
-      poolWorksheet: flag(parsed.poolWorksheet, false),
       poolWorksheetOrder: parsed.poolWorksheetOrder && typeof parsed.poolWorksheetOrder === "object"
         ? Object.fromEntries(Object.entries(parsed.poolWorksheetOrder).map(([key, value]) => [key, keys(value)]))
         : {},

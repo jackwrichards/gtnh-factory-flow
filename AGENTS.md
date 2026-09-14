@@ -1583,10 +1583,10 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## The Three Modes (Build, Solve, Pool) And The Rules That Went
 
-- Pool's WORKSHEET (Jack, 2026-09-13) is a VIEW, never a fourth mode.
-  `WorkspaceView.poolWorksheet` is a browser preference outside the plan.
-  The second slide-out key beside Pool's product key toggles it; both keys
-  occupy 104 shell pixels. Build/Solve always show the canvas. The worksheet
+- Pool's WORKSHEET (Jack, 2026-09-13) IS the Pool interface, never a fourth
+  mode. There is no canvas/view toggle or slide-out product key; the Products
+  heading's + opens the item picker. Ignore the retired browser preference
+  WorkspaceView.poolWorksheet. Build/Solve always show the canvas. Pool
   covers the mounted canvas and temporarily absorbs the inspector's width,
   preserving its open preference and the canvas positions/wires/camera.
   `components/pool/` reads the same books and machine-list figures. Shared
@@ -1647,7 +1647,8 @@ Working notes for future agents on GTNH Factory Flow.
   groups, products, and resources; arrow keys also reorder.
   `WorkspaceView.poolWorksheetOrder` saves per-plan browser order only, without
   changing canvas positions, the solver, or undo. Read-only views cannot drag.
-  Products and Resources share EXACT 22px column headers and 24px rows; both
+  Products, Resources, and Power share one table grid style: vertical dividers,
+  EXACT 22px column headers, and 24px rows. Products and Resources both
   call the first column Name and use compact 16px icons. Recipe art stays larger.
   Resource readings reuse inspector signed formatting and typography: red
   negative Inputs, green positive Outputs, neutral Internal, signed Net, bold
@@ -1686,8 +1687,7 @@ Working notes for future agents on GTNH Factory Flow.
   cannot flex-shrink. Test expanded checklist and manual recalculate too.
 
 - TOOLBAR LAYOUT since the rework (Jack, 2026-09-06): LEFT row = undo
-  pair, rate keys, pool mode's product tray (`PoolSpawnKeys`, the whole
-  tray slides in only while pool is on, so no empty plate shows). RIGHT
+  pair and rate keys. Pool products are added in the Products summary. RIGHT
   row, left to right = the MODE SWITCH tray, the paint tray (palette,
   paint, image), arrange, the view tray (annotation tools drop-down, view
   options), and the BIN last of everything. The mute key and the "Watch
@@ -1752,10 +1752,9 @@ Working notes for future agents on GTNH Factory Flow.
   A DRAIN drawer is the plan's declared product (its `drainMode` still says
   product/byproduct/trash, and `targetPerSecond` is the solve ask). There
   is NO source key (Jack, 2026-09-05): the pool imports by itself, so a
-  source drawer says nothing. New product drawers come from the build
-  tray's one pool key (`PoolSpawnKeys` -> `addPoolStorage`, through the
-  recipe search's `ItemPickerPopover`) or a drag off a port into empty
-  space (`addStorageForConnection`, side from the port, no wire).
+  source drawer says nothing. New products come from the Products heading
+  + (`AddPoolProduct` -> `addPoolStorage`, through ItemPickerPopover), or
+  by dragging an item/resource into that section.
 - CELLS AND FLUIDS are bridged inside the pool: `listPoolCellPairs` names
   every cell/fluid pair the plan's slots carry in both forms (the search's
   `isFluidEquivalentToFilledCell` match), the board fetches each cell's
@@ -1766,8 +1765,7 @@ Working notes for future agents on GTNH Factory Flow.
   two tanks feeding each other.
 - Chrome: the pool key is the third of the `ModeKeys` (Waves icon). Each
   lit key has its own colour and nothing else changes: build gold
-  `#f5b642`, solve violet `#c78bff` (cyan clashed with pool), pool blue `#6f9cff` (the product key on
-  the build tray lights the same blue while its picker is open). There is
+  `#f5b642`, solve violet `#c78bff` (cyan clashed with pool), pool blue `#6f9cff`. There is
   NO room light for any mode (Jack, 2026-09-06; the solve and pool auras
   were removed). Sounds: `buildOn` a latch (tick, then a wooden knock),
   `solveOn` the shimmer, `poolOn` a drop into water (a bent-up plink and

@@ -51,7 +51,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-09-12",
     headline: "Pool worksheet and drawer splits",
     notes: [
-      "Pool has a worksheet view: recipes, machine controls, counts, power and resource balances in one table. Open it with the new key beside the product drawer key; your canvas and calculations stay the same.",
+      "Pool now opens as a compact table of recipes and machine controls, with matching Products, Resources and Power summaries above. Add targets with the Products + button; Build and Solve keep your canvas.",
       "Drawers and tanks have a third mode: Ratio, with separate incoming and outgoing percentages and a Setup output share for unwired surplus.",
       "The bottom pencil opens a compact editor with current flow rates, editable percentages and Equal split buttons. Hover a percentage for a compact view of the whole split, or scroll it to adjust directly on the canvas.",
       "Ratio mode holds the split when a branch backs up, in both Build and Solve.",

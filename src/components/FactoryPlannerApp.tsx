@@ -407,7 +407,7 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
   // brings it back exactly as it was left.
   const covering = useCoveringPage();
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
-  const worksheet = poolMode && workspace.poolWorksheet;
+  const worksheet = poolMode;
   const rightPanelShown = workspace.rightPanelOpen && !covering && !worksheet;
 
   return (
@@ -459,7 +459,7 @@ function CompactWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
   // is not there at all, handle included.
   const covering = useCoveringPage();
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
-  const worksheet = poolMode && workspace.poolWorksheet;
+  const worksheet = poolMode;
   const openLeft = () => writeWorkspaceView({ leftPanelOpen: true, rightPanelOpen: false });
   const openRight = () => writeWorkspaceView({ leftPanelOpen: false, rightPanelOpen: true });
 

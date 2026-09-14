@@ -106,48 +106,19 @@
   color: var(--mc-ink);
   background: var(--mc-49);
 }
-.pool-product {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 64px 58px 18px;
-  align-items: center;
-  gap: 4px;
-  height: 24px;
-  padding: 0 6px;
-  border-bottom: 1px solid color-mix(in srgb, var(--mc-ink) 8%, transparent);
-}
-.pool-product-columns {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 64px 58px 18px;
-  gap: 4px;
-  height: 22px;
-  align-items: center;
-  padding: 2px 6px;
-  font-size: 11px;
-  line-height: 17px;
-  flex-shrink: 0;
-  color: var(--mc-ink-muted);
-  border-bottom: 1px solid color-mix(in srgb, var(--mc-ink) 14%, transparent);
-}
-.pool-product > .pool-resource-link {
-  grid-column: 2;
-}
-.pool-product > .pool-order-handle {
-  grid-column: 1;
-}
-.pool-product > .pool-sheet-icon-button {
-  grid-column: 5;
+.pool-products-table th:nth-child(2) { width: 72px; }
+.pool-products-table th:nth-child(3) { width: 76px; }
+.pool-products-table th:last-child { width: 28px; }
+.pool-products-table th:not(:first-child),
+.pool-products-table td:not(:first-child) {
+  text-align: right;
+  white-space: nowrap;
 }
 .pool-product-target {
-  min-width: 0;
   position: relative;
-  grid-column: 3;
 }
 .pool-product-target [aria-label="Required amount"] > div {
   transform: none;
-}
-.pool-product > span {
-  font-size: 10px;
-  grid-column: 4;
 }
 .pool-sheet-balance,
 .pool-sheet-power {
@@ -155,14 +126,12 @@
   flex-direction: column;
   min-width: 0;
 }
-.pool-sheet-resources,
-.pool-power-table {
+.pool-summary-table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
 }
-.pool-sheet-resources th,
-.pool-power-table thead th {
+.pool-summary-table thead th {
   text-align: left;
   color: var(--mc-ink-muted);
   font-size: 11px;
@@ -171,9 +140,8 @@
   padding: 2px 6px;
   line-height: 17px;
 }
-.pool-sheet-resources td,
-.pool-power-table tbody td,
-.pool-power-table tbody th {
+.pool-summary-table tbody td,
+.pool-summary-table tbody th {
   padding: 0 6px;
   border-bottom: 1px solid color-mix(in srgb, var(--mc-ink) 8%, transparent);
   height: 24px;
@@ -181,14 +149,10 @@
   line-height: 18px;
   font-variant-numeric: tabular-nums;
 }
-.pool-sheet-resources th + th,
-.pool-sheet-resources td + td,
-.pool-power-table th + th,
-.pool-power-table td {
+.pool-summary-table tr > * + * {
   border-left: 1px solid color-mix(in srgb, var(--mc-ink) 9%, transparent);
 }
-.pool-sheet-resources th,
-.pool-power-table thead th {
+.pool-summary-table thead th {
   border-bottom: 1px solid color-mix(in srgb, var(--mc-ink) 14%, transparent);
 }
 .pool-balance-name {
@@ -212,11 +176,11 @@
   text-overflow: ellipsis;
   font-size: 13px;
 }
-.pool-sheet-resources .pool-resource-link {
+.pool-summary-table .pool-resource-link {
   min-width: 0;
   width: 100%;
 }
-.pool-sheet-resources .pool-order-handle {
+.pool-summary-table .pool-order-handle {
   height: 16px;
 }
 .pool-balance-name {
@@ -265,7 +229,7 @@
   width: auto;
 }
 .pool-sheet-table thead,
-.pool-sheet-resources thead {
+.pool-summary-table thead {
   position: sticky;
   top: 0;
   z-index: 3;

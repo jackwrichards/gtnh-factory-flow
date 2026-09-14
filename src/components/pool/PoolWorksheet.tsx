@@ -184,17 +184,22 @@ export function PoolWorksheet() {
               <h3>Products</h3>
               {!readOnly ? <AddPoolProduct /> : null}
             </div>
-            <div className="pool-product-columns">
-              <span />
-              <span>Name</span>
-              <span>Target</span>
-              <span>Supplied</span>
-              <span />
-            </div>
             <div className="pool-products-scroll">
-              {products.map((storage) => (
-                <Product key={storage.id} storage={storage} />
-              ))}
+              <table className="pool-summary-table pool-products-table" aria-label="Pool products">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Target</th>
+                    <th>Supplied</th>
+                    <th><span className="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {products.map((storage) => (
+                    <Product key={storage.id} storage={storage} />
+                  ))}
+                </tbody>
+              </table>
             </div>
           </ProductsPane>
           <div className="pool-sheet-balance">
@@ -210,7 +215,7 @@ export function PoolWorksheet() {
               </label>
             </div>
             <div className="pool-resources-scroll">
-              <table className="pool-sheet-resources" aria-label="Pool resource balance">
+              <table className="pool-summary-table pool-sheet-resources" aria-label="Pool resource balance">
                 <thead>
                   <tr>
                     <th>Name</th>
@@ -761,24 +766,28 @@ function Product({ storage }: { storage: FactoryStorage }) {
   const readOnly = useFactoryStore((state) => state.isReadOnly);
   const orderTarget = useOrderTarget("products", storage.id);
   return (
-    <div {...orderTarget} className="pool-product" data-worksheet-product={storage.id}>
-      <OrderHandle
-        kind="products"
-        id={storage.id}
-        label={`product ${storage.displayName ?? storage.resourceId}`}
-      />
-      <ResourceLink
-        compact
-        resource={{
-          kind: storage.kind,
-          id: storage.resourceId,
-          displayName: storage.displayName,
-          iconPath: storage.iconPath,
-          iconAtlas: storage.iconAtlas,
-          amount: 1,
-        }}
-      />
-      <div className="pool-product-target">
+    <tr {...orderTarget} className="pool-product" data-worksheet-product={storage.id}>
+      <td>
+        <div className="pool-balance-name">
+          <OrderHandle
+            kind="products"
+            id={storage.id}
+            label={`product ${storage.displayName ?? storage.resourceId}`}
+          />
+          <ResourceLink
+            compact
+            resource={{
+              kind: storage.kind,
+              id: storage.resourceId,
+              displayName: storage.displayName,
+              iconPath: storage.iconPath,
+              iconAtlas: storage.iconAtlas,
+              amount: 1,
+            }}
+          />
+        </div>
+      </td>
+      <td className="pool-product-target">
         {readOnly ? (
           <span>
             {storage.targetPerSecond === undefined
@@ -788,25 +797,27 @@ function Product({ storage }: { storage: FactoryStorage }) {
         ) : (
           <TargetLine storage={storage} result={result} />
         )}
-      </div>
-      <span className={result?.targetUnreachable ? "pool-flow-input" : "pool-sheet-muted"}>
+      </td>
+      <td className={result?.targetUnreachable ? "pool-flow-input" : "pool-sheet-muted"}>
         {result?.targetUnreachable ? (
           "Unreachable"
         ) : (
           <BalanceRate value={result?.producedPerSecond ?? 0} kind={storage.kind} sign={0} />
         )}
-      </span>
-      {!readOnly ? (
-        <button
-          type="button"
-          className="pool-sheet-icon-button"
-          aria-label={`Remove product ${storage.displayName ?? storage.resourceId}`}
-          onClick={() => useFactoryStore.getState().deleteStorage(storage.id)}
-        >
-          <X />
-        </button>
-      ) : null}
-    </div>
+      </td>
+      <td>
+        {!readOnly ? (
+          <button
+            type="button"
+            className="pool-sheet-icon-button"
+            aria-label={`Remove product ${storage.displayName ?? storage.resourceId}`}
+            onClick={() => useFactoryStore.getState().deleteStorage(storage.id)}
+          >
+            <X />
+          </button>
+        ) : null}
+      </td>
+    </tr>
   );
 }
 
