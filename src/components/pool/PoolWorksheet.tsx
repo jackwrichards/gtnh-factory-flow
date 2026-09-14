@@ -1,6 +1,14 @@
 "use client";
 
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { Copy, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { formatPowerValue, resourceLabel, isCropProductionRecipe } from "@/lib/model";
@@ -16,7 +24,12 @@ import { ItemPickerPopover } from "../ItemPickerPopover";
 import { TargetLine } from "../flow/StorageNode";
 import { RecipeTooltip } from "../flow/RecipeTooltip";
 import { buildStatusTooltip, buildPortTooltip } from "../flow/recipe-tooltip-data";
-import { formatEnergyPerUnitParts, formatSlotRate, formatSlotRateBare, portReadsEnergy } from "../flow/flow-explainers";
+import {
+  formatEnergyPerUnitParts,
+  formatSlotRate,
+  formatSlotRateBare,
+  portReadsEnergy,
+} from "../flow/flow-explainers";
 import type { RailPort } from "../flow/node-verdict";
 import {
   getRecipeProgrammedCircuit,
@@ -24,6 +37,15 @@ import {
 } from "@/lib/model/programmed-circuit";
 import { getSelectedMachineHandler } from "@/lib/model/recipe-rules";
 import { useBrowseMenu, type BrowseMode } from "../browse-menu";
+import { useWorkspaceView, writeWorkspaceView } from "@/lib/workspace-view";
+import { RESOURCE_DRAG_TYPE, readResourceDrag, writeResourceDrag } from "@/lib/resource-drag";
+import {
+  OrderHandle,
+  WorksheetOrderContext,
+  moveWorksheetEntry,
+  orderWorksheetEntries,
+  useOrderTarget,
+} from "./worksheet-drag";
 import {
   buildWorksheetGroups,
   filterWorksheetGroups,
@@ -50,9 +72,13 @@ export function PoolWorksheet() {
     // React's wheel listeners are passive. Cancel the native scroll in
     // capture, while letting each control's existing wheel handler run.
     const preventControlScroll = (event: WheelEvent) => {
-      if (event.target instanceof Element && event.target.closest(
-        ".pool-machine-settings .nowheel, .pool-editor-power [data-power-controls]",
-      )) event.preventDefault();
+      if (
+        event.target instanceof Element &&
+        event.target.closest(
+          ".pool-machine-settings .nowheel, .pool-editor-power [data-power-controls]",
+        )
+      )
+        event.preventDefault();
     };
     root.addEventListener("wheel", preventControlScroll, { capture: true, passive: false });
     return () => root.removeEventListener("wheel", preventControlScroll, true);
@@ -63,31 +89,62 @@ export function PoolWorksheet() {
   useRateDisplayUnits();
   const [query, setQuery] = useState("");
   const [internal, setInternal] = useState(false);
+  const workspace = useWorkspaceView();
+  const savedOrder = (kind: string) => workspace.poolWorksheetOrder[`${project.id}:${kind}`] ?? [];
   const groups = useMemo(() => buildWorksheetGroups(project, result), [project, result]);
-  const shown = useMemo(() => filterWorksheetGroups(groups, query), [groups, query]);
-  const maxItems = Math.max(1, ...shown.flatMap((group) => group.sections.flatMap((section) => [
-    section.ports.outputs.length,
-    section.ports.inputs.length + section.nonConsumed.filter((resource) => !isProgrammedCircuitResource(resource)).length,
-  ])));
+  const orderedGroups = orderWorksheetEntries(
+    groups,
+    savedOrder("machines"),
+    (group) => group.owner.id,
+  );
+  const shown = filterWorksheetGroups(orderedGroups, query);
+  const maxItems = Math.max(
+    1,
+    ...shown.flatMap((group) =>
+      group.sections.flatMap((section) => [
+        section.ports.outputs.length,
+        section.ports.inputs.length +
+          section.nonConsumed.filter((resource) => !isProgrammedCircuitResource(resource)).length,
+      ]),
+    ),
+  );
   // One ruler for both sides of every recipe: empty slots keep their place.
-  const itemColumns = Math.min(maxItems, Math.max(1, Math.floor((ioWidth + 9) / 169)));
+  const comfortableColumns = Math.max(1, Math.floor((ioWidth + 9) / 169));
+  const compactColumns = Math.max(1, Math.floor((ioWidth + 9) / 121));
+  // Prefer readable widths, but narrow cards before reserving a third row.
+  const itemColumns = Math.min(
+    maxItems,
+    Math.max(comfortableColumns, Math.min(Math.ceil(maxItems / 2), compactColumns)),
+  );
   const itemRows = Math.ceil(maxItems / itemColumns);
   const roles = useMemo(() => getStorageRoles(project), [project]);
-  const products = (project.storages ?? []).filter(
-    (storage) => roles.get(storage.id) === "product",
+  const products = orderWorksheetEntries(
+    (project.storages ?? []).filter((storage) => roles.get(storage.id) === "product"),
+    savedOrder("products"),
+    (storage) => storage.id,
   );
   const boundaryKeys = new Set(
     [...result.externalInputs, ...result.unconsumedOutputs].map((entry) => entry.key),
   );
-  const balances = Object.values(result.resources)
-    .filter(
-      (balance) =>
-        (internal || boundaryKeys.has(balance.key)) &&
-        (balance.displayName ?? balance.resourceId)
-          .toLowerCase()
-          .includes(query.trim().toLowerCase()),
-    )
-    .sort((a, b) => (a.displayName ?? a.resourceId).localeCompare(b.displayName ?? b.resourceId));
+  const balances = orderWorksheetEntries(
+    Object.values(result.resources)
+      .filter(
+        (balance) =>
+          (internal || boundaryKeys.has(balance.key)) &&
+          (balance.displayName ?? balance.resourceId)
+            .toLowerCase()
+            .includes(query.trim().toLowerCase()),
+      )
+      .sort((a, b) => (a.displayName ?? a.resourceId).localeCompare(b.displayName ?? b.resourceId)),
+    savedOrder("resources"),
+    (balance) => balance.key,
+  );
+  const ids = {
+    machines: orderedGroups.map((group) => group.owner.id),
+    products: products.map((storage) => storage.id),
+    resources: balances.map((balance) => balance.key),
+    panels: orderWorksheetEntries(["products", "resources"], savedOrder("panels"), (id) => id),
+  };
   return (
     <section
       ref={rootRef}
@@ -99,19 +156,55 @@ export function PoolWorksheet() {
       onDoubleClick={(event) => event.stopPropagation()}
       onContextMenu={(event) => event.stopPropagation()}
     >
-      <div className="pool-sheet-scroll">
-        <div className="pool-sheet-summary">
-          <div className="pool-sheet-products">
+      <WorksheetOrderContext.Provider
+        value={{
+          readOnly,
+          ids,
+          move: (kind, from, to, after) => {
+            if (readOnly) return;
+            const next = moveWorksheetEntry(ids[kind], from, to, after);
+            writeWorkspaceView({
+              poolWorksheetOrder: {
+                ...workspace.poolWorksheetOrder,
+                [`${project.id}:${kind}`]: [
+                  ...next,
+                  ...savedOrder(kind).filter((id) => !next.includes(id)),
+                ],
+              },
+            });
+          },
+        }}
+      >
+        <div
+          className="pool-sheet-summary"
+          data-resources-first={ids.panels[0] === "resources" || undefined}
+        >
+          <ProductsPane order={ids.panels.indexOf("products")}>
             <div className="pool-products-heading">
+              <OrderHandle kind="panels" id="products" label="Products panel" />
               <h3>Products</h3>
               {!readOnly ? <AddPoolProduct /> : null}
             </div>
-            {products.map((storage) => (
-              <Product key={storage.id} storage={storage} />
-            ))}
-          </div>
-          <div className="pool-sheet-balance">
+            <div className="pool-product-columns">
+              <span />
+              <span>Product</span>
+              <span>Target</span>
+              <span>Supplied</span>
+              <span />
+            </div>
+            <div className="pool-products-scroll">
+              {products.map((storage) => (
+                <Product key={storage.id} storage={storage} />
+              ))}
+            </div>
+          </ProductsPane>
+          <SummaryPane
+            id="resources"
+            order={ids.panels.indexOf("resources")}
+            className="pool-sheet-balance"
+          >
             <div className="pool-sheet-resource-heading">
+              <OrderHandle kind="panels" id="resources" label="Resources panel" />
               <h3>Resources</h3>
               <label>
                 <input
@@ -122,73 +215,144 @@ export function PoolWorksheet() {
                 Include internal
               </label>
             </div>
-            <table className="pool-sheet-resources" aria-label="Pool resource balance">
-              <thead>
-                <tr>
-                  <th>Resource</th>
-                  <th>Inputs</th>
-                  <th>Outputs</th>
-                  <th>Internal</th>
-                  <th>Net</th>
-                </tr>
-              </thead>
-              <tbody>
-                {balances.map((balance) => (
-                  <BalanceRow key={balance.key} balance={balance} />
-                ))}
-              </tbody>
-            </table>
-            {!balances.length ? <p className="pool-sheet-empty">No matching resources.</p> : null}
-          </div>
+            <div className="pool-resources-scroll">
+              <table className="pool-sheet-resources" aria-label="Pool resource balance">
+                <thead>
+                  <tr>
+                    <th>Resource</th>
+                    <th>Inputs</th>
+                    <th>Outputs</th>
+                    <th>Internal</th>
+                    <th>Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {balances.map((balance) => (
+                    <BalanceRow key={balance.key} balance={balance} />
+                  ))}
+                </tbody>
+              </table>
+              {!balances.length ? <p className="pool-sheet-empty">No matching resources.</p> : null}
+            </div>
+          </SummaryPane>
         </div>
-        {result.stale ? (
-          <p className="pool-sheet-notice" role="status">
-            {result.held
-              ? "Results are waiting for Recalculate."
-              : "Calculating… Showing the previous results."}
-          </p>
-        ) : null}
-        <table className="pool-sheet-table" aria-label="Recipes running in the pool"
-          style={{ "--pool-io-columns": itemColumns, "--pool-io-rows": itemRows } as CSSProperties}>
-          <colgroup>
-            <col className="pool-col-picture" />
-            <col className="pool-col-machine" />
-            <col className="pool-col-circuit" />
-            <col className="pool-col-io" />
-            <col className="pool-col-io" />
-          </colgroup>
-          <thead>
-            <tr>
-              <th>
-                <span className="sr-only">Machine picture</span>
-              </th>
-              <th>
-                <label className="pool-sheet-search">
-                  <Search className="h-3.5 w-3.5" />
-                  <input
-                    aria-label="Filter worksheet"
-                    placeholder="Search machines or items"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                </label>
-              </th>
-              <th>Circuit</th>
-              <th ref={ioHeaderRef}>Takes</th>
-              <th>Makes</th>
-            </tr>
-          </thead>
-          {shown.map((group) => (
-            <MachineRows key={group.owner.id} group={group} readOnly={readOnly} />
-          ))}
-        </table>
-        {!shown.length ? (
-          <div className="pool-sheet-empty">
-            {groups.length ? "No recipes match this filter." : "Add recipes from the item browser."}
-          </div>
-        ) : null}
-      </div>
+        <div className="pool-sheet-scroll">
+          {result.stale ? (
+            <p className="pool-sheet-notice" role="status">
+              {result.held
+                ? "Results are waiting for Recalculate."
+                : "Calculating… Showing the previous results."}
+            </p>
+          ) : null}
+          <table
+            className="pool-sheet-table"
+            aria-label="Recipes running in the pool"
+            style={
+              { "--pool-io-columns": itemColumns, "--pool-io-rows": itemRows } as CSSProperties
+            }
+          >
+            <colgroup>
+              <col className="pool-col-picture" />
+              <col className="pool-col-machine" />
+              <col className="pool-col-circuit" />
+              <col className="pool-col-io" />
+              <col className="pool-col-io" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>
+                  <span className="sr-only">Machine picture</span>
+                </th>
+                <th>
+                  <label className="pool-sheet-search">
+                    <Search className="h-3.5 w-3.5" />
+                    <input
+                      aria-label="Filter worksheet"
+                      placeholder="Search machines or items"
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                    />
+                  </label>
+                </th>
+                <th>Circuit</th>
+                <th ref={ioHeaderRef}>Takes</th>
+                <th>Makes</th>
+              </tr>
+            </thead>
+            {shown.map((group) => (
+              <MachineRows
+                key={group.owner.id}
+                group={group}
+                readOnly={readOnly}
+                columns={itemColumns}
+              />
+            ))}
+          </table>
+          {!shown.length ? (
+            <div className="pool-sheet-empty">
+              {groups.length
+                ? "No recipes match this filter."
+                : "Add recipes from the item browser."}
+            </div>
+          ) : null}
+        </div>
+      </WorksheetOrderContext.Provider>
     </section>
+  );
+}
+
+function SummaryPane({
+  id,
+  order,
+  className,
+  children,
+}: {
+  id: string;
+  order: number;
+  className: string;
+  children: ReactNode;
+}) {
+  const target = useOrderTarget("panels", id);
+  return (
+    <div {...target} className={className} style={{ order }}>
+      {children}
+    </div>
+  );
+}
+
+function ProductsPane({ order, children }: { order: number; children: ReactNode }) {
+  const [hover, setHover] = useState(false);
+  const readOnly = useFactoryStore((state) => state.isReadOnly);
+  const target = useOrderTarget("panels", "products");
+  return (
+    <div
+      className="pool-sheet-products"
+      style={{ order }}
+      aria-label="Products drop zone"
+      data-resource-drop={hover || undefined}
+      onDragOver={(event) => {
+        if (!readOnly && event.dataTransfer.types.includes(RESOURCE_DRAG_TYPE)) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          setHover(true);
+        } else target.onDragOver(event);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHover(false);
+        target.onDragLeave(event);
+      }}
+      onDrop={(event) => {
+        setHover(false);
+        if (!readOnly && event.dataTransfer.types.includes(RESOURCE_DRAG_TYPE)) {
+          event.preventDefault();
+          event.stopPropagation();
+          const resource = readResourceDrag(event.dataTransfer);
+          if (resource) useFactoryStore.getState().addPoolStorage(resource, "drain");
+        } else target.onDrop(event);
+      }}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -236,12 +400,15 @@ function AddPoolProduct() {
 const MachineRows = memo(function MachineRows({
   group,
   readOnly,
+  columns,
 }: {
   group: WorksheetGroup;
   readOnly: boolean;
+  columns: number;
 }) {
   useRateDisplayUnits();
   const { owner, machine, sections } = group;
+  const orderTarget = useOrderTarget("machines", owner.id);
   const updateNode = useFactoryStore((state) => state.updateNode);
   const first = sections[0];
   const handler = first.recipe ? getSelectedMachineHandler(first.recipe, owner) : undefined;
@@ -252,6 +419,7 @@ const MachineRows = memo(function MachineRows({
   const machineCells = (controls: ReactNode, picture: ReactNode, settings: ReactNode) => (
     <>
       <td rowSpan={sections.length} className="pool-picture-cell">
+        <OrderHandle kind="machines" id={owner.id} label={`machine ${label}`} />
         <div className="pool-machine-picture">{picture}</div>
       </td>
       <td rowSpan={sections.length} className="pool-shared-cell pool-machine-cell">
@@ -337,6 +505,7 @@ const MachineRows = memo(function MachineRows({
   );
   return (
     <tbody
+      {...orderTarget}
       data-worksheet-node={owner.id}
       className={owner.enabled === false ? "pool-machine-off" : undefined}
     >
@@ -362,6 +531,7 @@ const MachineRows = memo(function MachineRows({
           </td>
           <td>
             <PortList
+              columns={columns}
               ports={section.ports.inputs}
               nodeId={owner.id}
               section={section}
@@ -371,7 +541,12 @@ const MachineRows = memo(function MachineRows({
             />
           </td>
           <td>
-            <PortList ports={section.ports.outputs} nodeId={owner.id} section={section} />
+            <PortList
+              columns={columns}
+              ports={section.ports.outputs}
+              nodeId={owner.id}
+              section={section}
+            />
           </td>
         </tr>
       ))}
@@ -409,19 +584,25 @@ function PortList({
   nodeId,
   section,
   nonConsumed = [],
+  columns,
 }: {
   ports: RailPort[];
   nodeId: string;
   section: WorksheetSection;
   nonConsumed?: ResourceAmount[];
+  columns: number;
 }) {
   if (!ports.length && !nonConsumed.length) return <span className="pool-sheet-muted">—</span>;
   return (
-    <div
-      className="pool-port-list"
-      role="group"
-      aria-label="Recipe items"
-    >
+    <div className="pool-port-list" role="group" aria-label="Recipe items">
+      {Array.from({ length: columns - 1 }, (_, index) => (
+        <span
+          key={`divider:${index}`}
+          aria-hidden
+          className="pool-item-divider"
+          style={{ left: `calc(${index + 1} * (100% + 9px) / ${columns} - 4.5px)` }}
+        />
+      ))}
       {ports.map((port) => (
         <div className="pool-port" key={port.handleId}>
           <MinecraftTooltip
@@ -440,7 +621,7 @@ function PortList({
               );
             }}
           >
-            <div className="pool-port-line">
+            <div className="flow-port pool-port-line">
               <ResourceLink
                 resource={
                   port.resource ?? {
@@ -460,7 +641,7 @@ function PortList({
         </div>
       ))}
       {nonConsumed.map((resource, index) => (
-        <div className="pool-port pool-port-line" key={`nc:${index}`}>
+        <div className="pool-port flow-port pool-port-line" key={`nc:${index}`}>
           <ResourceLink resource={resource} nodeId={nodeId} />
           <span className="pool-port-rate">NC · ×{resource.amount}</span>
         </div>
@@ -474,13 +655,20 @@ function PortRate({ port }: { port: RailPort }) {
   const energy = portReadsEnergy(port);
   const parts = energy
     ? formatEnergyPerUnitParts(port.energyPerUnit!, port.kind)
-    : { value: formatSlotRateBare(port.currentPerSecond, port.kind), unit: rateSuffixForKind(port.kind).trim() };
-  return <span className={energy ? "text-amber-300" : undefined}>
-    <strong>{parts.value}</strong><small>{parts.unit}</small>
-  </span>;
+    : {
+        value: formatSlotRateBare(port.currentPerSecond, port.kind),
+        unit: rateSuffixForKind(port.kind).trim(),
+      };
+  return (
+    <span className={energy ? "text-amber-300" : undefined}>
+      <strong>{parts.value}</strong>
+      <small>{parts.unit}</small>
+    </span>
+  );
 }
 
 function ResourceLink({ resource, nodeId }: { resource: ResourceAmount; nodeId?: string }) {
+  const readOnly = useFactoryStore((state) => state.isReadOnly);
   const browse = (mode: BrowseMode) => {
     if (resource.kind === "power") return;
     useFactoryStore.getState().browseResource({ ...resource, anchorNodeId: nodeId }, mode);
@@ -494,6 +682,11 @@ function ResourceLink({ resource, nodeId }: { resource: ResourceAmount; nodeId?:
       <button
         type="button"
         className="pool-resource-link"
+        draggable={!readOnly}
+        onDragStart={(event) => {
+          event.stopPropagation();
+          writeResourceDrag(event.dataTransfer, resource);
+        }}
         {...pressHandlers}
         onClick={(event) => {
           if (wasDragged()) return;
@@ -519,7 +712,7 @@ function ResourceLink({ resource, nodeId }: { resource: ResourceAmount; nodeId?:
           size="sm"
           bare
           className="pool-item-icon !h-8 !w-8"
-          iconPixelSize={38}
+          iconPixelSize={44}
           showAmount={false}
           showConsumedState={false}
           tooltip={false}
@@ -537,13 +730,17 @@ function MachinePower({ entry }: { entry?: MachineListEntry }) {
   const sign = entry.madeEuT !== undefined ? "+" : "";
   const average = steam ? entry.avgSteamLs : (entry.avgMadeEuT ?? entry.avgEuT);
   const peak = steam ? entry.steamLs : (entry.madeEuT ?? entry.euT);
-  const format = (value: number) => steam
-    ? formatSlotRate(value, "fluid")
-    : `${sign}${formatPowerValue(powerDisplayFromEuT(value))} ${powerDisplaySuffix()}`;
+  const format = (value: number) =>
+    steam
+      ? formatSlotRate(value, "fluid")
+      : `${sign}${formatPowerValue(powerDisplayFromEuT(value))} ${powerDisplaySuffix()}`;
   if (average === peak && peak !== undefined) {
-    return <div className="pool-power-line" title="Average and peak are equal">
-      <small>{steam ? "Steam" : "Power"}</small><strong>{format(peak)}</strong>
-    </div>;
+    return (
+      <div className="pool-power-line" title="Average and peak are equal">
+        <small>{steam ? "Steam" : "Power"}</small>
+        <strong>{format(peak)}</strong>
+      </div>
+    );
   }
   return (
     <>
@@ -568,8 +765,14 @@ function MachinePower({ entry }: { entry?: MachineListEntry }) {
 function Product({ storage }: { storage: FactoryStorage }) {
   const result = useFactoryStore((state) => state.lastResult.storages[storage.id]);
   const readOnly = useFactoryStore((state) => state.isReadOnly);
+  const orderTarget = useOrderTarget("products", storage.id);
   return (
-    <div className="pool-product">
+    <div {...orderTarget} className="pool-product" data-worksheet-product={storage.id}>
+      <OrderHandle
+        kind="products"
+        id={storage.id}
+        label={`product ${storage.displayName ?? storage.resourceId}`}
+      />
       <ResourceLink
         resource={{
           kind: storage.kind,
@@ -594,7 +797,7 @@ function Product({ storage }: { storage: FactoryStorage }) {
       <span className={result?.targetUnreachable ? "text-red-300" : "pool-sheet-muted"}>
         {result?.targetUnreachable
           ? "Unreachable"
-          : `${formatSlotRate(result?.producedPerSecond ?? 0, storage.kind)} supplied`}
+          : formatSlotRate(result?.producedPerSecond ?? 0, storage.kind)}
       </span>
       {!readOnly ? (
         <button
@@ -611,23 +814,31 @@ function Product({ storage }: { storage: FactoryStorage }) {
 }
 
 function BalanceRow({ balance }: { balance: ResourceBalance }) {
+  const orderTarget = useOrderTarget("resources", balance.key);
   const dataset = useFactoryStore((state) => state.dataset);
   const resource = dataset?.resources.find(
     (entry) => entry.kind === balance.kind && entry.id === balance.resourceId,
   );
   const net = balance.surplusPerSecond - balance.deficitPerSecond;
   return (
-    <tr>
+    <tr {...orderTarget} data-worksheet-resource={balance.key}>
       <td>
-        <ResourceLink
-          resource={{
-            ...resource,
-            kind: balance.kind,
-            id: balance.resourceId,
-            displayName: balance.displayName ?? resource?.displayName,
-            amount: 1,
-          }}
-        />
+        <div className="pool-balance-name">
+          <OrderHandle
+            kind="resources"
+            id={balance.key}
+            label={`resource ${balance.displayName ?? balance.resourceId}`}
+          />
+          <ResourceLink
+            resource={{
+              ...resource,
+              kind: balance.kind,
+              id: balance.resourceId,
+              displayName: balance.displayName ?? resource?.displayName,
+              amount: 1,
+            }}
+          />
+        </div>
       </td>
       <td>{formatSlotRate(balance.deficitPerSecond, balance.kind)}</td>
       <td>{formatSlotRate(balance.surplusPerSecond, balance.kind)}</td>

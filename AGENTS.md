@@ -1593,7 +1593,7 @@ Working notes for future agents on GTNH Factory Flow.
   recipes have separate rows but one machine/config/count/power group per
   real card. `RecipeNodeEditor` reuses the card's controls without mounting
   canvas handles; keep specialty machine behavior shared between views.
-  Keep this view dense: bare item icons, visible settings, and product
+  Keep this view dense: canvas-styled item cards, visible settings, and product
   targets beside resource balances ABOVE the recipes.
   The machine's full structure render (or its item) gets the far-left
   picture column. Status badges sit under its name, circuits have
@@ -1613,19 +1613,32 @@ Working notes for future agents on GTNH Factory Flow.
   Do not rebuild a separate set of tiny inline steppers. Amps/tier stay in Machine.
   Picture/Machine/Circuit columns have FIXED widths (72/480/60 shell px),
   and the artwork has a fixed 52px frame, independent of row height or window
-  width. ALL extra horizontal space goes to Takes/Makes. Their bare item
+  width. The picture's padding is removed and its shadow softened ONLY in
+  the worksheet; never change other artwork shadows. ALL extra horizontal
+  space goes to Takes/Makes. Their item
   grids share ONE column count and ONE row count across both sides and all
   displayed recipes. Fit one row when possible; when any recipe needs two,
   reserve two everywhere (and likewise for larger counts). Never auto-fit
   each recipe independently, which spreads sparse rows differently. Additional
   rows show every item; no scrolling item list. Names fade, never ellipses.
-  Names and rates are snug, with larger numbers and small unit suffixes,
+  Prefer 160px item widths, but allow 112px cards before reserving a third
+  row. Cards are 36px tall and reuse the canvas's `flow-port` surface, border,
+  and inset highlights, distinct from the alternating row wash. Subtle item
+  column dividers are quieter than the Takes/Makes boundary.
+  Names and rates are snug (11px names, 10px rates, 8px unit suffixes),
   above/below each other, with the icon spanning both lines; no top clipping.
   Count/pin and power belong INSIDE the machine cell; amps/tier sit at its
   top right. No enable/disable action, heading/counter, duplicate Canvas
   button, or resource favourite/hide controls. Search is in the table head.
   Products have a direct + item picker. Resource-summary names do not fade,
   and canvas resource visibility/favourite preferences do not filter them.
+  Products/Resources stay above the recipe scroller, each with its own bounded
+  scroll area and separated headings/columns. Drag recipe items or resources
+  (including the item browser) into Products: use the existing addPoolStorage
+  action, preserving duplicate handling and undo. Grip handles reorder machine
+  groups, products, resources, and summary panels; arrow keys also reorder.
+  `WorkspaceView.poolWorksheetOrder` saves per-plan browser order only, without
+  changing canvas positions, the solver, or undo. Read-only views cannot drag.
   Count uses the canvas's SolvedMachinesStat, including its pencil and
   clear-to-unpin behavior. Never rebuild a "Need / Pin / Auto" text stack.
   The name and chevron are first; the next row keeps Machines/count/pencil

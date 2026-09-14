@@ -2,7 +2,9 @@
 
 import { Search, X, ChevronLeft, ChevronRight, Zap } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { PointerEvent, RefObject, WheelEvent } from "react";
+import type { DragEvent, PointerEvent, RefObject, WheelEvent } from "react";
+import { useWorkspaceView } from "@/lib/workspace-view";
+import { writeResourceDrag } from "@/lib/resource-drag";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
 import {
   queryRecipeDatasetResources,
@@ -1042,6 +1044,8 @@ function ResourcePager({
 function useResourceBrowseMenu(
   browse: (resource: IndexedResource, mode: "recipes" | "uses") => void,
 ) {
+  const { poolWorksheet } = useWorkspaceView();
+  const canDrag = useFactoryStore((state) => state.project.poolMode && !state.isReadOnly) && poolWorksheet;
   const pressedRef = useRef<IndexedResource | undefined>(undefined);
   const [pressedName, setPressedName] = useState("");
   const menu = useBrowseMenu({
@@ -1058,6 +1062,11 @@ function useResourceBrowseMenu(
     menu: menu.menu,
     /** Spread on the row, after its own click and context-menu handlers. */
     pressProps: (resource: IndexedResource) => ({
+      draggable: canDrag && resource.kind !== "aspect",
+      onDragStart: (event: DragEvent<HTMLElement>) => {
+        if (!canDrag || resource.kind === "aspect") { event.preventDefault(); return; }
+        writeResourceDrag(event.dataTransfer, { ...resource, amount: 1 });
+      },
       onPointerDown: (event: PointerEvent<HTMLElement>) => {
         pressedRef.current = resource;
         if (event.pointerType !== "mouse") {

@@ -76,6 +76,69 @@ afterEach(() => {
 });
 
 describe("Pool worksheet", () => {
+  it("drags a recipe item into Products using the normal drawer action and undo", () => {
+    const { container } = render(<PoolWorksheet />);
+    const values = new Map<string, string>();
+    const transfer = {
+      get types() {
+        return [...values.keys()];
+      },
+      setData: (kind: string, value: string) => values.set(kind, value),
+      getData: (kind: string) => values.get(kind) ?? "",
+    };
+    const row = container.querySelector('[data-worksheet-node="machine"]') as HTMLElement;
+    fireEvent.dragStart(within(row).getByRole("button", { name: "Copper Ingot" }), {
+      dataTransfer: transfer,
+    });
+    const products = screen.getByLabelText("Products drop zone");
+    fireEvent.dragOver(products, { dataTransfer: transfer });
+    fireEvent.drop(products, { dataTransfer: transfer });
+    expect(useFactoryStore.getState().project.storages).toHaveLength(2);
+    expect(useFactoryStore.getState().project.storages?.[1]).toMatchObject({
+      resourceId: "copper",
+      poolSide: "drain",
+    });
+    fireEvent.drop(products, { dataTransfer: transfer });
+    expect(useFactoryStore.getState().project.storages).toHaveLength(2);
+    act(() => useFactoryStore.getState().undo());
+    expect(useFactoryStore.getState().project.storages).toHaveLength(1);
+  });
+
+  it("reorders machine rows without changing the plan, solve or canvas positions", () => {
+    const project = fixture();
+    project.nodes.push({ ...project.nodes[0], id: "second", position: { x: 800, y: 400 } });
+    useFactoryStore.getState().setProject(project);
+    const before = useFactoryStore.getState();
+    const { container } = render(<PoolWorksheet />);
+    const values = new Map<string, string>();
+    const transfer = {
+      get types() {
+        return [...values.keys()];
+      },
+      setData: (kind: string, value: string) => values.set(kind, value),
+      getData: (kind: string) => values.get(kind) ?? "",
+    };
+    fireEvent.dragStart(screen.getAllByRole("button", { name: /Reorder machine/ })[1], {
+      dataTransfer: transfer,
+    });
+    const target = container.querySelector('[data-worksheet-node="machine"]')!;
+    fireEvent.dragOver(target, { dataTransfer: transfer, clientY: 10 });
+    fireEvent.drop(target, { dataTransfer: transfer });
+    expect(
+      [...container.querySelectorAll("[data-worksheet-node]")].map((row) =>
+        row.getAttribute("data-worksheet-node"),
+      ),
+    ).toEqual(["second", "machine"]);
+    expect(useFactoryStore.getState().project).toBe(before.project);
+    expect(useFactoryStore.getState().lastResult).toBe(before.lastResult);
+    expect(useFactoryStore.getState().undoHistory).toBe(before.undoHistory);
+    expect(
+      JSON.parse(localStorage.getItem("gtnh-factory-flow-workspace-view")!).poolWorksheetOrder[
+        "worksheet-ui:machines"
+      ],
+    ).toEqual(["second", "machine"]);
+  });
+
   it("adds a product directly from the Products plus button", () => {
     render(<PoolWorksheet />);
     fireEvent.click(screen.getByRole("button", { name: "Add product" }));
@@ -147,16 +210,18 @@ describe("Pool worksheet", () => {
   });
   it("edits machine-specific settings below the machine and omits empty settings sections", () => {
     const project = fixture();
-    project.recipes[0].machineConfigControls = [{
-      id: "solenoidCoil",
-      label: "Solenoid",
-      defaultKey: "lv",
-      minimumKey: "lv",
-      tiers: [
-        { key: "lv", label: "LV", resource: { kind: "item", id: "lv-solenoid", amount: 1 } },
-        { key: "mv", label: "MV", resource: { kind: "item", id: "mv-solenoid", amount: 1 } },
-      ],
-    }];
+    project.recipes[0].machineConfigControls = [
+      {
+        id: "solenoidCoil",
+        label: "Solenoid",
+        defaultKey: "lv",
+        minimumKey: "lv",
+        tiers: [
+          { key: "lv", label: "LV", resource: { kind: "item", id: "lv-solenoid", amount: 1 } },
+          { key: "mv", label: "MV", resource: { kind: "item", id: "mv-solenoid", amount: 1 } },
+        ],
+      },
+    ];
     useFactoryStore.getState().setProject(project);
     const { container } = render(<PoolWorksheet />);
     const settings = container.querySelector(".pool-settings-section") as HTMLElement;
@@ -165,14 +230,22 @@ describe("Pool worksheet", () => {
     expect(container.querySelector(".pool-machine-cell")?.contains(settings)).toBe(true);
     expect(screen.queryByRole("columnheader", { name: "Settings" })).toBeNull();
     act(() => useFactoryStore.getState().undo());
-    expect(useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil).toBeUndefined();
-    expect(fireEvent.wheel(within(settings).getByRole("button", { name: "Next Solenoid" }), {
-      deltaY: -100, cancelable: true,
-    })).toBe(false);
+    expect(
+      useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil,
+    ).toBeUndefined();
+    expect(
+      fireEvent.wheel(within(settings).getByRole("button", { name: "Next Solenoid" }), {
+        deltaY: -100,
+        cancelable: true,
+      }),
+    ).toBe(false);
     expect(useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil).toBe("mv");
-    expect(fireEvent.wheel(container.querySelector(".pool-sheet-scroll")!, {
-      deltaY: 100, cancelable: true,
-    })).toBe(true);
+    expect(
+      fireEvent.wheel(container.querySelector(".pool-sheet-scroll")!, {
+        deltaY: 100,
+        cancelable: true,
+      }),
+    ).toBe(true);
     act(() => useFactoryStore.getState().setProject(fixture()));
     expect(container.querySelector(".pool-settings-section")).toBeNull();
   });
