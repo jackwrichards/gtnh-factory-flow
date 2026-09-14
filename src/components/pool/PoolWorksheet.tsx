@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Copy, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { formatPowerValue, resourceLabel, isCropProductionRecipe } from "@/lib/model";
@@ -34,6 +34,20 @@ import {
 import "./pool-worksheet.css";
 
 export function PoolWorksheet() {
+  const rootRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    // React's wheel listeners are passive. Cancel the native scroll in
+    // capture, while letting each control's existing wheel handler run.
+    const preventControlScroll = (event: WheelEvent) => {
+      if (event.target instanceof Element && event.target.closest(
+        ".pool-machine-settings .nowheel, .pool-editor-power [data-power-controls]",
+      )) event.preventDefault();
+    };
+    root.addEventListener("wheel", preventControlScroll, { capture: true, passive: false });
+    return () => root.removeEventListener("wheel", preventControlScroll, true);
+  }, []);
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
   const readOnly = useFactoryStore((state) => state.isReadOnly);
@@ -60,6 +74,7 @@ export function PoolWorksheet() {
     .sort((a, b) => (a.displayName ?? a.resourceId).localeCompare(b.displayName ?? b.resourceId));
   return (
     <section
+      ref={rootRef}
       data-viewer-inspect
       data-pool-worksheet
       className="pool-worksheet nodrag nopan nowheel"

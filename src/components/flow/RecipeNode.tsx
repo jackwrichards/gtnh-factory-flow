@@ -4506,7 +4506,9 @@ function MachineConfigControlPanel({
   const tiles = (
       <div
         className="grid gap-1"
-        style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${SETTING_TILE_MIN_WIDTH_PX}px, 1fr))` }}
+        style={{ gridTemplateColumns: compact
+          ? "repeat(auto-fill, min(132px, 100%))"
+          : `repeat(auto-fit, minmax(${SETTING_TILE_MIN_WIDTH_PX}px, 1fr))` }}
       >
         {controls.map((control) => (
           <LadderTile

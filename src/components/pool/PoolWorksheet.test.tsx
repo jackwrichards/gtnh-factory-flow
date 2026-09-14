@@ -166,6 +166,13 @@ describe("Pool worksheet", () => {
     expect(screen.queryByRole("columnheader", { name: "Settings" })).toBeNull();
     act(() => useFactoryStore.getState().undo());
     expect(useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil).toBeUndefined();
+    expect(fireEvent.wheel(within(settings).getByRole("button", { name: "Next Solenoid" }), {
+      deltaY: -100, cancelable: true,
+    })).toBe(false);
+    expect(useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil).toBe("mv");
+    expect(fireEvent.wheel(container.querySelector(".pool-sheet-scroll")!, {
+      deltaY: 100, cancelable: true,
+    })).toBe(true);
     act(() => useFactoryStore.getState().setProject(fixture()));
     expect(container.querySelector(".pool-settings-section")).toBeNull();
   });

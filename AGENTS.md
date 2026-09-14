@@ -1604,6 +1604,12 @@ Working notes for future agents on GTNH Factory Flow.
   controls, searchable choices, numeric edits, and rich tooltips. They wrap
   naturally and grow only that machine's row: no settings column, height cap,
   or scrolling settings list. Machines without settings omit the section.
+  Keep the indent small and setting tiles compact (132px), left-aligned;
+  a lone setting or pair must not stretch across the machine's full width.
+  The recalculation notice is out of document flow so it never shifts rows.
+  Count/status/power use consistent grid tracks. Wheel gestures over settings
+  and hatch power controls cancel native scrolling (a non-passive capture
+  listener), while the existing control handlers still perform the adjustment.
   Do not rebuild a separate set of tiny inline steppers. Amps/tier stay in Machine.
   Takes/Makes use two-by-two item grids with larger bare icons and fading
   names, never ellipses; extra entries scroll instead of stretching rows.

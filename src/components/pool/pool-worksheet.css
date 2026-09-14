@@ -285,13 +285,14 @@
 }
 .pool-machine-settings {
   width: 100%;
+  margin: 0;
 }
 .pool-machine-settings > * {
   max-width: 100%;
 }
 .pool-settings-section {
-  margin: 7px 0 3px 10px;
-  padding-left: 10px;
+  margin: 5px 0 3px;
+  padding-left: 6px;
   border-left: 2px solid var(--mc-61);
 }
 .pool-sheet-button {
@@ -334,6 +335,7 @@
 }
 .pool-power-line {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 6px;
   white-space: nowrap;
@@ -343,8 +345,8 @@
   color: var(--mc-ink-muted);
 }
 .pool-machine-footer {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 128px 100px minmax(0, 1fr) 63px;
   align-items: center;
   gap: 4px 6px;
   margin: 4px 0 0;
@@ -393,8 +395,8 @@
   align-items: center;
 }
 .pool-machine-footer .pool-row-actions {
-  margin-left: auto;
-  align-self: flex-end;
+  grid-column: 4;
+  justify-self: end;
 }
 .pool-sheet-icon-button {
   display: inline-flex;
@@ -487,8 +489,15 @@
   padding: 12px 5px;
 }
 .pool-sheet-notice {
+  position: absolute;
+  top: 48px;
+  right: 16px;
+  z-index: 4;
+  margin: 0;
+  pointer-events: none;
   color: #e0cc93;
-  padding: 5px 0;
+  font-size: 10px;
+  line-height: 18px;
 }
 .pool-worksheet button:focus-visible,
 .pool-worksheet input:focus-visible,
