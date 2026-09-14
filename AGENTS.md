@@ -1665,7 +1665,13 @@ Working notes for future agents on GTNH Factory Flow.
   in ONE horizontal tile, then power
   (which may wrap below when needed). The canvas keeps its original tile layout.
   The cell's flex column absorbs existing spare height; do not increase row
-  height to push the footer down. MachineMenu anchors to the worksheet's
+  height to push the footer down. The inner flex layout uses natural height
+  plus min-height:100%; do not restore height:100% + min-content (Firefox
+  ignores the intrinsic floor and settings overlap the following row). Gecko
+  needs height:100% on the outer spanning cell, Blink a definite 1px; keep
+  the scoped @supports rule and verify both engines with shared/settings rows.
+  Pool hatch labels are nowrap with compact padding so EU/t stays in its key.
+  MachineMenu anchors to the worksheet's
   data-machine-editor-anchor cell when no canvas card exists.
   Status labels stay on one line inside their tiles, including Power stalled.
   Recipe numbers/removal controls sit under their own status; machine-wide

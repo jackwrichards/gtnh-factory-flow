@@ -335,11 +335,19 @@
 .pool-sheet-table .pool-machine-cell {
   height: 1px;
 }
+@supports (-moz-appearance: none) {
+  /* Gecko needs a percentage on the spanning cell for its flex child's
+     minimum height to fill the group. Blink needs the definite cell height. */
+  .pool-sheet-table .pool-machine-cell {
+    height: 100%;
+  }
+}
 .pool-machine-layout {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: min-content;
+  /* Grow from the controls first; only use spare cell height to push the
+     footer down. A fixed percentage height can let settings overflow a row. */
+  min-height: 100%;
 }
 .pool-machine-layout > * {
   flex-shrink: 0;
@@ -383,6 +391,9 @@
   height: 24px;
   width: 46px;
   font-size: 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-inline: 2px;
 }
 .pool-machine-settings {
   width: 100%;
