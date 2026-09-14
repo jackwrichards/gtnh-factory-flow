@@ -11,6 +11,7 @@ import {
   rateUnitSuffix,
 } from "@/lib/model/rate-unit";
 import { describeStorage, getStorageRoles } from "@/lib/model/storage-role";
+import { inputEdgeRate, inputEdgeResourceKey } from "./input-edge";
 import { parseResourceHandleId } from "./resource-handles";
 import {
   honestEdgeAskPerSecond,
@@ -174,6 +175,9 @@ export function edgeTouchesResource(
   kind: string,
   resourceId: string,
 ): boolean {
+  if (side === "input" && edge.crossForm) {
+    return inputEdgeResourceKey(edge) === `${kind}:${resourceId}`;
+  }
   const handle = side === "input" ? edge.targetHandle : edge.sourceHandle;
   const parsed = parseResourceHandleId(handle);
   if (parsed && parsed.kind === kind && parsed.resourceId === resourceId) {
@@ -245,7 +249,8 @@ export function buildPortBreakdown(
       ? describeStorage(storage, storageRoles.get(otherId))
       : (otherRecipe?.machineType ?? otherRecipe?.name ?? "Machine");
     const edgeResult = result.edges[edge.id];
-    const rate = edgeResult?.transferredPerSecond ?? 0;
+    const sourceRate = edgeResult?.transferredPerSecond ?? 0;
+    const rate = isInput ? inputEdgeRate(edge, sourceRate) : sourceRate;
     routed += rate;
 
     if (isInput) {

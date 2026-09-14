@@ -47,6 +47,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.2.1",
+    date: "2026-09-14",
+    headline: "Cell wire supply indicators",
+    notes: [
+      "Fluid-to-cell and cell-to-fluid wires now show connected inputs correctly, with supply rates and shortage hints in the receiving slot’s units.",
+    ],
+  },
+  {
     version: "3.2.0",
     date: "2026-09-13",
     headline: "Pool workspace and ratio splitters",
