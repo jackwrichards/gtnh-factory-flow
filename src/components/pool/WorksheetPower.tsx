@@ -4,7 +4,7 @@ import { powerDisplayFromEuT, powerDisplaySuffix, rateSuffixForKind } from "@/li
 import { formatSlotRateBare } from "../flow/flow-explainers";
 
 /** The same per-card peak/average totals as the inspector, never filtered by search. */
-export function WorksheetPower({ entries }: { entries: MachineListEntry[] }) {
+export function WorksheetPower({ entries, id }: { entries: MachineListEntry[]; id?: string }) {
   const sum = (key: "euT" | "avgEuT" | "madeEuT" | "avgMadeEuT" | "steamLs" | "avgSteamLs") =>
     entries.reduce((total, entry) => total + (entry[key] ?? 0), 0);
   const rows = [
@@ -16,7 +16,7 @@ export function WorksheetPower({ entries }: { entries: MachineListEntry[] }) {
       : []),
   ];
   return (
-    <section className="pool-sheet-power" aria-label="Pool power summary">
+    <section id={id} className="pool-sheet-power" aria-label="Pool power summary">
       <div className="pool-sheet-resource-heading">
         <h3>Power</h3>
       </div>

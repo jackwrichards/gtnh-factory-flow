@@ -47,6 +47,7 @@
   flex-direction: column;
   min-width: 0;
 }
+.pool-summary-toggles { display: none; }
 .pool-sheet-products,
 .pool-sheet-balance,
 .pool-sheet-power {
@@ -647,22 +648,55 @@
 }
 @container (max-width: 960px) {
   .pool-sheet-summary {
-    grid-template-columns: minmax(240px, 0.8fr) minmax(380px, 1.5fr);
-    grid-template-rows: auto auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    /* Relative to the worksheet, not the viewport above its app/tool bars. */
+    max-height: 40%;
+    min-height: 0;
   }
-  .pool-sheet-power {
-    grid-column: 1 / -1;
+  .pool-summary-toggles {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    flex-shrink: 0;
+    border: 1px solid color-mix(in srgb, var(--mc-ink) 14%, transparent);
   }
-}
-@container (max-width: 660px) {
+  .pool-summary-toggles button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 3px;
+    min-width: 0;
+    height: 32px;
+    padding: 0 7px;
+    font-size: 12px;
+    cursor: pointer;
+    background: color-mix(in srgb, var(--mc-ink) 3%, transparent);
+  }
+  .pool-summary-toggles button + button {
+    border-left: 1px solid color-mix(in srgb, var(--mc-ink) 14%, transparent);
+  }
+  .pool-summary-toggles button[aria-expanded="true"] {
+    background: color-mix(in srgb, #78a7bc 15%, var(--surface, #24272c));
+  }
+  .pool-summary-toggles button[aria-expanded="true"] svg { transform: rotate(180deg); }
   .pool-sheet-products,
-  .pool-sheet-balance { min-height: 0; }
-  .pool-sheet-summary {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr) auto;
-    max-height: 50vh;
-    gap: 6px;
+  .pool-sheet-balance,
+  .pool-sheet-power {
+    align-self: stretch;
+    min-height: 0;
+    flex: 0 1 auto;
+    border-top: 0;
   }
+  .pool-sheet-summary:not([data-mobile-summary="products"]) .pool-sheet-products,
+  .pool-sheet-summary:not([data-mobile-summary="resources"]) .pool-sheet-balance,
+  .pool-sheet-summary:not([data-mobile-summary="power"]) .pool-sheet-power {
+    display: none;
+  }
+  .pool-sheet-power .pool-resources-scroll { flex: 1; }
+  .pool-sheet-power .pool-sheet-resource-heading { display: none; }
+  .pool-products-heading h3,
+  .pool-sheet-resource-heading h3 { display: none; }
 }
 @media (pointer: coarse) {
   .pool-sheet-button,

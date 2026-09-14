@@ -3,13 +3,14 @@
 import {
   memo,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { Copy, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { ChevronDown, Copy, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { formatPowerValue, resourceLabel, isCropProductionRecipe } from "@/lib/model";
 import { isCustomRateRecipe } from "@/lib/model/custom-rate";
@@ -59,6 +60,8 @@ import {
 import "./pool-worksheet.css";
 
 export function PoolWorksheet() {
+  const summaryId = useId();
+  const [mobileSummary, setMobileSummary] = useState<string | null>(null);
   const [ioWidth, setIoWidth] = useState(232);
   const rootRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -201,8 +204,24 @@ export function PoolWorksheet() {
           },
         }}
       >
-        <div className="pool-sheet-summary">
-          <ProductsPane>
+        <div className="pool-sheet-summary" data-mobile-summary={mobileSummary ?? "closed"}>
+          <div className="pool-summary-toggles" aria-label="Pool summaries">
+            {["Products", "Resources", "Power"].map((label) => {
+              const section = label.toLowerCase();
+              return (
+                <button
+                  key={section}
+                  type="button"
+                  aria-expanded={mobileSummary === section}
+                  aria-controls={`${summaryId}-${section}`}
+                  onClick={() => setMobileSummary((current) => current === section ? null : section)}
+                >
+                  {label}<ChevronDown aria-hidden="true" size={13} />
+                </button>
+              );
+            })}
+          </div>
+          <ProductsPane id={`${summaryId}-products`}>
             <div className="pool-products-heading">
               <h3>Products</h3>
               {!readOnly ? <AddPoolProduct /> : null}
@@ -225,7 +244,7 @@ export function PoolWorksheet() {
               </table>
             </div>
           </ProductsPane>
-          <div className="pool-sheet-balance">
+          <div className="pool-sheet-balance" id={`${summaryId}-resources`}>
             <div className="pool-sheet-resource-heading">
               <h3>Resources</h3>
               <label>
@@ -258,6 +277,7 @@ export function PoolWorksheet() {
             </div>
           </div>
           <WorksheetPower
+            id={`${summaryId}-power`}
             entries={groups.flatMap((group) => (group.machine ? [group.machine] : []))}
           />
         </div>
@@ -328,12 +348,13 @@ export function PoolWorksheet() {
   );
 }
 
-function ProductsPane({ children }: { children: ReactNode }) {
+function ProductsPane({ children, id }: { children: ReactNode; id: string }) {
   const [hover, setHover] = useState(false);
   const readOnly = useFactoryStore((state) => state.isReadOnly);
   return (
     <div
       className="pool-sheet-products"
+      id={id}
       aria-label="Products drop zone"
       data-resource-drop={hover || undefined}
       onDragOver={(event) => {

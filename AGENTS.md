@@ -1654,10 +1654,13 @@ Working notes for future agents on GTNH Factory Flow.
   then scroll independently. A bottom fade previews further rows and clears
   when scrolled to the end. App scrollers use brighter, persistent thumbs and
   recessed tracks; intentional scrollbar-free tab strips remain unchanged.
-  Power stays at its natural height, without stretching
-  or a scrollbar. On phones the summary also caps at 50vh to leave recipe room.
-  Power moves below
-  the other sections on narrow screens. Summary sections are NOT draggable.
+  On desktop Power stays at its natural height without stretching or scrolling.
+  At worksheet widths up to 960px, summaries become a single row of disclosure
+  buttons, initially collapsed. Only one section opens at a time; pressing its
+  button again closes it. The complete summary caps at 40% of worksheet content
+  height (not viewport height), and its active table scrolls, including Power
+  on short screens. Desktop always shows all three regardless of mobile state.
+  Summary sections are NOT draggable.
   Drag recipe items or resources
   (including the item browser) into Products: use the existing addPoolStorage
   action, preserving duplicate handling and undo. Grip handles reorder machine
