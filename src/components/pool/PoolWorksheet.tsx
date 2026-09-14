@@ -23,6 +23,9 @@ import { CircuitChip, RecipeNodeEditor, SolvedMachinesStat } from "../flow/Recip
 import { ItemPickerPopover } from "../ItemPickerPopover";
 import { TargetLine } from "../flow/StorageNode";
 import { RecipeTooltip } from "../flow/RecipeTooltip";
+import { formatSignedRate } from "../inspector/flow-rate";
+import { WorksheetPower } from "./WorksheetPower";
+import "../inspector/panel.css";
 import { buildStatusTooltip, buildPortTooltip } from "../flow/recipe-tooltip-data";
 import {
   formatEnergyPerUnitParts,
@@ -130,6 +133,7 @@ export function PoolWorksheet() {
     Object.values(result.resources)
       .filter(
         (balance) =>
+          balance.kind !== "power" &&
           (internal || boundaryKeys.has(balance.key)) &&
           (balance.displayName ?? balance.resourceId)
             .toLowerCase()
@@ -143,7 +147,6 @@ export function PoolWorksheet() {
     machines: orderedGroups.map((group) => group.owner.id),
     products: products.map((storage) => storage.id),
     resources: balances.map((balance) => balance.key),
-    panels: orderWorksheetEntries(["products", "resources"], savedOrder("panels"), (id) => id),
   };
   return (
     <section
@@ -175,19 +178,15 @@ export function PoolWorksheet() {
           },
         }}
       >
-        <div
-          className="pool-sheet-summary"
-          data-resources-first={ids.panels[0] === "resources" || undefined}
-        >
-          <ProductsPane order={ids.panels.indexOf("products")}>
+        <div className="pool-sheet-summary">
+          <ProductsPane>
             <div className="pool-products-heading">
-              <OrderHandle kind="panels" id="products" label="Products panel" />
               <h3>Products</h3>
               {!readOnly ? <AddPoolProduct /> : null}
             </div>
             <div className="pool-product-columns">
               <span />
-              <span>Product</span>
+              <span>Name</span>
               <span>Target</span>
               <span>Supplied</span>
               <span />
@@ -198,13 +197,8 @@ export function PoolWorksheet() {
               ))}
             </div>
           </ProductsPane>
-          <SummaryPane
-            id="resources"
-            order={ids.panels.indexOf("resources")}
-            className="pool-sheet-balance"
-          >
+          <div className="pool-sheet-balance">
             <div className="pool-sheet-resource-heading">
-              <OrderHandle kind="panels" id="resources" label="Resources panel" />
               <h3>Resources</h3>
               <label>
                 <input
@@ -219,9 +213,9 @@ export function PoolWorksheet() {
               <table className="pool-sheet-resources" aria-label="Pool resource balance">
                 <thead>
                   <tr>
-                    <th>Resource</th>
-                    <th>Inputs</th>
-                    <th>Outputs</th>
+                    <th>Name</th>
+                    <th className="pool-flow-input">Inputs</th>
+                    <th className="pool-flow-output">Outputs</th>
                     <th>Internal</th>
                     <th>Net</th>
                   </tr>
@@ -234,7 +228,10 @@ export function PoolWorksheet() {
               </table>
               {!balances.length ? <p className="pool-sheet-empty">No matching resources.</p> : null}
             </div>
-          </SummaryPane>
+          </div>
+          <WorksheetPower
+            entries={groups.flatMap((group) => (group.machine ? [group.machine] : []))}
+          />
         </div>
         <div className="pool-sheet-scroll">
           {result.stale ? (
@@ -301,33 +298,12 @@ export function PoolWorksheet() {
   );
 }
 
-function SummaryPane({
-  id,
-  order,
-  className,
-  children,
-}: {
-  id: string;
-  order: number;
-  className: string;
-  children: ReactNode;
-}) {
-  const target = useOrderTarget("panels", id);
-  return (
-    <div {...target} className={className} style={{ order }}>
-      {children}
-    </div>
-  );
-}
-
-function ProductsPane({ order, children }: { order: number; children: ReactNode }) {
+function ProductsPane({ children }: { children: ReactNode }) {
   const [hover, setHover] = useState(false);
   const readOnly = useFactoryStore((state) => state.isReadOnly);
-  const target = useOrderTarget("panels", "products");
   return (
     <div
       className="pool-sheet-products"
-      style={{ order }}
       aria-label="Products drop zone"
       data-resource-drop={hover || undefined}
       onDragOver={(event) => {
@@ -335,11 +311,10 @@ function ProductsPane({ order, children }: { order: number; children: ReactNode 
           event.preventDefault();
           event.dataTransfer.dropEffect = "copy";
           setHover(true);
-        } else target.onDragOver(event);
+        }
       }}
       onDragLeave={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHover(false);
-        target.onDragLeave(event);
       }}
       onDrop={(event) => {
         setHover(false);
@@ -348,7 +323,7 @@ function ProductsPane({ order, children }: { order: number; children: ReactNode 
           event.stopPropagation();
           const resource = readResourceDrag(event.dataTransfer);
           if (resource) useFactoryStore.getState().addPoolStorage(resource, "drain");
-        } else target.onDrop(event);
+        }
       }}
     >
       {children}
@@ -782,6 +757,7 @@ function Product({ storage }: { storage: FactoryStorage }) {
         label={`product ${storage.displayName ?? storage.resourceId}`}
       />
       <ResourceLink
+        compact
         resource={{
           kind: storage.kind,
           id: storage.resourceId,
@@ -802,10 +778,12 @@ function Product({ storage }: { storage: FactoryStorage }) {
           <TargetLine storage={storage} result={result} />
         )}
       </div>
-      <span className={result?.targetUnreachable ? "text-red-300" : "pool-sheet-muted"}>
-        {result?.targetUnreachable
-          ? "Unreachable"
-          : formatSlotRate(result?.producedPerSecond ?? 0, storage.kind)}
+      <span className={result?.targetUnreachable ? "pool-flow-input" : "pool-sheet-muted"}>
+        {result?.targetUnreachable ? (
+          "Unreachable"
+        ) : (
+          <BalanceRate value={result?.producedPerSecond ?? 0} kind={storage.kind} sign={0} />
+        )}
       </span>
       {!readOnly ? (
         <button
@@ -849,13 +827,37 @@ function BalanceRow({ balance }: { balance: ResourceBalance }) {
           />
         </div>
       </td>
-      <td>{formatSlotRate(balance.deficitPerSecond, balance.kind)}</td>
-      <td>{formatSlotRate(balance.surplusPerSecond, balance.kind)}</td>
-      <td>{formatSlotRate(balance.consumedPerSecond, balance.kind)}</td>
       <td>
-        {net > 0 ? "+" : ""}
-        {formatSlotRate(net, balance.kind)}
+        <BalanceRate value={balance.deficitPerSecond} kind={balance.kind} sign={-1} />
+      </td>
+      <td>
+        <BalanceRate value={balance.surplusPerSecond} kind={balance.kind} sign={1} />
+      </td>
+      <td>
+        <BalanceRate value={balance.consumedPerSecond} kind={balance.kind} sign={0} />
+      </td>
+      <td>
+        <BalanceRate value={net} kind={balance.kind} sign={Math.sign(net)} />
       </td>
     </tr>
+  );
+}
+
+function BalanceRate({
+  value,
+  kind,
+  sign,
+}: {
+  value: number;
+  kind: ResourceAmount["kind"];
+  sign: number;
+}) {
+  return (
+    <span
+      className={`inspector-resource-net pool-balance-rate ${sign < 0 ? "pool-flow-input" : sign > 0 ? "pool-flow-output" : "pool-flow-internal"}`}
+    >
+      {formatSignedRate(value, kind, sign)}
+      <span className="inspector-unit">{rateSuffixForKind(kind).trim()}</span>
+    </span>
   );
 }

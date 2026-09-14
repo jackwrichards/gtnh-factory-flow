@@ -76,6 +76,27 @@ afterEach(() => {
 });
 
 describe("Pool worksheet", () => {
+  it("keeps summary sections fixed, uses signed inspector rates, and separates power", () => {
+    const { container } = render(<PoolWorksheet />);
+    expect(screen.queryByRole("button", { name: /Reorder .* panel/ })).toBeNull();
+    const table = screen.getByRole("table", { name: "Pool resource balance" });
+    expect(within(table).getByRole("columnheader", { name: "Name" })).toBeTruthy();
+    const input = container.querySelector(
+      '[data-worksheet-resource="item:copper"] .pool-flow-input',
+    )!;
+    expect(input.textContent).toBe("−0.5/s");
+    const output = container.querySelector(
+      '[data-worksheet-resource="item:plate"] .pool-flow-output',
+    )!;
+    expect(output.textContent).toBe("+0.5/s");
+    const power = screen.getByRole("table", { name: "Pool power totals" });
+    const totals = power.textContent;
+    fireEvent.change(screen.getByRole("textbox", { name: "Filter worksheet" }), {
+      target: { value: "not present" },
+    });
+    expect(power.textContent).toBe(totals);
+  });
+
   it("drags a recipe item into Products using the normal drawer action and undo", () => {
     const { container } = render(<PoolWorksheet />);
     const values = new Map<string, string>();

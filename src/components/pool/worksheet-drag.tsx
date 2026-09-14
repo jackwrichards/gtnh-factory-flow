@@ -3,7 +3,7 @@
 import { createContext, useContext, type DragEvent } from "react";
 import { GripVertical } from "lucide-react";
 
-type ListKind = "machines" | "products" | "resources" | "panels";
+type ListKind = "machines" | "products" | "resources";
 const ORDER_TYPE = "application/x-gtnh-pool-order";
 export const WorksheetOrderContext = createContext<{
   readOnly: boolean;
@@ -11,7 +11,7 @@ export const WorksheetOrderContext = createContext<{
   move: (kind: ListKind, from: string, to: string, after: boolean) => void;
 }>({
   readOnly: true,
-  ids: { machines: [], products: [], resources: [], panels: [] },
+  ids: { machines: [], products: [], resources: [] },
   move: () => {},
 });
 

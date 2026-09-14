@@ -16,8 +16,8 @@ import { getUiScale } from "@/lib/ui-scale";
 import "./inspector/panel.css";
 import { ProductTargetRow } from "./inspector/ProductTargetRow";
 import { MachineShoppingList } from "./MachineShoppingList";
-import { formatCompact } from "@/lib/model";
-import { makeResourceKey, formatPowerValue } from "@/lib/model/resources";
+import { makeResourceKey } from "@/lib/model/resources";
+import { formatSignedRate } from "./inspector/flow-rate";
 import { getStorageRoles } from "@/lib/model/storage-role";
 import {
   energyPerUnit,
@@ -78,16 +78,6 @@ const EMPTY_KEYS: ReadonlySet<string> = new Set();
  * Formatters read the unit singleton; rows subscribe to the display dials
  * and repaint without solving again.
  */
-function formatRateValue(perSecond: number, kind: string = "item"): string {
-  const value = perSecond * rateMultiplierForKind(kind);
-  return kind === "power" ? formatPowerValue(value) : formatCompact(value);
-}
-
-function formatSignedRate(perSecond: number, kind: string, sign: number): string {
-  const text = formatRateValue(Math.abs(perSecond), kind);
-  return text === "0" ? text : (sign < 0 ? "−" : sign > 0 ? "+" : "") + text;
-}
-
 function rateUnitFor(kind: ResourceBalance["kind"]): string {
   return rateSuffixForKind(kind).trim();
 }

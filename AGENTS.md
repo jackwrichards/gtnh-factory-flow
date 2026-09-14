@@ -1638,16 +1638,24 @@ Working notes for future agents on GTNH Factory Flow.
   button, or resource favourite/hide controls. Search is in the table head.
   Products have a direct + item picker. Resource-summary names do not fade,
   and canvas resource visibility/favourite preferences do not filter them.
-  Products/Resources stay above the recipe scroller, each with its own bounded
-  scroll area and separated headings/columns. Drag recipe items or resources
+  Products/Resources/Power stay above the recipe scroller in that fixed order,
+  with bounded scroll areas and separated headings/columns. Power moves below
+  the other sections on narrow screens. Summary sections are NOT draggable.
+  Drag recipe items or resources
   (including the item browser) into Products: use the existing addPoolStorage
   action, preserving duplicate handling and undo. Grip handles reorder machine
-  groups, products, resources, and summary panels; arrow keys also reorder.
+  groups, products, and resources; arrow keys also reorder.
   `WorkspaceView.poolWorksheetOrder` saves per-plan browser order only, without
   changing canvas positions, the solver, or undo. Read-only views cannot drag.
-  Keep column headers tight (12px summary labels, 20px recipe header). Resource
-  balance rows use 16px icon frames and no vertical cell padding, about 17px
-  per single-line row; long names can still wrap. Recipe item art stays larger.
+  Products and Resources share EXACT 22px column headers and 24px rows; both
+  call the first column Name and use compact 16px icons. Recipe art stays larger.
+  Resource readings reuse inspector signed formatting and typography: red
+  negative Inputs, green positive Outputs, neutral Internal, signed Net, bold
+  12px numbers with 8px units and the app font. Power has Average/Peak columns
+  for Used, Made, Net, plus Steam when present, summed from the same unfiltered
+  machine-list entries as the inspector. EU is omitted from resource balances
+  here: generator EU and machine consumption are separate in the model, not an
+  automatic connection. Power totals obey the power display dial.
   Count uses the canvas's SolvedMachinesStat, including its pencil and
   clear-to-unpin behavior. Never rebuild a "Need / Pin / Auto" text stack.
   The name and chevron are first; the next row keeps Machines/count/pencil
