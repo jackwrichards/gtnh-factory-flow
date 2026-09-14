@@ -374,8 +374,18 @@ describe("Pool worksheet", () => {
     fireEvent.change(pin, { target: { value: "1.25" } });
     fireEvent.blur(pin);
     expect(useFactoryStore.getState().project.nodes[0].solvePin).toBe(1.25);
-    fireEvent.click(screen.getByRole("button", { name: "Increase machine tier" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tier LV" }));
     expect(useFactoryStore.getState().project.nodes[0].overclockTier).toBe("MV");
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Tier MV" }));
+    expect(useFactoryStore.getState().project.nodes[0].overclockTier).toBe("LV");
+    const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -100 });
+    fireEvent(screen.getByRole("button", { name: "Tier LV" }), wheel);
+    expect(wheel.defaultPrevented).toBe(true);
+    expect(useFactoryStore.getState().project.nodes[0].overclockTier).toBe("MV");
+    fireEvent.wheel(screen.getByRole("button", { name: "Tier MV" }), { deltaY: 100 });
+    expect(useFactoryStore.getState().project.nodes[0].overclockTier).toBe("LV");
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Tier LV" }));
+    expect(useFactoryStore.getState().project.nodes[0].overclockTier).toBe("LV");
     expect(container.querySelector(".react-flow__handle")).toBeNull();
   });
 

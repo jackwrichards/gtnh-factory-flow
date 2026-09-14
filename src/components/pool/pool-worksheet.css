@@ -381,11 +381,6 @@
 .pool-editor-power:empty {
   display: none;
 }
-.pool-editor-power > .flex > span {
-  padding: 0 3px;
-  line-height: 22px;
-  font-size: 13px;
-}
 .pool-editor-power [data-power-controls] > button,
 .pool-editor-power [data-power-controls] > input {
   height: 24px;
@@ -394,6 +389,9 @@
   white-space: nowrap;
   flex-shrink: 0;
   padding-inline: 2px;
+}
+.pool-editor-power [data-power-controls] > :first-child {
+  width: calc(46px + 1ch);
 }
 .pool-machine-settings {
   width: 100%;

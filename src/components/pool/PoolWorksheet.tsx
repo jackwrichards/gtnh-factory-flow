@@ -70,7 +70,7 @@ export function PoolWorksheet() {
       if (
         event.target instanceof Element &&
         event.target.closest(
-          ".pool-machine-settings .nowheel, .pool-editor-power [data-power-controls]",
+          ".pool-machine-settings .nowheel, .pool-editor-power [data-power-controls], .pool-editor-power .nowheel",
         )
       )
         event.preventDefault();

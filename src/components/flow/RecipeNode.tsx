@@ -879,7 +879,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
             ]),
           ];
   const updateTier = (direction: -1 | 1) => {
-    if (!tierControl) {
+    if (editorLocked || !tierControl || tierControl.fixed) {
       return;
     }
 
@@ -1182,6 +1182,84 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
     ...(isSearchHighlighted ? [{ width: 4, color: "#7dd3fc" }] : []),
   ];
 
+  // Canvas and worksheet share the same tier chip and interaction surface.
+  const voltageTierControl = tierControl && tierColor ? (
+    // The fused chip trio is ONE hover surface telling the whole
+    // power story - the same panel the footer's POWER cell shows -
+    // so count, hatch and tier all speak one language. The native
+    // titles survive only where there is no report to tell it.
+    <div className="relative">
+    <MinecraftTooltip
+      content={
+        powerReport && isSharedMachine ? (
+          // A shared machine's chip is a machine fact: its tier and
+          // budget. Each recipe's own story sits on its rule row.
+          <RecipeTooltip
+            view={{
+              title: "Machine power",
+              rows: [
+                { label: "Tier", value: powerReport.tier },
+                { label: "Supply per machine", value: `${formatPowerValue(powerDisplayFromEuT(powerReport.poolEuT))} ${powerDisplaySuffix()}` },
+                { label: "Recipes", value: String(1 + sectionRails.length) },
+              ],
+            }}
+          />
+        ) : powerReport ? (
+          <PowerStoryContent
+            report={powerReport}
+            utilization={result?.utilization}
+            machines={projectNode.machineCount * projectNode.parallel}
+            recipe={nodeRecipe}
+            node={projectNode}
+          />
+        ) : undefined
+      }
+    >
+    <div className="flex">
+      <MinecraftTooltip content={() => <RecipeTooltip view={tierControl.fixed
+        ? { title: "Fusion reactor power", rows: [{ label: "Operating tier", value: tierControl.current }], reason: "Fixed by the reactor mark. Select a different controller to change overclocks." }
+        : { title: "Voltage tier", rows: [{ label: "Configured tier", value: tierControl.current }], actions: [{ gesture: "left", label: "Increase" }, { gesture: "right", label: "Decrease" }, { gesture: "wheel", label: "Adjust tier" }] }} />}>
+      <button
+        type="button"
+        aria-disabled={tierControl.fixed || undefined}
+        onClick={(event) => {
+          event.stopPropagation();
+          // No dropdown any more: click steps up, right-click steps
+          // down, wheel walks - the classic cycle, everywhere.
+          if (!tierControl.fixed) updateTier(1);
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          // Right click steps the tier down, with or without shift:
+          // requiring shift left plain right click doing nothing,
+          // which read as broken (and Firefox forces its own menu on
+          // shift-right-click, so plain is the one that always works).
+          if (!tierControl.fixed) updateTier(-1);
+        }}
+        data-hatch-menu-anchor
+        onWheel={(event) => {
+          if (checklistLocked()) return;
+          event.stopPropagation();
+          if (!tierControl.fixed) updateTier(event.deltaY < 0 ? 1 : -1);
+        }}
+        className="nowheel flex h-6 w-[50px] items-center justify-center border-2 px-1 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
+        style={{
+          backgroundColor: tierColor.background,
+          borderColor: tierColor.border,
+          color: tierColor.text,
+          textShadow: `1px 1px 0 ${tierColor.shadow}`,
+        }}
+        aria-label={`Tier ${tierControl.current}`}
+      >
+        {tierControl.current}
+      </button>
+      </MinecraftTooltip>
+    </div>
+    </MinecraftTooltip>
+    </div>
+  ) : null;
+
   // The worksheet mounts the SAME controls and derivation without canvas
   // handles or geometry registration. There is only one editing path for
   // machine math, specialized farms, generators, and shared recipe settings.
@@ -1207,13 +1285,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
           {powerReadout ? <HatchPowerControls {...powerReadout} locked={() => editorLocked}
             onChange={(hatchVoltageTier, hatchAmps, powerInputMode) => updateNode(projectNode.id, {
               hatchVoltageTier, hatchAmps, powerInputMode, powerEuT: hatchAmps * getVoltageTierMaxEuT(hatchVoltageTier),
-            })} /> : tierControl && tierColor ? (
-              <div className="flex items-center gap-1">
-                <button className="pool-sheet-button" type="button" disabled={tierControl.fixed} aria-label="Decrease machine tier" onClick={() => updateTier(-1)}>−</button>
-                <span className="px-2 py-1 text-xs" style={{ background: tierColor.background, color: tierColor.text }}>{tierControl.current}</span>
-                <button className="pool-sheet-button" type="button" disabled={tierControl.fixed} aria-label="Increase machine tier" onClick={() => updateTier(1)}>+</button>
-              </div>
-          ) : null}
+            })} /> : voltageTierControl}
           </div>
           {isCropFarmNode ? <div className="relative"><button type="button" className="pool-sheet-button" data-crop-picker-toggle onClick={() => setCropMenuOpen((open) => !open)}><Sprout className="h-4 w-4" />{cropTitle ?? "Pick a crop"}</button>
             {isCropMenuOpen ? <CropPickerMenu nodeId={projectNode.id} onClose={() => setCropMenuOpen(false)} /> : null}</div> : null}
@@ -1828,82 +1900,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
             playBoardSound("dialPower", { step: getVoltageTierIndex(hatchVoltageTier) + 1, gain: .6 });
             suppressBoardSound("adjust", 150);
             updateNode(projectNode.id, { hatchVoltageTier, hatchAmps, powerInputMode, powerEuT: hatchAmps * getVoltageTierMaxEuT(hatchVoltageTier) });
-          }} /> : tierControl && tierColor ? (
-            // The fused chip trio is ONE hover surface telling the whole
-            // power story - the same panel the footer's POWER cell shows -
-            // so count, hatch and tier all speak one language. The native
-            // titles survive only where there is no report to tell it.
-            <div className="relative">
-            <MinecraftTooltip
-              content={
-                powerReport && isSharedMachine ? (
-                  // A shared machine's chip is a machine fact: its tier and
-                  // budget. Each recipe's own story sits on its rule row.
-                  <RecipeTooltip
-                    view={{
-                      title: "Machine power",
-                      rows: [
-                        { label: "Tier", value: powerReport.tier },
-                        { label: "Supply per machine", value: `${formatPowerValue(powerDisplayFromEuT(powerReport.poolEuT))} ${powerDisplaySuffix()}` },
-                        { label: "Recipes", value: String(1 + sectionRails.length) },
-                      ],
-                    }}
-                  />
-                ) : powerReport ? (
-                  <PowerStoryContent
-                    report={powerReport}
-                    utilization={result?.utilization}
-                    machines={projectNode.machineCount * projectNode.parallel}
-                    recipe={nodeRecipe}
-                    node={projectNode}
-                  />
-                ) : undefined
-              }
-            >
-            <div className="flex">
-              <MinecraftTooltip content={() => <RecipeTooltip view={tierControl.fixed
-                ? { title: "Fusion reactor power", rows: [{ label: "Operating tier", value: tierControl.current }], reason: "Fixed by the reactor mark. Select a different controller to change overclocks." }
-                : { title: "Voltage tier", rows: [{ label: "Configured tier", value: tierControl.current }], actions: [{ gesture: "left", label: "Increase" }, { gesture: "right", label: "Decrease" }, { gesture: "wheel", label: "Adjust tier" }] }} />}>
-              <button
-                type="button"
-                aria-disabled={tierControl.fixed || undefined}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  // No dropdown any more: click steps up, right-click steps
-                  // down, wheel walks - the classic cycle, everywhere.
-                  if (!tierControl.fixed) updateTier(1);
-                }}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  // Right click steps the tier down, with or without shift:
-                  // requiring shift left plain right click doing nothing,
-                  // which read as broken (and Firefox forces its own menu on
-                  // shift-right-click, so plain is the one that always works).
-                  if (!tierControl.fixed) updateTier(-1);
-                }}
-                data-hatch-menu-anchor
-                onWheel={(event) => {
-                  if (checklistLocked()) return;
-                  event.stopPropagation();
-                  if (!tierControl.fixed) updateTier(event.deltaY < 0 ? 1 : -1);
-                }}
-                className="nowheel flex h-6 w-[50px] items-center justify-center border-2 px-1 pb-[3px] text-[11px] font-bold leading-none shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
-                style={{
-                  backgroundColor: tierColor.background,
-                  borderColor: tierColor.border,
-                  color: tierColor.text,
-                  textShadow: `1px 1px 0 ${tierColor.shadow}`,
-                }}
-                aria-label={`Tier ${tierControl.current}`}
-              >
-                {tierControl.current}
-              </button>
-              </MinecraftTooltip>
-            </div>
-            </MinecraftTooltip>
-            </div>
-          ) : null}
+          }} /> : voltageTierControl}
         </div>
         </div>
         {/* The card body. No paint of its own: the window behind it is

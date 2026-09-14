@@ -1709,6 +1709,10 @@ Working notes for future agents on GTNH Factory Flow.
   (Jack preferred this to the initial one-third reduction). Fold budgets use
   that same scale; mode-switch pointer coordinates use its rendered bounds.
   The Pool summary starts at 53px to match the shorter toolbar.
+  Pool single-block voltage uses the canvas's shared tier chip (same face,
+  tooltip, left/right click and wheel), not separate minus/plus buttons.
+  Pool cancels native wheel scrolling over that chip. Its multiblock power
+  amount field is one character wider than the adjacent tier field.
   The mode tray centers on the canvas width shared by Build/Solve/Pool,
   clamped between the left and right tool budgets when space is tight.
   ColumnWorkspace publishes the right column's hidden width in Pool via
