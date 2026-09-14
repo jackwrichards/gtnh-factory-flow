@@ -21,6 +21,7 @@ import {
 import { Fragment, memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { getUiScale } from "@/lib/ui-scale";
+import { BOARD_TOOL_SCALE } from "./toolbar-fold";
 import {
   GLANCE_CARD_CLASS,
   GLANCE_LINE,
@@ -1024,6 +1025,7 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
           onClick={() => setSheetOpen(true)}
           data-help-anchor="help"
           className={HELP_BUTTON_CLASS}
+          style={{ zoom: BOARD_TOOL_SCALE }}
           title="Board help"
           aria-label="Show board help"
         >
@@ -1071,6 +1073,7 @@ export const BoardHelp = memo(function BoardHelp({ compact }: { compact: boolean
         onBlur={scheduleHide}
         data-help-anchor="help"
         className={HELP_BUTTON_CLASS}
+        style={{ zoom: BOARD_TOOL_SCALE }}
         title="Board help"
         aria-label="Show board help"
       >

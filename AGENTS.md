@@ -1705,6 +1705,10 @@ Working notes for future agents on GTNH Factory Flow.
   BOARD width. Its size budget separates rem-sized controls (Firefox text
   zoom/default fonts) from fixed-pixel mode/power keys; trays and mode keys
   cannot flex-shrink. Test expanded checklist and manual recalculate too.
+  Board toolbar trays and the corner help key use BOARD_TOOL_SCALE = 0.8
+  (Jack preferred this to the initial one-third reduction). Fold budgets use
+  that same scale; mode-switch pointer coordinates use its rendered bounds.
+  The Pool summary starts at 53px to match the shorter toolbar.
 
 - TOOLBAR LAYOUT since the rework (Jack, 2026-09-06): LEFT row = undo
   pair and rate keys. Pool products are added in the Products summary. RIGHT

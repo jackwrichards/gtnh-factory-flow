@@ -13,7 +13,7 @@
   z-index: 15;
   display: flex;
   flex-direction: column;
-  padding-top: 62px;
+  padding-top: 53px;
   background: var(--surface, #24272c);
   color: var(--mc-ink);
   font-family: var(--font-minecraft), monospace;

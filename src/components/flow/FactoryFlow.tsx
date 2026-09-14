@@ -308,7 +308,7 @@ import { GT_TIER_COLORS } from "./tier-colors";
 import { isPowerDisplayUnit, rateSuffixForKind, rateUnitSuffix, type RateUnit } from "@/lib/model/rate-unit";
 import { useIsCompactViewport, useIsSnugViewport } from "@/lib/compact-view";
 import { getUiScale, useUiScale } from "@/lib/ui-scale";
-import { useToolbarFold } from "./toolbar-fold";
+import { BOARD_TOOL_SCALE, useToolbarFold } from "./toolbar-fold";
 import { browseHoveredPort } from "./port-browse";
 import { useBoardTouchGestures } from "./board-touch-gestures";
 import { useBoardCameraControls } from "./board-camera-controls";
@@ -7261,6 +7261,7 @@ function ToolTray({
   return (
     <div
       data-toolbar-tray
+      style={{ zoom: BOARD_TOOL_SCALE }}
       data-help-anchor={helpAnchor}
       className={`${raised ? "relative z-30 " : ""}pointer-events-auto flex shrink-0 items-start gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)] [filter:drop-shadow(6px_8px_7px_rgba(0,0,0,0.45))]`}
     >
@@ -7342,8 +7343,8 @@ function ToolGroup({
         // `w-max`, or the row inherits its shrink-to-fit width from the toolbar
         // root it is positioned against — which folded is one 36px button, so
         // every row wrapped into a vertical column one button wide.
-        // top-[3rem]: the plated trigger stands 44px tall now.
-        "absolute top-[3rem] flex w-max max-w-[calc(var(--board-width,calc(100*var(--ui-vw)))-24px)] flex-wrap items-start gap-1 transition-[opacity,transform] duration-100",
+        // Leave a small gap below the compact 35px plated trigger.
+        "absolute top-10 flex w-max max-w-[calc(var(--board-width,calc(100*var(--ui-vw)))-24px)] flex-wrap items-start gap-1 transition-[opacity,transform] duration-100",
         side === "left" ? "left-0 justify-start" : "right-0 justify-end",
         isOpen ? "translate-y-0 opacity-100" : "invisible -translate-y-1 opacity-0",
       ].join(" ")}
@@ -7409,7 +7410,7 @@ const SmartViewToolbar = memo(function SmartViewToolbar({
     // bottom-3 since the attribution badge left this corner.
     <div
       data-help-anchor="glance"
-      className="nodrag pointer-events-none absolute bottom-3 right-3 z-20 flex items-start gap-2"
+      className="nodrag pointer-events-none absolute bottom-3 right-3 z-20 flex items-start gap-[0.4rem]"
     >
       {/* On its own plate: this one moves the camera, the row beside it
           changes what every card shows. */}
@@ -7705,9 +7706,13 @@ const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: b
   const DRAG_START_PX = 4;
   const xToIndex = (x: number) =>
     Math.max(0, Math.min(MODE_KEYS.length - 1, Math.floor(x / modeStep)));
-  // Real px -> shell px: modeStep is the keys' layout pitch.
-  const localX = (event: ReactPointerEvent<HTMLDivElement>) =>
-    (event.clientX - (rowRef.current?.getBoundingClientRect().left ?? 0)) / getUiScale() - 2;
+  // Read the rendered scale so pointer picking includes the compact toolbar.
+  const localX = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const row = rowRef.current;
+    if (!row) return 0;
+    const rect = row.getBoundingClientRect();
+    return (event.clientX - rect.left) * row.offsetWidth / rect.width - 2;
+  };
   const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0 || !rowRef.current) {
       return;
@@ -7930,7 +7935,7 @@ const SourceToolbar = memo(function SourceToolbar({
       data-board-toolbar
       data-help-anchor="build"
       className={[
-        "nodrag pointer-events-none absolute left-[var(--toolbar-inset,0.75rem)] flex items-start gap-2",
+        "nodrag pointer-events-none absolute left-[var(--toolbar-inset,0.75rem)] flex items-start gap-[0.4rem]",
         // Lifted while either unit menu hangs below, so a notice card cannot
         // paint over it - the same lift the paint row gives its fold-outs.
         isRateMenuOpen || isPowerUnitMenuOpen ? "z-40" : "z-20",
@@ -9399,7 +9404,7 @@ const PaintToolbar = memo(function PaintToolbar({
     <div
       data-board-toolbar
       className={[
-        "nodrag pointer-events-none absolute right-[var(--toolbar-inset,0.75rem)] flex items-start gap-2",
+        "nodrag pointer-events-none absolute right-[var(--toolbar-inset,0.75rem)] flex items-start gap-[0.4rem]",
         shiftedDown ? "top-14" : "top-3",
         // An open fold-out hangs below the row and can cross whatever toolbar
         // sits beneath, which at the same z and later in the DOM would paint

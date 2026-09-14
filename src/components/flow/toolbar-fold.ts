@@ -2,6 +2,9 @@
 
 import { useLayoutEffect, useState, type RefObject } from "react";
 
+/** Shared size for the board's top and corner controls. */
+export const BOARD_TOOL_SCALE = 0.8;
+
 /** Responsive board chrome: labeled modes, icon modes, then folded tools.
  * Measurements are shell pixels. Only rem-sized parts grow with Firefox text
  * zoom; the 76px power key and 96/44px mode keys keep their fixed widths.
@@ -17,14 +20,14 @@ export interface ToolbarFold {
 
 export function toolbarFoldFor(boardWidth: number, compact: boolean, textScale = 1): ToolbarFold {
   const scale = Number.isFinite(textScale) ? Math.max(1, textScale) : 1;
-  const buildWidth = 260 * scale + 92;
-  const foldedBuildWidth = 124 * scale + 8;
-  const paintWidth = 124 * scale + 8;
-  const foldedPaintWidth = 40 * scale + 4;
+  const buildWidth = (260 * scale + 92) * BOARD_TOOL_SCALE;
+  const foldedBuildWidth = (124 * scale + 8) * BOARD_TOOL_SCALE;
+  const paintWidth = (124 * scale + 8) * BOARD_TOOL_SCALE;
+  const foldedPaintWidth = (40 * scale + 4) * BOARD_TOOL_SCALE;
   const margin = 12 * scale;
   const gap = 16 * scale;
-  const labelModesWidth = 296 + 8 * scale;
-  const iconModesWidth = 140 + 8 * scale;
+  const labelModesWidth = (296 + 8 * scale) * BOARD_TOOL_SCALE;
+  const iconModesWidth = (140 + 8 * scale) * BOARD_TOOL_SCALE;
   const centerFits = (modesWidth: number, rightWidth: number) =>
     boardWidth >= 2 * Math.max(buildWidth + margin + gap, rightWidth + margin + gap) + modesWidth;
   const modeIconsOnly = compact || !centerFits(labelModesWidth, paintWidth);
@@ -68,7 +71,7 @@ export function useToolbarFold(
       // squeezing the always-visible undo/redo and the two fold triggers.
       const scale = Number.isFinite(textScale) ? Math.max(1, textScale) : 1;
       const inset = next.build && next.paint
-        ? Math.max(0, Math.min(12 * scale, (width - (168 * scale + 12)) / 2))
+        ? Math.max(0, Math.min(12 * scale, (width - (168 * scale + 12) * BOARD_TOOL_SCALE) / 2))
         : 12 * scale;
       element.style.setProperty("--toolbar-inset", `${inset}px`);
       setFold((current) =>
