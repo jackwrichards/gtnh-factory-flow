@@ -1005,10 +1005,10 @@ Working notes for future agents on GTNH Factory Flow.
   cap), fitting four 58px-minimum item columns. Keep drawer measurement and
   desktop grid widths in sync.
 
-- Build/Solve/Pool use icons only on snug or compact windows; wider windows
-  keep the words. When Build tools folds, the mode switch and Pool product
-  key move inside it, freeing the centre. The key width and drag hit-testing
-  must use the same pitch.
+- Build/Solve/Pool keep their words while the toolbar fits; the window's
+  generic snug breakpoint does not hide them. Compact windows use icons.
+  When Build tools folds, the mode switch moves inside it. The key width
+  and drag hit-testing must use the same pitch.
 
 - The default is 10% smaller than the previous baseline (Jack, 2026-09-10),
   still labelled 100%. `src/lib/ui-scale.ts` owns it: a Settings
@@ -1709,6 +1709,12 @@ Working notes for future agents on GTNH Factory Flow.
   (Jack preferred this to the initial one-third reduction). Fold budgets use
   that same scale; mode-switch pointer coordinates use its rendered bounds.
   The Pool summary starts at 53px to match the shorter toolbar.
+  The mode tray centers on the canvas width shared by Build/Solve/Pool,
+  clamped between the left and right tool budgets when space is tight.
+  ColumnWorkspace publishes the right column's hidden width in Pool via
+  --toolbar-hidden-panel-width, so mode changes preserve both position and
+  label/fold decisions. The fit budget sums actual left/mode/right widths;
+  do not reserve two copies of the wider left toolbar for perfect centering.
 
 - TOOLBAR LAYOUT since the rework (Jack, 2026-09-06): LEFT row = undo
   pair and rate keys. Pool products are added in the Products summary. RIGHT

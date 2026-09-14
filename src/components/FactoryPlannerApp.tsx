@@ -1,7 +1,7 @@
 "use client";
 
 import { resolveProjectRecipes } from "@/lib/datasets/refresh-project-recipes";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, type CSSProperties } from "react";
 import {
   DEFAULT_DATASET_MANIFEST_URL,
   fetchDatasetManifest,
@@ -419,6 +419,10 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
       <main
         className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden"
         style={{
+          // Keep the toolbar's fit budget stable when Pool hides this column.
+          "--toolbar-hidden-panel-width": worksheet && !covering
+            ? `${workspace.rightPanelOpen ? 234 : RAIL_WIDTH}px`
+            : "0px",
           gridTemplateColumns: [
             workspace.leftPanelOpen ? "256px" : `${RAIL_WIDTH}px`,
             "minmax(0,1fr)",
@@ -426,7 +430,7 @@ function ColumnWorkspace({ workspace, onLoadDatasetVersion }: WorkspaceProps) {
             // GONE: nothing to open, no rail to hint that there is.
             rightPanelShown ? "234px" : covering || worksheet ? "0px" : `${RAIL_WIDTH}px`,
           ].join(" "),
-        }}
+        } as CSSProperties}
       >
         {/* Each column carries its own header row, all the same height, so the
             three line up where the full-width bar used to be. */}

@@ -306,7 +306,7 @@ import { isTrashRecipe, TRASH_ANY_RESOURCE_ID } from "@/lib/model/trash";
 import { GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
 import { GT_TIER_COLORS } from "./tier-colors";
 import { isPowerDisplayUnit, rateSuffixForKind, rateUnitSuffix, type RateUnit } from "@/lib/model/rate-unit";
-import { useIsCompactViewport, useIsSnugViewport } from "@/lib/compact-view";
+import { useIsCompactViewport } from "@/lib/compact-view";
 import { getUiScale, useUiScale } from "@/lib/ui-scale";
 import { BOARD_TOOL_SCALE, useToolbarFold } from "./toolbar-fold";
 import { browseHoveredPort } from "./port-browse";
@@ -7660,8 +7660,7 @@ const MODE_KEYS: Array<{
 
 const ModeKeys = memo(function ModeKeys({ forceIcons = false }: { forceIcons?: boolean }) {
   const compact = useIsCompactViewport();
-  const snug = useIsSnugViewport();
-  const iconsOnly = forceIcons || compact || snug;
+  const iconsOnly = forceIcons || compact;
   const modeStep = iconsOnly ? 44 : 96;
   const mode = useFactoryStore((state): BoardMode =>
     state.project.poolMode === true ? "pool" : state.project.solveMode === true ? "solve" : "build",
@@ -9385,14 +9384,13 @@ const PaintToolbar = memo(function PaintToolbar({
 
   return (
     <>
-    {/* THE MODE SWITCH, top centre of the board on a plate of its own
-        (2026-09-06): it changes what the whole board means, so it stands
-        apart from both tool rows until Build tools folds. */}
+    {/* Center on the canvas width shared by all modes so hiding the resource
+        column in Pool cannot move the next mode out from under the pointer. */}
     {!modesInBuild && (
     <div
       data-board-toolbar-centre
       className={[
-        "nodrag pointer-events-none absolute left-1/2 z-20 -translate-x-1/2",
+        "nodrag pointer-events-none absolute left-[var(--toolbar-mode-left)] z-20",
         shiftedDown ? "top-14" : "top-3",
       ].join(" ")}
     >
