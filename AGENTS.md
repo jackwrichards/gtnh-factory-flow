@@ -1661,6 +1661,11 @@ Working notes for future agents on GTNH Factory Flow.
   height (not viewport height), and its active table scrolls, including Power
   on short screens. Desktop always shows all three regardless of mobile state.
   Summary sections are NOT draggable.
+  Each machine group's chevron beside its grip collapses all shared recipes
+  into one 32px row: small machine picture, name/count and icon-only Takes/Makes.
+  Icon strips never wrap and fade at the right edge; their browse/hover actions
+  still work. `WorkspaceView.poolCollapsedMachines` remembers node IDs per plan,
+  separately from project data and undo. Read-only viewers can fold rows too.
   Drag recipe items or resources
   (including the item browser) into Products: use the existing addPoolStorage
   action, preserving duplicate handling and undo. Grip handles reorder machine

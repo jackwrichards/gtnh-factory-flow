@@ -76,6 +76,31 @@ afterEach(() => {
 });
 
 describe("Pool worksheet", () => {
+  it("folds all shared recipes without changing the plan and remembers the view", () => {
+    const project = fixture();
+    project.recipes.push({ ...project.recipes[0], id: "foil", name: "Copper Foil",
+      outputs: [{ kind: "item", id: "foil", displayName: "Copper Foil", amount: 1 }] });
+    project.nodes[0].extraRecipes = [{ recipeId: "foil" }];
+    project.nodes[0].solvePin = 2;
+    useFactoryStore.getState().setProject(project);
+    useFactoryStore.setState({ isReadOnly: true });
+    const before = useFactoryStore.getState().project;
+    const view = render(<PoolWorksheet />);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Bender" }));
+    const row = view.container.querySelector('[data-worksheet-node="machine"]')!;
+    expect(row.querySelectorAll("tr")).toHaveLength(1);
+    expect(row.querySelector(".pool-collapsed-count")?.textContent).toBe("×2");
+    expect(row.querySelector(".pool-status-cell")).toBeNull();
+    expect(row.querySelector(".pool-port-rate")).toBeNull();
+    expect(within(row as HTMLElement).getByRole("button", { name: "Copper Foil" })).toBeTruthy();
+    expect(useFactoryStore.getState().project).toBe(before);
+    view.unmount();
+    const restored = render(<PoolWorksheet />);
+    fireEvent.click(screen.getByRole("button", { name: "Expand Bender" }));
+    expect(restored.container.querySelectorAll('[data-worksheet-node="machine"] tr')).toHaveLength(2);
+    expect(useFactoryStore.getState().project).toBe(before);
+  });
+
   it("keeps each shared recipe's status and removal beside its own circuit", () => {
     const project = fixture();
     project.recipes.push({ ...project.recipes[0], id: "foil", name: "Copper Foil" });

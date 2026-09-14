@@ -14,7 +14,7 @@ import { ChevronDown, Copy, Plus, RefreshCw, Search, Trash2, X } from "lucide-re
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { formatPowerValue, resourceLabel, isCropProductionRecipe } from "@/lib/model";
 import { isCustomRateRecipe } from "@/lib/model/custom-rate";
-import { type MachineListEntry } from "@/lib/model/machine-list";
+import { formatMachineListCount, type MachineListEntry } from "@/lib/model/machine-list";
 import type { ResourceAmount, ResourceBalance, FactoryStorage } from "@/lib/model/types";
 import { getStorageRoles } from "@/lib/model/storage-role";
 import { powerDisplayFromEuT, powerDisplaySuffix, rateSuffixForKind } from "@/lib/model/rate-unit";
@@ -119,17 +119,19 @@ export function PoolWorksheet() {
     (group) => group.owner.id,
   );
   const shown = filterWorksheetGroups(orderedGroups, query);
-  const firstShownId = shown[0]?.owner.id;
+  const collapsedIds = workspace.poolCollapsedMachines[project.id] ?? [];
+  const expanded = shown.filter((group) => !collapsedIds.includes(group.owner.id));
+  const firstExpandedId = expanded[0]?.owner.id;
   useEffect(() => {
-    const cell = rootRef.current?.querySelector(".pool-takes-cell");
+    const cell = rootRef.current?.querySelector("tbody:not([data-collapsed]) .pool-takes-cell");
     if (!cell || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(([entry]) => setIoWidth(entry.contentRect.width));
     observer.observe(cell);
     return () => observer.disconnect();
-  }, [firstShownId]);
+  }, [firstExpandedId]);
   const maxItems = Math.max(
     1,
-    ...shown.flatMap((group) =>
+    ...expanded.flatMap((group) =>
       group.sections.flatMap((section) => [
         section.ports.outputs.length,
         section.ports.inputs.length +
@@ -332,6 +334,16 @@ export function PoolWorksheet() {
                 group={group}
                 readOnly={readOnly}
                 columns={itemColumns}
+                collapsed={(workspace.poolCollapsedMachines[project.id] ?? []).includes(group.owner.id)}
+                onToggleCollapsed={() => {
+                  const current = workspace.poolCollapsedMachines[project.id] ?? [];
+                  writeWorkspaceView({ poolCollapsedMachines: {
+                    ...workspace.poolCollapsedMachines,
+                    [project.id]: current.includes(group.owner.id)
+                      ? current.filter((id) => id !== group.owner.id)
+                      : [...current, group.owner.id],
+                  } });
+                }}
               />
             ))}
           </table>
@@ -427,10 +439,14 @@ const MachineRows = memo(function MachineRows({
   group,
   readOnly,
   columns,
+  collapsed,
+  onToggleCollapsed,
 }: {
   group: WorksheetGroup;
   readOnly: boolean;
   columns: number;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }) {
   useRateDisplayUnits();
   const { owner, machine, sections } = group;
@@ -442,36 +458,50 @@ const MachineRows = memo(function MachineRows({
   const required =
     machine?.count ??
     sections.reduce((sum, section) => sum + (section.result?.theoreticalMachinesRequired ?? 0), 0);
+  const isCrop = first.recipe && isCropProductionRecipe(first.recipe);
+  const countNeeded = isCrop
+    ? sections.reduce((sum, section) => sum + (section.result?.theoreticalMachinesRequired ?? 0), 0)
+    : required;
+  const visibleSections = collapsed ? sections.slice(0, 1) : sections;
   const machineCells = (controls: ReactNode, picture: ReactNode, settings: ReactNode) => (
     <>
-      <td rowSpan={sections.length} className="pool-picture-cell">
-        <OrderHandle kind="machines" id={owner.id} label={`machine ${label}`} />
+      <td rowSpan={visibleSections.length} className="pool-picture-cell">
+        <div className="pool-machine-row-tools">
+          <OrderHandle kind="machines" id={owner.id} label={`machine ${label}`} />
+          <button
+            type="button"
+            className="pool-collapse-machine"
+            aria-label={`${collapsed ? "Expand" : "Collapse"} ${label}`}
+            aria-expanded={!collapsed}
+            onClick={onToggleCollapsed}
+          ><ChevronDown size={13} aria-hidden="true" /></button>
+        </div>
         <div className="pool-machine-picture">{picture}</div>
       </td>
       <td
-        rowSpan={sections.length}
+        rowSpan={visibleSections.length}
+        colSpan={collapsed ? 3 : undefined}
         className="pool-shared-cell pool-machine-cell"
         data-machine-editor-anchor
       >
-        <div className="pool-machine-layout">
+        {collapsed ? (
+          <div className="pool-collapsed-machine">
+            <span className="pool-collapsed-name" title={label}>{label}</span>
+            {first.recipe && isCustomRateRecipe(first.recipe) ? null : (
+              <span className="pool-collapsed-count" title={`${owner.solvePin !== undefined ? "Pinned" : "Required"} ${isCrop ? "seeds" : "machines"}: ${formatMachineListCount(owner.solvePin ?? countNeeded)}`}>
+                ×{formatMachineListCount(owner.solvePin ?? countNeeded)}
+              </span>
+            )}
+          </div>
+        ) : <div className="pool-machine-layout">
           <div className="pool-machine-details">{controls}</div>
           <div className="pool-machine-stats">
             <fieldset disabled={readOnly} className="pool-machine-count">
               {first.recipe && isCustomRateRecipe(first.recipe) ? null : (
                 <SolvedMachinesStat
                   inline
-                  label={
-                    first.recipe && isCropProductionRecipe(first.recipe) ? "Seeds" : "Machines"
-                  }
-                  needed={
-                    first.recipe && isCropProductionRecipe(first.recipe)
-                      ? sections.reduce(
-                          (sum, section) =>
-                            sum + (section.result?.theoreticalMachinesRequired ?? 0),
-                          0,
-                        )
-                      : required
-                  }
+                  label={isCrop ? "Seeds" : "Machines"}
+                  needed={countNeeded}
                   pinned={owner.solvePin}
                   onPin={(solvePin) => updateNode(owner.id, { solvePin })}
                 />
@@ -510,7 +540,7 @@ const MachineRows = memo(function MachineRows({
             ) : null}
           </div>
           {settings ? <div className="pool-settings-section">{settings}</div> : null}
-        </div>
+        </div>}
       </td>
     </>
   );
@@ -518,9 +548,10 @@ const MachineRows = memo(function MachineRows({
     <tbody
       {...orderTarget}
       data-worksheet-node={owner.id}
+      data-collapsed={collapsed || undefined}
       className={owner.enabled === false ? "pool-machine-off" : undefined}
     >
-      {sections.map((section, index) => (
+      {visibleSections.map((section, index) => (
         <tr key={section.section}>
           {index === 0 ? (
             first.recipe ? (
@@ -532,7 +563,7 @@ const MachineRows = memo(function MachineRows({
               machineCells(<span>{label}</span>, null, null)
             )
           ) : null}
-          <td className="pool-status-cell">
+          {collapsed ? null : <><td className="pool-status-cell">
             <div className="pool-section-status">
               <Status section={section} />
               {sections.length > 1 ? (
@@ -562,8 +593,9 @@ const MachineRows = memo(function MachineRows({
               />
             </div>
           </td>
+          </>}
           <td className="pool-takes-cell">
-            <PortList
+            {collapsed ? <CollapsedPorts sections={sections} nodeId={owner.id} side="inputs" /> : <PortList
               columns={columns}
               ports={section.ports.inputs}
               nodeId={owner.id}
@@ -571,21 +603,37 @@ const MachineRows = memo(function MachineRows({
               nonConsumed={section.nonConsumed.filter(
                 (resource) => !isProgrammedCircuitResource(resource),
               )}
-            />
+            />}
           </td>
           <td className="pool-makes-cell">
-            <PortList
+            {collapsed ? <CollapsedPorts sections={sections} nodeId={owner.id} side="outputs" /> : <PortList
               columns={columns}
               ports={section.ports.outputs}
               nodeId={owner.id}
               section={section}
-            />
+            />}
           </td>
         </tr>
       ))}
     </tbody>
   );
 });
+
+function CollapsedPorts({ sections, nodeId, side }: {
+  sections: WorksheetSection[];
+  nodeId: string;
+  side: "inputs" | "outputs";
+}) {
+  return (
+    <div className="pool-collapsed-ports" aria-label={side === "inputs" ? "Takes" : "Makes"}>
+      {sections.map((section) => (
+        <PortList key={section.section} columns={1} ports={section.ports[side]} nodeId={nodeId}
+          section={section} iconsOnly
+          nonConsumed={side === "inputs" ? section.nonConsumed.filter((resource) => !isProgrammedCircuitResource(resource)) : []} />
+      ))}
+    </div>
+  );
+}
 
 function Status({ section }: { section: WorksheetSection }) {
   const labels: Record<string, string> = {
@@ -618,12 +666,14 @@ function PortList({
   section,
   nonConsumed = [],
   columns,
+  iconsOnly = false,
 }: {
   ports: RailPort[];
   nodeId: string;
   section: WorksheetSection;
   nonConsumed?: ResourceAmount[];
   columns: number;
+  iconsOnly?: boolean;
 }) {
   if (!ports.length && !nonConsumed.length) return <span className="pool-sheet-muted">—</span>;
   return (
@@ -666,18 +716,19 @@ function PortList({
                 }
                 nodeId={nodeId}
                 nameTooltip={false}
+                iconsOnly={iconsOnly}
               />
-              <span className="pool-port-rate">
+              {iconsOnly ? null : <span className="pool-port-rate">
                 <PortRate port={port} />
-              </span>
+              </span>}
             </div>
           </MinecraftTooltip>
         </div>
       ))}
       {nonConsumed.map((resource, index) => (
         <div className="pool-port flow-port pool-port-line" key={`nc:${index}`}>
-          <ResourceLink resource={resource} nodeId={nodeId} />
-          <span className="pool-port-rate">NC · ×{resource.amount}</span>
+          <ResourceLink resource={resource} nodeId={nodeId} iconsOnly={iconsOnly} />
+          {iconsOnly ? null : <span className="pool-port-rate">NC · ×{resource.amount}</span>}
         </div>
       ))}
     </div>
@@ -706,11 +757,13 @@ function ResourceLink({
   nodeId,
   compact = false,
   nameTooltip = true,
+  iconsOnly = false,
 }: {
   resource: ResourceAmount;
   nodeId?: string;
   compact?: boolean;
   nameTooltip?: boolean;
+  iconsOnly?: boolean;
 }) {
   const readOnly = useFactoryStore((state) => state.isReadOnly);
   const browse = (mode: BrowseMode) => {
@@ -726,6 +779,7 @@ function ResourceLink({
       <button
         type="button"
         className="pool-resource-link"
+        aria-label={iconsOnly ? resourceLabel(resource) : undefined}
         draggable={!readOnly}
         onDragStart={(event) => {
           event.stopPropagation();
@@ -755,13 +809,13 @@ function ResourceLink({
           resource={resource}
           size="sm"
           bare
-          className={compact ? "pool-item-icon !h-4 !w-4" : "pool-item-icon !h-8 !w-8"}
-          iconPixelSize={compact ? 22 : 44}
+          className={iconsOnly ? "pool-item-icon !h-6 !w-6" : compact ? "pool-item-icon !h-4 !w-4" : "pool-item-icon !h-8 !w-8"}
+          iconPixelSize={iconsOnly ? 28 : compact ? 22 : 44}
           showAmount={false}
           showConsumedState={false}
           tooltip={false}
         />
-        <span title={nameTooltip ? resourceLabel(resource) : undefined}>{resourceLabel(resource)}</span>
+        {iconsOnly ? null : <span title={nameTooltip ? resourceLabel(resource) : undefined}>{resourceLabel(resource)}</span>}
       </button>
       {menu}
     </>
