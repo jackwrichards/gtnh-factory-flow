@@ -1596,7 +1596,8 @@ Working notes for future agents on GTNH Factory Flow.
   Keep this view dense: canvas-styled item cards, visible settings, and product
   targets beside resource balances ABOVE the recipes.
   The machine's full structure render (or its item) gets the far-left
-  picture column. Status badges sit under its name, circuits have
+  picture column. Per-recipe status badges have their own column immediately
+  before Circuit, with one cell per recipe (including shared machines). Circuits have
   their own column using the canvas's CircuitChip (including its blank),
   enlarged and WITHOUT its background in this view.
   Settings sit in an INDENTED SECTION BELOW the machine's name,
@@ -1607,7 +1608,7 @@ Working notes for future agents on GTNH Factory Flow.
   Keep the indent small and setting tiles compact (132px), left-aligned;
   a lone setting or pair must not stretch across the machine's full width.
   The recalculation notice is out of document flow so it never shifts rows.
-  Count/status/power use consistent grid tracks. Wheel gestures over settings
+  Count/power use consistent grid tracks; status cells align with their recipe. Wheel gestures over settings
   and hatch power controls cancel native scrolling (a non-passive capture
   listener), while the existing control handlers still perform the adjustment.
   Above-card tooltips anchor to their own control when no React Flow card
@@ -1617,7 +1618,7 @@ Working notes for future agents on GTNH Factory Flow.
   themselves open by being hovered: pointer-events-none throughout, immediate
   close when the pointer leaves the control, no delayed bridge to the panel.
   Do not rebuild a separate set of tiny inline steppers. Amps/tier stay in Machine.
-  Picture/Machine/Circuit columns have FIXED widths (72/480/60 shell px),
+  Picture/Machine/Status/Circuit columns have FIXED widths (72/352/128/60 shell px),
   and the artwork has a fixed 52px frame, independent of row height or window
   width. The picture's padding is removed and its shadow softened ONLY in
   the worksheet; never change other artwork shadows. ALL extra horizontal
@@ -1661,12 +1662,14 @@ Working notes for future agents on GTNH Factory Flow.
   clear-to-unpin behavior. Never rebuild a "Need / Pin / Auto" text stack.
   The name and chevron are first; settings follow, and a footer at the BOTTOM
   of the machine cell keeps Machines/count/pencil
-  in ONE horizontal tile, then status with the same background, then power
+  in ONE horizontal tile, then power
   (which may wrap below when needed). The canvas keeps its original tile layout.
   The cell's flex column absorbs existing spare height; do not increase row
   height to push the footer down. MachineMenu anchors to the worksheet's
   data-machine-editor-anchor cell when no canvas card exists.
   Status labels stay on one line inside their tiles, including Power stalled.
+  Recipe numbers/removal controls sit under their own status; machine-wide
+  count, configuration, power and actions render only once per shared group.
   Keep rows compact: item names and rates fit tightly beside the large icon.
   The ordinary row floor is 54px, growing only for shared item rows/settings.
   Power stays readable beside the stats or wraps below; actions sit at right. Equal average

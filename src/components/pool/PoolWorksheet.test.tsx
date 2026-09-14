@@ -76,6 +76,30 @@ afterEach(() => {
 });
 
 describe("Pool worksheet", () => {
+  it("keeps each shared recipe's status and removal beside its own circuit", () => {
+    const project = fixture();
+    project.recipes.push({ ...project.recipes[0], id: "foil", name: "Copper Foil" });
+    project.nodes[0].extraRecipes = [{ recipeId: "foil" }];
+    useFactoryStore.getState().setProject(project);
+    const { container } = render(<PoolWorksheet />);
+    const machine = container.querySelector(".pool-machine-cell")!;
+    expect(machine.getAttribute("rowspan")).toBe("2");
+    expect(machine.querySelector(".pool-status")).toBeNull();
+    const statuses = container.querySelectorAll(".pool-status-cell");
+    expect(statuses).toHaveLength(2);
+    for (const cell of statuses) {
+      expect(cell.querySelectorAll(".pool-status")).toHaveLength(1);
+      expect(cell.nextElementSibling?.classList.contains("pool-circuit-cell")).toBe(true);
+    }
+    fireEvent.click(within(statuses[1] as HTMLElement).getByRole("button", {
+      name: "Remove recipe 2 from shared machine",
+    }));
+    expect(useFactoryStore.getState().project.nodes[0].recipeId).toBe("plate");
+    expect(useFactoryStore.getState().project.nodes[0].extraRecipes ?? []).toHaveLength(0);
+    expect(container.querySelectorAll(".pool-status-cell")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /Remove recipe .* from shared machine/ })).toBeNull();
+  });
+
   it("opens the machine chooser outside the canvas and applies the selected machine", async () => {
     const project = fixture();
     project.recipes[0].machineHandlers = [

@@ -256,6 +256,7 @@ export function PoolWorksheet() {
             <colgroup>
               <col className="pool-col-picture" />
               <col className="pool-col-machine" />
+              <col className="pool-col-status" />
               <col className="pool-col-circuit" />
               <col className="pool-col-io" />
               <col className="pool-col-io" />
@@ -276,6 +277,7 @@ export function PoolWorksheet() {
                     />
                   </label>
                 </th>
+                <th>Status</th>
                 <th>Circuit</th>
                 <th ref={ioHeaderRef}>Takes</th>
                 <th>Makes</th>
@@ -432,32 +434,6 @@ const MachineRows = memo(function MachineRows({
                 />
               )}
             </fieldset>
-            <div className="pool-status-list">
-              {sections.map((section, index) => (
-                <div key={section.section} className="pool-section-status">
-                  <Status section={section} />
-                  {sections.length > 1 ? (
-                    <span className="pool-shared-label" title={section.recipe?.name}>
-                      #{index + 1}
-                      {!readOnly ? (
-                        <button
-                          type="button"
-                          className="pool-sheet-icon-button"
-                          aria-label={"Remove recipe " + (index + 1) + " from shared machine"}
-                          onClick={() =>
-                            useFactoryStore
-                              .getState()
-                              .removeRecipeSection(owner.id, section.section)
-                          }
-                        >
-                          <X />
-                        </button>
-                      ) : null}
-                    </span>
-                  ) : null}
-                </div>
-              ))}
-            </div>
             <div className="pool-machine-power">
               <MachinePower entry={machine} />
             </div>
@@ -512,6 +488,28 @@ const MachineRows = memo(function MachineRows({
               machineCells(<span>{label}</span>, null, null)
             )
           ) : null}
+          <td className="pool-status-cell">
+            <div className="pool-section-status">
+              <Status section={section} />
+              {sections.length > 1 ? (
+                <span className="pool-shared-label" title={section.recipe?.name}>
+                  #{index + 1}
+                  {!readOnly ? (
+                    <button
+                      type="button"
+                      className="pool-sheet-icon-button"
+                      aria-label={"Remove recipe " + (index + 1) + " from shared machine"}
+                      onClick={() =>
+                        useFactoryStore.getState().removeRecipeSection(owner.id, section.section)
+                      }
+                    >
+                      <X />
+                    </button>
+                  ) : null}
+                </span>
+              ) : null}
+            </div>
+          </td>
           <td className="pool-circuit-cell">
             <div className="pool-circuit-slot">
               <CircuitChip
