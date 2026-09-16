@@ -5615,7 +5615,7 @@ export function FactoryFlow() {
   // The arrange in flight, for the loader; undefined when none is.
   const [arrangeProgress, setArrangeProgress] = useState<ArrangeProgress | undefined>(undefined);
   const arrangeRunningRef = useRef(false);
-  const handleAutoArrange = useCallback(async (options: { keepBoards: boolean }) => {
+  const handleAutoArrange = useCallback(async (options: { keepBoards: boolean; tidyInside: boolean }) => {
     // One at a time: a second click while one runs is a second click.
     if (arrangeRunningRef.current) {
       return;
@@ -5639,7 +5639,7 @@ export function FactoryFlow() {
         {
           spacing: "compact",
         },
-        { tidyBoardInteriors: false },
+        { tidyBoardInteriors: options.keepBoards && options.tidyInside },
         (progress) => setArrangeProgress(progress),
       );
     } catch (error) {
@@ -8799,12 +8799,14 @@ const BoardViewMenu = memo(function BoardViewMenu({
   onOpenChange: (open: boolean) => void;
   /**
    * Auto-arrange, living in this sheet since 2026-09-06 (it was a key and a
-   * sheet of its own): the one setting, and the button that runs it.
+   * sheet of its own): the settings, and the button that runs them.
    */
   arrange: {
     keepBoards: boolean;
     onToggleKeepBoards: () => void;
-    onArrange: (options: { keepBoards: boolean }) => void;
+    tidyInside: boolean;
+    onToggleTidyInside: () => void;
+    onArrange: (options: { keepBoards: boolean; tidyInside: boolean }) => void;
   };
 }) {
   const { canvasPattern } = view;
@@ -8976,11 +8978,42 @@ const BoardViewMenu = memo(function BoardViewMenu({
                 </span>
               </span>
             </button>
+            {arrange.keepBoards ? (
+              <button
+                type="button"
+                onClick={arrange.onToggleTidyInside}
+                aria-pressed={arrange.tidyInside}
+                className={[
+                  "mt-1 flex w-full items-start gap-2 border-2 p-2 text-left",
+                  arrange.tidyInside
+                    ? `border-[var(--mc-good)] ${TOOL_FACE_ON}`
+                    : `border-[var(--mc-15)] ${TOOL_FACE_OFF}`,
+                ].join(" ")}
+              >
+                <Combine className="mt-[1px] h-4 w-4 shrink-0" />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="font-mono text-[12px] font-black uppercase">Tidy inside boards</span>
+                    <span
+                      className={[
+                        "font-mono text-[10px] font-black tracking-[1px]",
+                        arrange.tidyInside ? "text-[var(--mc-good)]" : "text-[var(--mc-ink-muted)]",
+                      ].join(" ")}
+                    >
+                      {arrange.tidyInside ? "ON" : "OFF"}
+                    </span>
+                  </span>
+                  <span className="font-mono text-[11px] leading-snug opacity-80">
+                    Kept boards are re-arranged inside their frames too.
+                  </span>
+                </span>
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={() => {
                 onOpenChange(false);
-                arrange.onArrange({ keepBoards: arrange.keepBoards });
+                arrange.onArrange({ keepBoards: arrange.keepBoards, tidyInside: arrange.tidyInside });
               }}
               className="mt-1 flex w-full items-center justify-center gap-2 border-2 border-[var(--mc-15)] bg-[var(--mc-49)] p-2 font-mono text-[12px] font-black uppercase text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:brightness-110"
               aria-label="Arrange the board"
@@ -8995,7 +9028,6 @@ const BoardViewMenu = memo(function BoardViewMenu({
   );
 });
 
-// Whether auto-arrange may lay out the inside of boards the player drew.
 /**
  * THE ARRANGE LOADER (Jack, 2026-09-08): one bar across every step of the
  * arrange, each step an equal share, the steps listed under it with the
@@ -9107,6 +9139,8 @@ function ArrangeLoader({
 // A browser preference, not part of the plan: two people sharing a setup
 // each keep their own habit.
 const ARRANGE_KEEP_BOARDS_KEY = "gtnh-factory-flow.arrange-keep-boards.v1";
+// Whether auto-arrange may lay out the inside of boards the player drew.
+const ARRANGE_TIDY_INSIDE_KEY = "gtnh-factory-flow.arrange-tidy-inside.v1";
 
 const PaintToolbar = memo(function PaintToolbar({
   paintMode,
@@ -9141,8 +9175,8 @@ const PaintToolbar = memo(function PaintToolbar({
   /** The view menu rides this row's corner slot; see BoardViewMenu. */
   view: BoardView;
   onViewChange: (patch: Partial<BoardView>) => void;
-  /** Runs the arrange; the fold-out's setting rides along per press. */
-  onAutoArrange: (options: { keepBoards: boolean }) => void;
+  /** Runs the arrange; the fold-out's settings ride along per press. */
+  onAutoArrange: (options: { keepBoards: boolean; tidyInside: boolean }) => void;
   folded: boolean;
   /**
    * The whole row folds into the brush, the bin and whole-board keys
@@ -9186,6 +9220,23 @@ const PaintToolbar = memo(function PaintToolbar({
     setKeepBoards((was) => {
       try {
         localStorage.setItem(ARRANGE_KEEP_BOARDS_KEY, was ? "0" : "1");
+      } catch {
+        // Private windows without storage still get the toggle for the session.
+      }
+      return !was;
+    });
+  }, []);
+  const [tidyInside, setTidyInside] = useState(() => {
+    try {
+      return localStorage.getItem(ARRANGE_TIDY_INSIDE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const onToggleTidyInside = useCallback(() => {
+    setTidyInside((was) => {
+      try {
+        localStorage.setItem(ARRANGE_TIDY_INSIDE_KEY, was ? "0" : "1");
       } catch {
         // Private windows without storage still get the toggle for the session.
       }
@@ -9372,7 +9423,13 @@ const PaintToolbar = memo(function PaintToolbar({
             onChange={onViewChange}
             open={isViewMenuOpen}
             onOpenChange={setViewMenuOpen}
-            arrange={{ keepBoards, onToggleKeepBoards, onArrange: onAutoArrange }}
+            arrange={{
+              keepBoards,
+              onToggleKeepBoards,
+              tidyInside,
+              onToggleTidyInside,
+              onArrange: onAutoArrange,
+            }}
           />
         </ToolTray>
     </>
