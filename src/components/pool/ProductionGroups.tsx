@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { ChevronDown, FolderPlus, Ungroup } from "lucide-react";
+import type { ReactNode } from "react";
+import { ChevronDown, FolderPlus, GripVertical, Ungroup } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
-import type { ProductionGroup, PoolResourceRule } from "@/lib/model/types";
+import type { ProductionGroup, ResourceAmount } from "@/lib/model/types";
 import type { getPoolGroupResources } from "@/lib/solver/pool-mode";
 import { formatSlotRate } from "../flow/flow-explainers";
 import { ResourceIcon } from "../nei/ResourceIcon";
+import { useWorksheetPointerDrag } from "./worksheet-pointer-drag";
 
 export function ProductionGroupSelect({
   value,
@@ -23,73 +24,113 @@ export function ProductionGroupSelect({
   exclude?: Set<string>;
 }) {
   const savedGroups = useFactoryStore((state) => state.project.productionGroups);
-  const groups = savedGroups ?? [];
+  const options = productionGroupTree(savedGroups ?? []).filter(
+    ({ group }) => !exclude?.has(group.id),
+  );
   return (
-    <select
-      className="pool-production-select"
-      aria-label={label}
-      value={value ?? ""}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value || undefined)}
-    >
-      <option value="">Factory</option>
-      {productionGroupTree(groups)
-        .filter(({ group }) => !exclude?.has(group.id))
-        .map(({ group, depth }) => (
+    <label className="pool-production-move">
+      <span>{exclude ? "Inside" : "Group"}</span>
+      <select
+        className="pool-production-select"
+        aria-label={label}
+        value={value ?? ""}
+        disabled={disabled || !options.length}
+        onChange={(event) => onChange(event.target.value || undefined)}
+      >
+        <option value="">Factory</option>
+        {options.map(({ group, depth }) => (
           <option key={group.id} value={group.id}>
             {"· ".repeat(depth)}
             {group.name}
           </option>
         ))}
-    </select>
+      </select>
+    </label>
   );
 }
 
 type ResourceRow = ReturnType<typeof getPoolGroupResources>[number];
+export type GroupFlow = { resource: ResourceAmount; rate: number };
 export function ProductionScopeHeader({
   group,
-  depth = 0,
   collapsed,
   onToggle,
   resources,
   readOnly,
-  productAction,
+  power,
+  inputs,
+  outputs,
+  renderResource,
 }: {
   group?: ProductionGroup;
-  depth?: number;
   collapsed?: boolean;
   onToggle?: () => void;
   resources: ResourceRow[];
   readOnly: boolean;
-  productAction?: ReactNode;
+  power: ReactNode;
+  inputs: GroupFlow[];
+  outputs: GroupFlow[];
+  renderResource: (resource: ResourceAmount) => ReactNode;
 }) {
   useRateDisplayUnits();
-  const savedGroups = useFactoryStore((state) => state.project.productionGroups);
-  const groups = savedGroups ?? [];
-  const [rulesOpen, setRulesOpen] = useState(false);
-  const name = group?.name ?? "Factory pool";
-  const inputs = resources.filter(
-    (row) => row.used - row.made > 1e-6 && (row.route !== "local" || row.feeders.length === 0),
-  ).length;
-  const outputs = resources.filter(
-    (row) => row.made - row.used > 1e-6 && row.route === "parent",
-  ).length;
-  const local = resources.filter((row) => row.route === "local").length;
+  const groups = useFactoryStore((state) => state.project.productionGroups);
+  const { begin } = useWorksheetPointerDrag();
+  const name = group?.name ?? "Factory";
+  const excluded = group ? productionGroupDescendants(groups ?? [], group.id) : new Set<string>();
+  const canMove =
+    group && (group.parentId || (groups ?? []).some((entry) => !excluded.has(entry.id)));
+  const links = resources.filter(
+    (row) => row.rule || (row.feeders.length && row.takers.some((port) => !port.storage)),
+  );
+  const flows = (title: string, entries: GroupFlow[]) => (
+    <section className="pool-group-flow" aria-label={title + " for " + name}>
+      <h4>{title}</h4>
+      {entries.length ? (
+        entries.map(({ resource, rate }) => (
+          <div key={resource.kind + ":" + resource.id} className="pool-group-flow-item">
+            {renderResource(resource)}
+            <strong>{formatSlotRate(rate, resource.kind)}</strong>
+          </div>
+        ))
+      ) : (
+        <span className="pool-sheet-muted">None</span>
+      )}
+    </section>
+  );
   return (
-    <tbody className="pool-production-scope" data-production-group={group?.id ?? "factory"}>
+    <tbody
+      className="pool-production-scope"
+      data-production-group={group?.id ?? "factory"}
+      data-pool-group-target={group?.id ?? ""}
+    >
       <tr>
-        <td colSpan={6} style={{ paddingLeft: 10 + Math.min(depth, 8) * 16 }}>
+        <td colSpan={6}>
           <div className="pool-production-heading">
             {group ? (
-              <button
-                type="button"
-                className="pool-collapse-machine"
-                aria-label={(collapsed ? "Expand " : "Collapse ") + name}
-                aria-expanded={!collapsed}
-                onClick={onToggle}
-              >
-                <ChevronDown size={14} />
-              </button>
+              <>
+                {!readOnly ? (
+                  <button
+                    type="button"
+                    className="pool-order-handle"
+                    aria-label={"Move group " + name}
+                    title="Drag onto another group or Factory"
+                    onPointerDown={(event) =>
+                      begin(event, { kind: "groups", id: group.id, label: name })
+                    }
+                  >
+                    <GripVertical size={14} />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="pool-collapse-machine"
+                  aria-label={(collapsed ? "Expand " : "Collapse ") + name}
+                  aria-expanded={!collapsed}
+                  onClick={onToggle}
+                >
+                  <ChevronDown size={14} />
+                </button>
+              </>
             ) : null}
             {group && !readOnly ? (
               <input
@@ -115,25 +156,15 @@ export function ProductionScopeHeader({
               <strong>{name}</strong>
             )}
             <span className="pool-production-summary">
-              {inputs} in · {outputs} out · {local} local
+              {group ? "Group total" : "Grand total · all groups"}
             </span>
-            <button
-              type="button"
-              className="pool-production-key"
-              aria-expanded={rulesOpen}
-              aria-label={"Material rules for " + name}
-              onClick={() => setRulesOpen(!rulesOpen)}
-            >
-              Materials <ChevronDown size={12} />
-            </button>
-            {productAction}
             {!readOnly ? (
               <>
-                {group ? (
+                {canMove ? (
                   <ProductionGroupSelect
                     value={group.parentId}
                     label={"Parent of " + name}
-                    exclude={productionGroupDescendants(groups, group.id)}
+                    exclude={excluded}
                     onChange={(parentId) =>
                       useFactoryStore.getState().updateProductionGroup(group.id, { parentId })
                     }
@@ -146,18 +177,18 @@ export function ProductionScopeHeader({
                   onClick={() =>
                     useFactoryStore
                       .getState()
-                      .createProductionGroup("Production group " + (groups.length + 1), group?.id)
+                      .createProductionGroup("Group " + ((groups?.length ?? 0) + 1), group?.id)
                   }
                 >
                   <FolderPlus size={14} />
-                  {group ? "Subgroup" : "New group"}
+                  Add group
                 </button>
                 {group ? (
                   <button
                     type="button"
                     className="pool-production-key"
                     aria-label={"Ungroup " + name}
-                    title="Remove this group; keep its machines, products and subgroups in the parent."
+                    title="Remove the group; keep its machines and subgroups in its parent."
                     onClick={() => useFactoryStore.getState().dissolveProductionGroup(group.id)}
                   >
                     <Ungroup size={14} />
@@ -167,100 +198,76 @@ export function ProductionScopeHeader({
               </>
             ) : null}
           </div>
-          {rulesOpen ? (
-            <div className="pool-production-materials">
-              <p>
-                {group
-                  ? "Auto keeps a material here when this group both makes and uses it. Other materials reach the parent. Share with parent skips that local match."
-                  : "Auto imports materials nobody in this pool makes. Outside supply also permits imports when a producer is present."}
-                {group ? " Outside supply permits imports directly into this group." : ""} Surplus
-                is allowed. Outside supply may replace production unless the producer is pinned.
-              </p>
-              {resources.length ? (
-                <div className="pool-production-material-scroll">
-                  <table aria-label={"Material balance for " + name}>
-                    <thead>
-                      <tr>
-                        <th>Material</th>
-                        <th>Rule</th>
-                        <th>Connection</th>
-                        <th>Makes</th>
-                        <th>Takes</th>
-                        <th>Net</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {resources.map((row) => (
-                        <tr key={row.key}>
-                          <td>
-                            <span className="pool-production-resource">
-                              <ResourceIcon
-                                resource={row.resource}
-                                size="sm"
-                                bare
-                                showAmount={false}
-                                className="!h-5 !w-5"
-                              />
-                              {row.resource.displayName ?? row.resource.id}
-                            </span>
-                          </td>
-                          <td>
-                            <select
-                              aria-label={
-                                "Rule for " +
-                                (row.resource.displayName ?? row.resource.id) +
-                                " in " +
-                                name
-                              }
-                              value={row.rule ?? "auto"}
-                              disabled={readOnly}
-                              onChange={(event) =>
-                                useFactoryStore
-                                  .getState()
-                                  .setPoolResourceRule(
-                                    group?.id,
-                                    row.key,
-                                    event.target.value === "auto"
-                                      ? undefined
-                                      : (event.target.value as PoolResourceRule),
-                                  )
-                              }
-                            >
-                              <option value="auto">Auto</option>
-                              {group || row.rule === "share" ? (
-                                <option value="share">Share with parent</option>
-                              ) : null}
-                              <option value="import">Outside supply</option>
-                            </select>
-                          </td>
-                          <td>
-                            {row.route === "parent"
-                              ? "Parent pool"
-                              : row.route === "outside"
-                                ? "Outside allowed"
-                                : row.feeders.length === 0
-                                  ? "Imported"
-                                  : group
-                                    ? "Kept here"
-                                    : "Factory pool"}
-                          </td>
-                          <td>{formatSlotRate(row.made, row.resource.kind)}</td>
-                          <td>{formatSlotRate(row.used, row.resource.kind)}</td>
-                          <td
-                            className={row.made < row.used ? "pool-flow-input" : "pool-flow-output"}
-                          >
-                            {row.made > row.used + 1e-6 ? "+" : ""}
-                            {formatSlotRate(row.made - row.used, row.resource.kind)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <p>No materials yet. Move a machine or product into this group.</p>
-              )}
-            </div>
+          <div className="pool-group-totals">
+            {power}
+            {flows("Inputs", inputs)}
+            {flows("Outputs", outputs)}
+          </div>
+          <div className="pool-group-links" aria-label={"Links for " + name}>
+            <span
+              title={
+                group
+                  ? "Click a link to ignore matching here and let the parent group handle it."
+                  : "Click a link to ignore matching and allow imports."
+              }
+            >
+              Links
+            </span>
+            {links.length ? (
+              links.map((row) => {
+                const ignored = Boolean(row.rule);
+                return (
+                  <button
+                    type="button"
+                    key={row.key}
+                    className="pool-group-link"
+                    disabled={readOnly}
+                    aria-pressed={ignored}
+                    aria-label={
+                      "Ignore " + (row.resource.displayName ?? row.resource.id) + " in " + name
+                    }
+                    title={
+                      ignored
+                        ? "Click to match this material here again."
+                        : group
+                          ? "Ignore here: let the parent group handle this material."
+                          : "Ignore: permit outside supply of this material."
+                    }
+                    onClick={() =>
+                      useFactoryStore
+                        .getState()
+                        .setPoolResourceRule(
+                          group?.id,
+                          row.key,
+                          ignored ? undefined : group ? "share" : "import",
+                        )
+                    }
+                  >
+                    <ResourceIcon
+                      resource={row.resource}
+                      bare
+                      size="sm"
+                      showAmount={false}
+                      tooltip={false}
+                      className="!h-5 !w-5"
+                    />
+                    <span>{row.resource.displayName ?? row.resource.id}</span>
+                    {ignored ? (
+                      <strong>
+                        {group && row.rule === "import" ? "Ignore · outside supply" : "Ignore"}
+                      </strong>
+                    ) : null}
+                  </button>
+                );
+              })
+            ) : (
+              <span className="pool-sheet-muted">No internal links</span>
+            )}
+          </div>
+          {!readOnly ? (
+            <p className="pool-group-drop-hint">
+              Drag machines or groups onto this heading to move them here.
+            </p>
           ) : null}
         </td>
       </tr>

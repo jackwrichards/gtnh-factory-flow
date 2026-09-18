@@ -14,6 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import { GripVertical } from "lucide-react";
 import type { ResourceAmount } from "@/lib/model/types";
+import { productionGroupDescendants } from "@/lib/model/production-groups";
 import { resourceLabel } from "@/lib/model";
 import { playBoardSound, suppressBoardSound } from "@/lib/board-sounds";
 import { useFactoryStore } from "@/store/factory-store";
@@ -21,7 +22,7 @@ import { ResourceIcon } from "../nei/ResourceIcon";
 import { WorksheetOrderContext } from "./worksheet-drag";
 
 type Payload =
-  | { kind: "machines" | "products" | "resources"; id: string; label: string }
+  | { kind: "machines" | "products" | "resources" | "groups"; id: string; label: string }
   | { resource: ResourceAmount };
 const DragContext = createContext({
   begin: (_event: ReactPointerEvent<HTMLElement>, _payload: Payload) => {},
@@ -62,6 +63,7 @@ export function WorksheetPointerDrag({ children }: { children: ReactNode }) {
       const clearTarget = () => {
         target?.removeAttribute("data-order-drop");
         target?.removeAttribute("data-resource-drop");
+        target?.removeAttribute("data-group-drop");
         target = undefined;
       };
       const locate = () => {
@@ -78,7 +80,24 @@ export function WorksheetPointerDrag({ children }: { children: ReactNode }) {
             target.dataset.resourceDrop = "true";
           }
         } else {
-          const candidate = hit?.closest<HTMLElement>("[data-pool-order-kind]");
+          const groupTarget = hit?.closest<HTMLElement>("[data-pool-group-target]");
+          const groupId = groupTarget?.dataset.poolGroupTarget || undefined;
+          const project = useFactoryStore.getState().project;
+          const canEnter =
+            payload.kind === "machines" ||
+            (payload.kind === "groups" &&
+              (!groupId ||
+                !productionGroupDescendants(project.productionGroups ?? [], payload.id).has(
+                  groupId,
+                )));
+          if (groupTarget && root.contains(groupTarget) && canEnter) {
+            target = groupTarget;
+            target.dataset.groupDrop = "true";
+          }
+          const candidate =
+            !target && payload.kind !== "groups"
+              ? hit?.closest<HTMLElement>("[data-pool-order-kind]")
+              : undefined;
           if (
             candidate &&
             root.contains(candidate) &&
@@ -161,7 +180,16 @@ export function WorksheetPointerDrag({ children }: { children: ReactNode }) {
                 suppressBoardSound("place", 150);
                 useFactoryStore.getState().addPoolStorage(payload.resource, "drain");
                 changed = useFactoryStore.getState().project !== before;
-              } else {
+              } else if (target.hasAttribute("data-pool-group-target")) {
+                const before = useFactoryStore.getState().project;
+                const groupId = target.dataset.poolGroupTarget || undefined;
+                if (payload.kind === "groups")
+                  useFactoryStore
+                    .getState()
+                    .updateProductionGroup(payload.id, { parentId: groupId });
+                else useFactoryStore.getState().moveToProductionGroup([payload.id], groupId);
+                changed = useFactoryStore.getState().project !== before;
+              } else if (payload.kind !== "groups") {
                 changed = move(payload.kind, payload.id, target.dataset.poolOrderId!, after);
               }
             }

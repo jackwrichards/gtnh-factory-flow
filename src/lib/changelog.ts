@@ -52,8 +52,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "Production groups in Pool",
     notes: [
       "Organize Pool into named, nested production groups with their own material balances.",
-      "Share a material with the parent group or allow outside supply when local production falls short; surplus remains allowed.",
-      "Move machines and products between groups, collapse whole lines, and keep groups through saves, undo and copy/paste.",
+      "Desired products stay global; each group shows its inputs, outputs, power and clickable Links. Ignore hands a material to the parent, or permits imports at Factory.",
+      "Drag machines and whole groups onto group headings, including empty or collapsed groups. Groups persist through saves, undo and copy/paste.",
     ],
   },
   {

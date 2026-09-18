@@ -1833,6 +1833,13 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Pool Production Groups
 
+- The UI follows the reference: global Desired products, Factory grand total, nested group
+  totals and visible Links. Clicking a link toggles Ignore: share inside a group, import
+  at Factory. Do not restore separate Resources/Materials panels or three-way rule selects.
+  Group headings accept machine/group pointer drops, even when empty or collapsed. Group
+  totals include closed child surplus/imports without counting shared ports twice. Legacy
+  scoped targets and direct child imports remain explicit and editable, never silently lost.
+
 - Pool groups are material scopes, separate from physical shared machines and canvas boards.
   Nodes/storages carry productionGroupId; productionGroups stores the tree and per-material
   rules. expandPool resolves children first: Auto retains paired ports locally and bubbles

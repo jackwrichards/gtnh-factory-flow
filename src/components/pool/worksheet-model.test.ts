@@ -1,8 +1,13 @@
+import { getPoolGroupResources } from "@/lib/solver/pool-mode";
 import { describe, expect, it } from "vitest";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
 import { calculateThroughput } from "@/lib/solver/throughput";
 import { buildMachineList } from "@/lib/model/machine-list";
-import { buildWorksheetGroups, filterWorksheetGroups } from "./worksheet-model";
+import {
+  buildProductionGroupFlows,
+  buildWorksheetGroups,
+  filterWorksheetGroups,
+} from "./worksheet-model";
 
 export function worksheetFixture(): FactoryProject {
   return {
@@ -106,5 +111,36 @@ describe("Pool worksheet books", () => {
     expect(group.sections[0].ports.inputs[0].resourceId).toBe("copper");
     expect(group.sections[0].ports.inputs[0].displayName).toBe("Concrete Copper");
     expect(group.machine?.count).toBeCloseTo(0.125);
+  });
+});
+
+describe("production group totals", () => {
+  it("includes a nested child's local surplus without counting shared inputs twice", () => {
+    const project = worksheetFixture();
+    project.productionGroups = [
+      { id: "parent", name: "Parent" },
+      { id: "child", name: "Child", parentId: "parent" },
+    ];
+    project.nodes[0].extraRecipes = undefined;
+    project.nodes[0].productionGroupId = "child";
+    project.nodes[0].solvePin = 1;
+    project.nodes.push({ ...project.nodes[0], id: "foil", recipeId: "foil", solvePin: undefined });
+    const rows = getPoolGroupResources(project, calculateThroughput(project));
+    const totals = buildProductionGroupFlows(project.productionGroups, "parent", rows);
+    expect(totals.inputs.find((row) => row.resource.id === "copper")?.rate).toBeCloseTo(1);
+    expect(totals.outputs.find((row) => row.resource.id === "plate")?.rate).toBeCloseTo(0.5);
+    expect(totals.outputs.find((row) => row.resource.id === "foil")?.rate).toBeCloseTo(2);
+  });
+  it("keeps inactive Ignore links available to clear after their machines move", () => {
+    const project = worksheetFixture();
+    project.productionGroups = [
+      { id: "empty", name: "Empty", resourceRules: { "item:plate": "share" } },
+    ];
+    const rows = getPoolGroupResources(project, calculateThroughput(project));
+    expect(rows.find((row) => row.groupId === "empty" && row.key === "item:plate")).toMatchObject({
+      rule: "share",
+      made: 0,
+      used: 0,
+    });
   });
 });

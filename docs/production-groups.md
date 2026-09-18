@@ -1,35 +1,38 @@
 # Pool production groups
 
-Production groups are material-balancing boundaries in Pool mode. They are independent of canvas boards and shared physical machines. Every recipe section of a shared machine stays in its owner's production group.
+Pool follows the reference calculator's organization: a global **Desired products** list, the **Factory grand total**, and nested production groups. Each group shows its power, inputs, outputs, and internal **Links**. The separate Resources summary and hidden Materials panel are gone.
 
 ## Using groups
 
-Choose **New group** in the Factory pool heading. Assign machines and products with their group selectors. A group's **Subgroup** button creates a nested group; its parent selector moves the whole group. **Ungroup** removes only the container, moving its machines, products and immediate subgroups to its parent. These edits support undo.
+Choose **Add group** in Factory or an existing group. Move a machine with its grip onto a group heading, including an empty or collapsed group. Drop it onto Factory to move it back outside all subgroups. A group has its own grip for moving the whole group; moving a parent into its descendants is rejected. A labeled Group selector provides another way to move machines. The Inside selector appears only when a group has a different valid parent to choose.
 
-Open **Materials** to inspect that scope's actual makes, takes and net flow and select a rule per material:
+Group outlines show the hierarchy. Collapse hides the group's machines and nested groups while retaining its totals and Links. Search temporarily reveals collapsed machines. Ungroup removes only the container; machines, products and child groups move to the parent. Edits support undo.
 
-| Rule | Meaning |
-| --- | --- |
-| Auto | If this group both makes and uses the material, balance it here. Otherwise pass its ports to the parent. At the factory, materials with no producer import automatically. |
-| Share with parent | Pass both production and consumption to the parent instead of matching them here. The parent can still balance them locally. |
-| Outside supply | Permit unlimited external supply directly at this scope, even if a producer exists. |
+## Links and Ignore
 
-Children resolve before parents. A parent rule cannot reach into a material already kept local by a child. Share at every intervening group if the material needs to reach the factory pool. Groups are useful with Auto alone: they keep independent production lines from borrowing each other's intermediates.
+Click a material in **Links** to toggle **Ignore**, as in ShadowTheAge's calculator:
 
-For example, an ingot maker and plate bender in one group keep their ingots together. A lathe outside that group imports its own ingots. Sharing ingots with the parent lets the maker supply both machines. Allowing outside supply instead lets the group buy ingots directly.
+| Scope | Matching normally | Ignore |
+| --- | --- | --- |
+| Production group | Materials both made and consumed here balance locally. One-sided resources reach the parent. | Both sides reach the parent, which can match them with other machines. |
+| Factory | Materials with producers balance; materials nobody produces import automatically. | Permit imports even when a producer exists. |
 
-Outside supply is permission, not a promise to use only a shortfall. Pool first minimizes required machinery, so it may idle an unpinned producer and import the material. Pin a machine count when that producer must keep running. This separates the reference calculator's child Ignore (share upward) and root Ignore (external supply) into two explicit controls.
+Children resolve first. Ignoring a material in the parent cannot change a match already kept inside a child. Ignore it at each intervening group if it needs to reach Factory. Ignored materials remain available in Links even if their machines move elsewhere, so the setting can be cleared.
 
-## Surplus and targets
+Factory Ignore is permission to import, not a promise to use only a shortfall. Pool minimizes machinery first, so an unpinned producer may idle. Pin its count if it must run.
 
-Surplus is still allowed automatically. Local surplus stays in that group's pool; it does not silently satisfy another group's demand. Share the material to make it available to the parent. A product assigned inside a group can request additional intermediate output without exposing that intermediate to the parent. Identical product resources in different groups have independent targets.
+## Targets, totals and surplus
 
-Negative products remain outside this change. No recipe editing, new machine math, electricity imports, or Build/wired Solve balancing changes are introduced.
+Desired products are global requests, like the reference. Group inputs and outputs are calculated results, not extra targets. Inputs and outputs remain visible without opening a Materials panel. Parent totals include closed child surpluses and direct imports; shared ports are counted once.
+
+Existing plans from the earlier group interface retain scoped targets and direct outside-supply policies. A scoped target is labeled in Desired products and has a **Make global** action. A saved direct-supply link is explicitly labeled **Ignore · outside supply**. New Ignore clicks inside groups always use parent sharing.
+
+Surplus remains allowed automatically. Local surplus stays in that group's pool and appears in totals; it does not silently satisfy another group's demand. Ignore the local match to make that material available to the parent. Negative products remain a separate follow-up.
 
 ## Saved data and implementation
 
-Optional project fields productionGroups and poolResourceRules hold the hierarchy and policies. Nodes and storages use productionGroupId. Optional fields preserve compatibility with older plans. Import normalization repairs missing/cyclic parents and dangling memberships. Copy/paste includes selected members' group ancestors and remaps their IDs. Collapse state is a per-plan local workspace preference.
+Production groups are independent of canvas boards and physical shared machines. All recipe sections of a shared machine inherit their owner's group. Optional project fields productionGroups and poolResourceRules hold the hierarchy and policies; nodes and storages carry productionGroupId. Imports repair invalid hierarchies and memberships. Clipboard copying carries ancestor groups and remaps their IDs. Collapse state is local workspace preference.
 
-The solver expands shared machines first, then builds resource pools from deepest group to factory. Local pools, explicit outside sources and cell/fluid conversion helpers are private to their scope. Existing LP conservation, target constraints and surplus accounting run over that expanded graph. Saved wires and recipes are unchanged.
+The solver expands shared machines first, then resource scopes deepest-first. Internal share rules implement child Ignore; root import rules implement Factory Ignore. Existing conservation, target and surplus accounting run over the expanded graph. Cell/fluid helpers remain scoped. Saved wires, recipe data and Build/wired Solve behavior are unchanged.
 
-Regression coverage lives in production-groups.test.ts under solver and store, plus PoolWorksheet.test.tsx. It covers nested sharing, outside supply and pins, independent product targets, surplus, cells, shared machines, JSON, invalid hierarchies, undo, clipboard remapping, and read-only inspection.
+Regression coverage includes the solver/store production-groups.test.ts files, PoolWorksheet.test.tsx, and worksheet-model.test.ts. Browser checks cover real pointer moves into empty/collapsed groups, moving groups, Ignore persistence, and desktop/phone layouts.

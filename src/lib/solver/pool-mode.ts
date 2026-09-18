@@ -361,7 +361,7 @@ export function expandPool(project: FactoryProject): PoolExpansion {
 /** The same scoped ports used by the solver, with their actual solved flows. */
 export function getPoolGroupResources(project: FactoryProject, result: ThroughputResult) {
   const expanded = expandPool(expandSharedMachines(project));
-  return expanded.groupResources.map((row) => {
+  const rows = expanded.groupResources.map((row) => {
     const total = (entries: PoolEndpoint[], side: "in" | "out") =>
       entries.reduce(
         (sum, entry) =>
@@ -370,6 +370,41 @@ export function getPoolGroupResources(project: FactoryProject, result: Throughpu
             ?.transferredPerSecond ?? 0),
         0,
       );
-    return { ...row, made: total(row.feeders, "in"), used: total(row.takers, "out") };
+    return {
+      ...row,
+      made: total(row.feeders, "in"),
+      used: total(row.takers, "out"),
+      product: total(
+        row.takers.filter((entry) => entry.storage),
+        "out",
+      ),
+    };
   });
+  // Keep saved Ignore switches reachable even after all of their machines move.
+  for (const scope of [undefined, ...(project.productionGroups ?? [])]) {
+    const rules = scope ? scope.resourceRules : project.poolResourceRules;
+    for (const [key, rule] of Object.entries(rules ?? {})) {
+      if (rows.some((row) => row.groupId === scope?.id && row.key === key)) continue;
+      const separator = key.indexOf(":");
+      const kind = key.slice(0, separator);
+      if (kind !== "item" && kind !== "fluid") continue;
+      const id = key.slice(separator + 1);
+      const resource = project.recipes
+        .flatMap((recipe) => [...recipe.inputs, ...recipe.outputs])
+        .find((slot) => slot.kind === kind && slot.id === id) ?? { kind, id, amount: 1 };
+      rows.push({
+        groupId: scope?.id,
+        key: makeResourceKey(kind, id),
+        resource,
+        rule,
+        route: rule === "share" && scope ? "parent" : "outside",
+        feeders: [],
+        takers: [],
+        made: 0,
+        used: 0,
+        product: 0,
+      });
+    }
+  }
+  return rows;
 }

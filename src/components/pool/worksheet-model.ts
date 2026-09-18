@@ -1,3 +1,6 @@
+import { productionGroupDescendants } from "@/lib/model/production-groups";
+import type { getPoolGroupResources } from "@/lib/solver/pool-mode";
+import type { ResourceAmount, ProductionGroup } from "@/lib/model/types";
 import type { FactoryNode, FactoryProject, Recipe, ThroughputResult } from "@/lib/model/types";
 import {
   applyRecipeInputOverrides,
@@ -72,4 +75,28 @@ export function filterWorksheetGroups(groups: WorksheetGroup[], query: string) {
       ]),
     ].some((text) => text?.toLowerCase().includes(needle)),
   );
+}
+
+/** Include closed child surpluses/imports without counting shared ports twice. */
+export function buildProductionGroupFlows(
+  groups: ProductionGroup[],
+  groupId: string,
+  rows: ReturnType<typeof getPoolGroupResources>,
+) {
+  const descendants = productionGroupDescendants(groups, groupId);
+  const inputs = new Map<string, { resource: ResourceAmount; rate: number }>();
+  const outputs = new Map<string, { resource: ResourceAmount; rate: number }>();
+  const add = (map: typeof inputs, key: string, resource: ResourceAmount, rate: number) => {
+    if (rate <= 1e-6) return;
+    const previous = map.get(key);
+    map.set(key, { resource, rate: (previous?.rate ?? 0) + rate });
+  };
+  for (const row of rows) {
+    if (!row.groupId || !descendants.has(row.groupId)) continue;
+    // Parent rows already contain every child port that bubbled upwards.
+    if (row.groupId !== groupId && row.route === "parent") continue;
+    add(inputs, row.key, row.resource, row.used - row.made - row.product);
+    add(outputs, row.key, row.resource, row.made - row.used + row.product);
+  }
+  return { inputs: [...inputs.values()], outputs: [...outputs.values()] };
 }

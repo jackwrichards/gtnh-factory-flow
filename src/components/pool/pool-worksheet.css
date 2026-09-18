@@ -1011,29 +1011,52 @@ body[data-pool-dragging] [data-tooltip-companion] { visibility: hidden; pointer-
   .pool-sheet-scroll { padding-left: 24px; }
 }
 
-/* Production scopes are separate from physical machines and canvas boards. */
-.pool-sheet-table .pool-production-scope > tr > td { padding: 8px 10px; border-top: 1px solid var(--mc-61); background: color-mix(in srgb, #6f9cff 7%, var(--surface, #24272c)); }
+/* Production scopes: the reference's totals and Links stay visible. */
+.pool-desired-products { margin: 0 0 10px; font-family: var(--app-font); }
+.pool-desired-products .pool-sheet-products { min-height: 0; max-height: none; display: flex; }
+.pool-desired-products .pool-products-scroll { overflow: visible; }
+.pool-desired-products .pool-products-heading h3 { display: block; }
 .pool-production-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 28px; font-family: var(--app-font); }
 .pool-production-name { width: 170px; min-width: 70px; max-width: 100%; font: inherit; font-weight: 600; color: var(--mc-ink); background: transparent; border-bottom: 1px dotted var(--mc-61); }
-.pool-production-summary { color: var(--mc-ink-muted); font-size: 10px; margin-right: auto; white-space: nowrap; }
+.pool-production-summary { color: var(--mc-ink-muted); font-size: 10px; margin-right: auto; }
 .pool-production-key { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--mc-61); color: var(--mc-ink-muted); cursor: pointer; white-space: nowrap; }
-.pool-production-key:hover, .pool-production-key[aria-expanded="true"] { color: var(--mc-ink); background: var(--mc-49); }
-.pool-production-select, .pool-production-materials select { color: var(--mc-ink); background: var(--mc-49); border: 1px solid var(--mc-61); padding: 2px 4px; max-width: 170px; font-family: var(--app-font); font-size: 10px; }
-.pool-machine-cell > .pool-production-select { display: block; margin-bottom: 5px; max-width: 100%; }
-.pool-products-table .pool-production-select { display: block; margin-top: 3px; max-width: 140px; }
-.pool-production-materials { margin: 8px 0 2px; font-family: var(--app-font); }
-.pool-production-materials p { max-width: 760px; margin-bottom: 8px; color: var(--mc-ink-muted); font-size: 11px; white-space: normal; }
-.pool-production-material-scroll { overflow: auto; max-height: 300px; }
-.pool-production-materials table { width: 100%; font-size: 11px; table-layout: auto; }
-.pool-production-materials th, .pool-production-materials td { padding: 4px 8px; text-align: left; white-space: nowrap; border-bottom: 1px solid color-mix(in srgb, var(--mc-ink) 10%, transparent); }
-.pool-production-materials th:nth-child(n+4), .pool-production-materials td:nth-child(n+4) { text-align: right; }
-.pool-production-resource { display: flex; align-items: center; gap: 6px; }
-@container (max-width: 600px) { .pool-production-heading { gap: 5px; } .pool-production-name { width: 140px; } .pool-production-summary { display: none; } }
-
+.pool-production-key:hover { color: var(--mc-ink); background: var(--mc-49); }
+.pool-production-select { color: var(--mc-ink); background: var(--mc-49); border: 1px solid var(--mc-61); padding: 2px 4px; max-width: 170px; font-family: var(--app-font); font-size: 10px; }
+.pool-production-move { display: inline-flex; gap: 5px; align-items: center; margin-bottom: 4px; font: 10px var(--app-font); color: var(--mc-ink-muted); max-width: 100%; }
+.pool-production-move select { min-width: 0; }
 .pool-sheet-table > .pool-production-scope > tr { height: auto; }
-.pool-production-materials th { color: var(--mc-ink-muted); font-weight: 400; }
+.pool-sheet-table > .pool-production-scope > tr > td { padding: 8px 10px; background: color-mix(in srgb, #6f9cff 7%, var(--surface, #24272c)); }
+.pool-group-totals { display: grid; grid-template-columns: minmax(160px, .7fr) minmax(0, 1fr) minmax(0, 1fr); gap: 10px; padding-top: 8px; font-family: var(--app-font); }
+.pool-group-totals .pool-sheet-power { min-width: 0; }
+.pool-group-totals .pool-sheet-resource-heading, .pool-group-totals .pool-sheet-resource-heading h3 { display: flex; }
+.pool-group-flow { min-width: 0; }
+.pool-group-flow h4 { font-weight: 600; margin-bottom: 5px; }
+.pool-group-flow-item { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
+.pool-group-flow-item .pool-resource-link { flex: 1; min-width: 0; }
+.pool-group-flow-item strong { white-space: nowrap; font-size: 10px; }
+.pool-group-links { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 8px; font-family: var(--app-font); }
+.pool-group-links > span:first-child { margin-right: 5px; font-weight: 600; }
+.pool-group-link { display: inline-flex; align-items: center; gap: 5px; padding: 3px 6px; border: 1px solid var(--mc-61); cursor: pointer; }
+.pool-group-link[aria-pressed="true"] { border-color: #d8a258; background: #d8a25818; }
+.pool-group-link strong { color: #dfb77e; font-size: 10px; }
+.pool-group-link:disabled { cursor: default; }
+.pool-group-drop-hint { font: 10px var(--app-font); color: var(--mc-ink-muted); margin-top: 7px; }
+.pool-sheet-table > .pool-group-frame > tr { height: auto; }
+.pool-sheet-table > .pool-group-frame > tr > td { padding: 8px 0 8px 12px; border-left: 2px solid #6f9cff55; }
+.pool-production-scope[data-group-drop] { outline: 2px solid #78a7bc; outline-offset: -2px; }
+.pool-product-scope { display: flex; gap: 6px; font-size: 10px; color: var(--mc-ink-muted); }
+.pool-product-scope button { text-decoration: underline; }
 @container (max-width: 1080px) {
-  .pool-sheet-table > .pool-production-scope { display: block; }
-  .pool-sheet-table > .pool-production-scope > tr { display: block; }
-  .pool-sheet-table > .pool-production-scope > tr > td { display: block; }
+  .pool-sheet-table > .pool-production-scope, .pool-sheet-table > .pool-group-frame,
+  .pool-sheet-table > .pool-production-scope > tr, .pool-sheet-table > .pool-group-frame > tr,
+  .pool-sheet-table > .pool-production-scope > tr > td, .pool-sheet-table > .pool-group-frame > tr > td { display: block; }
+}
+@container (max-width: 600px) {
+  .pool-production-heading { gap: 5px; }
+  .pool-production-name { width: 130px; }
+  .pool-group-totals { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .pool-group-totals .pool-sheet-power { grid-column: 1 / -1; }
+  .pool-group-flow-item { flex-wrap: wrap; }
+  .pool-group-flow-item .pool-resource-link { flex-basis: 100%; }
+  .pool-sheet-table > .pool-group-frame > tr > td { padding-left: 6px; }
 }

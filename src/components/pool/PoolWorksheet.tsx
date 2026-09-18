@@ -1,5 +1,5 @@
 "use client";
-import { productionGroupTree } from "@/lib/model/production-groups";
+import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
 import { getPoolGroupResources } from "@/lib/solver/pool-mode";
 import { ProductionGroupSelect, ProductionScopeHeader } from "./ProductionGroups";
 
@@ -18,7 +18,7 @@ import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { formatPowerValue, resourceLabel, isCropProductionRecipe } from "@/lib/model";
 import { isCustomRateRecipe } from "@/lib/model/custom-rate";
 import { formatMachineListCount, type MachineListEntry } from "@/lib/model/machine-list";
-import type { ResourceAmount, ResourceBalance, FactoryStorage } from "@/lib/model/types";
+import type { ResourceAmount, FactoryStorage, ProductionGroup } from "@/lib/model/types";
 import { getStorageRoles } from "@/lib/model/storage-role";
 import { powerDisplayFromEuT, powerDisplaySuffix, rateSuffixForKind } from "@/lib/model/rate-unit";
 import { ResourceIcon } from "../nei/ResourceIcon";
@@ -55,6 +55,7 @@ import {
 } from "./worksheet-drag";
 import {
   buildWorksheetGroups,
+  buildProductionGroupFlows,
   filterWorksheetGroups,
   type WorksheetGroup,
   type WorksheetSection,
@@ -65,7 +66,6 @@ import "./pool-worksheet.css";
 
 export function PoolWorksheet() {
   const summaryId = useId();
-  const [mobileSummary, setMobileSummary] = useState<string | null>(null);
   const [ioWidth, setIoWidth] = useState(232);
   const rootRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -113,7 +113,6 @@ export function PoolWorksheet() {
       for (const scroller of scrollers) scroller.removeEventListener("scroll", update);
     };
   }, []);
-  const [internal, setInternal] = useState(false);
   const workspace = useWorkspaceView();
   const savedOrder = (kind: string) => workspace.poolWorksheetOrder[`${project.id}:${kind}`] ?? [];
   const groups = useMemo(() => buildWorksheetGroups(project, result), [project, result]);
@@ -166,27 +165,10 @@ export function PoolWorksheet() {
     savedOrder("products"),
     (storage) => storage.id,
   );
-  const boundaryKeys = new Set(
-    [...result.externalInputs, ...result.unconsumedOutputs].map((entry) => entry.key),
-  );
-  const balances = orderWorksheetEntries(
-    Object.values(result.resources)
-      .filter(
-        (balance) =>
-          balance.kind !== "power" &&
-          (internal || boundaryKeys.has(balance.key)) &&
-          (balance.displayName ?? balance.resourceId)
-            .toLowerCase()
-            .includes(query.trim().toLowerCase()),
-      )
-      .sort((a, b) => (a.displayName ?? a.resourceId).localeCompare(b.displayName ?? b.resourceId)),
-    savedOrder("resources"),
-    (balance) => balance.key,
-  );
   const ids = {
     machines: orderedGroups.map((group) => group.owner.id),
     products: products.map((storage) => storage.id),
-    resources: balances.map((balance) => balance.key),
+    resources: [],
   };
   const renderMachine = (group: WorksheetGroup) => (
 
@@ -207,6 +189,39 @@ export function PoolWorksheet() {
                 }}
               />
   );
+  const renderScope = (group?: ProductionGroup): ReactNode => {
+    const scopeRows = groupResources.filter((row) => row.groupId === group?.id);
+    const descendants = group ? productionGroupDescendants(project.productionGroups ?? [], group.id) : undefined;
+    const powerEntries = groups.filter((entry) => !descendants || (entry.owner.productionGroupId && descendants.has(entry.owner.productionGroupId)))
+      .flatMap((entry) => entry.machine ? [entry.machine] : []);
+    const boundary = (rows: typeof result.externalInputs, side: "input" | "output") => rows.filter((row) => row.kind !== "power").map((row) => ({
+      resource: { ...groupResources.find((entry) => entry.key === row.key)?.resource, kind: row.kind, id: row.resourceId, displayName: row.displayName, amount: 1 },
+      rate: side === "input" ? row.deficitPerSecond : row.surplusPerSecond,
+    })).filter((row) => row.rate > 1e-6);
+    const { inputs, outputs } = group
+      ? buildProductionGroupFlows(project.productionGroups ?? [], group.id, groupResources)
+      : { inputs: boundary(result.externalInputs, "input"), outputs: boundary(result.unconsumedOutputs, "output") };
+    const collapsed = Boolean(group && hiddenScopes.has(group.id));
+    const content = <>
+      <ProductionScopeHeader group={group} resources={scopeRows} readOnly={readOnly} collapsed={collapsed}
+        inputs={inputs} outputs={outputs} power={<WorksheetPower entries={powerEntries} />}
+        renderResource={(resource) => <ResourceLink compact resource={resource} />}
+        onToggle={group ? () => writeWorkspaceView({ poolCollapsedProductionGroups: {
+          ...workspace.poolCollapsedProductionGroups,
+          [project.id]: collapsedProduction.includes(group.id) ? collapsedProduction.filter((id) => id !== group.id) : [...collapsedProduction, group.id],
+        } }) : undefined} />
+      {!collapsed ? <>
+        {visible.filter((entry) => entry.owner.productionGroupId === group?.id).map(renderMachine)}
+        {(project.productionGroups ?? []).filter((entry) => entry.parentId === group?.id).map((child) => renderScope(child))}
+      </> : null}
+    </>;
+    return group ? <tbody key={group.id} className="pool-group-frame"><tr><td colSpan={6}>
+      <table className="pool-sheet-table" aria-label={"Recipes in " + group.name}>
+        <colgroup><col className="pool-col-picture" /><col className="pool-col-machine" /><col className="pool-col-status" /><col className="pool-col-circuit" /><col className="pool-col-io" /><col className="pool-col-io" /></colgroup>
+        {content}
+      </table>
+    </td></tr></tbody> : content;
+  };
   return (
     <section
       ref={rootRef}
@@ -229,7 +244,7 @@ export function PoolWorksheet() {
               const destination = project.nodes.find((node) => node.id === to)?.productionGroupId;
               useFactoryStore.getState().moveToProductionGroup([from], destination);
             }
-            if (next.every((id, index) => id === ids[kind][index])) return false;
+            if (next.every((id, index) => id === ids[kind][index])) return useFactoryStore.getState().project !== project;
             writeWorkspaceView({
               poolWorksheetOrder: {
                 ...workspace.poolWorksheetOrder,
@@ -244,27 +259,11 @@ export function PoolWorksheet() {
         }}
       >
         <WorksheetPointerDrag>
-        <div className="pool-sheet-summary" data-mobile-summary={mobileSummary ?? "closed"}>
-          <div className="pool-summary-toggles" aria-label="Pool summaries">
-            {["Products", "Resources", "Power"].map((label) => {
-              const section = label.toLowerCase();
-              return (
-                <button
-                  key={section}
-                  type="button"
-                  data-pool-products-toggle={section === "products" || undefined}
-                  aria-expanded={mobileSummary === section}
-                  aria-controls={`${summaryId}-${section}`}
-                  onClick={() => setMobileSummary((current) => current === section ? null : section)}
-                >
-                  {label}<ChevronDown aria-hidden="true" size={13} />
-                </button>
-              );
-            })}
-          </div>
+        <div className="pool-sheet-scroll">
+        <div className="pool-desired-products">
           <ProductsPane id={`${summaryId}-products`}>
             <div className="pool-products-heading">
-              <h3>Products</h3>
+              <h3>Desired products</h3>
               {!readOnly ? <AddPoolProduct /> : null}
             </div>
             <div className="pool-products-scroll">
@@ -285,44 +284,7 @@ export function PoolWorksheet() {
               </table>
             </div>
           </ProductsPane>
-          <div className="pool-sheet-balance" id={`${summaryId}-resources`}>
-            <div className="pool-sheet-resource-heading">
-              <h3>Resources</h3>
-              <label>
-                <input
-                  type="checkbox"
-                  checked={internal}
-                  onChange={(event) => setInternal(event.target.checked)}
-                />
-                Include internal
-              </label>
-            </div>
-            <div className="pool-resources-scroll">
-              <table className="pool-summary-table pool-sheet-resources" aria-label="Pool resource balance">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th className="pool-flow-input">Inputs</th>
-                    <th className="pool-flow-output">Outputs</th>
-                    <th>Internal</th>
-                    <th>Net</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {balances.map((balance) => (
-                    <BalanceRow key={balance.key} balance={balance} />
-                  ))}
-                </tbody>
-              </table>
-              {!balances.length ? <p className="pool-sheet-empty">No matching resources.</p> : null}
-            </div>
-          </div>
-          <WorksheetPower
-            id={`${summaryId}-power`}
-            entries={groups.flatMap((group) => (group.machine ? [group.machine] : []))}
-          />
         </div>
-        <div className="pool-sheet-scroll">
           {result.stale ? (
             <p className="pool-sheet-notice" role="status">
               {result.held
@@ -367,18 +329,7 @@ export function PoolWorksheet() {
                 <th>Makes</th>
               </tr>
             </thead>
-            <ProductionScopeHeader resources={groupResources.filter((row) => !row.groupId)} readOnly={readOnly} />
-            {visible.filter((entry) => !entry.owner.productionGroupId).map(renderMachine)}
-            {productionTree.flatMap(({ group, depth }) => {
-              if (group.parentId && hiddenScopes.has(group.parentId)) return [];
-              const header = <ProductionScopeHeader key={group.id} group={group} depth={depth + 1} readOnly={readOnly} productAction={!readOnly ? <AddPoolProduct groupId={group.id} /> : undefined}
-                resources={groupResources.filter((row) => row.groupId === group.id)} collapsed={hiddenScopes.has(group.id)}
-                onToggle={() => writeWorkspaceView({ poolCollapsedProductionGroups: {
-                  ...workspace.poolCollapsedProductionGroups,
-                  [project.id]: collapsedProduction.includes(group.id) ? collapsedProduction.filter((id) => id !== group.id) : [...collapsedProduction, group.id],
-                } })} />;
-              return [header, ...visible.filter((entry) => entry.owner.productionGroupId === group.id).map(renderMachine)];
-            })}
+            {renderScope()}
           </table>
           {!shown.length ? (
             <div className="pool-sheet-empty">
@@ -901,7 +852,7 @@ function MachinePower({ entry }: { entry?: MachineListEntry }) {
 }
 
 function Product({ storage }: { storage: FactoryStorage }) {
-  const hasProductionGroups = useFactoryStore((state) => Boolean(state.project.productionGroups?.length));
+  const scopeName = useFactoryStore((state) => state.project.productionGroups?.find((group) => group.id === storage.productionGroupId)?.name);
   const result = useFactoryStore((state) => state.lastResult.storages[storage.id]);
   const readOnly = useFactoryStore((state) => state.isReadOnly);
   const orderTarget = useOrderTarget("products", storage.id);
@@ -926,8 +877,7 @@ function Product({ storage }: { storage: FactoryStorage }) {
             }}
           />
         </div>
-        {hasProductionGroups ? <ProductionGroupSelect value={storage.productionGroupId} label={"Production group for product " + (storage.displayName ?? storage.resourceId)} disabled={readOnly}
-          onChange={(id) => useFactoryStore.getState().moveToProductionGroup([storage.id], id)} /> : null}
+        {scopeName ? <span className="pool-product-scope">Target in {scopeName}{!readOnly ? <button type="button" onClick={() => useFactoryStore.getState().moveToProductionGroup([storage.id])}>Make global</button> : null}</span> : null}
       </td>
       <td className="pool-product-target">
         {readOnly ? (
@@ -958,50 +908,6 @@ function Product({ storage }: { storage: FactoryStorage }) {
             <X />
           </button>
         ) : null}
-      </td>
-    </tr>
-  );
-}
-
-function BalanceRow({ balance }: { balance: ResourceBalance }) {
-  const orderTarget = useOrderTarget("resources", balance.key);
-  const dataset = useFactoryStore((state) => state.dataset);
-  const resource = dataset?.resources.find(
-    (entry) => entry.kind === balance.kind && entry.id === balance.resourceId,
-  );
-  const net = balance.surplusPerSecond - balance.deficitPerSecond;
-  return (
-    <tr {...orderTarget} data-worksheet-resource={balance.key}>
-      <td>
-        <div className="pool-balance-name">
-          <OrderHandle
-            kind="resources"
-            id={balance.key}
-            label={`resource ${balance.displayName ?? balance.resourceId}`}
-          />
-          <ResourceLink
-            compact
-            resource={{
-              ...resource,
-              kind: balance.kind,
-              id: balance.resourceId,
-              displayName: balance.displayName ?? resource?.displayName,
-              amount: 1,
-            }}
-          />
-        </div>
-      </td>
-      <td>
-        <BalanceRate value={balance.deficitPerSecond} kind={balance.kind} sign={-1} />
-      </td>
-      <td>
-        <BalanceRate value={balance.surplusPerSecond} kind={balance.kind} sign={1} />
-      </td>
-      <td>
-        <BalanceRate value={balance.consumedPerSecond} kind={balance.kind} sign={0} />
-      </td>
-      <td>
-        <BalanceRate value={net} kind={balance.kind} sign={Math.sign(net)} />
       </td>
     </tr>
   );

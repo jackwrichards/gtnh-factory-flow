@@ -49,7 +49,7 @@ export function OrderHandle({ kind, id, label }: { kind: ListKind; id: string; l
       draggable={false}
       className="pool-order-handle"
       aria-label={`Reorder ${label}`}
-      title="Drag to reorder · Arrow keys move up or down"
+      title={kind === "machines" ? "Drag to reorder or move into a group · Arrow keys move up or down" : "Drag to reorder · Arrow keys move up or down"}
       onPointerDown={(event) => begin(event, { kind, id, label })}
       onDragStart={(event) => event.preventDefault()}
       onKeyDown={(event) => {
