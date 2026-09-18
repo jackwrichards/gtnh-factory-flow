@@ -4,9 +4,15 @@ Pool follows the reference calculator's organization: a global **Desired product
 
 ## Using groups
 
-Choose **Add group** in Factory or an existing group. Move a machine with its grip onto a group heading, including an empty or collapsed group. Drop it onto Factory to move it back outside all subgroups. A group has its own grip for moving the whole group; moving a parent into its descendants is rejected. A labeled Group selector provides another way to move machines. The Inside selector appears only when a group has a different valid parent to choose.
+Choose **Add group** in Factory or an existing group. Move a machine with its grip onto a group heading, including an empty or collapsed group. Drop it onto Factory to move it back outside all subgroups. A group has its own grip for moving the whole group; moving a parent into its descendants is rejected. The settings button at the right of each machine opens its labeled Group selector. The Inside selector appears only when a group has a different valid parent to choose.
 
 Group outlines show the hierarchy. Collapse hides the group's machines and nested groups while retaining its totals and Links. Search temporarily reveals collapsed machines. Ungroup removes only the container; machines, products and child groups move to the parent. Edits support undo.
+
+## Compact worksheet
+
+Recipes use a compact row with bare item icons and rates. Names and full port details remain in tooltips; click/right-click still browse recipes/uses. Tier and machine count stay inline. The buttons on the right duplicate, replace, remove, and open machine settings; those settings expand beneath the row. Shared machines keep one row per recipe, with each recipe's own removal button.
+
+Group power is a compact headline. Click it (or press Enter while focused) for average, peak, generation, net, and steam totals; Escape closes it. Inputs, outputs, and Links stay visible. Recipes with many ingredients wrap only their own rows. Narrow screens stack controls and keep actions on the right.
 
 ## Links and Ignore
 

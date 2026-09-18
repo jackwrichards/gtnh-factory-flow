@@ -52,6 +52,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "Production groups in Pool",
     notes: [
       "Organize Pool into named, nested production groups with their own material balances.",
+      "Compact recipe rows use bare item icons, right-side actions and expandable machine settings; group power opens a full breakdown.",
       "Desired products stay global; each group shows its inputs, outputs, power and clickable Links. Ignore hands a material to the parent, or permits imports at Factory.",
       "Drag machines and whole groups onto group headings, including empty or collapsed groups. Groups persist through saves, undo and copy/paste.",
     ],

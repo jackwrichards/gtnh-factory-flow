@@ -104,8 +104,11 @@ export function ProductionScopeHeader({
       data-pool-group-target={group?.id ?? ""}
     >
       <tr>
-        <td colSpan={6}>
-          <div className="pool-production-heading">
+        <td colSpan={8}>
+          <div
+            className="pool-production-heading"
+            title="Drag machines or groups onto this heading to move them here."
+          >
             {group ? (
               <>
                 {!readOnly ? (
@@ -155,51 +158,52 @@ export function ProductionScopeHeader({
             ) : (
               <strong>{name}</strong>
             )}
-            <span className="pool-production-summary">
-              {group ? "Group total" : "Grand total · all groups"}
-            </span>
-            {!readOnly ? (
-              <>
-                {canMove ? (
-                  <ProductionGroupSelect
-                    value={group.parentId}
-                    label={"Parent of " + name}
-                    exclude={excluded}
-                    onChange={(parentId) =>
-                      useFactoryStore.getState().updateProductionGroup(group.id, { parentId })
-                    }
-                  />
-                ) : null}
-                <button
-                  type="button"
-                  className="pool-production-key"
-                  aria-label={group ? "Add subgroup to " + name : "Add production group"}
-                  onClick={() =>
-                    useFactoryStore
-                      .getState()
-                      .createProductionGroup("Group " + ((groups?.length ?? 0) + 1), group?.id)
-                  }
-                >
-                  <FolderPlus size={14} />
-                  Add group
-                </button>
-                {group ? (
+            <span className="pool-production-summary">{group ? "Group total" : "Grand total"}</span>
+            <div className="pool-group-power-inline">{power}</div>
+            <div className="pool-group-actions">
+              {!readOnly ? (
+                <>
+                  {canMove ? (
+                    <ProductionGroupSelect
+                      value={group.parentId}
+                      label={"Parent of " + name}
+                      exclude={excluded}
+                      onChange={(parentId) =>
+                        useFactoryStore.getState().updateProductionGroup(group.id, { parentId })
+                      }
+                    />
+                  ) : null}
                   <button
                     type="button"
                     className="pool-production-key"
-                    aria-label={"Ungroup " + name}
-                    title="Remove the group; keep its machines and subgroups in its parent."
-                    onClick={() => useFactoryStore.getState().dissolveProductionGroup(group.id)}
+                    aria-label={group ? "Add subgroup to " + name : "Add production group"}
+                    title={group ? "Add subgroup to " + name : "Add production group"}
+                    onClick={() =>
+                      useFactoryStore
+                        .getState()
+                        .createProductionGroup("Group " + ((groups?.length ?? 0) + 1), group?.id)
+                    }
                   >
-                    <Ungroup size={14} />
-                    Ungroup
+                    <FolderPlus size={14} />
+                    <span className="sr-only">Add group</span>
                   </button>
-                ) : null}
-              </>
-            ) : null}
+                  {group ? (
+                    <button
+                      type="button"
+                      className="pool-production-key"
+                      aria-label={"Ungroup " + name}
+                      title="Remove the group; keep its machines and subgroups in its parent."
+                      onClick={() => useFactoryStore.getState().dissolveProductionGroup(group.id)}
+                    >
+                      <Ungroup size={14} />
+                      <span className="sr-only">Ungroup</span>
+                    </button>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
           </div>
           <div className="pool-group-totals">
-            {power}
             {flows("Inputs", inputs)}
             {flows("Outputs", outputs)}
           </div>
@@ -227,11 +231,13 @@ export function ProductionScopeHeader({
                       "Ignore " + (row.resource.displayName ?? row.resource.id) + " in " + name
                     }
                     title={
-                      ignored
+                      (row.resource.displayName ?? row.resource.id) +
+                      ": " +
+                      (ignored
                         ? "Click to match this material here again."
                         : group
                           ? "Ignore here: let the parent group handle this material."
-                          : "Ignore: permit outside supply of this material."
+                          : "Ignore: permit outside supply of this material.")
                     }
                     onClick={() =>
                       useFactoryStore
@@ -251,7 +257,7 @@ export function ProductionScopeHeader({
                       tooltip={false}
                       className="!h-5 !w-5"
                     />
-                    <span>{row.resource.displayName ?? row.resource.id}</span>
+                    <span className="sr-only">{row.resource.displayName ?? row.resource.id}</span>
                     {ignored ? (
                       <strong>
                         {group && row.rule === "import" ? "Ignore · outside supply" : "Ignore"}
@@ -261,14 +267,11 @@ export function ProductionScopeHeader({
                 );
               })
             ) : (
-              <span className="pool-sheet-muted">No internal links</span>
+              <span className="pool-sheet-muted" title="No internal links">
+                —
+              </span>
             )}
           </div>
-          {!readOnly ? (
-            <p className="pool-group-drop-hint">
-              Drag machines or groups onto this heading to move them here.
-            </p>
-          ) : null}
         </td>
       </tr>
     </tbody>

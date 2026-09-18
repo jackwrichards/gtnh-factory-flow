@@ -121,9 +121,9 @@ describe("Pool worksheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Collapse Bender" }));
     const row = view.container.querySelector('[data-worksheet-node="machine"]')!;
     expect(row.querySelectorAll("tr")).toHaveLength(1);
-    expect(row.querySelector(".pool-collapsed-count")?.textContent).toBe("×2");
-    expect(row.querySelector(".pool-status-cell")).toBeNull();
-    expect(row.querySelector(".pool-port-rate")).toBeNull();
+    expect(row.querySelector(".pool-machine-count")?.textContent).toContain("×2");
+    expect(row.querySelector(".pool-status-cell")).not.toBeNull();
+    expect(row.querySelector(".pool-port-rate")).not.toBeNull();
     expect(within(row as HTMLElement).getByRole("button", { name: "Copper Foil" })).toBeTruthy();
     expect(useFactoryStore.getState().project).toBe(before);
     view.unmount();
@@ -133,7 +133,7 @@ describe("Pool worksheet", () => {
     expect(useFactoryStore.getState().project).toBe(before);
   });
 
-  it("keeps each shared recipe's status and removal beside its own circuit", () => {
+  it("keeps each shared recipe's status beside its circuit and removal on the right", () => {
     const project = fixture();
     project.recipes.push({ ...project.recipes[0], id: "foil", name: "Copper Foil" });
     project.nodes[0].extraRecipes = [{ recipeId: "foil" }];
@@ -148,7 +148,7 @@ describe("Pool worksheet", () => {
       expect(cell.querySelectorAll(".pool-status")).toHaveLength(1);
       expect(cell.nextElementSibling?.classList.contains("pool-circuit-cell")).toBe(true);
     }
-    fireEvent.click(within(statuses[1] as HTMLElement).getByRole("button", {
+    fireEvent.click(within(statuses[1].parentElement!).getByRole("button", {
       name: "Remove recipe 2 from shared machine",
     }));
     expect(useFactoryStore.getState().project.nodes[0].recipeId).toBe("plate");
@@ -189,10 +189,12 @@ describe("Pool worksheet", () => {
     expect(screen.queryByRole("button", { name: /Reorder .* panel/ })).toBeNull();
     const inputs = screen.getByRole("region", { name: "Inputs for Factory" });
     const outputs = screen.getByRole("region", { name: "Outputs for Factory" });
-    expect(inputs.textContent).toContain("Copper Ingot0.5/s");
-    expect(outputs.textContent).toContain("Copper Plate0.5/s");
+    expect(within(inputs).getByRole("button", { name: "Copper Ingot" })).toBeTruthy();
+    expect(inputs.textContent).toContain("0.5/s");
+    expect(within(outputs).getByRole("button", { name: "Copper Plate" })).toBeTruthy();
+    expect(outputs.textContent).toContain("0.5/s");
     expect(screen.queryByRole("table", { name: "Pool resource balance" })).toBeNull();
-    const power = screen.getByRole("table", { name: "Pool power totals" });
+    const power = screen.getByRole("region", { name: "Pool power summary" });
     const totals = power.textContent;
     fireEvent.change(screen.getByRole("textbox", { name: "Filter worksheet" }), {
       target: { value: "not present" },
@@ -336,10 +338,12 @@ describe("Pool worksheet", () => {
     ];
     useFactoryStore.getState().setProject(project);
     const { container } = render(<PoolWorksheet />);
+    expect(container.querySelector(".pool-settings-section")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Settings for Bender" }));
     const settings = container.querySelector(".pool-settings-section") as HTMLElement;
     fireEvent.click(within(settings).getByRole("button", { name: "Next Solenoid" }));
     expect(useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil).toBe("mv");
-    expect(container.querySelector(".pool-machine-cell")?.contains(settings)).toBe(true);
+    expect(container.querySelector(".pool-settings-row")?.contains(settings)).toBe(true);
     expect(screen.queryByRole("columnheader", { name: "Settings" })).toBeNull();
     act(() => useFactoryStore.getState().undo());
     expect(
@@ -358,7 +362,7 @@ describe("Pool worksheet", () => {
         cancelable: true,
       }),
     ).toBe(true);
-    act(() => useFactoryStore.getState().setProject(fixture()));
+    fireEvent.click(screen.getByRole("button", { name: "Close machine settings" }));
     expect(container.querySelector(".pool-settings-section")).toBeNull();
   });
   it("shows desired products followed by one always-visible factory total", () => {
@@ -461,6 +465,7 @@ describe("production group controls", () => {
     const name = screen.getByRole("textbox", { name: "Production group name" });
     fireEvent.change(name, { target: { value: "Copper line" } }); fireEvent.blur(name);
     const id = useFactoryStore.getState().project.productionGroups![0].id;
+    fireEvent.click(screen.getByRole("button", { name: "Settings for Bender" }));
     fireEvent.change(screen.getByLabelText("Production group for Bender"), { target: { value: id } });
     expect(useFactoryStore.getState().project.nodes[0].productionGroupId).toBe(id);
     act(() => useFactoryStore.getState().undo());
