@@ -459,3 +459,63 @@ describe("Pool worksheet", () => {
     expect(useFactoryStore.getState().project).toBe(project);
   });
 });
+
+
+describe("production group controls", () => {
+  it("creates, names and nests groups, moves a machine, and undoes the move", () => {
+    render(<PoolWorksheet />);
+    fireEvent.click(screen.getByRole("button", { name: "Add production group" }));
+    const name = screen.getByRole("textbox", { name: "Production group name" });
+    fireEvent.change(name, { target: { value: "Copper line" } }); fireEvent.blur(name);
+    const id = useFactoryStore.getState().project.productionGroups![0].id;
+    fireEvent.change(screen.getByLabelText("Production group for Bender"), { target: { value: id } });
+    expect(useFactoryStore.getState().project.nodes[0].productionGroupId).toBe(id);
+    act(() => useFactoryStore.getState().undo());
+    expect(useFactoryStore.getState().project.nodes[0].productionGroupId).toBeUndefined();
+    fireEvent.click(screen.getByRole("button", { name: "Add subgroup to Copper line" }));
+    expect(useFactoryStore.getState().project.productionGroups![1].parentId).toBe(id);
+  });
+  it("shows sharing rules and persists changes without changing recipe bodies", () => {
+    const p = fixture(); p.productionGroups = [{ id: "line", name: "Copper line" }]; p.nodes[0].productionGroupId = "line";
+    useFactoryStore.getState().setProject(p);
+    const before = useFactoryStore.getState().project.recipes;
+    render(<PoolWorksheet />);
+    fireEvent.click(screen.getByRole("button", { name: "Material rules for Copper line" }));
+    fireEvent.change(screen.getByLabelText("Rule for Copper Ingot in Copper line"), { target: { value: "import" } });
+    expect(useFactoryStore.getState().project.productionGroups![0].resourceRules).toEqual({ "item:copper": "import" });
+    expect(useFactoryStore.getState().project.recipes).toBe(before);
+    fireEvent.change(screen.getByLabelText("Rule for Copper Ingot in Copper line"), { target: { value: "share" } });
+    expect(useFactoryStore.getState().project.productionGroups![0].resourceRules?.["item:copper"]).toBe("share");
+  });
+  it("collapses a production line and restores it when searching", () => {
+    const p = fixture(); p.productionGroups = [{ id: "line", name: "Copper line" }]; p.nodes[0].productionGroupId = "line";
+    useFactoryStore.getState().setProject(p);
+    const view = render(<PoolWorksheet />);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Copper line" }));
+    expect(view.container.querySelector('[data-worksheet-node="machine"]')).toBeNull();
+    fireEvent.change(screen.getByLabelText("Filter worksheet"), { target: { value: "Copper" } });
+    expect(view.container.querySelector('[data-worksheet-node="machine"]')).not.toBeNull();
+  });
+  it("adds a scoped product and ungroups without deleting machines or products", () => {
+    const p = fixture(); p.productionGroups = [{ id: "line", name: "Copper line" }]; p.nodes[0].productionGroupId = "line";
+    useFactoryStore.getState().setProject(p);
+    render(<PoolWorksheet />);
+    fireEvent.click(screen.getByRole("button", { name: "Add product to this group" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pick Copper Ingot" }));
+    expect(useFactoryStore.getState().project.storages!.find((s) => s.resourceId === "copper")?.productionGroupId).toBe("line");
+    fireEvent.click(screen.getByRole("button", { name: "Ungroup Copper line" }));
+    expect(useFactoryStore.getState().project.nodes).toHaveLength(1);
+    expect(useFactoryStore.getState().project.storages).toHaveLength(2);
+    expect(useFactoryStore.getState().project.nodes[0].productionGroupId).toBeUndefined();
+  });
+  it("allows viewers to inspect rules and collapse groups without editing", () => {
+    const p = fixture(); p.productionGroups = [{ id: "line", name: "Copper line" }]; p.nodes[0].productionGroupId = "line";
+    useFactoryStore.getState().setProject(p); useFactoryStore.setState({ isReadOnly: true });
+    render(<PoolWorksheet />);
+    expect(screen.queryByRole("button", { name: "Add production group" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Material rules for Copper line" }));
+    expect((screen.getByLabelText("Rule for Copper Ingot in Copper line") as HTMLSelectElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Copper line" }));
+    expect(useFactoryStore.getState().project.productionGroups).toEqual(p.productionGroups);
+  });
+});

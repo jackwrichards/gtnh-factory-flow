@@ -1,5 +1,8 @@
 "use client";
 
+import { dissolveProductionGroup, productionGroupDescendants } from "@/lib/model/production-groups";
+import type { ProductionGroup, PoolResourceRule } from "@/lib/model/types";
+
 import { normalizeFullFarms } from "@/lib/model/full-farms";
 
 import { normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
@@ -457,6 +460,11 @@ interface FactoryStore {
   setSolveMode: (solveMode: boolean) => void;
   /** Pool mode: every resource is one shared pool, no wires needed. */
   setPoolMode: (poolMode: boolean) => void;
+  createProductionGroup: (name?: string, parentId?: string) => string | undefined;
+  updateProductionGroup: (id: string, patch: Partial<Pick<ProductionGroup, "name" | "parentId">>) => void;
+  dissolveProductionGroup: (id: string) => void;
+  moveToProductionGroup: (ids: string[], groupId?: string) => void;
+  setPoolResourceRule: (groupId: string | undefined, key: string, rule?: PoolResourceRule) => void;
   /**
    * Pool mode's cell-to-fluid ratios, merged in as the board fetches them
    * from the Canner (litres per filled cell, by cell id). Not an undo step:
@@ -480,6 +488,7 @@ interface FactoryStore {
     side: "source" | "drain",
     /** Where to set it down (flow px, the drawer centred there); absent finds clear floor. */
     position?: { x: number; y: number },
+    productionGroupId?: string,
   ) => void;
   /**
    * Cut a wire at a point and run it through a new drawer of its resource
@@ -760,6 +769,7 @@ const initialProject = createEmptyProject();
  * Blueprints save exactly this payload.
  */
 export interface BoardClipboardPayload {
+  productionGroups?: ProductionGroup[];
   nodes: FactoryNode[];
   storages: FactoryStorage[];
   annotations: FactoryAnnotation[];
@@ -787,10 +797,16 @@ export function captureBoardSelection(
     return undefined;
   }
 
+  const groupIds = new Set([...nodes, ...storages].flatMap((entry) => entry.productionGroupId ? [entry.productionGroupId] : []));
+  for (const id of groupIds) {
+    const parent = project.productionGroups?.find((group) => group.id === id)?.parentId;
+    if (parent) groupIds.add(parent);
+  }
   const recipeIds = new Set(nodes.flatMap((node) => listNodeRecipeIds(node)));
   // Snapshotted, not referenced: the capture must not change when the
   // originals are edited or deleted afterwards.
   return structuredClone({
+    productionGroups: project.productionGroups?.filter((group) => groupIds.has(group.id)),
     nodes,
     storages,
     annotations,
@@ -2325,7 +2341,11 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       if (state.project.poolMode && side === "input") {
         return state;
       }
-      // ...and one product drawer per resource: a drop that would make a
+      const nodeIds = Array.isArray(nodeId) ? nodeId : [nodeId];
+      const anchor = state.project.nodes.find((node) => node.id === nodeIds[0]) ??
+        state.project.storages?.find((entry) => entry.id === nodeIds[0]);
+      const productionGroupId = anchor?.productionGroupId;
+      // ...and one product drawer per resource per scope: a drop that would make a
       // second one makes nothing (the ghost said so before the release).
       if (state.project.poolMode && side === "output") {
         const roles = getStorageRoles(state.project);
@@ -2333,13 +2353,13 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
           (storage) =>
             storage.kind === resource.kind &&
             storage.resourceId === resource.id &&
+            storage.productionGroupId === productionGroupId &&
             roles.get(storage.id) === "product",
         );
         if (duplicate) {
           return state;
         }
       }
-      const nodeIds = Array.isArray(nodeId) ? nodeId : [nodeId];
       // Whatever came out of the slot is what the buffer holds. A filled cell
       // makes a drawer of cells, counted in cells; it used to be rewritten into
       // its fluid, which is why an item output reported litres.
@@ -2381,6 +2401,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
             : landing,
         ),
         pocketId: anchorFrame ? anchorOwner : undefined,
+        productionGroupId,
         // POOL MODE has no wires: dragging off a port into space still makes
         // the drawer, and the side of the port it came off IS the declaration
         // (off an output: the plan makes this; off an input: it imports this).
@@ -2493,6 +2514,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
                 (storage) =>
                   storage.kind === typed.kind &&
                   storage.resourceId === typed.resourceId &&
+                  storage.productionGroupId === typed.productionGroupId &&
                   roles.get(storage.id) === "product",
               )
               .map((storage) => storage.id)
@@ -2510,6 +2532,72 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         project,
         lastResult: solveBooks(project),
       });
+    });
+  },
+  createProductionGroup: (name, parentId) => {
+    let id: string | undefined;
+    set((state) => {
+      if (state.isReadOnly || (parentId && !state.project.productionGroups?.some((g) => g.id === parentId))) return state;
+      id = createId("production-group");
+      const project = touchProject({ ...state.project, productionGroups: [...(state.project.productionGroups ?? []),
+        { id, name: name?.trim() || "Production group", parentId }] });
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+    return id;
+  },
+  updateProductionGroup: (id, patch) => {
+    set((state) => {
+      if (state.isReadOnly) return state;
+      const groups = state.project.productionGroups ?? [];
+      const current = groups.find((group) => group.id === id);
+      if (!current) return state;
+      if (patch.parentId && (!groups.some((group) => group.id === patch.parentId)
+        || productionGroupDescendants(groups, id).has(patch.parentId))) return state;
+      const next = { ...current, ...patch, name: patch.name?.trim() || current.name };
+      if (next.name === current.name && next.parentId === current.parentId) return state;
+      const project = touchProject({ ...state.project, productionGroups: groups.map((group) => group.id === id ? next : group) });
+      return withProjectHistory(state, { project, lastResult: next.parentId === current.parentId ? state.lastResult : solveBooks(project) });
+    });
+  },
+  dissolveProductionGroup: (id) => {
+    set((state) => {
+      if (state.isReadOnly) return state;
+      const changed = dissolveProductionGroup(state.project, id);
+      if (changed === state.project) return state;
+      const project = touchProject(changed);
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  moveToProductionGroup: (ids, groupId) => {
+    set((state) => {
+      if (state.isReadOnly || (groupId && !state.project.productionGroups?.some((group) => group.id === groupId))) return state;
+      const selected = new Set(ids);
+      let changed = false;
+      const move = <T extends { id: string; productionGroupId?: string }>(entry: T): T => {
+        if (!selected.has(entry.id) || entry.productionGroupId === groupId) return entry;
+        changed = true;
+        return { ...entry, productionGroupId: groupId };
+      };
+      const nodes = state.project.nodes.map(move);
+      const storages = state.project.storages?.map(move);
+      if (!changed) return state;
+      const project = touchProject({ ...state.project, nodes, storages });
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
+    });
+  },
+  setPoolResourceRule: (groupId, key, rule) => {
+    set((state) => {
+      if (state.isReadOnly || !/^(item|fluid):.+/.test(key)) return state;
+      const group = state.project.productionGroups?.find((entry) => entry.id === groupId);
+      if (groupId && !group) return state;
+      const current = (group ? group.resourceRules : state.project.poolResourceRules) ?? {};
+      if (current[key] === rule) return state;
+      const rules = { ...current };
+      if (rule) rules[key] = rule; else delete rules[key];
+      const project = touchProject(group ? { ...state.project,
+        productionGroups: state.project.productionGroups!.map((entry) => entry.id === groupId ? { ...entry, resourceRules: rules } : entry),
+      } : { ...state.project, poolResourceRules: rules });
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
     });
   },
   setPoolMode: (poolMode) => {
@@ -2544,9 +2632,10 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       return { project, lastResult: solveBooks(project) };
     });
   },
-  addPoolStorage: (resource, side, at) => {
+  addPoolStorage: (resource, side, at, productionGroupId) => {
     set((state) => {
-      // ONE product drawer per resource in pool mode: a second is the same
+      if (productionGroupId && !state.project.productionGroups?.some((group) => group.id === productionGroupId)) return state;
+      // ONE product drawer per resource and scope in pool mode: a second is the same
       // ask twice. Asking again goes to the one that exists. Build and
       // solve mode (the board menu's "New product drawer") may hold as many
       // as the player sets down.
@@ -2556,6 +2645,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
             (storage) =>
               storage.kind === resource.kind &&
               storage.resourceId === resource.id &&
+              storage.productionGroupId === productionGroupId &&
               roles.get(storage.id) === "product",
           )
         : undefined;
@@ -2595,6 +2685,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         iconAtlas: resource.iconAtlas,
         dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
         poolSide: side,
+        productionGroupId,
         position,
       };
       const project = touchProject({
@@ -3246,6 +3337,9 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       const projectRecipeIds = new Set(state.project.recipes.map((recipe) => recipe.id));
       const addedRecipes: Recipe[] = [];
       const idMap = new Map<string, string>();
+      const groupMap = new Map((payload.productionGroups ?? []).map((group) => [group.id, createId("production-group")]));
+      const productionGroups = (payload.productionGroups ?? []).map((group) => ({ ...structuredClone(group),
+        id: groupMap.get(group.id)!, parentId: group.parentId ? groupMap.get(group.parentId) : undefined }));
 
       // Boards first: items need the new board ids to re-home into. A
       // payload item at the payload's root lands on the canvas.
@@ -3284,6 +3378,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         clone.id = createId("node");
         idMap.set(node.id, clone.id);
         clone.pocketId = rehome(node.pocketId);
+        clone.productionGroupId = node.productionGroupId ? groupMap.get(node.productionGroupId) : undefined;
         clone.position = placeAt(node.position, clone.pocketId);
         // Custom rate nodes own their recipe (the dialed rate lives on it) -
         // same rule as duplicateNode, or both cards would share one dial.
@@ -3304,6 +3399,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         clone.id = createId("storage");
         idMap.set(storage.id, clone.id);
         clone.pocketId = rehome(storage.pocketId);
+        clone.productionGroupId = storage.productionGroupId ? groupMap.get(storage.productionGroupId) : undefined;
         clone.position = placeAt(storage.position, clone.pocketId);
         return clone;
       });
@@ -3347,6 +3443,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
 
       const project = touchProject({
         ...state.project,
+        productionGroups: productionGroups.length ? [...(state.project.productionGroups ?? []), ...productionGroups] : state.project.productionGroups,
         recipes: addedRecipes.length
           ? [...state.project.recipes, ...addedRecipes]
           : state.project.recipes,

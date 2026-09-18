@@ -1,4 +1,7 @@
 "use client";
+import { productionGroupTree } from "@/lib/model/production-groups";
+import { getPoolGroupResources } from "@/lib/solver/pool-mode";
+import { ProductionGroupSelect, ProductionScopeHeader } from "./ProductionGroups";
 
 import {
   memo,
@@ -120,8 +123,16 @@ export function PoolWorksheet() {
     (group) => group.owner.id,
   );
   const shown = filterWorksheetGroups(orderedGroups, query);
+  const productionTree = useMemo(() => productionGroupTree(project.productionGroups ?? []), [project.productionGroups]);
+  const groupResources = useMemo(() => getPoolGroupResources(project, result).filter((row) => row.resource.kind !== "power"), [project, result]);
+  const collapsedProduction = workspace.poolCollapsedProductionGroups[project.id] ?? [];
+  const hiddenScopes = new Set<string>();
+  for (const { group } of productionTree) {
+    if (!query.trim() && (collapsedProduction.includes(group.id) || (group.parentId && hiddenScopes.has(group.parentId)))) hiddenScopes.add(group.id);
+  }
+  const visible = shown.filter((entry) => !entry.owner.productionGroupId || !hiddenScopes.has(entry.owner.productionGroupId));
   const collapsedIds = workspace.poolCollapsedMachines[project.id] ?? [];
-  const expanded = shown.filter((group) => !collapsedIds.includes(group.owner.id));
+  const expanded = visible.filter((group) => !collapsedIds.includes(group.owner.id));
   const firstExpandedId = expanded[0]?.owner.id;
   useEffect(() => {
     const cell = rootRef.current?.querySelector("tbody:not([data-collapsed]) .pool-takes-cell");
@@ -177,6 +188,25 @@ export function PoolWorksheet() {
     products: products.map((storage) => storage.id),
     resources: balances.map((balance) => balance.key),
   };
+  const renderMachine = (group: WorksheetGroup) => (
+
+              <MachineRows
+                key={group.owner.id}
+                group={group}
+                readOnly={readOnly}
+                columns={itemColumns}
+                collapsed={(workspace.poolCollapsedMachines[project.id] ?? []).includes(group.owner.id)}
+                onToggleCollapsed={() => {
+                  const current = workspace.poolCollapsedMachines[project.id] ?? [];
+                  writeWorkspaceView({ poolCollapsedMachines: {
+                    ...workspace.poolCollapsedMachines,
+                    [project.id]: current.includes(group.owner.id)
+                      ? current.filter((id) => id !== group.owner.id)
+                      : [...current, group.owner.id],
+                  } });
+                }}
+              />
+  );
   return (
     <section
       ref={rootRef}
@@ -195,6 +225,10 @@ export function PoolWorksheet() {
           move: (kind, from, to, after) => {
             if (readOnly) return false;
             const next = moveWorksheetEntry(ids[kind], from, to, after);
+            if (kind === "machines") {
+              const destination = project.nodes.find((node) => node.id === to)?.productionGroupId;
+              useFactoryStore.getState().moveToProductionGroup([from], destination);
+            }
             if (next.every((id, index) => id === ids[kind][index])) return false;
             writeWorkspaceView({
               poolWorksheetOrder: {
@@ -333,24 +367,18 @@ export function PoolWorksheet() {
                 <th>Makes</th>
               </tr>
             </thead>
-            {shown.map((group) => (
-              <MachineRows
-                key={group.owner.id}
-                group={group}
-                readOnly={readOnly}
-                columns={itemColumns}
-                collapsed={(workspace.poolCollapsedMachines[project.id] ?? []).includes(group.owner.id)}
-                onToggleCollapsed={() => {
-                  const current = workspace.poolCollapsedMachines[project.id] ?? [];
-                  writeWorkspaceView({ poolCollapsedMachines: {
-                    ...workspace.poolCollapsedMachines,
-                    [project.id]: current.includes(group.owner.id)
-                      ? current.filter((id) => id !== group.owner.id)
-                      : [...current, group.owner.id],
-                  } });
-                }}
-              />
-            ))}
+            <ProductionScopeHeader resources={groupResources.filter((row) => !row.groupId)} readOnly={readOnly} />
+            {visible.filter((entry) => !entry.owner.productionGroupId).map(renderMachine)}
+            {productionTree.flatMap(({ group, depth }) => {
+              if (group.parentId && hiddenScopes.has(group.parentId)) return [];
+              const header = <ProductionScopeHeader key={group.id} group={group} depth={depth + 1} readOnly={readOnly} productAction={!readOnly ? <AddPoolProduct groupId={group.id} /> : undefined}
+                resources={groupResources.filter((row) => row.groupId === group.id)} collapsed={hiddenScopes.has(group.id)}
+                onToggle={() => writeWorkspaceView({ poolCollapsedProductionGroups: {
+                  ...workspace.poolCollapsedProductionGroups,
+                  [project.id]: collapsedProduction.includes(group.id) ? collapsedProduction.filter((id) => id !== group.id) : [...collapsedProduction, group.id],
+                } })} />;
+              return [header, ...visible.filter((entry) => entry.owner.productionGroupId === group.id).map(renderMachine)];
+            })}
           </table>
           {!shown.length ? (
             <div className="pool-sheet-empty">
@@ -400,7 +428,7 @@ function ProductsPane({ children, id }: { children: ReactNode; id: string }) {
   );
 }
 
-function AddPoolProduct() {
+function AddPoolProduct({ groupId }: { groupId?: string }) {
   const [open, setOpen] = useState(false);
   const add = useFactoryStore((state) => state.addPoolStorage);
   return (
@@ -408,7 +436,7 @@ function AddPoolProduct() {
       <button
         type="button"
         className="pool-add-button"
-        aria-label="Add product"
+        aria-label={groupId ? "Add product to this group" : "Add product"}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
@@ -432,6 +460,8 @@ function AddPoolProduct() {
                 dominantColor: entry.dominantColor,
               },
               "drain",
+              undefined,
+              groupId,
             );
             setOpen(false);
           }}
@@ -458,6 +488,7 @@ const MachineRows = memo(function MachineRows({
   const { owner, machine, sections } = group;
   const orderTarget = useOrderTarget("machines", owner.id);
   const updateNode = useFactoryStore((state) => state.updateNode);
+  const hasProductionGroups = useFactoryStore((state) => Boolean(state.project.productionGroups?.length));
   const first = sections[0];
   const handler = first.recipe ? getSelectedMachineHandler(first.recipe, owner) : undefined;
   const label = machine?.label ?? handler?.label ?? "Missing recipe";
@@ -490,6 +521,8 @@ const MachineRows = memo(function MachineRows({
         className="pool-shared-cell pool-machine-cell"
         data-machine-editor-anchor
       >
+        {hasProductionGroups ? <ProductionGroupSelect value={owner.productionGroupId} label={"Production group for " + label} disabled={readOnly}
+          onChange={(id) => useFactoryStore.getState().moveToProductionGroup([owner.id], id)} /> : null}
         {collapsed ? (
           <div className="pool-collapsed-machine">
             <span className="pool-collapsed-name" title={label}>{label}</span>
@@ -868,6 +901,7 @@ function MachinePower({ entry }: { entry?: MachineListEntry }) {
 }
 
 function Product({ storage }: { storage: FactoryStorage }) {
+  const hasProductionGroups = useFactoryStore((state) => Boolean(state.project.productionGroups?.length));
   const result = useFactoryStore((state) => state.lastResult.storages[storage.id]);
   const readOnly = useFactoryStore((state) => state.isReadOnly);
   const orderTarget = useOrderTarget("products", storage.id);
@@ -892,6 +926,8 @@ function Product({ storage }: { storage: FactoryStorage }) {
             }}
           />
         </div>
+        {hasProductionGroups ? <ProductionGroupSelect value={storage.productionGroupId} label={"Production group for product " + (storage.displayName ?? storage.resourceId)} disabled={readOnly}
+          onChange={(id) => useFactoryStore.getState().moveToProductionGroup([storage.id], id)} /> : null}
       </td>
       <td className="pool-product-target">
         {readOnly ? (

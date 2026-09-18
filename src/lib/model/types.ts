@@ -331,6 +331,8 @@ export interface FactoryNodeRecipeSection {
 }
 
 export interface FactoryNode {
+  /** Pool production scope, independent of canvas boards and shared recipes. */
+  productionGroupId?: string;
   id: string;
   recipeId: string;
   colorTag?: FactoryNodeColorTag;
@@ -431,6 +433,7 @@ export type StorageDrainMode = "product" | "byproduct" | "trash";
 export type StorageBufferMode = "overflow" | "strict" | "ratio";
 
 export interface FactoryStorage {
+  productionGroupId?: string;
   id: string;
   kind: ResourceKind;
   resourceId: ResourceId;
@@ -725,7 +728,18 @@ export interface SetupRules {
   looseCellWires?: boolean;
 }
 
+/** Share skips this scope's match; import permits external supply here. */
+export type PoolResourceRule = "share" | "import";
+export interface ProductionGroup {
+  id: string;
+  name: string;
+  parentId?: string;
+  resourceRules?: Record<string, PoolResourceRule>;
+}
+
 export interface FactoryProject {
+  productionGroups?: ProductionGroup[];
+  poolResourceRules?: Record<string, PoolResourceRule>;
   /** Construction progress; never changes production. */
   checklist?: { cards: string[]; edges: string[] };
   schemaVersion: typeof PROJECT_SCHEMA_VERSION;
@@ -753,12 +767,11 @@ export interface FactoryProject {
    */
   solveMode?: boolean;
   /**
-   * POOL MODE: no wires needed. Every resource is one shared pool: whatever
-   * any machine makes goes in, whatever any machine needs comes out, the
-   * surplus banks. Imports are SOURCE drawers placed on the board with
-   * `poolSide: "source"`, products are DRAIN drawers with `poolSide: "drain"`;
-   * a resource nobody makes and no source declares stays short. Wires drawn
-   * anyway still count. Combines with solve mode. Part of the plan JSON.
+   * POOL MODE: machines share resource pools and ignore saved wires.
+   * Production groups resolve local materials first; unmatched or shared ports
+   * reach the parent. The factory imports materials with no producer; an
+   * explicit outside-supply rule permits imports alongside local production.
+   * Surplus banks, and product drawers carry targets. Implies solve mode.
    */
   poolMode?: boolean;
   /**

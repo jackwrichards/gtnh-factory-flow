@@ -303,6 +303,7 @@ export const targetRateSchema = z.object({
 });
 
 export const factoryNodeSchema = z.object({
+  productionGroupId: z.string().min(1).optional(),
   id: z.string().min(1),
   recipeId: z.string().min(1),
   colorTag: factoryNodeColorTagSchema.optional(),
@@ -375,6 +376,7 @@ export const factoryNodeSchema = z.object({
 });
 
 export const factoryStorageSchema = z.object({
+  productionGroupId: z.string().min(1).optional(),
   id: z.string().min(1),
   kind: resourceKindSchema,
   resourceId: z.string().min(1),
@@ -528,6 +530,11 @@ export const planViewStateSchema = z.object({
 });
 
 export const factoryProjectSchema = z.object({
+  productionGroups: z.array(z.object({
+    id: z.string().min(1), name: z.string().min(1), parentId: z.string().min(1).optional(),
+    resourceRules: z.record(z.string(), z.enum(["share", "import"])).optional(),
+  })).optional(),
+  poolResourceRules: z.record(z.string(), z.enum(["share", "import"])).optional(),
   checklist: z.object({ cards: z.array(z.string()), edges: z.array(z.string()) }).optional(),
   schemaVersion: z.literal(PROJECT_SCHEMA_VERSION),
   id: z.string().min(1),
@@ -582,6 +589,7 @@ export type FactoryProjectInput = z.input<typeof factoryProjectSchema>;
  * smuggle malformed cards into every design that later pastes it.
  */
 export const boardSelectionPayloadSchema = z.object({
+  productionGroups: factoryProjectSchema.shape.productionGroups,
   nodes: z.array(factoryNodeSchema),
   storages: z.array(factoryStorageSchema),
   annotations: z.array(factoryAnnotationSchema),

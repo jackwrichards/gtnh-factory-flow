@@ -255,14 +255,14 @@
 .pool-col-io {
   width: auto;
 }
-.pool-sheet-table thead,
+.pool-sheet-table > thead,
 .pool-summary-table thead {
   position: sticky;
   top: 0;
   z-index: 3;
   background: var(--surface, #24272c);
 }
-.pool-sheet-table th {
+.pool-sheet-table > thead > tr > th {
   padding: 1px 8px;
   font-size: 11px;
   font-weight: 400;
@@ -290,24 +290,24 @@
 .pool-sheet-search:focus-within {
   color: #adc7ff;
 }
-.pool-sheet-table tbody tr {
+.pool-sheet-table > tbody > tr {
   height: max(54px, calc(var(--pool-io-rows, 1) * 36px + 4px));
 }
-.pool-sheet-table td {
+.pool-sheet-table > tbody > tr > td {
   padding: 2px 8px;
   vertical-align: top;
   border-bottom: 1px solid color-mix(in srgb, var(--mc-ink) 10%, transparent);
 }
-.pool-sheet-table tbody:nth-of-type(even) {
+.pool-sheet-table > tbody:nth-of-type(even) {
   background: color-mix(in srgb, var(--mc-ink) 3%, transparent);
 }
-.pool-sheet-table tbody + tbody {
+.pool-sheet-table > tbody + tbody {
   border-top: 1px solid color-mix(in srgb, var(--mc-ink) 20%, transparent);
 }
-.pool-sheet-table tbody:hover {
+.pool-sheet-table > tbody:hover {
   background: color-mix(in srgb, var(--mc-ink) 5%, transparent);
 }
-.pool-sheet-table td + td {
+.pool-sheet-table > tbody > tr > td + td {
   border-left: 1px solid color-mix(in srgb, var(--mc-ink) 6%, transparent);
 }
 .pool-sheet-table .pool-picture-cell {
@@ -708,7 +708,7 @@
     font-size: 16px;
   }
 }
-.pool-sheet-table th:nth-child(4) {
+.pool-sheet-table > thead > tr > th:nth-child(4) {
   padding-inline: 2px;
   text-align: center;
   font-size: 10px;
@@ -770,31 +770,31 @@
    Keep every control in normal flow rather than clipping horizontal overflow. */
 @container (max-width: 1080px) {
   .pool-sheet-table,
-  .pool-sheet-table thead {
+  .pool-sheet-table > thead {
     display: block;
   }
   .pool-sheet-table colgroup {
     display: none;
   }
-  .pool-sheet-table thead tr {
+  .pool-sheet-table > thead > tr {
     display: block;
     height: auto;
   }
-  .pool-sheet-table thead th {
+  .pool-sheet-table > thead > tr > th {
     display: none;
   }
-  .pool-sheet-table thead th:nth-child(2) {
+  .pool-sheet-table > thead > tr > th:nth-child(2) {
     display: block;
     padding-block: 4px;
   }
-  .pool-sheet-table tbody {
+  .pool-sheet-table > tbody {
     display: grid;
     grid-template-columns: 128px 60px minmax(0, 1fr) minmax(0, 1fr);
   }
-  .pool-sheet-table tbody tr {
+  .pool-sheet-table > tbody > tr {
     display: contents;
   }
-  .pool-sheet-table td {
+  .pool-sheet-table > tbody > tr > td {
     min-width: 0;
   }
   .pool-picture-cell {
@@ -829,7 +829,7 @@
   .pool-makes-cell::before { content: "Makes"; }
 }
 @container (max-width: 660px) {
-  .pool-sheet-table tbody {
+  .pool-sheet-table > tbody {
     position: relative;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
@@ -888,8 +888,8 @@
 }
 
 /* A folded machine is one line, including every recipe in its group. */
-.pool-sheet-table tbody[data-collapsed] tr { height: 32px; }
-.pool-sheet-table tbody[data-collapsed] td {
+.pool-sheet-table > tbody[data-collapsed] tr { height: 32px; }
+.pool-sheet-table > tbody[data-collapsed] td {
   padding-block: 2px;
   vertical-align: middle;
 }
@@ -939,10 +939,10 @@ tbody[data-collapsed] .pool-machine-picture > [data-machine-picture] { width: 28
 }
 .pool-collapsed-ports .pool-resource-link { height: 24px; }
 @container (max-width: 1080px) {
-  .pool-sheet-table tbody[data-collapsed] {
+  .pool-sheet-table > tbody[data-collapsed] {
     grid-template-columns: 68px minmax(64px, 1.6fr) minmax(0, 1fr) minmax(0, 1fr);
   }
-  .pool-sheet-table tbody[data-collapsed] .pool-picture-cell {
+  .pool-sheet-table > tbody[data-collapsed] .pool-picture-cell {
     position: relative;
     inset: auto;
     width: auto;
@@ -950,14 +950,14 @@ tbody[data-collapsed] .pool-machine-picture > [data-machine-picture] { width: 28
     grid-column: 1;
     grid-row: 1;
   }
-  .pool-sheet-table tbody[data-collapsed] .pool-machine-cell {
+  .pool-sheet-table > tbody[data-collapsed] .pool-machine-cell {
     grid-column: 2;
     grid-row: 1;
     min-height: 0;
     padding-inline: 4px;
   }
-  .pool-sheet-table tbody[data-collapsed] .pool-takes-cell { grid-column: 3; grid-row: 1; padding-inline: 3px; }
-  .pool-sheet-table tbody[data-collapsed] .pool-makes-cell { grid-column: 4; grid-row: 1; padding-inline: 3px; }
+  .pool-sheet-table > tbody[data-collapsed] .pool-takes-cell { grid-column: 3; grid-row: 1; padding-inline: 3px; }
+  .pool-sheet-table > tbody[data-collapsed] .pool-makes-cell { grid-column: 4; grid-row: 1; padding-inline: 3px; }
   tbody[data-collapsed] .pool-takes-cell::before,
   tbody[data-collapsed] .pool-makes-cell::before { display: none; }
   .pool-collapsed-machine { gap: 4px; }
@@ -972,7 +972,7 @@ tbody[data-collapsed] .pool-machine-picture > [data-machine-picture] { width: 28
 }
 .pool-machine-row-tools .pool-order-handle { opacity: 0.9; }
 .pool-machine-picture { left: 20px; }
-.pool-sheet-table tbody[data-collapsed] .pool-machine-row-tools {
+.pool-sheet-table > tbody[data-collapsed] .pool-machine-row-tools {
   flex-direction: row;
   width: 36px;
 }
@@ -1004,9 +1004,36 @@ body[data-pool-dragging] [data-minecraft-tooltip],
 body[data-pool-dragging] [data-tooltip-companion] { visibility: hidden; pointer-events: none; }
 .pool-summary-toggles [data-resource-drop] { outline: 2px solid #78a7bc; outline-offset: -2px; }
 @container (max-width: 660px) {
-  .pool-sheet-table tbody:not([data-collapsed]) .pool-picture-cell { width: 72px; }
+  .pool-sheet-table > tbody:not([data-collapsed]) .pool-picture-cell { width: 72px; }
 }
 @container (max-width: 660px) {
   /* The edge drawer's touch handle owns the first 24px on compact screens. */
   .pool-sheet-scroll { padding-left: 24px; }
+}
+
+/* Production scopes are separate from physical machines and canvas boards. */
+.pool-sheet-table .pool-production-scope > tr > td { padding: 8px 10px; border-top: 1px solid var(--mc-61); background: color-mix(in srgb, #6f9cff 7%, var(--surface, #24272c)); }
+.pool-production-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 28px; font-family: var(--app-font); }
+.pool-production-name { width: 170px; min-width: 70px; max-width: 100%; font: inherit; font-weight: 600; color: var(--mc-ink); background: transparent; border-bottom: 1px dotted var(--mc-61); }
+.pool-production-summary { color: var(--mc-ink-muted); font-size: 10px; margin-right: auto; white-space: nowrap; }
+.pool-production-key { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--mc-61); color: var(--mc-ink-muted); cursor: pointer; white-space: nowrap; }
+.pool-production-key:hover, .pool-production-key[aria-expanded="true"] { color: var(--mc-ink); background: var(--mc-49); }
+.pool-production-select, .pool-production-materials select { color: var(--mc-ink); background: var(--mc-49); border: 1px solid var(--mc-61); padding: 2px 4px; max-width: 170px; font-family: var(--app-font); font-size: 10px; }
+.pool-machine-cell > .pool-production-select { display: block; margin-bottom: 5px; max-width: 100%; }
+.pool-products-table .pool-production-select { display: block; margin-top: 3px; max-width: 140px; }
+.pool-production-materials { margin: 8px 0 2px; font-family: var(--app-font); }
+.pool-production-materials p { max-width: 760px; margin-bottom: 8px; color: var(--mc-ink-muted); font-size: 11px; white-space: normal; }
+.pool-production-material-scroll { overflow: auto; max-height: 300px; }
+.pool-production-materials table { width: 100%; font-size: 11px; table-layout: auto; }
+.pool-production-materials th, .pool-production-materials td { padding: 4px 8px; text-align: left; white-space: nowrap; border-bottom: 1px solid color-mix(in srgb, var(--mc-ink) 10%, transparent); }
+.pool-production-materials th:nth-child(n+4), .pool-production-materials td:nth-child(n+4) { text-align: right; }
+.pool-production-resource { display: flex; align-items: center; gap: 6px; }
+@container (max-width: 600px) { .pool-production-heading { gap: 5px; } .pool-production-name { width: 140px; } .pool-production-summary { display: none; } }
+
+.pool-sheet-table > .pool-production-scope > tr { height: auto; }
+.pool-production-materials th { color: var(--mc-ink-muted); font-weight: 400; }
+@container (max-width: 1080px) {
+  .pool-sheet-table > .pool-production-scope { display: block; }
+  .pool-sheet-table > .pool-production-scope > tr { display: block; }
+  .pool-sheet-table > .pool-production-scope > tr > td { display: block; }
 }

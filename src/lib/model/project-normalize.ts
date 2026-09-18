@@ -1,3 +1,4 @@
+import { normalizeProductionGroups } from "./production-groups";
 import { normalizeFullFarms } from "./full-farms";
 import { normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
 import type { FactoryProject } from "./types";
@@ -20,6 +21,7 @@ import { repairWiredInputOverrides } from "./edge-input-overrides";
  * migration — every caller now gets the full set by construction.
  */
 export function normalizeLoadedProject(project: FactoryProject): FactoryProject {
+  project = normalizeProductionGroups(project);
   project = repairWiredInputOverrides(project);
   return normalizeProjectHatchInputs(
     snapProjectToGrid(

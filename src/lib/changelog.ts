@@ -47,6 +47,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.3.0",
+    date: "2026-09-18",
+    headline: "Production groups in Pool",
+    notes: [
+      "Organize Pool into named, nested production groups with their own material balances.",
+      "Share a material with the parent group or allow outside supply when local production falls short; surplus remains allowed.",
+      "Move machines and products between groups, collapse whole lines, and keep groups through saves, undo and copy/paste.",
+    ],
+  },
+  {
     version: "3.2.1",
     date: "2026-09-14",
     headline: "Cell wire supply indicators",

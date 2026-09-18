@@ -1831,6 +1831,21 @@ Working notes for future agents on GTNH Factory Flow.
   `factory-flow-board--pool` (pool-mode.css).
   `src/lib/solver/pool-mode.test.ts` is the exam.
 
+## Pool Production Groups
+
+- Pool groups are material scopes, separate from physical shared machines and canvas boards.
+  Nodes/storages carry productionGroupId; productionGroups stores the tree and per-material
+  rules. expandPool resolves children first: Auto retains paired ports locally and bubbles
+  one-sided resources; share bubbles both sides; import adds a private unlimited source.
+  The factory retains ordinary Pool import behavior. A parent rule cannot override a
+  child-local match. Power is never imported by these rules.
+- Outside supply can idle an unpinned producer because the existing objective minimizes
+  machinery first. Surplus remains allowed and local. Cells bridge only where both forms
+  are available in the same scope. All sections of a shared machine inherit its owner.
+- Groups/rules must survive saves, JSON and clipboard remapping; collapse is local workspace
+  state. Build and wired Solve ignore these scopes. See docs/production-groups.md and the
+  solver/store production-groups.test.ts files. Negative products are a separate follow-up.
+
 ## Verification
 
 - For code changes:

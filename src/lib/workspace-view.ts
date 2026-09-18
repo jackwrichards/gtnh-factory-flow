@@ -22,6 +22,7 @@ export interface WorkspaceView {
   poolWorksheetOrder: Record<string, string[]>;
   /** Collapsed Pool machine groups, keyed by plan; never changes the plan. */
   poolCollapsedMachines: Record<string, string[]>;
+  poolCollapsedProductionGroups: Record<string, string[]>;
   /** The recipe browser / pockets / setups column on the left. */
   leftPanelOpen: boolean;
   /** The resource flow panel on the right. */
@@ -54,6 +55,7 @@ const WORKSPACE_VIEW_STORAGE_KEY = "gtnh-factory-flow-workspace-view";
 export const DEFAULT_WORKSPACE_VIEW: WorkspaceView = {
   poolWorksheetOrder: {},
   poolCollapsedMachines: {},
+  poolCollapsedProductionGroups: {},
   leftPanelOpen: true,
   rightPanelOpen: true,
   showHiddenResources: false,
@@ -113,6 +115,9 @@ function readWorkspaceView(): WorkspaceView {
     return {
       poolCollapsedMachines: parsed.poolCollapsedMachines && typeof parsed.poolCollapsedMachines === "object"
         ? Object.fromEntries(Object.entries(parsed.poolCollapsedMachines).map(([key, value]) => [key, keys(value)]))
+        : {},
+      poolCollapsedProductionGroups: parsed.poolCollapsedProductionGroups && typeof parsed.poolCollapsedProductionGroups === "object"
+        ? Object.fromEntries(Object.entries(parsed.poolCollapsedProductionGroups).map(([key, value]) => [key, keys(value)]))
         : {},
       poolWorksheetOrder: parsed.poolWorksheetOrder && typeof parsed.poolWorksheetOrder === "object"
         ? Object.fromEntries(Object.entries(parsed.poolWorksheetOrder).map(([key, value]) => [key, keys(value)]))
