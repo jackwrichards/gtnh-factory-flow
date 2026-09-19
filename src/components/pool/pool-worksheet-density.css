@@ -307,25 +307,30 @@
 }
 .pool-worksheet--dense .pool-settings-section {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-wrap: nowrap;
+  align-items: flex-start;
   gap: 8px;
   padding: 8px 12px;
   margin: 0;
   border-left: 2px solid #6f9cff;
   background: color-mix(in srgb, #6f9cff 5%, var(--surface));
 }
-.pool-worksheet--dense .pool-settings-section > strong {
-  font-weight: 500;
-}
 .pool-worksheet--dense .pool-settings-section > .pool-machine-settings {
-  flex: 1;
-  min-width: 160px;
-  width: auto;
+  flex: 0 1 520px;
+  min-width: 0;
+  width: 520px;
 }
 .pool-worksheet--dense .pool-settings-section > button:last-child {
-  margin-left: auto;
+  flex: none;
 }
+.pool-machine-settings { container-type: inline-size; }
+.pool-machine-settings [data-grid-block] { height: auto !important; }
+@container (max-width: 360px) {
+  .pool-machine-settings .crop-settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.pool-machine-identity { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.pool-crop-picker { position: relative; flex: none; }
+.pool-crop-button { background: #6f9cff12; outline: 1px solid #ffffff16; }
 .pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr,
 .pool-worksheet--dense .pool-sheet-table > .pool-production-scope > tr {
   height: auto;
@@ -669,6 +674,8 @@
 .pool-worksheet--dense .pool-settings-section {
   padding: 6px 10px;
   gap: 8px;
+  width: fit-content;
+  max-width: 100%;
 }
 
 /* Readable worksheet columns; headings belong to the scope they describe. */

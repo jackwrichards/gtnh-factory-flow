@@ -1,3 +1,4 @@
+import { CROP_FARM_PLACEHOLDER_RECIPE_ID, createCropFarmPlaceholderRecipe } from "./passive-production";
 import { getFusionMachine, getFusionRecipeMark, isFusionRecipe, normalizeFusionHandler } from "@/lib/machines/fusion";
 import type {
   FactoryNode,
@@ -42,6 +43,9 @@ export function getRecipeMachineHandlers(
   // would duplicate it under the category name ("Blast Furnace" next to the
   // real Electric Blast Furnace), so the fallback only exists for recipes
   // without exported handlers.
+  if (recipe.id === CROP_FARM_PLACEHOLDER_RECIPE_ID && !recipe.machineHandlers?.length) {
+    return createCropFarmPlaceholderRecipe().machineHandlers!;
+  }
   const handlersByFamily = new Map<string, MachineHandler>();
   const fusionMark = isFusionRecipe(recipe) ? getFusionRecipeMark(recipe) : undefined;
   for (const handler of recipe.machineHandlers ?? []) {

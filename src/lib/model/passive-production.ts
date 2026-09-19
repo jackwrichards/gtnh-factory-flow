@@ -800,6 +800,7 @@ export function createCropFarmPlaceholderRecipe(): Recipe {
     eut: 0,
     inputs: [],
     outputs: [],
+    machineHandlers: cropHarvesterHandlers().map((handler) => ({ ...handler, machineConfigControls: [] })),
     notes: "Pick a crop to start producing.",
     source: { recipeMap: CROP_FARM_RECIPE_MAP },
   };
@@ -914,12 +915,14 @@ export function getCropStatsPreset(value: string | undefined): CropStatsPreset |
 function enrichCropProductionRecipe(recipe: Recipe): Recipe {
   const analyticStats = getCropsNhStats(recipe);
   if (!analyticStats && isCropFarmRecipe(recipe)) {
-    // The empty crop-farm placeholder: no crop picked yet, nothing to tune.
+    // An empty farm can choose its harvester before choosing a crop.
     return {
       ...recipe,
       minimumTier: "NONE",
       eut: 0,
-      machineHandlers: [],
+      machineHandlers: recipe.id === CROP_FARM_PLACEHOLDER_RECIPE_ID
+        ? createCropFarmPlaceholderRecipe().machineHandlers
+        : [],
     };
   }
   const controls = analyticStats

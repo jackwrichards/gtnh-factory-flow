@@ -1,3 +1,5 @@
+import { stripBeeFrameSlotInputs } from "@/lib/model/bee-display";
+import { isBeeProductionRecipe } from "@/lib/model/passive-production";
 import { productionGroupDescendants } from "@/lib/model/production-groups";
 import type { getPoolGroupResources } from "@/lib/solver/pool-mode";
 import type { ResourceAmount, ProductionGroup } from "@/lib/model/types";
@@ -48,10 +50,11 @@ export function buildWorksheetGroups(project: FactoryProject, result: Throughput
 function worksheetRecipe(recipe: Recipe, node: FactoryNode): Recipe {
   const contextual = applyRecipeInputOverrides(recipe, node);
   const handled = applyMachineHandlerToRecipe(contextual, node);
-  const effective = applyTreeGrowthSimulatorToolInputs(
+  const toolAdjusted = applyTreeGrowthSimulatorToolInputs(
     handled,
     getRecipeMachineConfigTierControls(handled, node).filter(isTreeGrowthSimulatorToolControl),
   );
+  const effective = isBeeProductionRecipe(toolAdjusted) ? stripBeeFrameSlotInputs(toolAdjusted) : toolAdjusted;
   const stats = getOverclockedRecipeStats(contextual, node);
   return { ...effective, ...applyMachineOutputMultipliers(effective, node, stats.tier), ...stats };
 }

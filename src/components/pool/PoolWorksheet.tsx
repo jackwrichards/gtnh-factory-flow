@@ -710,7 +710,6 @@ const MachineRows = memo(function MachineRows({
                 }
               }}
             >
-              <strong>Machine settings</strong>
               {settings}
               <button
                 type="button"

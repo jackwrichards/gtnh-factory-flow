@@ -1,5 +1,7 @@
 "use client";
 
+import { stripBeeFrameSlotInputs } from "@/lib/model/bee-display";
+
 import { isTreeGrowthSimulatorToolControl, applyTreeGrowthSimulatorToolInputs, getTreeGrowthSimulatorSlotResource, getTreeGrowthSimulatorSlotTiers } from "@/lib/model/recipe-tool-slots";
 import { industrialFarmCapacity } from "@/lib/model/full-farms";
 
@@ -484,7 +486,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
           )
         : undefined;
     const cropTitle =
-      cropSeedResource && recipe.name.includes(": ")
+      isCropFarmRecipe(effectiveRecipe) && effectiveRecipe.outputs.length > 0 && recipe.name.includes(": ")
         ? recipe.name.slice(recipe.name.indexOf(": ") + 2)
         : undefined;
     const isCropFarmNode = isCropFarmRecipe(effectiveRecipe);
@@ -522,6 +524,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
       cropProductionControls,
       cropTierControl,
       cropTitle,
+      cropSeedResource,
       isCropFarmNode,
       isCropFarmPlaceholder,
       isCustomRateNode,
@@ -530,7 +533,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
       isCustomRatePlaceholder,
       isCropProductionNode: cropProductionControls.length > 0,
       beeFrameControls,
-      beePanelControls: getBeePanelControls(beeProductionControls),
+      beePanelControls: getBeePanelControls(beeProductionControls.filter((control) => !isBeeFrameSlotControlId(control.id))),
       tgsToolControls,
       statsMachineConfigControls: machineConfigControls.filter(
         (control) =>
@@ -569,6 +572,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
     cropProductionControls,
     cropTierControl,
     cropTitle,
+    cropSeedResource,
     isCropFarmNode,
     isCropFarmPlaceholder,
     isCustomRateNode,
@@ -1009,8 +1013,8 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
         controls={beePanelControls}
         onSelect={updateMachineConfigTier}
         title={selectedMachineHandler.label}
-        collapsed={projectNode.settingsCollapsed === true}
-        onToggleCollapsed={() =>
+        collapsed={!controlsOnly && projectNode.settingsCollapsed === true}
+        onToggleCollapsed={controlsOnly ? undefined : () =>
           updateNode(projectNode.id, {
             settingsCollapsed: !(projectNode.settingsCollapsed === true),
           })
@@ -1118,8 +1122,11 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
   const machineIcons = useMachineHandlerIcons();
   const machineIconEntries = useMachineHandlerIconEntries();
   const recipeMapIcons = useRecipeMapIcons();
-  // The machine's own art, when the dataset ships it. Crop farms and custom
-  // rate nodes have no machine to show.
+  // Crop/bee category icons represent seeds or specimens, not machines.
+  const recipeMapMachineIcon = isCropProductionRecipe(recipe) || isBeeProductionRecipe(recipe)
+    ? undefined
+    : recipeMapIcons.get(recipe.source?.recipeMap ?? recipe.machineType);
+  // Prefer the selected harvester or housing's own art.
   const machineGlanceIcon = powerInfo
     ? powerMachineIcon?.iconPath
       ? ({
@@ -1134,7 +1141,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
       ? // The same pick as the picture window: the tier's own block, the
         // family face, or the map's machine - the glance must mirror the card.
         (machineIconAtTier(machineIconEntries.get(selectedMachineHandler.id), cropTierControl?.current.label ?? tierControl?.current ?? projectNode.overclockTier) ??
-        recipeMapIcons.get(recipe.source?.recipeMap ?? recipe.machineType))
+        recipeMapMachineIcon)
       : undefined;
   const previewHandler = hasMachinePicker
     ? (machineHandlers.find((handler) => handler.id === previewHandlerId) ?? selectedMachineHandler)
@@ -1152,7 +1159,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
   const pictureTier = cropTierControl?.current.label ?? tierControl?.current ?? projectNode.overclockTier;
   const previewMachineIcon =
     machineIconAtTier(machineIconEntries.get(previewHandler.id), pictureTier) ??
-    recipeMapIcons.get(recipe.source?.recipeMap ?? recipe.machineType);
+    recipeMapMachineIcon;
   // The machine's REAL name (Jack, 2026-09-06): the tier variant's own item
   // name - "Advanced Centrifuge II", not the family word "Centrifuge" - and
   // the map's machine for a one-family map. Generators, crops and custom
@@ -1267,7 +1274,20 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
     const controls = (
       <fieldset disabled={editorLocked} className="pool-machine-editor min-w-0 border-0 p-0 text-[var(--mc-ink)]">
         <div className="pool-editor-controls pool-editor-heading">
-          <span className="pool-machine-title" title={machineDisplayName}>{machineDisplayName}</span>
+          <div className="pool-machine-identity">
+            {isCropFarmNode ? <div className="pool-crop-picker">
+              <MinecraftTooltip content={cropTitle ? "Change crop: " + cropTitle : "Pick a crop"}>
+                <button type="button" className="pool-machine-icon-button pool-crop-button" data-crop-picker-toggle
+                  aria-label={cropTitle ? "Change crop: " + cropTitle : "Pick a crop"} aria-expanded={isCropMenuOpen}
+                  onClick={() => setCropMenuOpen((open) => !open)}>
+                  {cropSeedResource ? <ResourceIcon resource={cropSeedResource} size="sm" bare showAmount={false} showConsumedState={false} tooltip={false} /> : <Sprout className="h-5 w-5" />}
+                  <RefreshCw className="pool-machine-swap" aria-hidden="true" />
+                </button>
+              </MinecraftTooltip>
+              {isCropMenuOpen ? <CropPickerMenu nodeId={projectNode.id} onClose={() => setCropMenuOpen(false)} /> : null}
+            </div> : null}
+            <span className="pool-machine-title" title={machineDisplayName}>{machineDisplayName}</span>
+          </div>
           <div className="pool-editor-power">
           {powerInfo ? <PowerTierChip nodeId={projectNode.id} sourceId={powerInfo.sourceId} values={projectNode.machineConfigTiers} /> : null}
           {cropTierControl && !tierControl && !powerInfo ? <CropTierChip control={cropTierControl} onPick={(key) => updateMachineConfigTier(cropTierControl.id, key)} /> : null}
@@ -1276,8 +1296,6 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
               hatchVoltageTier, hatchAmps, powerInputMode, powerEuT: hatchAmps * getVoltageTierMaxEuT(hatchVoltageTier),
             })} /> : voltageTierControl}
           </div>
-          {isCropFarmNode ? <div className="relative"><button type="button" className="pool-sheet-button" data-crop-picker-toggle onClick={() => setCropMenuOpen((open) => !open)}><Sprout className="h-4 w-4" />{cropTitle ?? "Pick a crop"}</button>
-            {isCropMenuOpen ? <CropPickerMenu nodeId={projectNode.id} onClose={() => setCropMenuOpen(false)} /> : null}</div> : null}
         </div>
       </fieldset>
     );
@@ -1302,7 +1320,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
           selectedId={selectedMachineHandler.id} iconsById={machineIcons} onHover={setPreviewHandlerId}
           onUse={updateMachineHandler} onClose={() => setCompareOpen(false)}
           twins={isSharedMachine ? undefined : twins} mapIcons={recipeMapIcons} onUseTwin={useTwin}
-          figures={!isSharedMachine} onAddRecipe={canShareMachine ? () => { setCompareOpen(false); browseMachineRecipes(projectNode.id); } : undefined} /> : null}
+          figures={!isSharedMachine && !isCropProductionRecipe(recipe)} onAddRecipe={canShareMachine ? () => { setCompareOpen(false); browseMachineRecipes(projectNode.id); } : undefined} /> : null}
       </div>
     );
     return renderEditor ? renderEditor(controls, picture, settings) : <>{picture}{controls}{settings}</>;
@@ -1862,7 +1880,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
                 twins={isSharedMachine ? undefined : twins}
                 mapIcons={recipeMapIcons}
                 onUseTwin={useTwin}
-                figures={!isSharedMachine}
+                figures={!isSharedMachine && !isCropProductionRecipe(recipe)}
                 title={isSharedMachine ? "Machines that run every recipe on this card" : undefined}
                 onAddRecipe={
                   canShareMachine
@@ -2942,7 +2960,7 @@ function GridBlock({
   }, [clearancePx, minCells]);
 
   return (
-    <div className={className} style={{ ...style, height: cellCount * BOARD_GRID }}>
+    <div data-grid-block className={className} style={{ ...style, height: cellCount * BOARD_GRID }}>
       {/* The measured div must be free to size to its content, or its own
           scrollHeight would just report the height we gave it and the block
           could never shrink again. The aligning wrapper takes the fixed
@@ -4407,12 +4425,6 @@ function isDisplayOnlyParallelControl(control: MachineConfigTierControl) {
   return /^machineParallel/.test(control.id) && control.tiers.length <= 1;
 }
 
-const BEE_FRAME_SLOTS: Record<string, { x: number; y: number }> = {
-  beeFrameSlot1: { x: 66, y: 23 },
-  beeFrameSlot2: { x: 66, y: 52 },
-  beeFrameSlot3: { x: 66, y: 81 },
-};
-
 function getBeePanelControls(controls: MachineConfigTierControl[]): MachineConfigTierControl[] {
   const speedControl = controls.find((control) => control.id === BEE_INDUSTRIAL_SPEED_CONTROL_ID);
   if (speedControl?.current.key !== "speed-8-upgraded") {
@@ -4436,38 +4448,6 @@ function getBeePanelControls(controls: MachineConfigTierControl[]): MachineConfi
       tiers: [production8],
     };
   });
-}
-
-function stripBeeFrameSlotInputs(recipe: Recipe): Recipe {
-  const inputs = recipe.inputs.filter((input) => !isBeeFrameSlotInput(input));
-  const neiSlots = recipe.nei?.slots?.filter((slot) => !isBeeFrameSlotPosition(slot));
-  const recipeChanged = inputs.length !== recipe.inputs.length;
-  const neiChanged = neiSlots?.length !== recipe.nei?.slots?.length;
-
-  if (!recipeChanged && !neiChanged) {
-    return recipe;
-  }
-
-  return {
-    ...recipe,
-    inputs,
-    nei: recipe.nei
-      ? {
-          ...recipe.nei,
-          slots: neiSlots,
-        }
-      : recipe.nei,
-  };
-}
-
-function isBeeFrameSlotInput(input: Recipe["inputs"][number]) {
-  return /^factoryflow:bee_frame_slot_\d+$/.test(input.id);
-}
-
-function isBeeFrameSlotPosition(slot: NonNullable<NonNullable<Recipe["nei"]>["slots"]>[number]) {
-  return Object.values(BEE_FRAME_SLOTS).some(
-    (position) => position.x === slot.x && position.y === slot.y,
-  );
 }
 
 /**
@@ -5375,7 +5355,7 @@ function CropConfigPanel({
         {cropCells.length > 0 ? (
           // Four across: the crop's own knobs are narrow (a two-digit stat,
           // a one-word option), so the row need not wrap.
-          <div className="grid min-w-0 grid-cols-[repeat(4,minmax(0,1fr))] gap-x-1 gap-y-1">
+          <div className="crop-settings-grid grid min-w-0 grid-cols-[repeat(4,minmax(0,1fr))] gap-x-1 gap-y-1">
             {cropCells}
           </div>
         ) : null}
@@ -5398,7 +5378,7 @@ function CropConfigPanel({
                 </span>
               </>,
             )}
-            <div className="grid min-w-0 grid-cols-[repeat(3,minmax(0,1fr))] gap-x-1 gap-y-1">
+            <div className="crop-settings-grid grid min-w-0 grid-cols-[repeat(3,minmax(0,1fr))] gap-x-1 gap-y-1">
               {unitCells}
             </div>
           </div>

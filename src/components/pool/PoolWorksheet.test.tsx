@@ -367,7 +367,7 @@ describe("Pool worksheet", () => {
     fireEvent.click(within(settings).getByRole("button", { name: "Next Solenoid" }));
     expect(useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil).toBe("mv");
     expect(container.querySelector(".pool-settings-row")?.contains(settings)).toBe(true);
-    expect(within(settings).getByText("Machine settings")).toBeTruthy();
+    expect(within(settings).queryByText("Machine settings")).toBeNull();
     expect(screen.queryByRole("columnheader", { name: "Settings" })).toBeNull();
     act(() => useFactoryStore.getState().undo());
     expect(
