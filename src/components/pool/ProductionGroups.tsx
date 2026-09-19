@@ -95,10 +95,14 @@ export function ProductionScopeHeader({
       materials.set(key, entry);
     }
   }
+  const direction = (entry: { input: number; output: number }) => {
+    const net = entry.output - entry.input;
+    return net < -1e-6 ? 0 : net > 1e-6 ? 1 : 2;
+  };
   const needle = materialQuery.trim().toLowerCase();
   const filteredMaterials = [...materials.entries()]
     .filter(([, entry]) => !needle || (entry.resource.displayName ?? entry.resource.id).toLowerCase().includes(needle))
-    .sort(([, a], [, b]) => (a.resource.displayName ?? a.resource.id).localeCompare(b.resource.displayName ?? b.resource.id));
+    .sort(([, a], [, b]) => direction(a) - direction(b) || (a.resource.displayName ?? a.resource.id).localeCompare(b.resource.displayName ?? b.resource.id));
   const pageSize = 24;
   const pageCount = Math.max(1, Math.ceil(filteredMaterials.length / pageSize));
   const page = Math.min(materialPage, pageCount - 1);
@@ -165,9 +169,6 @@ export function ProductionScopeHeader({
             ) : (
               <strong>{name}</strong>
             )}
-            {materials.size ? <span className="pool-material-legend" title="Net material flow after internal use. Negative means input; positive means output. Zero means no net flow, not necessarily an active machine.">
-                  Net: <span className="pool-flow-input">− input</span> · <span className="pool-flow-output">+ output</span>
-                </span> : null}
             {group && !hasContents ? (
               <span className="pool-production-summary">Empty · drag recipes here</span>
             ) : null}
@@ -227,30 +228,39 @@ export function ProductionScopeHeader({
                 </div> : null}
               </div> : null}
               <div className="pool-material-strip">
-                {visibleMaterials.map(([key, { resource, row, input, output }]) => {
+                {["Inputs", "Outputs", "Internal"].map((label, index) => {
+                  const entries = visibleMaterials.filter(([, entry]) => direction(entry) === index);
+                  if (!entries.length) return null;
+                  return <table className="pool-material-table" key={label} aria-label={label + " for " + name}>
+                    <tbody><tr>
+                      <th scope="row" title={index === 2 ? "No net input or output, including inactive materials." : undefined}>{label}</th>
+                      <td><div className="pool-material-columns">
+                {entries.map(([key, { resource, row, input, output }]) => {
                   const material = resource.displayName ?? resource.id;
                   const net = output - input;
                   const sign = Math.abs(net) <= 1e-6 ? 0 : Math.sign(net);
                   const rate = formatSlotRateBare(sign ? Math.abs(net) : 0, resource.kind);
                   const unit = rateSuffixForKind(resource.kind).trim();
                   return <div className="pool-scope-material" key={key} data-material-key={key}>
-                    <div className="pool-material-amount">
-                      {renderResource(resource)}
+                    {renderResource(resource)}
                       <span className={"pool-material-rate " + (sign < 0 ? "pool-flow-input" : sign > 0 ? "pool-flow-output" : "pool-flow-internal")}
                         aria-label={material + ": " + (sign < 0 ? "net input " : sign > 0 ? "net output " : "no net flow ") + rate + unit}
                         title={"Input: " + formatSlotRateBare(input, resource.kind) + unit + "; output: " + formatSlotRateBare(output, resource.kind) + unit}>
                         <strong>{sign < 0 ? "−" : sign > 0 ? "+" : ""}{rate}</strong><small>{unit}</small>
                       </span>
-                    </div>
-                    {row ? <select className="pool-material-rule" aria-label={(group ? "Sharing for " : "Supply for ") + material + " in " + name}
+                    {row ? <select className="pool-material-rule" data-auto={!row.rule || undefined} aria-label={(group ? "Sharing for " : "Supply for ") + material + " in " + name}
                       title={ruleHelp} value={row.rule ?? "auto"} disabled={readOnly}
                       onChange={(event) => useFactoryStore.getState().setPoolResourceRule(group?.id, row.key, event.target.value === "auto" ? undefined : event.target.value === "share" ? "share" : "import")}>
-                      <option value="auto">Automatic</option>
+                      <option value="auto">Auto</option>
                       {group ? <option value="share">Share with parent</option> : <option value="import">Import anyway</option>}
                       {group && row.rule === "import" ? <option value="import">Outside supply</option> : null}
                       {!group && row.rule === "share" ? <option value="share">Import anyway</option> : null}
                     </select> : <span className="pool-material-inherited" title="This total includes a child group's local material. Change its rule in that group.">Within groups</span>}
                   </div>;
+                })}
+                      </div></td>
+                    </tr></tbody>
+                  </table>;
                 })}
                 {!visibleMaterials.length ? <span className="pool-sheet-muted">No matching materials.</span> : null}
               </div>

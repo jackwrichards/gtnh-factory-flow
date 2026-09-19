@@ -1834,9 +1834,10 @@ Working notes for future agents on GTNH Factory Flow.
 ## Pool Production Groups
 
 - The UI follows the reference: global Desired products, Factory grand total, nested group
-  totals in one always-visible material strip: icon, signed net rate, and supply/sharing
-  selector. Red negative is input; green positive is output; gray zero is no net flow.
-  Gross input/output remain on the rate tooltip. The strip uses the available width
+  totals in compact, always-visible Inputs / Outputs / Internal tables. Each material
+  has its icon, signed net rate, and supply/sharing selector on one line; columns use
+  the available horizontal space. Red negative is input; green positive is output; gray zero is no net flow.
+  Gross input/output remain on the rate tooltip. The tables use the available width
   with bounded height, search, and 24 entries per page. Child-local totals without
   a parent material row keep their controls in the child. Automatic uses a producer when present, else
   imports; Import anyway permits imports alongside production. Share with parent is

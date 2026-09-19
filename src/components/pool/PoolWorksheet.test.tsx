@@ -195,6 +195,13 @@ describe("Pool worksheet", () => {
     expect(within(inputs).getByLabelText("Copper Ingot: net input 0.5/s").textContent).toBe("−0.5/s");
     expect(within(outputs).getByRole("button", { name: "Copper Plate" })).toBeTruthy();
     expect(within(outputs).getByLabelText("Copper Plate: net output 0.5/s").textContent).toBe("+0.5/s");
+    const inputTable = within(inputs).getByRole("table", { name: "Inputs for All production" });
+    const outputTable = within(outputs).getByRole("table", { name: "Outputs for All production" });
+    expect(within(inputTable).getByRole("button", { name: "Copper Ingot" })).toBeTruthy();
+    expect(within(inputTable).queryByRole("button", { name: "Copper Plate" })).toBeNull();
+    expect(within(outputTable).getByRole("button", { name: "Copper Plate" })).toBeTruthy();
+    expect(within(inputTable).getByRole("combobox", { name: "Supply for Copper Ingot in All production" })).toBeTruthy();
+    expect(screen.queryByText(/Net:/)).toBeNull();
     expect(screen.queryByRole("table", { name: "Pool resource balance" })).toBeNull();
     const power = screen.getByRole("region", { name: "Pool power summary" });
     const totals = power.textContent;
@@ -572,13 +579,14 @@ describe("production group controls", () => {
     expect(screen.queryByRole("button", { name: "Material rules for Copper line" })).toBeNull();
     const link = screen.getByRole("combobox", { name: "Sharing for Copper Ingot in Copper line" }) as HTMLSelectElement;
     expect(link.value).toBe("auto");
+    expect(within(link).getByRole("option", { name: "Auto" })).toBeTruthy();
     fireEvent.change(link, { target: { value: "share" } });
     expect(useFactoryStore.getState().project.productionGroups![0].resourceRules).toEqual({ "item:copper": "share" });
     expect(link.value).toBe("share");
     fireEvent.change(screen.getByRole("combobox", { name: "Supply for Copper Ingot in All production" }), { target: { value: "import" } });
     expect(useFactoryStore.getState().project.poolResourceRules).toEqual({ "item:copper": "import" });
     expect(useFactoryStore.getState().project.recipes).toBe(before);
-    fireEvent.change(link, { target: { value: "auto" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Sharing for Copper Ingot in Copper line" }), { target: { value: "auto" } });
     expect(useFactoryStore.getState().project.productionGroups![0].resourceRules?.["item:copper"]).toBeUndefined();
   });
   it("combines both boundary directions without offering a parent override for child-local totals", () => {
