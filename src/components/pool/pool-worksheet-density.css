@@ -330,7 +330,6 @@
 }
 .pool-machine-identity { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .pool-crop-picker { position: relative; flex: none; }
-.pool-crop-button { background: #6f9cff12; outline: 1px solid #ffffff16; }
 .pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr,
 .pool-worksheet--dense .pool-sheet-table > .pool-production-scope > tr {
   height: auto;
