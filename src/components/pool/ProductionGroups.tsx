@@ -229,8 +229,8 @@ export function ProductionScopeHeader({
           </div>
           {inputs.length || outputs.length ? (
             <div className="pool-flow-summary">
-              <table className="pool-flow-table" aria-label={"Input totals for " + name}><tbody>{flows("Inputs", inputs)}</tbody></table>
-              <table className="pool-flow-table" aria-label={"Output totals for " + name}><tbody>{flows("Outputs", outputs)}</tbody></table>
+              <table className="pool-flow-table pool-flow-table--inputs" aria-label={"Input totals for " + name}><tbody>{flows("Inputs", inputs)}</tbody></table>
+              <table className="pool-flow-table pool-flow-table--outputs" aria-label={"Output totals for " + name}><tbody>{flows("Outputs", outputs)}</tbody></table>
             </div>
           ) : null}
           {rulesOpen && links.length ? (
