@@ -484,161 +484,8 @@
   font-size: 10px;
 }
 
-@container (max-width: 850px) {
-  .pool-worksheet--dense .pool-sheet-table,
-  .pool-worksheet--dense .pool-sheet-table > thead {
-    display: block;
-  }
-  .pool-worksheet--dense .pool-sheet-table > colgroup {
-    display: none;
-  }
-  .pool-worksheet--dense .pool-sheet-table > thead > tr {
-    display: block;
-  }
-  .pool-worksheet--dense .pool-sheet-table > thead > tr > th {
-    display: none;
-  }
-  .pool-worksheet--dense .pool-sheet-table > thead > tr > th:nth-child(2) {
-    display: block;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] {
-    display: grid;
-    grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 148px;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr {
-    display: contents;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr > td {
-    display: block;
-    padding: 2px 3px;
-    border-bottom: 0;
-    min-width: 0;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-picture-cell {
-    grid-column: 1;
-    grid-row: 1;
-    position: relative;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-machine-cell {
-    grid-column: 2 / 4;
-    grid-row: 1;
-    padding: 2px 3px;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-actions-cell {
-    grid-column: 4;
-    grid-row: var(--pool-section-row);
-    align-self: center;
-  }
-  .pool-worksheet--dense
-    .pool-sheet-table
-    > tbody[data-worksheet-node]
-    > tr:first-child
-    > .pool-actions-cell {
-    grid-row: 1;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell {
-    grid-column: 4;
-    grid-row: 2;
-    align-self: center;
-    justify-self: end;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-status-cell {
-    grid-column: 1;
-    grid-row: var(--pool-section-row);
-    width: 8px;
-    align-self: center;
-    z-index: 1;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-circuit-cell {
-    grid-column: 1;
-    grid-row: var(--pool-section-row);
-    justify-self: end;
-    align-self: center;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-takes-cell {
-    grid-column: 2;
-    grid-row: var(--pool-section-row);
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-makes-cell {
-    grid-column: 3;
-    grid-row: var(--pool-section-row);
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > .pool-settings-row > td {
-    grid-column: 1 / -1;
-  }
-  .pool-worksheet--dense .pool-sheet-table > .pool-group-frame,
-  .pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr,
-  .pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr > td,
-  .pool-worksheet--dense .pool-sheet-table > .pool-production-scope,
-  .pool-worksheet--dense .pool-sheet-table > .pool-production-scope > tr,
-  .pool-worksheet--dense .pool-sheet-table > .pool-production-scope > tr > td {
-    display: block;
-  }
-  .pool-worksheet--dense .pool-machine-picture > [data-machine-picture] {
-    width: 22px;
-    height: 22px;
-  }
-  .pool-worksheet--dense .pool-group-power-inline {
-    margin-left: auto;
-  }
-}
-@container (max-width: 500px) {
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] {
-    grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr);
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-machine-cell {
-    grid-column: 2 / 4;
-  }
-  .pool-worksheet--dense
-    .pool-sheet-table
-    > tbody[data-worksheet-node]
-    > tr:first-child
-    > .pool-actions-cell {
-    grid-column: 3;
-    grid-row: 2;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-actions-cell {
-    grid-column: 3;
-    grid-row: calc(var(--pool-section-row) * 2);
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: start;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-status-cell,
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-circuit-cell {
-    grid-column: 1;
-    grid-row: calc(var(--pool-section-row) * 2 - 2);
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-takes-cell {
-    grid-column: 1 / 3;
-    grid-row: calc(var(--pool-section-row) * 2 - 1);
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-makes-cell {
-    grid-column: 3;
-    grid-row: calc(var(--pool-section-row) * 2 - 1);
-  }
-  .pool-worksheet--dense .pool-sheet-icon-button {
-    width: 23px;
-    height: 24px;
-  }
-  .pool-worksheet--dense .pool-production-heading {
-    gap: 3px;
-  }
-  .pool-worksheet--dense .pool-production-name {
-    width: 104px;
-  }
-  .pool-worksheet--dense .pool-production-summary {
-    display: none;
-  }
-  .pool-worksheet--dense .pool-group-actions {
-    margin-left: auto;
-  }
-  .pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr > td {
-    padding-left: 4px;
-  }
-}
+
+
 
 .pool-worksheet--dense .pool-production-heading {
   position: relative;
@@ -781,25 +628,7 @@
   padding: 6px 10px;
   gap: 8px;
 }
-@container (max-width: 500px) {
-  .pool-worksheet--dense
-    .pool-sheet-table
-    > tbody[data-worksheet-node]
-    > tr:first-child
-    > .pool-actions-cell {
-    grid-column: 2 / 4;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell {
-    grid-column: 1;
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-status-cell,
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-circuit-cell {
-    grid-row: calc(var(--pool-section-row) * 2 - 1);
-  }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-takes-cell {
-    grid-column: 2;
-  }
-}
+
 /* Readable worksheet columns; headings belong to the scope they describe. */
 .pool-worksheet--dense .pool-col-status { width: 112px; }
 .pool-worksheet--dense .pool-col-circuit { width: 42px; }
@@ -833,16 +662,106 @@
 .pool-worksheet--dense .pool-status::before { content: ''; width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: #999b9f; }
 .pool-worksheet--dense .pool-status--balanced::before { background: #94d5b7; }
 .pool-worksheet--dense :is(.pool-status--blocked, .pool-status--power-stalled, .pool-status--starved, .pool-status--bottleneck, .pool-status--dead-loop, .pool-status--clog-lock)::before { background: #ed9b80; }
-@container (max-width: 850px) {
-  .pool-worksheet--dense .pool-sheet-table > .pool-column-headings { display: none; }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-status-cell {
-    width: auto; grid-column: 2 / 4; grid-row: calc(var(--pool-section-row) * 3 - 3); justify-self: start;
+
+
+/* Compact columns first. Keep the worksheet a table down to phone widths. */
+@container (max-width: 1050px) {
+  .pool-worksheet--dense .pool-col-status { width: 24px; }
+  .pool-worksheet--dense .pool-col-circuit { width: 36px; }
+  .pool-worksheet--dense .pool-col-machine { width: 242px; }
+  .pool-worksheet--dense .pool-status { justify-content: center; min-width: 14px; min-height: 22px; }
+  .pool-worksheet--dense .pool-status-text,
+  .pool-worksheet--dense .pool-status-heading {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+    clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
   }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-circuit-cell { grid-column: 1; grid-row: calc(var(--pool-section-row) * 3 - 3); }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-takes-cell { grid-column: 2; grid-row: calc(var(--pool-section-row) * 3 - 2); }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-makes-cell { grid-column: 3; grid-row: calc(var(--pool-section-row) * 3 - 2); }
-  .pool-worksheet--dense .pool-takes-cell::before, .pool-worksheet--dense .pool-makes-cell::before { display: block; font: 9px var(--app-font); color: var(--mc-ink-muted); }
+  .pool-worksheet--dense .pool-status::before { width: 7px; height: 7px; }
+  .pool-worksheet--dense .pool-status-heading-dot { display: inline; }
+  .pool-worksheet--dense .pool-status:focus-visible { outline: 1px solid #adc7ff; outline-offset: -1px; border-radius: 3px; }
+}
+.pool-status-heading-dot { display: none; }
+@container (max-width: 850px) {
+  .pool-worksheet--dense .pool-col-machine { width: 208px; }
+  .pool-worksheet--dense .pool-col-power { width: 68px; }
+  .pool-worksheet--dense .pool-col-actions { width: 104px; }
+  .pool-worksheet--dense .pool-settings-toggle > span { display: none; }
+  .pool-worksheet--dense .pool-settings-toggle { width: 19px; padding: 0; }
+  .pool-worksheet--dense .pool-column-headings th { font-size: 9px; }
+  .pool-worksheet--dense .pool-column-headings th:first-child > span { display: none; }
+}
+@container (max-width: 650px) {
+  .pool-worksheet--dense .pool-col-machine { width: 180px; }
+  .pool-worksheet--dense .pool-col-power { width: 62px; }
+  .pool-worksheet--dense .pool-col-actions { width: 98px; }
+  .pool-worksheet--dense .pool-machine-layout { gap: 3px; }
+}
+/* Small worksheets: controls on one line, materials on the next. */
+@container (max-width: 700px) {
+  .pool-worksheet--dense .pool-sheet-table { display: block; }
+  .pool-worksheet--dense .pool-sheet-table > colgroup,
+  .pool-worksheet--dense .pool-sheet-table > .pool-column-headings { display: none; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] {
+    display: grid; grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 104px;
+    padding-block: 2px; border-bottom: 1px solid #ffffff10;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr { display: contents; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr > td {
+    display: block; min-width: 0; padding: 1px 3px; border: 0 !important;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-picture-cell {
+    position: relative; inset: auto; grid-column: 1; grid-row: 1; height: 28px;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-machine-cell {
+    grid-column: 2 / 4; grid-row: 1; min-height: 0; padding: 1px 3px;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell {
+    grid-column: 4; grid-row: 2; justify-self: end; align-self: center;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-actions-cell {
+    grid-column: 4; grid-row: var(--pool-section-row); align-self: center;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr:first-child > .pool-actions-cell {
+    grid-column: 4; grid-row: 1;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-status-cell {
+    grid-column: 1; grid-row: var(--pool-section-row); justify-self: start; align-self: center;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-circuit-cell {
+    grid-column: 1; grid-row: var(--pool-section-row); justify-self: end; align-self: center;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-takes-cell {
+    grid-column: 2; grid-row: var(--pool-section-row);
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-makes-cell {
+    grid-column: 3; grid-row: var(--pool-section-row);
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > .pool-settings-row > td {
+    grid-column: 1 / -1; grid-row: auto;
+  }
+  .pool-worksheet--dense .pool-sheet-table > .pool-group-frame,
+  .pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr,
+  .pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr > td,
+  .pool-worksheet--dense .pool-sheet-table > .pool-production-scope,
+  .pool-worksheet--dense .pool-sheet-table > .pool-production-scope > tr,
+  .pool-worksheet--dense .pool-sheet-table > .pool-production-scope > tr > td { display: block; }
+  .pool-worksheet--dense .pool-sheet-table > .pool-group-frame > tr > td { padding-left: 4px; }
+  .pool-worksheet--dense .pool-takes-cell::before,
+  .pool-worksheet--dense .pool-makes-cell::before { display: block; margin: 0; font: 9px/11px var(--app-font); color: var(--mc-ink-muted); }
   .pool-worksheet--dense .pool-takes-cell::before { content: 'Takes'; }
   .pool-worksheet--dense .pool-makes-cell::before { content: 'Makes'; }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr > td { border-left: 0 !important; }
+  .pool-worksheet--dense .pool-sheet-icon-button { width: 23px; height: 24px; }
+  .pool-worksheet--dense .pool-production-name { width: 104px; }
+  .pool-worksheet--dense .pool-production-heading { gap: 3px; }
+  .pool-worksheet--dense .pool-group-power-inline { margin-left: auto; }
+  .pool-worksheet--dense .pool-section-status { flex-direction: row; gap: 1px; }
+}
+
+@container (max-width: 440px) {
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] {
+    grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 24px;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-machine-cell { grid-column: 2 / -1; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell { grid-column: 1 / 3; grid-row: 2; justify-self: start; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr:first-child > .pool-actions-cell { grid-column: 3 / -1; grid-row: 2; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] :is(.pool-status-cell, .pool-circuit-cell, .pool-takes-cell, .pool-makes-cell, .pool-actions-cell) { grid-row: calc(var(--pool-section-row) + 1); }
 }

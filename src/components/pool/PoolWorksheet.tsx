@@ -604,6 +604,7 @@ const MachineRows = memo(function MachineRows({
                       type="button"
                       className="pool-sheet-icon-button pool-settings-toggle"
                       aria-label={"Settings for " + label}
+                      title="Machine settings"
                       ref={settingsButton}
                       aria-expanded={settingsOpen}
                       aria-controls={settingsId}
@@ -756,22 +757,22 @@ function CollapsedPorts({
 function ColumnHeadings() {
   return <tbody className="pool-column-headings"><tr>
     <th colSpan={2} scope="col">Machine <span>· tier · count</span></th>
-    <th scope="col">Status</th><th scope="col">Circuit</th><th scope="col">Power</th>
+    <th scope="col"><span className="pool-status-heading">Status</span><span className="pool-status-heading-dot" aria-hidden="true">●</span></th><th scope="col">Circuit</th><th scope="col">Power</th>
     <th scope="col">Takes</th><th scope="col">Makes</th><th scope="col">Actions</th>
   </tr></tbody>;
 }
 
 function Status({ section }: { section: WorksheetSection }) {
+  const label = section.result?.powerStalled ? "Power stalled" : buildStatusTooltip(section.verdict, "pool").title;
   return (
-    <MinecraftTooltip
+    <MinecraftTooltip openOnFocus placement="below"
       content={() => <RecipeTooltip view={buildStatusTooltip(section.verdict, "pool")} />}
     >
       <span
         className={`pool-status pool-status--${section.result?.powerStalled ? "power-stalled" : section.verdict.kind}`}
+        tabIndex={0} role="img" aria-label={label}
       >
-        {section.result?.powerStalled
-          ? "Power stalled"
-          : buildStatusTooltip(section.verdict, "pool").title}
+        <span className="pool-status-text">{label}</span>
       </span>
     </MinecraftTooltip>
   );

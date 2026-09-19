@@ -18,6 +18,18 @@ describe("MinecraftTooltip", () => {
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
   });
 
+  it("opens opted-in information on focus and closes on Escape or blur", () => {
+    render(<MinecraftTooltip openOnFocus placement="below" content={<div>Full status explanation</div>}><span tabIndex={0}>Status</span></MinecraftTooltip>);
+    const status = screen.getByText("Status");
+    fireEvent.focus(status);
+    expect(screen.getByText("Full status explanation")).toBeTruthy();
+    fireEvent.keyDown(status, { key: "Escape" });
+    expect(screen.queryByText("Full status explanation")).toBeNull();
+    fireEvent.focus(status);
+    fireEvent.blur(status);
+    expect(screen.queryByText("Full status explanation")).toBeNull();
+  });
+
   it.each([
     [40, 180, "below", "items-start"],
     [550, 680, "above", "items-end"],

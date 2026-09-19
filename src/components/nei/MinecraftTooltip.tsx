@@ -34,6 +34,7 @@ export function MinecraftTooltip({
   children,
   placement = "pointer",
   compact = false,
+  openOnFocus = false,
 }: {
   label?: string | string[];
   /**
@@ -50,6 +51,8 @@ export function MinecraftTooltip({
   placement?: "pointer" | "below" | "above" | "above-card";
   /** Small canvas readouts use the same panel with tighter padding. */
   compact?: boolean;
+  /** Allow a compact information control to expose its details with keyboard focus. */
+  openOnFocus?: boolean;
 }) {
   const lines = useMemo(
     () => (Array.isArray(label) ? label : label ? label.split("\n") : []),
@@ -318,6 +321,15 @@ export function MinecraftTooltip({
       onMouseEnter={handleMouseMove}
       onMouseMove={handleMouseMove}
       onMouseLeave={clearTooltip}
+      onFocus={openOnFocus ? () => {
+        const rect = readAnchorRect();
+        if (!rect || (!hasContent && !lines.length)) return;
+        anchorRef.current = rect;
+        pointerRef.current = { x: rect.left + rect.width / 2, y: rect.bottom };
+        setPosition(clampToViewport(pointerRef.current.x, pointerRef.current.y));
+      } : undefined}
+      onBlur={openOnFocus ? clearTooltip : undefined}
+      onKeyDown={openOnFocus ? (event) => { if (event.key === "Escape") clearTooltip(); } : undefined}
     >
       {children}
       {position && (lines.length > 0 || hasContent) && typeof document !== "undefined"
