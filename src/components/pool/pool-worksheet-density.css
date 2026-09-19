@@ -817,3 +817,21 @@
   .pool-target-controls { flex-direction: column; gap: 2px; padding: 3px 0; }
   .pool-target-rule { flex: none; height: 18px; }
 }
+
+/* Scope summaries show totals; optional supply overrides stay behind one control. */
+.pool-worksheet--dense .pool-rules-toggle { width: auto; gap: 4px; padding: 0 4px; font-size: 9px; border-color: transparent; }
+.pool-worksheet--dense .pool-rules-toggle[aria-expanded="true"] { color: #adc7ff; background: #6f9cff18; }
+.pool-flow-table { width: 100%; border-collapse: collapse; margin-bottom: 2px; }
+.pool-flow-table th { width: 60px; padding: 1px 7px 1px 0; text-align: left; vertical-align: top; font-size: 10px; font-weight: 500; color: var(--mc-ink-muted); }
+.pool-flow-table th > span { display: flex; align-items: center; gap: 4px; min-height: 20px; }
+.pool-flow-table td { padding: 1px 0 1px 7px; border-left: 1px solid #ffffff12; }
+.pool-flow-table tr + tr { border-top: 1px solid #ffffff08; }
+.pool-flow-items { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; min-height: 20px; }
+.pool-worksheet--dense .pool-material-rules { margin: 4px 0; padding: 6px 8px; border: 1px solid #ffffff18; background: #00000012; }
+.pool-material-rules p { margin: 0 0 5px; font-size: 10px; color: var(--mc-ink-muted); }
+.pool-material-rules table { width: min(100%, 600px); border-collapse: collapse; font-size: 10px; }
+.pool-material-rules :is(th, td) { padding: 3px 6px; text-align: left; font-weight: 400; }
+.pool-material-rules thead th { color: var(--mc-ink-muted); border-bottom: 1px solid #ffffff18; }
+.pool-material-rules tbody tr + tr { border-top: 1px solid #ffffff08; }
+.pool-rule-material, .pool-material-rules label { display: flex; align-items: center; gap: 6px; }
+.pool-material-rules input { accent-color: #6f9cff; }

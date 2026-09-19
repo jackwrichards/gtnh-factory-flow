@@ -561,18 +561,22 @@ describe("production group controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add subgroup to Copper line" }));
     expect(useFactoryStore.getState().project.productionGroups![1].parentId).toBe(id);
   });
-  it("shows internal links directly and toggles Ignore at the current scope", () => {
+  it("labels material controls by their effect and toggles rules at the current scope", () => {
     const p = fixture(); p.productionGroups = [{ id: "line", name: "Copper line" }]; p.nodes[0].productionGroupId = "line";
     p.recipes.push({ ...p.recipes[0], id: "producer", inputs: [], outputs: [{ kind: "item", id: "copper", displayName: "Copper Ingot", amount: 1 }] });
     p.nodes.push({ ...p.nodes[0], id: "producer", recipeId: "producer" });
     useFactoryStore.getState().setProject(p);
     const before = useFactoryStore.getState().project.recipes;
     render(<PoolWorksheet />);
-    const link = screen.getByRole("button", { name: "Ignore Copper Ingot in Copper line" });
-    expect(link.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByRole("checkbox", { name: "Share with parent: Copper Ingot in Copper line" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Material rules for Copper line" }));
+    const link = screen.getByRole("checkbox", { name: "Share with parent: Copper Ingot in Copper line" }) as HTMLInputElement;
+    expect(link.checked).toBe(false);
     fireEvent.click(link);
     expect(useFactoryStore.getState().project.productionGroups![0].resourceRules).toEqual({ "item:copper": "share" });
-    fireEvent.click(screen.getByRole("button", { name: "Ignore Copper Ingot in All production" }));
+    expect(link.checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Material rules for All production" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Allow outside supply of Copper Ingot in All production" }));
     expect(useFactoryStore.getState().project.poolResourceRules).toEqual({ "item:copper": "import" });
     expect(useFactoryStore.getState().project.recipes).toBe(before);
     fireEvent.click(link);
