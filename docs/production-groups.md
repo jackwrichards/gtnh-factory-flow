@@ -4,13 +4,13 @@ Pool follows the reference calculator's organization: a global **Desired product
 
 ## Using groups
 
-Choose **Add group** in All production or an existing group. Move a machine with its grip onto a group heading, including an empty or collapsed group. Drop it onto All production to move it back outside all subgroups. Empty groups have no collapse arrow until there is content to hide. A group has its own grip for moving the whole group; moving a parent into its descendants is rejected. The settings button at the right of each machine opens a popover with its labeled Group selector. The Inside selector appears only when a group has a different valid parent to choose.
+Choose **Add group** in All production or an existing group. Move a machine with its grip onto a group heading, including an empty or collapsed group. Drop it onto All production to move it back outside all subgroups. Empty groups have no collapse arrow until there is content to hide. A group has its own grip for moving the whole group; moving a parent into its descendants is rejected. The settings button at the right of each machine expands an inline Machine settings row with its labeled Group selector. The Inside selector appears only when a group has a different valid parent to choose.
 
 Group outlines show the hierarchy. Collapse hides the group's machines and nested groups while retaining its totals and Links. Search temporarily reveals collapsed machines. Delete group (the trash icon) removes only the container; machines, products and child groups move to the parent. Edits support undo.
 
 ## Compact worksheet
 
-Recipes use a compact row with bare item icons and rates. Names and full port details remain in tooltips; click/right-click still browse recipes/uses. Tier and machine count stay inline. The buttons on the right duplicate, replace, remove, and open machine settings; those settings open in a popover beside the button, dismissed with Escape or a click outside. Shared machines keep one row per recipe, with each recipe's own removal button.
+Recipes use a compact row with bare item icons and rates. Names and full port details remain in tooltips; click/right-click still browse recipes/uses. Tier and machine count stay inline. The buttons on the right duplicate, replace, remove, and open machine settings; the labeled Settings button expands those controls directly beneath the machine, with Escape or the close button to fold them back up. Shared machines keep one row per recipe, with each recipe's own removal button.
 
 Desired products uses a narrower table beside a permanent Total power breakdown. All production combines every group; Top level in the selectors refers to recipes outside named subgroups. Group power is a compact headline. Click it (or press Enter while focused) for average, peak, generation, net, and steam totals; Escape closes it. Inputs, outputs, and Links share a compact line when they contain materials. Empty groups show a single heading with a drop hint. Recipes with many ingredients wrap only their own rows. Narrow screens stack controls and keep actions on the right.
 

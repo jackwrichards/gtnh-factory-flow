@@ -322,7 +322,7 @@ describe("Pool worksheet", () => {
     expect(screen.queryByRole("button", { name: "Disable machine" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Enable machine" })).toBeNull();
   });
-  it("edits machine settings in a dismissible popover without adding a table row", () => {
+  it("edits machine settings in a clearly labeled inline dropdown", () => {
     const project = fixture();
     project.recipes[0].machineConfigControls = [
       {
@@ -340,11 +340,11 @@ describe("Pool worksheet", () => {
     const { container } = render(<PoolWorksheet />);
     expect(container.querySelector(".pool-settings-section")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Settings for Bender" }));
-    const settings = screen.getByRole("dialog", { name: "Settings for Bender" });
+    const settings = screen.getByRole("region", { name: "Machine settings for Bender" });
     fireEvent.click(within(settings).getByRole("button", { name: "Next Solenoid" }));
     expect(useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil).toBe("mv");
-    expect(container.querySelector(".pool-settings-row")).toBeNull();
-    expect(document.activeElement).toBe(settings);
+    expect(container.querySelector(".pool-settings-row")?.contains(settings)).toBe(true);
+    expect(within(settings).getByText("Machine settings")).toBeTruthy();
     expect(screen.queryByRole("columnheader", { name: "Settings" })).toBeNull();
     act(() => useFactoryStore.getState().undo());
     expect(
@@ -364,13 +364,15 @@ describe("Pool worksheet", () => {
       }),
     ).toBe(true);
     fireEvent.keyDown(settings, { key: "Escape" });
-    expect(screen.queryByRole("dialog", { name: "Settings for Bender" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Machine settings for Bender" })).toBeNull();
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Settings for Bender" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings for Bender" }));
     fireEvent.pointerDown(document.body);
-    expect(screen.queryByRole("dialog", { name: "Settings for Bender" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Machine settings for Bender" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close machine settings" }));
+    expect(screen.queryByRole("region", { name: "Machine settings for Bender" })).toBeNull();
   });
-  it("opens only the selected machine's settings popover", () => {
+  it("keeps each machine settings dropdown independently expandable", () => {
     const project = fixture();
     project.productionGroups = [{ id: "line", name: "Line" }];
     project.nodes.push({ ...project.nodes[0], id: "second" });
@@ -381,9 +383,9 @@ describe("Pool worksheet", () => {
     expect(buttons[0].getAttribute("aria-expanded")).toBe("true");
     fireEvent.pointerDown(buttons[1]);
     fireEvent.click(buttons[1]);
-    expect(buttons[0].getAttribute("aria-expanded")).toBe("false");
+    expect(buttons[0].getAttribute("aria-expanded")).toBe("true");
     expect(buttons[1].getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(screen.getAllByRole("region", { name: "Machine settings for Bender" })).toHaveLength(2);
   });
 
   it("shows desired products beside total power and an all-production summary", () => {

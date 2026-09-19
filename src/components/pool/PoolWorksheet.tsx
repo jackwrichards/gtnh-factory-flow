@@ -28,7 +28,6 @@ import { ItemPickerPopover } from "../ItemPickerPopover";
 import { TargetLine } from "../flow/StorageNode";
 import { RecipeTooltip } from "../flow/RecipeTooltip";
 import { formatSignedRate } from "../inspector/flow-rate";
-import { WorksheetSettings } from "./WorksheetSettings";
 import { WorksheetPower } from "./WorksheetPower";
 import "../inspector/panel.css";
 import { buildStatusTooltip, buildPortTooltip } from "../flow/recipe-tooltip-data";
@@ -503,15 +502,10 @@ const MachineRows = memo(function MachineRows({
 }) {
   useRateDisplayUnits();
   const { owner, machine, sections } = group;
-  const [settingsAnchor, setSettingsAnchor] = useState<{
-    x: number;
-    top: number;
-    bottom: number;
-  } | null>(null);
-  const settingsOpen = Boolean(settingsAnchor);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsButton = useRef<HTMLButtonElement>(null);
   const closeSettings = () => {
-    setSettingsAnchor(null);
+    setSettingsOpen(false);
     settingsButton.current?.focus({ preventScroll: true });
   };
   const settingsId = useId();
@@ -631,22 +625,15 @@ const MachineRows = memo(function MachineRows({
                   {settings || hasProductionGroups ? (
                     <button
                       type="button"
-                      className="pool-sheet-icon-button"
+                      className="pool-sheet-icon-button pool-settings-toggle"
                       aria-label={"Settings for " + label}
-                      title="Machine settings and group"
                       ref={settingsButton}
-                      data-worksheet-settings-anchor
-                      aria-haspopup="dialog"
                       aria-expanded={settingsOpen}
                       aria-controls={settingsId}
-                      onClick={(event) => {
-                        const box = event.currentTarget.getBoundingClientRect();
-                        setSettingsAnchor(
-                          settingsOpen ? null : { x: box.right, top: box.top, bottom: box.bottom },
-                        );
-                      }}
+                      onClick={() => setSettingsOpen((open) => !open)}
                     >
                       <Settings2 />
+                      <span>Settings</span>
                     </button>
                   ) : null}
                   {!readOnly ? (
@@ -710,32 +697,44 @@ const MachineRows = memo(function MachineRows({
           </td>
         </tr>
       ))}
-      {settingsAnchor && (settings || hasProductionGroups) ? (
-        <WorksheetSettings
-          id={settingsId}
-          label={label}
-          anchor={settingsAnchor}
-          onClose={closeSettings}
-        >
-          <strong>{label}</strong>
-          {hasProductionGroups ? (
-            <ProductionGroupSelect
-              value={owner.productionGroupId}
-              label={"Production group for " + label}
-              disabled={readOnly}
-              onChange={(id) => useFactoryStore.getState().moveToProductionGroup([owner.id], id)}
-            />
-          ) : null}
-          {settings}
-          <button
-            type="button"
-            className="pool-sheet-icon-button"
-            aria-label="Close machine settings"
-            onClick={closeSettings}
-          >
-            <X />
-          </button>
-        </WorksheetSettings>
+      {settingsOpen && (settings || hasProductionGroups) ? (
+        <tr className="pool-settings-row">
+          <td colSpan={8}>
+            <div
+              id={settingsId}
+              className="pool-settings-section"
+              role="region"
+              aria-label={"Machine settings for " + label}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.stopPropagation();
+                  closeSettings();
+                }
+              }}
+            >
+              <strong>Machine settings</strong>
+              {hasProductionGroups ? (
+                <ProductionGroupSelect
+                  value={owner.productionGroupId}
+                  label={"Production group for " + label}
+                  disabled={readOnly}
+                  onChange={(id) =>
+                    useFactoryStore.getState().moveToProductionGroup([owner.id], id)
+                  }
+                />
+              ) : null}
+              {settings}
+              <button
+                type="button"
+                className="pool-sheet-icon-button"
+                aria-label="Close machine settings"
+                onClick={closeSettings}
+              >
+                <X />
+              </button>
+            </div>
+          </td>
+        </tr>
       ) : null}
     </tbody>
   );
