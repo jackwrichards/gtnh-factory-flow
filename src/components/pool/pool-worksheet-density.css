@@ -218,9 +218,6 @@
   min-height: 0;
   height: 22px;
 }
-.pool-worksheet--dense .pool-circuit-slot [aria-label="No circuit setting"] {
-  visibility: hidden;
-}
 .pool-worksheet--dense .pool-machine-power-value {
   display: inline-flex;
   flex-wrap: wrap;
