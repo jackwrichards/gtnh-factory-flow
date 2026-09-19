@@ -212,6 +212,19 @@ describe("Pool worksheet", () => {
     expect(power.textContent).toBe(totals);
   });
 
+  it("bounds tiny target text but preserves the exact amount when editing", () => {
+    const project = fixture();
+    project.storages![0].targetPerSecond = 0.000000084;
+    useFactoryStore.getState().setProject(project);
+    render(<PoolWorksheet />);
+    const target = screen.getByRole("button", { name: "Required amount" });
+    expect(target.textContent).toContain("<.00001");
+    fireEvent.click(target);
+    const field = screen.getByRole("textbox", { name: "Required amount" }) as HTMLInputElement;
+    expect(Number(field.value)).toBe(0.000000084);
+    fireEvent.blur(field);
+    expect(useFactoryStore.getState().project.storages![0].targetPerSecond).toBe(0.000000084);
+  });
   it("drags a recipe item into Products using the normal drawer action and undo", () => {
     const { container } = render(<PoolWorksheet />);
     const row = container.querySelector('[data-worksheet-node="machine"]') as HTMLElement;

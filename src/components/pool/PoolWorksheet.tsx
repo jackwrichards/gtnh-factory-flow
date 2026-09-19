@@ -16,7 +16,7 @@ import {
 } from "react";
 import { ChevronDown, Copy, Plus, RefreshCw, Search, Settings2, Trash2, X } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
-import { formatPowerValue, resourceLabel, isCropProductionRecipe } from "@/lib/model";
+import { resourceLabel, isCropProductionRecipe } from "@/lib/model";
 import { isCustomRateRecipe } from "@/lib/model/custom-rate";
 import { type MachineListEntry } from "@/lib/model/machine-list";
 import type { ResourceAmount, FactoryStorage, ProductionGroup } from "@/lib/model/types";
@@ -28,14 +28,11 @@ import { CircuitChip, RecipeNodeEditor, SolvedMachinesStat } from "../flow/Recip
 import { ItemPickerPopover } from "../ItemPickerPopover";
 import { TargetLine } from "../flow/StorageNode";
 import { RecipeTooltip } from "../flow/RecipeTooltip";
-import { formatSignedRate } from "../inspector/flow-rate";
+import { formatPoolPowerValue as formatPowerValue, formatPoolEnergyPerUnitParts as formatEnergyPerUnitParts, formatPoolRate as formatSlotRate, formatPoolRateBare as formatSlotRateBare, formatPoolSignedRate as formatSignedRate } from "./worksheet-format";
 import { WorksheetPower } from "./WorksheetPower";
 import "../inspector/panel.css";
 import { buildStatusTooltip, buildPortTooltip } from "../flow/recipe-tooltip-data";
 import {
-  formatEnergyPerUnitParts,
-  formatSlotRate,
-  formatSlotRateBare,
   portReadsEnergy,
 } from "../flow/flow-explainers";
 import type { RailPort } from "../flow/node-verdict";
@@ -1056,7 +1053,7 @@ function Product({ storage }: { storage: FactoryStorage }) {
               : formatSlotRate(storage.targetPerSecond, storage.kind)}
           </span>
         ) : (
-          <TargetLine storage={storage} result={result} />
+          <TargetLine storage={storage} result={result} formatDisplayRate={formatSlotRate} />
         )}
         </div>
       </td>

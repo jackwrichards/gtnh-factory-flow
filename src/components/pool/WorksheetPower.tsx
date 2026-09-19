@@ -1,8 +1,8 @@
 import type { MachineListEntry } from "@/lib/model/machine-list";
-import { formatPowerValue } from "@/lib/model/resources";
+import { formatPoolPowerValue as formatPowerValue } from "./worksheet-format";
 import { powerDisplayFromEuT, powerDisplaySuffix, rateSuffixForKind } from "@/lib/model/rate-unit";
 import { Zap } from "lucide-react";
-import { formatSlotRateBare } from "../flow/flow-explainers";
+import { formatPoolRateBare as formatSlotRateBare } from "./worksheet-format";
 
 /** Compact headline with the same complete average/peak breakdown available by click, keyboard, or touch. */
 export function WorksheetPower({

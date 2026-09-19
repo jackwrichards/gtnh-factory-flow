@@ -6,7 +6,7 @@ import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
 import type { ProductionGroup, ResourceAmount } from "@/lib/model/types";
 import type { getPoolGroupResources } from "@/lib/solver/pool-mode";
-import { formatSlotRateBare } from "../flow/flow-explainers";
+import { formatPoolRateBare as formatSlotRateBare } from "./worksheet-format";
 import { rateSuffixForKind } from "@/lib/model/rate-unit";
 import { useWorksheetPointerDrag } from "./worksheet-pointer-drag";
 
@@ -97,7 +97,7 @@ export function ProductionScopeHeader({
   }
   const direction = (entry: { input: number; output: number }) => {
     const net = entry.output - entry.input;
-    return net < -1e-6 ? 0 : net > 1e-6 ? 1 : 2;
+    return net < 0 ? 0 : net > 0 ? 1 : 2;
   };
   const needle = materialQuery.trim().toLowerCase();
   const filteredMaterials = [...materials.entries()]
@@ -238,7 +238,7 @@ export function ProductionScopeHeader({
                 {entries.map(([key, { resource, row, input, output }]) => {
                   const material = resource.displayName ?? resource.id;
                   const net = output - input;
-                  const sign = Math.abs(net) <= 1e-6 ? 0 : Math.sign(net);
+                  const sign = Math.sign(net);
                   const rate = formatSlotRateBare(sign ? Math.abs(net) : 0, resource.kind);
                   const unit = rateSuffixForKind(resource.kind).trim();
                   return <div className="pool-scope-material" key={key} data-material-key={key}>
@@ -248,14 +248,14 @@ export function ProductionScopeHeader({
                         title={"Input: " + formatSlotRateBare(input, resource.kind) + unit + "; output: " + formatSlotRateBare(output, resource.kind) + unit}>
                         <strong>{sign < 0 ? "−" : sign > 0 ? "+" : ""}{rate}</strong><small>{unit}</small>
                       </span>
-                    {row ? <select className="pool-material-rule" data-auto={!row.rule || undefined} aria-label={(group ? "Sharing for " : "Supply for ") + material + " in " + name}
+                    {row ? <span className="pool-material-rule-control" data-auto={!row.rule || undefined}><select className="pool-material-rule" data-auto={!row.rule || undefined} aria-label={(group ? "Sharing for " : "Supply for ") + material + " in " + name}
                       title={ruleHelp} value={row.rule ?? "auto"} disabled={readOnly}
                       onChange={(event) => useFactoryStore.getState().setPoolResourceRule(group?.id, row.key, event.target.value === "auto" ? undefined : event.target.value === "share" ? "share" : "import")}>
                       <option value="auto">Auto</option>
                       {group ? <option value="share">Share with parent</option> : <option value="import">Import anyway</option>}
                       {group && row.rule === "import" ? <option value="import">Outside supply</option> : null}
                       {!group && row.rule === "share" ? <option value="share">Import anyway</option> : null}
-                    </select> : <span className="pool-material-inherited" title="This total includes a child group's local material. Change its rule in that group.">Within groups</span>}
+                    </select><ChevronDown size={8} aria-hidden /></span> : <span className="pool-material-inherited" title="This total includes a child group's local material. Change its rule in that group.">Within groups</span>}
                   </div>;
                 })}
                       </div></td>

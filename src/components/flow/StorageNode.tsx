@@ -702,10 +702,10 @@ function rateFitClass(label: string, role: StorageRole, width = NET_LINE_WIDTH_B
 }
 
 /** The tile's one line of news: the net rate, sized to fit its silhouette. */
-function NetLine({ net, kind, role, width }: { net: number; kind: string; role: StorageRole; width?: number }) {
+function NetLine({ net, kind, role, width, formatRate = formatCompactRate }: { net: number; kind: string; role: StorageRole; width?: number; formatRate?: (value: number, kind: string) => string }) {
   // The fit class and the colour read the TARGET value: the size and tone
   // land immediately, and only the digits ease their way there.
-  const label = `${net >= 0 ? "+" : ""}${formatCompactRate(net, kind)}`;
+  const label = `${net >= 0 ? "+" : ""}${formatRate(net, kind)}`;
   return (
     <div
       className={[
@@ -720,7 +720,7 @@ function NetLine({ net, kind, role, width }: { net: number; kind: string; role: 
         values={[net]}
         render={(shown) => {
           const value = shown[0] ?? net;
-          return `${value >= 0 ? "+" : ""}${formatCompactRate(value, kind)}`;
+          return `${value >= 0 ? "+" : ""}${formatRate(value, kind)}`;
         }}
       />
     </div>
@@ -772,9 +772,11 @@ function parseAmountWithSuffix(text: string): number | undefined {
 export function TargetLine({
   storage,
   result,
+  formatDisplayRate,
 }: {
   storage: FactoryStorage;
   result: StorageThroughputResult | undefined;
+  formatDisplayRate?: (value: number, kind: string) => string;
 }) {
   const setStorageTarget = useFactoryStore((state) => state.setStorageTarget);
   const [editing, setEditing] = useState(false);
@@ -789,7 +791,9 @@ export function TargetLine({
   const beginEdit = () => {
     setDraft(
       target !== undefined && (target > 0 || (signed && target < 0) || showZero)
-        ? formatAmountWithSuffix(target * rateMultiplierForKind(storage.kind))
+        ? formatDisplayRate && Math.abs(target * rateMultiplierForKind(storage.kind)) < 1
+          ? (target * rateMultiplierForKind(storage.kind)).toLocaleString("en-US", { useGrouping: false, maximumSignificantDigits: 21 })
+          : formatAmountWithSuffix(target * rateMultiplierForKind(storage.kind))
         : "",
     );
     setEditing(true);
@@ -847,7 +851,7 @@ export function TargetLine({
             tile's bottom edge instead of merging with it. */}
         <div className="relative -translate-y-[2px] underline decoration-dotted decoration-[1.5px] underline-offset-[3px]">
           {target !== undefined && (target > 0 || (signed && target < 0) || showZero) ? (
-            <NetLine net={target} kind={storage.kind} role="product" />
+            <NetLine net={target} kind={storage.kind} role="product" formatRate={formatDisplayRate} />
           ) : (
             <div
               className={[
