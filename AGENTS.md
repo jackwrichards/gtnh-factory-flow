@@ -1834,8 +1834,11 @@ Working notes for future agents on GTNH Factory Flow.
 ## Pool Production Groups
 
 - The UI follows the reference: global Desired products, Factory grand total, nested group
-  totals side by side. Optional Sharing rules / Supply rules buttons reveal a bounded,
-  searchable grid (24 entries per page). Automatic uses a producer when present, else
+  totals in one always-visible material strip: icon, signed net rate, and supply/sharing
+  selector. Red negative is input; green positive is output; gray zero is no net flow.
+  Gross input/output remain on the rate tooltip. The strip uses the available width
+  with bounded height, search, and 24 entries per page. Child-local totals without
+  a parent material row keep their controls in the child. Automatic uses a producer when present, else
   imports; Import anyway permits imports alongside production. Share with parent is
   the group-level Ignore rule. There is no general never-import rule. Do not restore separate Resources/Materials panels or three-way rule selects.
   Group headings accept machine/group pointer drops, even when empty or collapsed. Group

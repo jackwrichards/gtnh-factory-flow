@@ -822,24 +822,22 @@
   .pool-target-rule { flex: none; height: 18px; }
 }
 
-/* Scope summaries show totals; optional supply overrides stay behind one control. */
-.pool-worksheet--dense .pool-rules-toggle { width: auto; gap: 4px; padding: 0 4px; font-size: 9px; border-color: transparent; }
-.pool-worksheet--dense .pool-rules-toggle[aria-expanded="true"] { color: #adc7ff; background: #6f9cff18; }
-.pool-flow-summary { display: flex; flex-wrap: wrap; align-items: stretch; gap: 3px 8px; margin-bottom: 2px; }
-.pool-flow-table { width: auto; max-width: 100%; border-collapse: separate; border-spacing: 0; flex: 0 1 auto; background: #6f9cff0d; }
-.pool-flow-table th { padding: 0 6px; text-align: left; vertical-align: middle; font-size: 10px; font-weight: 400; color: var(--mc-ink-muted); }
-.pool-flow-table th > span { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-.pool-flow-table td { padding: 1px 6px 1px 0; }
-.pool-flow-items > .pool-sheet-muted { line-height: 29px; }
-.pool-worksheet--dense .pool-flow-items { min-height: 29px; max-width: 560px; max-height: 66px; overflow: auto; overscroll-behavior: contain; }
-.pool-worksheet--dense .pool-material-rules { margin: 3px 0; padding: 4px 6px; border: 1px solid #ffffff18; background: #00000012; }
-.pool-rules-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 4px; }
-.pool-rules-toolbar p { margin: 0; font-size: 10px; color: var(--mc-ink-muted); flex: 1 1 320px; }
+/* One material strip combines net flow and the rule at this scope. */
+.pool-scope-materials { margin-bottom: 2px; }
+.pool-material-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 10px; min-height: 18px; margin-bottom: 2px; }
+.pool-material-legend { margin-right: auto; font-size: 9px; color: var(--mc-ink-muted); }
+.pool-material-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 116px), 1fr)); gap: 3px 6px; max-height: 120px; overflow: auto; overscroll-behavior: contain; }
+.pool-scope-material { min-width: 0; padding: 2px 5px; background: #6f9cff0d; }
+.pool-material-amount { display: flex; align-items: center; gap: 6px; min-height: 20px; }
+.pool-material-amount .pool-resource-link { flex: 0 0 18px; height: 18px; justify-content: center; }
+.pool-material-rate { white-space: nowrap; font: 9px/11px var(--app-font); font-variant-numeric: tabular-nums; }
+.pool-material-rate strong { font-weight: 600; }
+.pool-material-rate small { margin-left: 2px; font-size: 7px; color: var(--mc-ink-muted); }
+.pool-material-rule { display: block; width: 100%; height: 17px; padding: 0; border: 0; border-bottom: 1px dotted #ffffff20; background: transparent; color: var(--mc-ink-muted); font: 9px var(--app-font); cursor: pointer; }
+.pool-material-rule option { background: var(--surface, #24272c); color: var(--mc-ink); }
+.pool-material-rule:focus-visible { outline: 1px solid #adc7ff; }
+.pool-material-rule:disabled { cursor: default; }
+.pool-material-inherited { display: block; height: 17px; font: 9px/17px var(--app-font); color: var(--mc-ink-muted); }
 .pool-rule-search { width: 150px; min-width: 80px; height: 20px; padding: 0 5px; font-size: 10px; background: #0002; border: 1px solid #ffffff18; }
 .pool-rule-pages { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--mc-ink-muted); white-space: nowrap; }
 .pool-rule-pages button:disabled { opacity: .3; cursor: default; }
-.pool-rule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 2px 12px; max-height: 144px; overflow: auto; overscroll-behavior: contain; }
-.pool-rule-entry { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; min-height: 22px; border-bottom: 1px solid #ffffff08; font-size: 10px; }
-.pool-rule-material { display: flex; align-items: center; gap: 5px; min-width: 0; }
-.pool-rule-material > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pool-rule-entry select { width: 108px; flex: 0 0 108px; height: 20px; padding: 0 3px; background: var(--surface, #24272c); border: 1px solid #ffffff18; color: var(--mc-ink); font: inherit; }
