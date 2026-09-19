@@ -1267,18 +1267,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
     const controls = (
       <fieldset disabled={editorLocked} className="pool-machine-editor min-w-0 border-0 p-0 text-[var(--mc-ink)]">
         <div className="pool-editor-controls pool-editor-heading">
-          <div className="relative min-w-0">
-            <button type="button" data-machine-menu-toggle className="pool-sheet-button"
-              disabled={!hasMachinePicker && !canShareMachine && !mayHaveTwins}
-              onClick={() => setCompareOpen((open) => !open)} aria-expanded={isCompareOpen}>
-              <span className="pool-machine-title" title={machineDisplayName}>{machineDisplayName}</span><ChevronDown className="h-3 w-3 shrink-0" />
-            </button>
-            {isCompareOpen ? <MachineMenu recipe={recipe} node={projectNode} handlers={machineHandlers}
-              selectedId={selectedMachineHandler.id} iconsById={machineIcons} onHover={setPreviewHandlerId}
-              onUse={updateMachineHandler} onClose={() => setCompareOpen(false)}
-              twins={isSharedMachine ? undefined : twins} mapIcons={recipeMapIcons} onUseTwin={useTwin}
-              figures={!isSharedMachine} onAddRecipe={canShareMachine ? () => { setCompareOpen(false); browseMachineRecipes(projectNode.id); } : undefined} /> : null}
-          </div>
+          <span className="pool-machine-title" title={machineDisplayName}>{machineDisplayName}</span>
           <div className="pool-editor-power">
           {powerInfo ? <PowerTierChip nodeId={projectNode.id} sourceId={powerInfo.sourceId} values={projectNode.machineConfigTiers} /> : null}
           {cropTierControl && !tierControl && !powerInfo ? <CropTierChip control={cropTierControl} onPick={(key) => updateMachineConfigTier(cropTierControl.id, key)} /> : null}
@@ -1300,7 +1289,23 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
         {isCustomRateNode && customRateDial ? <CustomRatePanel nodeId={projectNode.id} mode={customRateDial.mode} kind={customRateSlot?.resource.kind ?? "item"} perSecond={customRateDial.perSecond} /> : null}
       </fieldset>
     ) : null;
-    return renderEditor ? renderEditor(controls, hasPowerPicture ? <PowerStructureWindow art={powerArt} icon={powerMachineIcon ?? previewMachineIcon} inline bare /> : null, settings) : <>{controls}{settings}</>;
+    const picture = (
+      <div className="pool-machine-chooser" data-machine-editor-anchor>
+        <button type="button" data-machine-menu-toggle className="pool-machine-icon-button"
+          aria-label={`Change machine: ${machineDisplayName}`} aria-expanded={isCompareOpen} aria-haspopup="listbox"
+          disabled={editorLocked || (!hasMachinePicker && !canShareMachine && !mayHaveTwins)}
+          onClick={() => setCompareOpen((open) => !open)}>
+          {hasPowerPicture ? <PowerStructureWindow art={powerArt} icon={powerMachineIcon ?? previewMachineIcon} inline bare /> : <Cpu size={22} />}
+          <RefreshCw className="pool-machine-swap" aria-hidden="true" />
+        </button>
+        {isCompareOpen ? <MachineMenu recipe={recipe} node={projectNode} handlers={machineHandlers}
+          selectedId={selectedMachineHandler.id} iconsById={machineIcons} onHover={setPreviewHandlerId}
+          onUse={updateMachineHandler} onClose={() => setCompareOpen(false)}
+          twins={isSharedMachine ? undefined : twins} mapIcons={recipeMapIcons} onUseTwin={useTwin}
+          figures={!isSharedMachine} onAddRecipe={canShareMachine ? () => { setCompareOpen(false); browseMachineRecipes(projectNode.id); } : undefined} /> : null}
+      </div>
+    );
+    return renderEditor ? renderEditor(controls, picture, settings) : <>{picture}{controls}{settings}</>;
   }
 
   // Outputs end in coupling chips at the node's right edge — inside the

@@ -242,7 +242,7 @@ export function MachineMenu({
       const scale = getUiScale();
       const barRect = bar.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();
-      const width = Math.max(480 * scale, Math.round(cardRect.width));
+      const width = Math.min(window.innerWidth - 16, Math.max(480 * scale, Math.round(cardRect.width)));
       const left = Math.max(8, Math.min(Math.round(cardRect.left), window.innerWidth - width - 8));
       // The list's height before it exists: one row per machine, capped
       // where the panel starts scrolling.
@@ -321,6 +321,8 @@ export function MachineMenu({
     fade: true,
   });
 
+  const narrow = anchorAt !== undefined && anchorAt.width < 440;
+  const rowColumns = narrow ? "36px minmax(0,1fr) minmax(0,1fr)" : "36px minmax(0,1fr) 72px 112px";
   const menu = anchorAt ? (
     <div
       ref={rootRef}
@@ -356,10 +358,10 @@ export function MachineMenu({
               "grid w-full items-center gap-x-4 px-3 py-2 text-left text-[17px] leading-[24px]",
               active ? "bg-[var(--mc-71)] text-white" : "text-[var(--mc-ink)] hover:bg-[var(--mc-61)] hover:text-white",
             ].join(" ")}
-            style={{ gridTemplateColumns: "36px minmax(0,1fr) 72px 112px" }}
+            style={{ gridTemplateColumns: rowColumns, columnGap: narrow ? 8 : undefined }}
           >
             {/* Bare art, no slot chrome: the list is a menu, not a crafting grid. */}
-            <span className="flex h-9 w-9 items-center justify-center">
+            <span className="flex h-9 w-9 items-center justify-center" style={{ gridRow: narrow ? "span 2" : undefined }}>
               {icon ? (
                 <ResourceIcon
                   resource={{ ...icon, amount: 1 }}
@@ -372,7 +374,7 @@ export function MachineMenu({
                 />
               ) : null}
             </span>
-            <span title={handler.label} className={getFusionMachine(handler.machineType) ? "min-w-0 whitespace-normal" : "min-w-0 truncate"}>{handler.label}</span>
+            <span title={handler.label} style={narrow ? { gridColumn: "2 / 4", whiteSpace: "normal", overflowWrap: "anywhere" } : undefined} className={getFusionMachine(handler.machineType) ? "min-w-0 whitespace-normal" : "min-w-0 truncate"}>{handler.label}</span>
             {figures ? <DurationFigure seconds={stats.seconds} /> : <span />}
             {figures ? <Figure value={power.value} unit={power.unit} dim={power.unit === ""} /> : <span />}
           </button>
@@ -403,9 +405,9 @@ export function MachineMenu({
                     onUseTwin?.(twin);
                   }}
                   className="grid w-full items-center gap-x-4 px-3 py-2 text-left text-[17px] leading-[24px] text-[var(--mc-ink)] hover:bg-[var(--mc-61)] hover:text-white"
-                  style={{ gridTemplateColumns: "36px minmax(0,1fr) 72px 112px" }}
+                  style={{ gridTemplateColumns: rowColumns, columnGap: narrow ? 8 : undefined }}
                 >
-                  <span className="flex h-9 w-9 items-center justify-center">
+                  <span className="flex h-9 w-9 items-center justify-center" style={{ gridRow: narrow ? "span 2" : undefined }}>
                     {icon ? (
                       <ResourceIcon
                         resource={{ ...icon, amount: 1 }}
@@ -418,7 +420,7 @@ export function MachineMenu({
                       />
                     ) : null}
                   </span>
-                  <span className="min-w-0 truncate">
+                  <span className="min-w-0 truncate" style={narrow ? { gridColumn: "2 / 4", whiteSpace: "normal", overflowWrap: "anywhere" } : undefined}>
                     {twin.handler.label}
                     {showMap ? (
                       <span className="ml-2 text-[13px] text-[var(--mc-ink-muted)]">{twin.recipe.recipeMap}</span>
@@ -446,7 +448,7 @@ export function MachineMenu({
           className="mx-3 mt-1.5 flex w-[calc(100%-24px)] items-center gap-4 border-t-2 border-[var(--mc-33)] px-0 py-2 pt-3 text-left text-[17px] leading-[24px] text-[var(--mc-ink)] hover:bg-[var(--mc-61)] hover:text-white"
         >
           <span className="flex h-9 w-9 items-center justify-center text-[24px] font-black leading-none">+</span>
-          <span className="min-w-0 truncate">Add another recipe to this machine</span>
+          <span className="min-w-0 whitespace-normal">Add another recipe to this machine</span>
         </button>
       ) : null}
     </div>

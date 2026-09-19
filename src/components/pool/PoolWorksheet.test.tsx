@@ -415,6 +415,25 @@ describe("Pool worksheet", () => {
     expect(JSON.parse(localStorage.getItem("gtnh-factory-flow-workspace-view")!)).toEqual(DEFAULT_WORKSPACE_VIEW);
   });
 
+  it("edits a negative input goal, keeps its sign on reopening, and supports undo", () => {
+    const project = fixture();
+    project.storages![0] = { ...project.storages![0], resourceId: "copper", displayName: "Copper Ingot", targetPerSecond: undefined };
+    useFactoryStore.getState().setProject(project);
+    const { container } = render(<PoolWorksheet />);
+    fireEvent.click(screen.getByRole("button", { name: "Required amount" }));
+    const input = screen.getByRole("textbox", { name: "Required amount" });
+    fireEvent.change(input, { target: { value: "-2k" } });
+    fireEvent.blur(input);
+    expect(useFactoryStore.getState().project.storages?.[0].targetPerSecond).toBe(-2000);
+    expect(useFactoryStore.getState().lastResult.nodes.machine.theoreticalMachinesRequired).toBeCloseTo(2000);
+    expect(container.querySelector(".pool-product .pool-balance-rate")?.textContent).toContain("−2k");
+    fireEvent.click(screen.getByRole("button", { name: "Required amount" }));
+    expect((screen.getByRole("textbox", { name: "Required amount" }) as HTMLInputElement).value).toBe("-2k");
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Required amount" }), { key: "Escape" });
+    act(() => useFactoryStore.getState().undo());
+    expect(useFactoryStore.getState().project.storages?.[0].targetPerSecond).toBeUndefined();
+  });
+
   it("edits the real product target and supports undo", () => {
     render(<PoolWorksheet />);
     fireEvent.click(screen.getByRole("button", { name: "Required amount" }));

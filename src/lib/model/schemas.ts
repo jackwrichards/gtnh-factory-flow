@@ -396,7 +396,7 @@ export const factoryStorageSchema = z.object({
   // Pool mode: which side of the shared pool an unwired drawer sits on.
   poolSide: z.enum(["source", "drain"]).optional(),
   // Solve mode's requirement on a product drawer; absent = unconstrained.
-  targetPerSecond: z.number().nonnegative().optional(),
+  targetPerSecond: z.number().finite().optional(),
   pocketId: z.string().min(1).optional(),
   position: z.object({
     x: z.number(),

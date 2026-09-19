@@ -87,6 +87,12 @@ export function buildStorageTooltip(
       break;
     case "product": {
       const target = storage.targetPerSecond;
+      if (mode === "pool" && target !== undefined && target < 0) {
+        view.subtitle = "Input goal";
+        view.rows = [{ label: "Consume", value: rate(-target) }, { label: "Consumed", value: rate(outRate) }];
+        if (figures.targetUnreachable) view.reason = "No machine count consumes the requested input amount.";
+        break;
+      }
       const hasTarget = mode !== "build" && target !== undefined && target > 0;
       if (hasTarget) view.rows.push({ label: "Required", value: rate(target) });
       view.rows.push({ label: "Produced", value: rate(inRate) });
@@ -123,11 +129,12 @@ export function buildStorageTooltip(
 export function buildTargetTooltip(storage: FactoryStorage, figures: StorageThroughputResult | undefined): RecipeTooltipView {
   const target = storage.targetPerSecond;
   const rate = (value: number) => formatSlotRate(value, storage.kind);
-  const rows = target !== undefined && target > 0 ? [{ label: "Required", value: rate(target) }] : [];
+  const input = target !== undefined && target < 0;
+  const rows = target ? [{ label: input ? "Consume" : "Required", value: rate(Math.abs(target)) }] : [];
   if (figures?.targetUnreachable && figures.producedPerSecond >= 0) {
-    rows.push({ label: "Reachable", value: rate(figures.producedPerSecond) });
+    rows.push({ label: "Reachable", value: rate(input ? figures.consumedPerSecond : figures.producedPerSecond) });
   }
-  return { title: "Required amount", rows, actions: [{ gesture: "left", label: "Edit amount" }] };
+  return { title: input ? "Input goal" : "Required amount", rows, actions: [{ gesture: "left", label: "Edit amount" }] };
 }
 
 const NEXT_ACTION = (next: string): TooltipAction[] => [{ gesture: "left", label: `Switch to ${next}` }];

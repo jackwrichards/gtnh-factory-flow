@@ -494,7 +494,7 @@ export function hasAnySolveNumbers(project: FactoryProject): boolean {
   return (
     (project.storages ?? []).some(
       (storage) =>
-        (storage.targetPerSecond ?? 0) > 0 &&
+        ((storage.targetPerSecond ?? 0) > 0 || (project.poolMode && (storage.targetPerSecond ?? 0) < 0)) &&
         // A byproduct or trash drawer's number is DORMANT (typed while it
         // was a product, kept for the flip back): it asks nothing, so it
         // must not silence the needs-a-number notice.
@@ -526,7 +526,8 @@ function finalizeSolveModeResult(
   const targets = projectStorages
     .filter(
       (storage) =>
-        roles.get(storage.id) === "product" && (storage.targetPerSecond ?? 0) > 0,
+        (roles.get(storage.id) === "product" && (storage.targetPerSecond ?? 0) > 0) ||
+        (project.poolMode && roles.get(storage.id) === "source" && (storage.targetPerSecond ?? 0) < 0),
     )
     .map((storage) => ({
       storageId: storage.id,
@@ -607,7 +608,7 @@ function finalizeSolveModeResult(
 
   for (const storage of projectStorages) {
     const result = storages[storage.id];
-    if (!result || roles.get(storage.id) !== "product") {
+    if (!result || (roles.get(storage.id) !== "product" && !(project.poolMode && (storage.targetPerSecond ?? 0) < 0))) {
       continue;
     }
     result.targetPerSecond = storage.targetPerSecond;
@@ -617,7 +618,7 @@ function finalizeSolveModeResult(
         id: `solve-target:${storage.id}`,
         kind: "resource-deficit",
         severity: "critical",
-        message: `${storage.displayName ?? storage.resourceId}: no chain can make ${storage.targetPerSecond?.toFixed(2)}/s.`,
+        message: `${storage.displayName ?? storage.resourceId}: no chain can ${storage.targetPerSecond! < 0 ? "consume" : "make"} ${Math.abs(storage.targetPerSecond ?? 0).toFixed(2)}/s at these targets.`,
       });
     }
   }

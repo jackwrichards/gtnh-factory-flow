@@ -239,6 +239,7 @@ export function PoolWorksheet() {
         />
         {!collapsed ? (
           <>
+            {visible.some((entry) => entry.owner.productionGroupId === group?.id) ? <ColumnHeadings /> : null}
             {visible
               .filter((entry) => entry.owner.productionGroupId === group?.id)
               .map(renderMachine)}
@@ -316,7 +317,7 @@ export function PoolWorksheet() {
               <div className="pool-desired-products">
                 <ProductsPane id={`${summaryId}-products`}>
                   <div className="pool-products-heading">
-                    <h3>Desired products</h3>
+                    <h3>Desired products</h3><span className="pool-target-hint">+ output · − input</span>
                     {!readOnly ? <AddPoolProduct /> : null}
                   </div>
                   <div className="pool-products-scroll">
@@ -327,8 +328,8 @@ export function PoolWorksheet() {
                       <thead>
                         <tr>
                           <th>Name</th>
-                          <th>Target</th>
-                          <th>Supplied</th>
+                          <th>Target (±)</th>
+                          <th>Actual</th>
                           <th>
                             <span className="sr-only">Actions</span>
                           </th>
@@ -355,6 +356,12 @@ export function PoolWorksheet() {
                   : "Calculating… Showing the previous results."}
               </p>
             ) : null}
+            <div className="pool-machine-toolbar">
+              <label className="pool-sheet-search"><Search className="h-3.5 w-3.5" />
+                <input aria-label="Filter worksheet" placeholder="Search machines or items" value={query} onChange={(event) => setQuery(event.target.value)} />
+              </label>
+              <span className="pool-chooser-hint">Change machine: click its icon</span>
+            </div>
             <table className="pool-sheet-table" aria-label="Recipes running in the pool">
               <colgroup>
                 <col className="pool-col-picture" />
@@ -366,36 +373,6 @@ export function PoolWorksheet() {
                 <col className="pool-col-io" />
                 <col className="pool-col-actions" />
               </colgroup>
-              <thead>
-                <tr>
-                  <th>
-                    <span className="sr-only">Machine picture</span>
-                  </th>
-                  <th>
-                    <label className="pool-sheet-search">
-                      <Search className="h-3.5 w-3.5" />
-                      <input
-                        aria-label="Filter worksheet"
-                        placeholder="Search machines or items"
-                        value={query}
-                        onChange={(event) => setQuery(event.target.value)}
-                      />
-                    </label>
-                  </th>
-                  <th>
-                    <span className="sr-only">Status</span>
-                  </th>
-                  <th>
-                    <span className="sr-only">Circuit</span>
-                  </th>
-                  <th>Power</th>
-                  <th>Takes</th>
-                  <th>Makes</th>
-                  <th>
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
               {renderScope()}
             </table>
             {!shown.length ? (
@@ -776,16 +753,15 @@ function CollapsedPorts({
   );
 }
 
+function ColumnHeadings() {
+  return <tbody className="pool-column-headings"><tr>
+    <th colSpan={2} scope="col">Machine <span>· tier · count</span></th>
+    <th scope="col">Status</th><th scope="col">Circuit</th><th scope="col">Power</th>
+    <th scope="col">Takes</th><th scope="col">Makes</th><th scope="col">Actions</th>
+  </tr></tbody>;
+}
+
 function Status({ section }: { section: WorksheetSection }) {
-  const labels: Record<string, string> = {
-    balanced: "Running",
-    "demand-set": "On demand",
-    paced: "Paced",
-    off: "Disabled",
-    "no-recipe": "Missing recipe",
-    "dead-loop": "Dead loop",
-    "clog-lock": "Clog lock",
-  };
   return (
     <MinecraftTooltip
       content={() => <RecipeTooltip view={buildStatusTooltip(section.verdict, "pool")} />}
@@ -795,7 +771,7 @@ function Status({ section }: { section: WorksheetSection }) {
       >
         {section.result?.powerStalled
           ? "Power stalled"
-          : (labels[section.verdict.kind] ?? section.verdict.kind)}
+          : buildStatusTooltip(section.verdict, "pool").title}
       </span>
     </MinecraftTooltip>
   );
@@ -1061,7 +1037,7 @@ function Product({ storage }: { storage: FactoryStorage }) {
         {result?.targetUnreachable ? (
           "Unreachable"
         ) : (
-          <BalanceRate value={result?.producedPerSecond ?? 0} kind={storage.kind} sign={0} />
+          <BalanceRate value={(storage.targetPerSecond ?? 0) < 0 ? (result?.consumedPerSecond ?? 0) : (result?.producedPerSecond ?? 0)} kind={storage.kind} sign={(storage.targetPerSecond ?? 0) < 0 ? -1 : 0} />
         )}
       </td>
       <td>

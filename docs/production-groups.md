@@ -10,7 +10,7 @@ Group outlines show the hierarchy. Collapse hides the group's machines and neste
 
 ## Compact worksheet
 
-Recipes use a compact row with bare item icons and rates. Names and full port details remain in tooltips; click/right-click still browse recipes/uses. Tier and machine count stay inline. The buttons on the right duplicate, replace, remove, and open machine settings; the labeled Settings button expands those controls directly beneath the machine, with Escape or the close button to fold them back up. Shared machines keep one row per recipe, with each recipe's own removal button.
+Recipes use a compact row with bare item icons and rates. Names and full port details remain in tooltips; click/right-click still browse recipes/uses. Tier and machine count stay inline. Click the machine icon to choose a different machine; its swap mark and the visible Change machine hint indicate the action. Column labels sit below each populated group heading, with subtle dividers and full status reasons. The buttons on the right duplicate, replace, remove, and open machine settings; the labeled Settings button expands those controls directly beneath the machine, with Escape or the close button to fold them back up. Shared machines keep one row per recipe, with each recipe's own removal button.
 
 Desired products uses a narrower table beside a permanent Total power breakdown. All production combines every group; Top level in the selectors refers to recipes outside named subgroups. Group power is a compact headline. Click it (or press Enter while focused) for average, peak, generation, net, and steam totals; Escape closes it. Inputs, outputs, and Links share a compact line when they contain materials. Empty groups show a single heading with a drop hint. Recipes with many ingredients wrap only their own rows. Narrow screens stack controls and keep actions on the right.
 
@@ -33,7 +33,7 @@ Desired products are global requests, like the reference. Group inputs and outpu
 
 Existing plans from the earlier group interface retain scoped targets and direct outside-supply policies. A scoped target is labeled in Desired products and has a **Make global** action. A saved direct-supply link is explicitly labeled **Ignore · outside supply**. New Ignore clicks inside groups always use parent sharing.
 
-Surplus remains allowed automatically. Local surplus stays in that group's pool and appears in totals; it does not silently satisfy another group's demand. Ignore the local match to make that material available to the parent. Negative products remain a separate follow-up.
+Surplus remains allowed automatically. Local surplus stays in that group's pool and appears in totals; it does not silently satisfy another group's demand. Ignore the local match to make that material available to the parent. The Target (±) column accepts positive output goals and negative input goals. For example, −100/s of ore sizes the line to consume exactly 100 ore per second of fresh input; recycled ore is additional circulation, not fresh supply. Actual uses the same sign. Positive outputs remain minimums and can exceed their goals. A finite input goal takes precedence over Ignore imports at its receiving pool and cannot be satisfied by banking unused input. Impossible or conflicting goals are reported. Targets preserve their group scope; negative goals remain saved but inactive outside Pool.
 
 ## Saved data and implementation
 

@@ -800,3 +800,49 @@
     grid-column: 2;
   }
 }
+/* Readable worksheet columns; headings belong to the scope they describe. */
+.pool-worksheet--dense .pool-col-status { width: 112px; }
+.pool-worksheet--dense .pool-col-circuit { width: 42px; }
+.pool-worksheet--dense .pool-column-headings > tr { height: 20px; }
+.pool-worksheet--dense .pool-column-headings th {
+  padding: 2px 4px;
+  font: 10px/14px var(--app-font);
+  color: var(--mc-ink-muted);
+  text-align: left;
+  border-bottom: 1px solid #ffffff10;
+}
+.pool-column-headings th:first-child { padding-left: 24px; }
+.pool-column-headings th span { opacity: .7; }
+.pool-worksheet--dense .pool-column-headings th + th,
+.pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr > td:not(.pool-picture-cell):not(.pool-machine-cell) {
+  border-left: 1px solid #ffffff09;
+}
+.pool-machine-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 20px; padding: 3px 5px; }
+.pool-machine-toolbar .pool-sheet-search { flex: 0 1 290px; }
+.pool-chooser-hint, .pool-target-hint { font-size: 10px; color: var(--mc-ink-muted); }
+.pool-target-hint { margin-left: auto; white-space: nowrap; }
+.pool-machine-chooser { position: relative; display: flex; align-items: center; }
+.pool-machine-icon-button { position: relative; width: 27px; height: 27px; padding: 0; display: grid; place-items: center; border-radius: 3px; cursor: pointer; }
+.pool-machine-icon-button:hover, .pool-machine-icon-button:focus-visible { background: #6f9cff24; outline: 1px solid #adc7ff80; }
+.pool-machine-icon-button:disabled { cursor: default; }
+.pool-machine-icon-button > [data-machine-picture] { width: 25px; height: 25px; padding: 0; }
+.pool-machine-icon-button > [data-machine-picture] > * { max-width: 100%; max-height: 100%; }
+.pool-machine-icon-button .pool-machine-swap { position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; padding: 1px; background: var(--surface, #24272c); color: #adc7ff; border-radius: 2px; }
+.pool-machine-icon-button:disabled .pool-machine-swap { display: none; }
+.pool-worksheet--dense .pool-status { display: flex; align-items: center; gap: 5px; height: auto; width: auto; font: 10px/13px var(--app-font); color: var(--mc-ink-muted); background: transparent; border-radius: 0; }
+.pool-worksheet--dense .pool-status::before { content: ''; width: 5px; height: 5px; flex-shrink: 0; border-radius: 50%; background: #999b9f; }
+.pool-worksheet--dense .pool-status--balanced::before { background: #94d5b7; }
+.pool-worksheet--dense :is(.pool-status--blocked, .pool-status--power-stalled, .pool-status--starved, .pool-status--bottleneck, .pool-status--dead-loop, .pool-status--clog-lock)::before { background: #ed9b80; }
+@container (max-width: 850px) {
+  .pool-worksheet--dense .pool-sheet-table > .pool-column-headings { display: none; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-status-cell {
+    width: auto; grid-column: 2 / 4; grid-row: calc(var(--pool-section-row) * 3 - 3); justify-self: start;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-circuit-cell { grid-column: 1; grid-row: calc(var(--pool-section-row) * 3 - 3); }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-takes-cell { grid-column: 2; grid-row: calc(var(--pool-section-row) * 3 - 2); }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-makes-cell { grid-column: 3; grid-row: calc(var(--pool-section-row) * 3 - 2); }
+  .pool-worksheet--dense .pool-takes-cell::before, .pool-worksheet--dense .pool-makes-cell::before { display: block; font: 9px var(--app-font); color: var(--mc-ink-muted); }
+  .pool-worksheet--dense .pool-takes-cell::before { content: 'Takes'; }
+  .pool-worksheet--dense .pool-makes-cell::before { content: 'Makes'; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr > td { border-left: 0 !important; }
+}

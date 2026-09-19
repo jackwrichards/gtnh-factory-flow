@@ -191,8 +191,13 @@ export function expandPool(project: FactoryProject): PoolExpansion {
       poolFor(output, node.productionGroupId).feeders.push({ id: node.id, storage: false });
     }
   }
+  const inputTargetIds = new Set<string>();
   for (const storage of project.storages ?? []) {
-    const side = poolSideOf(storage, wiredIn.has(storage.id), wiredOut.has(storage.id));
+    let side = poolSideOf(storage, wiredIn.has(storage.id), wiredOut.has(storage.id));
+    if (side === "drain" && (storage.targetPerSecond ?? 0) < 0 && (!storage.drainMode || storage.drainMode === "product")) {
+      inputTargetIds.add(storage.id);
+      side = "source";
+    }
     if (!side) continue;
     const pool = poolFor(
       { ...storage, id: storage.resourceId, amount: 1 },
@@ -200,7 +205,8 @@ export function expandPool(project: FactoryProject): PoolExpansion {
     );
     (side === "source" ? pool.feeders : pool.takers).push({ id: storage.id, storage: true });
   }
-  const storages: FactoryStorage[] = [...(project.storages ?? [])];
+  const storages: FactoryStorage[] = (project.storages ?? []).map((storage) =>
+    inputTargetIds.has(storage.id) ? { ...storage, poolSide: "source" } : storage);
   const recipes = [...project.recipes];
   const nodes = [...project.nodes];
   const edges: FactoryProject["edges"] = [];
@@ -320,7 +326,9 @@ export function expandPool(project: FactoryProject): PoolExpansion {
       }
       if (resource.kind === "power" && (!pool.feeders.length || !pool.takers.length)) continue;
       const poolId = uniqueStorageId(POOL_STORAGE_PREFIX + scopeTag + key);
-      if ((rule === "import" || (!group && rule === "share")) && pool.takers.length) {
+      const hasInputTarget = pool.feeders.some((feeder) => inputTargetIds.has(feeder.id));
+      // An explicit input rate cannot be topped up by Ignore or banked unused.
+      if (!hasInputTarget && (rule === "import" || (!group && rule === "share")) && pool.takers.length) {
         const sourceId = uniqueStorageId(POOL_STORAGE_PREFIX + "import:" + scopeTag + key);
         storages.push({
           id: sourceId,
@@ -333,6 +341,7 @@ export function expandPool(project: FactoryProject): PoolExpansion {
       }
       storages.push({
         id: poolId,
+        bufferMode: hasInputTarget ? "strict" : undefined,
         kind: resource.kind,
         resourceId: resource.id,
         displayName: resource.displayName,

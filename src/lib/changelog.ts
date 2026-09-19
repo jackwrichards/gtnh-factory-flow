@@ -52,8 +52,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "Production groups in Pool",
     notes: [
       "Organize Pool into named, nested production groups with their own material balances.",
-      "Compact recipe rows use bare item icons, right-side actions and labeled inline settings; desired products sits beside total power.",
-      "Desired products stay global; each group shows its inputs, outputs, power and clickable Links. Ignore hands a material to the parent, or permits imports at All production.",
+      "Compact recipe rows have labeled columns, full status reasons, icon-based machine selection and inline settings.",
+      "Use negative targets to size a line from its input rate; group Links control sharing and Ignore, with total power beside desired products.",
       "Drag machines and whole groups onto group headings, including empty or collapsed groups. Groups persist through saves, undo and copy/paste.",
     ],
   },

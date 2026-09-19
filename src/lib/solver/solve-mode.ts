@@ -34,12 +34,13 @@ import { storageRatioEqualities } from "./storage-ratios";
  * stalls in game at any scale, and the per-target feasibility probe below is
  * what names the products that strands.
  *
- * Feasibility is per-target separable: every non-target row is homogeneous
+ * Positive-only feasibility is per-target separable: every non-target row is homogeneous
  * (conservation scales), so two individually reachable targets are always
  * jointly reachable - sources are unlimited and machinery is unbounded. An
  * infeasible solve therefore means some target is unreachable at ANY scale
  * (no wired path, or a bare port pinning its chain), and probing each target
- * alone identifies exactly which.
+ * alone identifies exactly which. Pool input goals add finite supply bounds;
+ * conflicting goals must be reported rather than silently dropped.
  */
 
 export interface SolveModeTarget {
@@ -300,32 +301,25 @@ export function solveSolveMode(
     }
   }
 
-  // A target is a row: the wires into that product drawer together carry at
-  // least the typed amount. Built as -inflow <= -target.
-  const targetRow = (target: SolveModeTarget): LinearProgram["upperBounds"][number] | undefined => {
-    const coefficients = new Map<number, number>();
-    for (const edge of usable) {
-      if (edge.target === target.storageId) {
-        coefficients.set(flowVar.get(edge.id)!, -1 / Math.max(1, target.amountPerSecond));
-      }
-    }
-    if (coefficients.size === 0) {
-      return undefined;
-    }
-    return { coefficients, rhs: -target.amountPerSecond / Math.max(1, target.amountPerSecond) };
-  };
-
-  const activeTargets = targets.filter((t) => t.amountPerSecond > 0);
-  // A target with no wire into its drawer at all is unreachable outright.
+  // Output goals request at least a rate. Negative Pool goals fix supplied
+  // input at exactly a rate; their strict receiving pool forces it to be used.
+  // Keep each input ceiling in the base model even when probing other goals.
+  const activeTargets = targets.filter((t) => t.amountPerSecond !== 0);
   const unreachableStorageIds = new Set<string>();
   const rowsByTarget = new Map<string, LinearProgram["upperBounds"][number]>();
   for (const target of activeTargets) {
-    const row = targetRow(target);
-    if (row) {
-      rowsByTarget.set(target.storageId, row);
-    } else {
-      unreachableStorageIds.add(target.storageId);
+    const input = target.amountPerSecond < 0;
+    const amount = Math.abs(target.amountPerSecond);
+    const scale = 1 / Math.max(1, amount);
+    const coefficients = new Map<number, number>();
+    for (const edge of usable) {
+      if (input ? edge.source === target.storageId : edge.target === target.storageId) {
+        coefficients.set(flowVar.get(edge.id)!, -scale);
+      }
     }
+    if (!coefficients.size) { unreachableStorageIds.add(target.storageId); continue; }
+    rowsByTarget.set(target.storageId, { coefficients, rhs: -amount * scale });
+    if (input) upperBounds.push({ coefficients: new Map([...coefficients].map(([v, c]) => [v, -c])), rhs: amount * scale });
   }
 
   const emptyResult = (status: SolveModeResult["status"]): SolveModeResult => ({
@@ -414,9 +408,9 @@ export function solveSolveMode(
         return { ...emptyResult("failed"), pinsInfeasible: true };
       }
     }
-    // Some target cannot be reached at any scale. Feasibility is per-target
-    // separable here (see the header note), so probe each alone to name the
-    // strays, then answer for the reachable rest.
+    // Probe each target within the declared input ceilings to identify
+    // unreachable goals, then solve the remainder together. Finite input
+    // goals can also conflict jointly even when each is feasible alone.
     for (const [storageId, row] of rowsByTarget) {
       const probe = new Array<number>(totalVars).fill(0);
       for (const [v, weight] of machineWeights) {
@@ -432,6 +426,7 @@ export function solveSolveMode(
       .map(([, row]) => row);
     solution = solveStages(reachableRows);
     if (!solution) {
+      for (const id of rowsByTarget.keys()) unreachableStorageIds.add(id);
       return emptyResult("failed");
     }
   }

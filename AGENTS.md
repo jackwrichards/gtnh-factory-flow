@@ -1851,7 +1851,10 @@ Working notes for future agents on GTNH Factory Flow.
   are available in the same scope. All sections of a shared machine inherit its owner.
 - Groups/rules must survive saves, JSON and clipboard remapping; collapse is local workspace
   state. Build and wired Solve ignore these scopes. See docs/production-groups.md and the
-  solver/store production-groups.test.ts files. Negative products are a separate follow-up.
+  solver/store production-groups.test.ts files. Pool negative targets are exact net input
+  goals: expand their product drawer to a source and enforce strict receiving balance.
+  Explicit input goals prevent Ignore top-up in that pool; positive targets remain minimums.
+  Signed values persist but are dormant outside Pool. See pool-input-targets.test.ts.
 
 ## Verification
 

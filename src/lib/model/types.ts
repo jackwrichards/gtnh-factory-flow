@@ -441,7 +441,9 @@ export interface FactoryStorage {
   drainMode?: StorageDrainMode;
   /**
    * Solve mode's question, typed on a PRODUCT drawer: make at least this much
-   * per second. Ignored in plan mode and on other drawer roles; a product with
+   * per second. In Pool, a negative number instead requests exact net input
+   * consumption at its absolute rate. Dormant outside Pool when negative.
+   * Ignored in plan mode and on other drawer roles; a product with
    * no number is unconstrained (byproduct-shaped) so flipping the mode never
    * errors a board.
    */

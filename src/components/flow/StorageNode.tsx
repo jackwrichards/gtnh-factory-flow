@@ -735,6 +735,7 @@ function NetLine({ net, kind, role, width }: { net: number; kind: string; role: 
 /** The mirror: a committed value is SHOWN in the same shorthand it was
  * typed in - 10000 reads back as 10k, never expanded under your cursor. */
 function formatAmountWithSuffix(value: number): string {
+  if (value < 0) return "-" + formatAmountWithSuffix(-value);
   if (value >= 1e9) {
     return `${trimTrailingDecimalZeros((value / 1e9).toFixed(2))}g`;
   }
@@ -752,7 +753,8 @@ function parseAmountWithSuffix(text: string): number | undefined {
     .trim()
     .toLowerCase()
     .replace(/,/g, "")
-    .match(/^([0-9]*\.?[0-9]+)\s*([kmg]?)$/);
+    .replace(/^−/, "-")
+    .match(/^([+-]?[0-9]*\.?[0-9]+)\s*([kmg]?)$/);
   if (!match) {
     return undefined;
   }
@@ -778,13 +780,14 @@ export function TargetLine({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const target = storage.targetPerSecond;
+  const signed = useFactoryStore((state) => state.project.poolMode === true);
   const unreachable = result?.targetUnreachable === true;
   // While the solver has NOTHING to solve for - no amount, no pin, anywhere -
   // every empty rate line blinks the ask, in step with the board's notice.
   const askBlink = useFactoryStore((state) => !hasAnySolveNumbers(state.project));
   const beginEdit = () => {
     setDraft(
-      target !== undefined && target > 0
+      target !== undefined && (target > 0 || (signed && target < 0))
         ? formatAmountWithSuffix(target * rateMultiplierForKind(storage.kind))
         : "",
     );
@@ -799,7 +802,7 @@ export function TargetLine({
       return;
     }
     const value = parseAmountWithSuffix(draft);
-    if (value === undefined || !Number.isFinite(value) || value <= 0) {
+    if (value === undefined || !Number.isFinite(value) || (value <= 0 && !(signed && value < 0))) {
       // Not a number: the field falls back to what it held.
       return;
     }
@@ -842,7 +845,7 @@ export function TargetLine({
         {/* Nudged up a couple of pixels so the dotted underline clears the
             tile's bottom edge instead of merging with it. */}
         <div className="relative -translate-y-[2px] underline decoration-dotted decoration-[1.5px] underline-offset-[3px]">
-          {target !== undefined && target > 0 ? (
+          {target !== undefined && (target > 0 || (signed && target < 0)) ? (
             <NetLine net={target} kind={storage.kind} role="product" />
           ) : (
             <div
@@ -887,7 +890,7 @@ export function TargetLine({
         onMouseDown={(event) => event.stopPropagation()}
         onTouchStart={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
-        inputMode="decimal"
+        inputMode={signed ? "text" : "decimal"}
         placeholder="rate"
         aria-label="Required amount"
         className={[

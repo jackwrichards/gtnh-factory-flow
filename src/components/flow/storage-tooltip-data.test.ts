@@ -43,6 +43,13 @@ const tip = (p: FactoryProject, id: string) => {
 const labels = (view: { rows: Array<{ label: string }> }) => view.rows.map((r) => r.label);
 
 describe("drawer tooltips are words and figures", () => {
+  it("describes signed Pool input goals with consumption figures", () => {
+    const input = drawer("input", chlorine, { poolSide: "drain", targetPerSecond: -150 });
+    const p = plan({ poolMode: true, solveMode: true, storages: [input], edges: [] });
+    const r = calculateThroughput(p);
+    expect(buildStorageTooltip(p, r, input, "product")).toMatchObject({ subtitle: "Input goal", rows: [{ label: "Consume", value: "150 L/s" }, { label: "Consumed", value: "150 L/s" }] });
+    expect(buildTargetTooltip(input, r.storages.input)).toMatchObject({ title: "Input goal", rows: [{ label: "Consume", value: "150 L/s" }] });
+  });
   it("names each role and shows its one figure", () => {
     const p = plan();
     expect(tip(p, "src")).toMatchObject({ subtitle: "Source", rows: [{ label: "Supplied", value: "200 L/s" }] });
