@@ -1,12 +1,13 @@
 "use client";
 
 import { useId, useRef, useState, type ReactNode } from "react";
-import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, FolderPlus, GripVertical, SlidersHorizontal, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, FolderPlus, GripVertical, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
 import type { ProductionGroup, ResourceAmount } from "@/lib/model/types";
 import type { getPoolGroupResources } from "@/lib/solver/pool-mode";
-import { formatSlotRate } from "../flow/flow-explainers";
+import { formatSlotRateBare } from "../flow/flow-explainers";
+import { rateSuffixForKind } from "@/lib/model/rate-unit";
 import { ResourceIcon } from "../nei/ResourceIcon";
 import { useWorksheetPointerDrag } from "./worksheet-pointer-drag";
 
@@ -100,14 +101,14 @@ export function ProductionScopeHeader({
   const flows = (title: string, entries: GroupFlow[]) => (
     <tr>
       <th scope="row" title={title === "Inputs" ? "Materials supplied from outside " + name + "." : "Outputs available after internal use in " + name + "."}>
-        <span>{title === "Inputs" ? <ArrowDownLeft size={11} aria-hidden /> : <ArrowUpRight size={11} aria-hidden />}{title}{entries.length > 12 ? <small>({entries.length})</small> : null}</span>
+        <span>{title}{entries.length > 12 ? <small>({entries.length})</small> : null}</span>
       </th>
       <td>
-        <section className="pool-flow-items" aria-label={title + " for " + name}>
+        <section className="pool-flow-items pool-port-list" aria-label={title + " for " + name}>
           {entries.length ? entries.map(({ resource, rate }) => (
-            <div key={resource.kind + ":" + resource.id} className="pool-group-flow-item">
+            <div key={resource.kind + ":" + resource.id} className="pool-group-flow-item pool-port flow-port pool-port-line">
               {renderResource(resource)}
-              <strong>{formatSlotRate(rate, resource.kind)}</strong>
+              <span className="pool-port-rate"><strong>{formatSlotRateBare(rate, resource.kind)}</strong><small>{rateSuffixForKind(resource.kind).trim()}</small></span>
             </div>
           )) : <span className="pool-sheet-muted">None</span>}
         </section>
