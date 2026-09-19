@@ -530,20 +530,25 @@
   grid-template-columns: minmax(280px, 520px) minmax(220px, 280px);
   gap: 12px;
   align-items: start;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 .pool-worksheet--dense .pool-overview .pool-sheet-power {
   display: block;
   width: 100%;
 }
-.pool-worksheet--dense .pool-overview .pool-sheet-resource-heading {
+.pool-worksheet--dense .pool-overview :is(.pool-products-heading, .pool-sheet-resource-heading) {
   display: flex;
+  height: 22px;
   min-height: 22px;
   padding: 0 6px;
 }
-.pool-worksheet--dense .pool-overview .pool-sheet-resource-heading h3 {
+.pool-worksheet--dense .pool-overview :is(.pool-products-heading, .pool-sheet-resource-heading) h3 {
   display: block;
   font-size: 11px;
+}
+/* Product drag handles need 24px; share their row rhythm with the power totals. */
+.pool-worksheet--dense .pool-overview .pool-summary-table tbody :is(th, td) {
+  height: 28px;
 }
 .pool-worksheet--dense .pool-overview .pool-resources-scroll {
   max-height: none;
