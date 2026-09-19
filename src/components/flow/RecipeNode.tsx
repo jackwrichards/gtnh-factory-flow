@@ -1280,7 +1280,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
                 <button type="button" className="pool-machine-icon-button pool-crop-button" data-crop-picker-toggle
                   aria-label={cropTitle ? "Change crop: " + cropTitle : "Pick a crop"} aria-expanded={isCropMenuOpen}
                   onClick={() => setCropMenuOpen((open) => !open)}>
-                  {cropSeedResource ? <ResourceIcon resource={cropSeedResource} size="sm" bare showAmount={false} showConsumedState={false} tooltip={false} /> : <Sprout className="h-5 w-5" />}
+                  {cropSeedResource ? <ResourceIcon resource={cropSeedResource} size="sm" className="!h-6 !w-6" iconPixelSize={24} bare showAmount={false} showConsumedState={false} tooltip={false} /> : <Sprout className="h-5 w-5" />}
                   <RefreshCw className="pool-machine-swap" aria-hidden="true" />
                 </button>
               </MinecraftTooltip>
