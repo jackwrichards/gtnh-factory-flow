@@ -536,19 +536,41 @@
   display: block;
   width: 100%;
 }
-.pool-worksheet--dense .pool-overview :is(.pool-products-heading, .pool-sheet-resource-heading) {
+.pool-worksheet--dense .pool-overview .pool-summary-table :is(th, td) {
+  height: 18px;
+  padding: 0 5px;
+  line-height: 16px;
+  vertical-align: middle;
+}
+.pool-worksheet--dense .pool-overview .pool-summary-table thead th {
+  height: 20px;
+  background: color-mix(in srgb, var(--mc-ink) 3%, var(--surface, #24272c));
+}
+.pool-overview-title {
   display: flex;
-  height: 22px;
-  min-height: 22px;
-  padding: 0 6px;
-}
-.pool-worksheet--dense .pool-overview :is(.pool-products-heading, .pool-sheet-resource-heading) h3 {
-  display: block;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   font-size: 11px;
+  font-weight: 500;
+  color: var(--mc-ink);
 }
-/* Product drag handles need 24px; share their row rhythm with the power totals. */
-.pool-worksheet--dense .pool-overview .pool-summary-table tbody :is(th, td) {
-  height: 28px;
+.pool-overview-title h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; }
+.pool-worksheet--dense .pool-overview .pool-power-table th:first-child { width: 78px; }
+.pool-worksheet--dense .pool-overview :is(.pool-order-handle, .pool-sheet-icon-button, .pool-add-button) {
+  height: 16px;
+  min-height: 0;
+  vertical-align: middle;
+}
+.pool-worksheet--dense .pool-overview .pool-order-handle { flex-basis: 20px; width: 20px; }
+.pool-worksheet--dense .pool-overview .pool-order-handle svg { height: 12px; width: 12px; }
+.pool-worksheet--dense .pool-overview .pool-add-button { margin-left: auto; border: 0; }
+.pool-worksheet--dense .pool-overview .pool-resource-link { height: 16px; line-height: 16px; }
+.pool-worksheet--dense .pool-overview .pool-item-icon { height: 14px !important; width: 14px !important; }
+.pool-worksheet--dense .pool-overview .pool-resource-link > span { font-size: 11px; }
+.pool-worksheet--dense .pool-overview .pool-target-rule { height: 16px; padding-block: 0; line-height: 14px; }
+@container (max-width: 1050px) {
+  .pool-overview-title .pool-target-hint { display: none; }
 }
 .pool-worksheet--dense .pool-overview .pool-resources-scroll {
   max-height: none;

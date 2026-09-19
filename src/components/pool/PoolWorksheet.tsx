@@ -316,10 +316,6 @@ export function PoolWorksheet() {
             <div className="pool-overview">
               <div className="pool-desired-products">
                 <ProductsPane id={`${summaryId}-products`}>
-                  <div className="pool-products-heading">
-                    <h3>Desired products</h3><span className="pool-target-hint">+ output · − input</span>
-                    {!readOnly ? <AddPoolProduct /> : null}
-                  </div>
                   <div className="pool-products-scroll">
                     <table
                       className="pool-summary-table pool-products-table"
@@ -327,11 +323,12 @@ export function PoolWorksheet() {
                     >
                       <thead>
                         <tr>
-                          <th>Name</th>
-                          <th>Target (±)</th>
+                          <th><div className="pool-overview-title"><h3>Desired products</h3><span className="pool-target-hint">+ output · − input</span></div></th>
+                          <th title="Positive amounts set output goals; negative amounts set input goals.">Target (±)</th>
                           <th>Actual</th>
                           <th>
                             <span className="sr-only">Actions</span>
+                            {!readOnly ? <AddPoolProduct /> : null}
                           </th>
                         </tr>
                       </thead>

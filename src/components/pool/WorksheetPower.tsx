@@ -31,7 +31,7 @@ export function WorksheetPower({
     <table className="pool-summary-table pool-power-table" aria-label="Pool power totals">
       <thead>
         <tr>
-          <th />
+          <th>{!compact ? <h3 className="pool-overview-title">{title}</h3> : null}</th>
           <th>Average</th>
           <th>Peak</th>
         </tr>
@@ -102,9 +102,6 @@ export function WorksheetPower({
     );
   return (
     <section id={id} className="pool-sheet-power" aria-label="Pool power summary">
-      <div className="pool-sheet-resource-heading">
-        <h3>{title}</h3>
-      </div>
       <div className="pool-resources-scroll">{table}</div>
     </section>
   );
