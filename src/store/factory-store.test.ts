@@ -1102,6 +1102,14 @@ describe("factory resource links", () => {
       expect.arrayContaining([expect.objectContaining({ id: drawer!.id })]),
     );
     expect(getStorageRole(useFactoryStore.getState().project, drawer!.id)).toBe("product");
+
+    const { nodes, recipes, edges, storages, productionGroups, poolResourceRules } = useFactoryStore.getState().project;
+    for (const mode of ["build", "pool", "solve", "pool"] as const) {
+      useFactoryStore.getState().setBoardMode(mode);
+      expect(useFactoryStore.getState().project).toMatchObject({ nodes, recipes, edges, storages });
+      expect(useFactoryStore.getState().project.productionGroups).toEqual(productionGroups);
+      expect(useFactoryStore.getState().project.poolResourceRules).toEqual(poolResourceRules);
+    }
   });
 
   it("migrates a stored recipe to its content match and moves the node onto the new id", () => {
