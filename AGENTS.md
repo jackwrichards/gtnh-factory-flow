@@ -1834,10 +1834,10 @@ Working notes for future agents on GTNH Factory Flow.
 ## Pool Production Groups
 
 - The UI follows the reference: global Desired products, Factory grand total, nested group
-  totals in a compact Inputs/Outputs table. Optional Sharing rules / Supply rules buttons
-  reveal the reference's Ignore overrides: Share with parent inside a group, Allow outside
-  supply at All production. Missing inputs are imported automatically without enabling
-  overrides. Do not restore separate Resources/Materials panels or three-way rule selects.
+  totals side by side. Optional Sharing rules / Supply rules buttons reveal a bounded,
+  searchable grid (24 entries per page). Automatic uses a producer when present, else
+  imports; Import anyway permits imports alongside production. Share with parent is
+  the group-level Ignore rule. There is no general never-import rule. Do not restore separate Resources/Materials panels or three-way rule selects.
   Group headings accept machine/group pointer drops, even when empty or collapsed. Group
   totals include closed child surplus/imports without counting shared ports twice. Legacy
   scoped targets and direct child imports remain explicit and editable, never silently lost.

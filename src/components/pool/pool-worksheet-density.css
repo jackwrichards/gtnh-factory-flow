@@ -821,17 +821,20 @@
 /* Scope summaries show totals; optional supply overrides stay behind one control. */
 .pool-worksheet--dense .pool-rules-toggle { width: auto; gap: 4px; padding: 0 4px; font-size: 9px; border-color: transparent; }
 .pool-worksheet--dense .pool-rules-toggle[aria-expanded="true"] { color: #adc7ff; background: #6f9cff18; }
-.pool-flow-table { width: 100%; border-collapse: collapse; margin-bottom: 2px; }
-.pool-flow-table th { width: 60px; padding: 1px 7px 1px 0; text-align: left; vertical-align: top; font-size: 10px; font-weight: 500; color: var(--mc-ink-muted); }
-.pool-flow-table th > span { display: flex; align-items: center; gap: 4px; min-height: 20px; }
-.pool-flow-table td { padding: 1px 0 1px 7px; border-left: 1px solid #ffffff12; }
-.pool-flow-table tr + tr { border-top: 1px solid #ffffff08; }
-.pool-flow-items { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; min-height: 20px; }
-.pool-worksheet--dense .pool-material-rules { margin: 4px 0; padding: 6px 8px; border: 1px solid #ffffff18; background: #00000012; }
-.pool-material-rules p { margin: 0 0 5px; font-size: 10px; color: var(--mc-ink-muted); }
-.pool-material-rules table { width: min(100%, 600px); border-collapse: collapse; font-size: 10px; }
-.pool-material-rules :is(th, td) { padding: 3px 6px; text-align: left; font-weight: 400; }
-.pool-material-rules thead th { color: var(--mc-ink-muted); border-bottom: 1px solid #ffffff18; }
-.pool-material-rules tbody tr + tr { border-top: 1px solid #ffffff08; }
-.pool-rule-material, .pool-material-rules label { display: flex; align-items: center; gap: 6px; }
-.pool-material-rules input { accent-color: #6f9cff; }
+.pool-flow-summary { display: flex; flex-wrap: wrap; align-items: start; gap: 2px 14px; margin-bottom: 2px; }
+.pool-flow-table { width: auto; max-width: 100%; border-collapse: collapse; flex: 0 1 auto; }
+.pool-flow-table th { padding: 0 6px 0 0; text-align: left; vertical-align: top; font-size: 10px; font-weight: 500; color: var(--mc-ink-muted); }
+.pool-flow-table th > span { display: flex; align-items: center; gap: 4px; min-height: 20px; white-space: nowrap; }
+.pool-flow-table td { padding: 0 0 0 6px; border-left: 1px solid #ffffff12; }
+.pool-flow-items { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; min-height: 20px; max-width: 560px; max-height: 66px; overflow: auto; overscroll-behavior: contain; }
+.pool-worksheet--dense .pool-material-rules { margin: 3px 0; padding: 4px 6px; border: 1px solid #ffffff18; background: #00000012; }
+.pool-rules-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 4px; }
+.pool-rules-toolbar p { margin: 0; font-size: 10px; color: var(--mc-ink-muted); flex: 1 1 320px; }
+.pool-rule-search { width: 150px; min-width: 80px; height: 20px; padding: 0 5px; font-size: 10px; background: #0002; border: 1px solid #ffffff18; }
+.pool-rule-pages { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--mc-ink-muted); white-space: nowrap; }
+.pool-rule-pages button:disabled { opacity: .3; cursor: default; }
+.pool-rule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 2px 12px; max-height: 144px; overflow: auto; overscroll-behavior: contain; }
+.pool-rule-entry { display: flex; align-items: center; justify-content: space-between; gap: 6px; min-width: 0; min-height: 22px; border-bottom: 1px solid #ffffff08; font-size: 10px; }
+.pool-rule-material { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.pool-rule-material > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pool-rule-entry select { width: 108px; flex: 0 0 108px; height: 20px; padding: 0 3px; background: var(--surface, #24272c); border: 1px solid #ffffff18; color: var(--mc-ink); font: inherit; }

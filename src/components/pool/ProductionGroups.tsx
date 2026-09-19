@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState, type ReactNode } from "react";
-import { ArrowDownLeft, ArrowUpRight, ChevronDown, FolderPlus, GripVertical, SlidersHorizontal, Trash2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, FolderPlus, GripVertical, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
 import type { ProductionGroup, ResourceAmount } from "@/lib/model/types";
@@ -85,13 +85,22 @@ export function ProductionScopeHeader({
   const [rulesOpen, setRulesOpen] = useState(false);
   const rulesId = useId();
   const rulesButton = useRef<HTMLButtonElement>(null);
+  const [ruleQuery, setRuleQuery] = useState("");
+  const [rulePage, setRulePage] = useState(0);
   const links = resources.filter(
     (row) => row.rule || (row.feeders.length && row.takers.some((port) => !port.storage)),
   );
+  const needle = ruleQuery.trim().toLowerCase();
+  const filteredRules = needle ? links.filter((row) =>
+    (row.resource.displayName ?? row.resource.id).toLowerCase().includes(needle)) : links;
+  const pageSize = 24;
+  const pageCount = Math.max(1, Math.ceil(filteredRules.length / pageSize));
+  const page = Math.min(rulePage, pageCount - 1);
+  const visibleRules = filteredRules.slice(page * pageSize, (page + 1) * pageSize);
   const flows = (title: string, entries: GroupFlow[]) => (
     <tr>
       <th scope="row" title={title === "Inputs" ? "Materials supplied from outside " + name + "." : "Outputs available after internal use in " + name + "."}>
-        <span>{title === "Inputs" ? <ArrowDownLeft size={11} aria-hidden /> : <ArrowUpRight size={11} aria-hidden />}{title}</span>
+        <span>{title === "Inputs" ? <ArrowDownLeft size={11} aria-hidden /> : <ArrowUpRight size={11} aria-hidden />}{title}{entries.length > 12 ? <small>({entries.length})</small> : null}</span>
       </th>
       <td>
         <section className="pool-flow-items" aria-label={title + " for " + name}>
@@ -219,9 +228,10 @@ export function ProductionScopeHeader({
             </div>
           </div>
           {inputs.length || outputs.length ? (
-            <table className="pool-flow-table" aria-label={"Material totals for " + name}>
-              <tbody>{flows("Inputs", inputs)}{flows("Outputs", outputs)}</tbody>
-            </table>
+            <div className="pool-flow-summary">
+              <table className="pool-flow-table" aria-label={"Input totals for " + name}><tbody>{flows("Inputs", inputs)}</tbody></table>
+              <table className="pool-flow-table" aria-label={"Output totals for " + name}><tbody>{flows("Outputs", outputs)}</tbody></table>
+            </div>
           ) : null}
           {rulesOpen && links.length ? (
             <section id={rulesId} className="pool-material-rules" aria-label={rulesTitle + " for " + name}
@@ -232,23 +242,35 @@ export function ProductionScopeHeader({
                   rulesButton.current?.focus();
                 }
               }}>
-              <p>{group
-                ? "Normally, materials made and used here stay inside this group. These overrides let the parent group handle them."
-                : "Inputs with no producer are supplied automatically. These overrides also allow outside supply of materials made here."}</p>
-              <table aria-label={"Optional material rules for " + name}>
-                <thead><tr><th>Material</th><th>Override</th></tr></thead>
-                <tbody>{links.map((row) => {
-                  const outside = !group || row.rule === "import";
-                  const action = outside ? "Allow outside supply" : "Share with parent";
+              <div className="pool-rules-toolbar">
+                <p>{group
+                  ? "Automatic: balance here when both produced and consumed here; otherwise share with parent."
+                  : "Automatic: use a producer when present; otherwise import. Import anyway can bypass producers."}</p>
+                <input type="search" className="pool-rule-search" aria-label={"Find material in " + name}
+                  placeholder="Find material…" value={ruleQuery} onChange={(event) => { setRuleQuery(event.target.value); setRulePage(0); }} />
+                {filteredRules.length > pageSize ? <div className="pool-rule-pages">
+                  <button type="button" className="pool-sheet-icon-button" aria-label={"Previous rules for " + name} disabled={page === 0} onClick={() => setRulePage(page - 1)}><ChevronLeft /></button>
+                  <span>{page * pageSize + 1}–{Math.min((page + 1) * pageSize, filteredRules.length)} / {filteredRules.length}</span>
+                  <button type="button" className="pool-sheet-icon-button" aria-label={"Next rules for " + name} disabled={page + 1 === pageCount} onClick={() => setRulePage(page + 1)}><ChevronRight /></button>
+                </div> : null}
+              </div>
+              <div className="pool-rule-grid">
+                {visibleRules.map((row) => {
                   const material = row.resource.displayName ?? row.resource.id;
-                  return <tr key={row.key}>
-                    <th scope="row"><span className="pool-rule-material"><ResourceIcon resource={row.resource} bare size="sm" showAmount={false} tooltip={false} className="!h-4 !w-4" />{material}</span></th>
-                    <td><label><input type="checkbox" checked={Boolean(row.rule)} disabled={readOnly}
-                      aria-label={(outside ? "Allow outside supply of " : "Share with parent: ") + material + " in " + name}
-                      onChange={() => useFactoryStore.getState().setPoolResourceRule(group?.id, row.key, row.rule ? undefined : group ? "share" : "import")} />{action}</label></td>
-                  </tr>;
-                })}</tbody>
-              </table>
+                  return <label className="pool-rule-entry" key={row.key}>
+                    <span className="pool-rule-material" title={material}><ResourceIcon resource={row.resource} bare size="sm" showAmount={false} tooltip={false} className="!h-4 !w-4" /><span>{material}</span></span>
+                    <select aria-label={(group ? "Sharing for " : "Supply for ") + material + " in " + name}
+                      value={row.rule ?? "auto"} disabled={readOnly}
+                      onChange={(event) => useFactoryStore.getState().setPoolResourceRule(group?.id, row.key, event.target.value === "auto" ? undefined : event.target.value === "share" ? "share" : "import")}>
+                      <option value="auto">Automatic</option>
+                      {group ? <option value="share">Share with parent</option> : <option value="import">Import anyway</option>}
+                      {group && row.rule === "import" ? <option value="import">Outside supply</option> : null}
+                      {!group && row.rule === "share" ? <option value="share">Import anyway</option> : null}
+                    </select>
+                  </label>;
+                })}
+                {!visibleRules.length ? <span className="pool-sheet-muted">No matching materials.</span> : null}
+              </div>
             </section>
           ) : null}
         </td>
