@@ -401,10 +401,11 @@
   width: 34px;
   flex-shrink: 0;
 }
-.pool-worksheet--dense .pool-group-flow-item {
+.pool-worksheet--dense .pool-group-flow-item.pool-port-line {
   display: flex;
   flex-wrap: nowrap;
-  gap: 0;
+  gap: 2px;
+  height: 29px;
   padding: 0;
 }
 .pool-worksheet--dense .pool-group-flow-item .pool-resource-link {
@@ -412,7 +413,13 @@
 }
 .pool-worksheet--dense .pool-group-flow-item strong {
   font-size: 9px;
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--mc-ink);
+}
+.pool-worksheet--dense .pool-group-flow-item .pool-port-rate small {
+  font-size: 7px;
+  color: var(--mc-ink-muted);
+  opacity: .8;
 }
 .pool-worksheet--dense .pool-group-links {
   margin-top: 1px;
@@ -818,15 +825,13 @@
 /* Scope summaries show totals; optional supply overrides stay behind one control. */
 .pool-worksheet--dense .pool-rules-toggle { width: auto; gap: 4px; padding: 0 4px; font-size: 9px; border-color: transparent; }
 .pool-worksheet--dense .pool-rules-toggle[aria-expanded="true"] { color: #adc7ff; background: #6f9cff18; }
-.pool-flow-summary { display: flex; flex-wrap: wrap; align-items: stretch; gap: 2px 12px; margin-bottom: 2px; }
-.pool-flow-table { width: auto; max-width: 100%; border-collapse: separate; border-spacing: 0; flex: 0 1 auto; }
-.pool-flow-table--outputs { border-left: 1px solid #ffffff24; }
-.pool-flow-table th { padding: 0 6px 0 0; text-align: left; vertical-align: middle; font-size: 10px; font-weight: 400; color: var(--mc-ink-muted); }
-.pool-flow-table--outputs th { padding-left: 12px; }
+.pool-flow-summary { display: flex; flex-wrap: wrap; align-items: stretch; gap: 3px 8px; margin-bottom: 2px; }
+.pool-flow-table { width: auto; max-width: 100%; border-collapse: separate; border-spacing: 0; flex: 0 1 auto; background: #6f9cff0d; }
+.pool-flow-table th { padding: 0 6px; text-align: left; vertical-align: middle; font-size: 10px; font-weight: 400; color: var(--mc-ink-muted); }
 .pool-flow-table th > span { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
-.pool-flow-table td { padding: 0; }
-.pool-flow-items > .pool-sheet-muted { line-height: 27px; }
-.pool-worksheet--dense .pool-flow-items { min-height: 27px; max-width: 560px; max-height: 66px; overflow: auto; overscroll-behavior: contain; }
+.pool-flow-table td { padding: 1px 6px 1px 0; }
+.pool-flow-items > .pool-sheet-muted { line-height: 29px; }
+.pool-worksheet--dense .pool-flow-items { min-height: 29px; max-width: 560px; max-height: 66px; overflow: auto; overscroll-behavior: contain; }
 .pool-worksheet--dense .pool-material-rules { margin: 3px 0; padding: 4px 6px; border: 1px solid #ffffff18; background: #00000012; }
 .pool-rules-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 4px; }
 .pool-rules-toolbar p { margin: 0; font-size: 10px; color: var(--mc-ink-muted); flex: 1 1 320px; }
