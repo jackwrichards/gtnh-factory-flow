@@ -22,9 +22,10 @@ import { storageRatioEqualities } from "./storage-ratios";
  *  - a product drawer's typed amount is a ROW: inflow >= target. Targets are
  *    minimums, not equalities, because fixed recipe ratios can force one
  *    product past its number while another lands exactly (the distillation
- *    tower shape); the overshoot reads as spare.
+ *    tower shape); the overshoot reads as spare. Pool can opt into an exact
+ *    output, pairing a ceiling with a strict receiving pool.
  *  - the objective is MINIMIZE TOTAL MACHINERY (sum of act x machineCount),
- *    ShadowTheAge's objective. It also settles under-determination: a chain
+ *    This also settles under-determination: a chain
  *    no target needs solves to zero, which is itself the answer.
  *
  * Deliberately absent from this mode: the fairness stage, the equal-fill
@@ -39,13 +40,14 @@ import { storageRatioEqualities } from "./storage-ratios";
  * jointly reachable - sources are unlimited and machinery is unbounded. An
  * infeasible solve therefore means some target is unreachable at ANY scale
  * (no wired path, or a bare port pinning its chain), and probing each target
- * alone identifies exactly which. Pool input goals add finite supply bounds;
+ * alone identifies exactly which. Pool input goals and exact outputs add finite bounds;
  * conflicting goals must be reported rather than silently dropped.
  */
 
 export interface SolveModeTarget {
   storageId: string;
   amountPerSecond: number;
+  exact?: boolean;
 }
 
 /** Run EXACTLY this many machines of this node; the line solves around it. */
@@ -301,10 +303,10 @@ export function solveSolveMode(
     }
   }
 
-  // Output goals request at least a rate. Negative Pool goals fix supplied
-  // input at exactly a rate; their strict receiving pool forces it to be used.
-  // Keep each input ceiling in the base model even when probing other goals.
-  const activeTargets = targets.filter((t) => t.amountPerSecond !== 0);
+  // Outputs default to minimums; exact outputs and negative inputs add a
+  // ceiling. Their strict receiving pool prevents hidden surplus. Keep these
+  // ceilings when probing other goals, so a conflict cannot bypass them.
+  const activeTargets = targets.filter((t) => t.amountPerSecond !== 0 || t.exact);
   const unreachableStorageIds = new Set<string>();
   const rowsByTarget = new Map<string, LinearProgram["upperBounds"][number]>();
   for (const target of activeTargets) {
@@ -317,9 +319,20 @@ export function solveSolveMode(
         coefficients.set(flowVar.get(edge.id)!, -scale);
       }
     }
-    if (!coefficients.size) { unreachableStorageIds.add(target.storageId); continue; }
+    if (!coefficients.size) { if (amount > 0) unreachableStorageIds.add(target.storageId); continue; }
     rowsByTarget.set(target.storageId, { coefficients, rhs: -amount * scale });
-    if (input) upperBounds.push({ coefficients: new Map([...coefficients].map(([v, c]) => [v, -c])), rhs: amount * scale });
+    if (input || target.exact) {
+      const ceiling = new Map([...coefficients].map(([v, c]) => [v, -c]));
+      if (!input && project.poolMode) {
+        // Cap all exports from the same receiving pool, so another drawer
+        // cannot silently catch surplus beyond the exact output goal.
+        const pools = new Set(usable.filter((edge) => edge.target === target.storageId).map((edge) => edge.source));
+        for (const edge of usable) {
+          if (pools.has(edge.source) && storageKind(edge.target) === "sink") ceiling.set(flowVar.get(edge.id)!, scale);
+        }
+      }
+      upperBounds.push({ coefficients: ceiling, rhs: amount * scale });
+    }
   }
 
   const emptyResult = (status: SolveModeResult["status"]): SolveModeResult => ({
@@ -405,6 +418,7 @@ export function solveSolveMode(
       }
       const pinsAlone = solve({ maximize: probe, equalities, upperBounds });
       if (pinsAlone.status !== "optimal") {
+        for (const target of activeTargets) if (target.exact || target.amountPerSecond < 0) unreachableStorageIds.add(target.storageId);
         return { ...emptyResult("failed"), pinsInfeasible: true };
       }
     }

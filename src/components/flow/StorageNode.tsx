@@ -781,13 +781,14 @@ export function TargetLine({
   const [draft, setDraft] = useState("");
   const target = storage.targetPerSecond;
   const signed = useFactoryStore((state) => state.project.poolMode === true);
+  const showZero = signed && target === 0;
   const unreachable = result?.targetUnreachable === true;
   // While the solver has NOTHING to solve for - no amount, no pin, anywhere -
   // every empty rate line blinks the ask, in step with the board's notice.
-  const askBlink = useFactoryStore((state) => !hasAnySolveNumbers(state.project));
+  const askBlink = useFactoryStore((state) => !hasAnySolveNumbers(state.project) && !(state.project.poolMode && storage.poolTargetMode === "ignore"));
   const beginEdit = () => {
     setDraft(
-      target !== undefined && (target > 0 || (signed && target < 0))
+      target !== undefined && (target > 0 || (signed && target < 0) || showZero)
         ? formatAmountWithSuffix(target * rateMultiplierForKind(storage.kind))
         : "",
     );
@@ -802,7 +803,7 @@ export function TargetLine({
       return;
     }
     const value = parseAmountWithSuffix(draft);
-    if (value === undefined || !Number.isFinite(value) || (value <= 0 && !(signed && value < 0))) {
+    if (value === undefined || !Number.isFinite(value) || (value <= 0 && !(signed && (value < 0 || (value === 0 && storage.poolTargetMode === "exact"))))) {
       // Not a number: the field falls back to what it held.
       return;
     }
@@ -815,7 +816,7 @@ export function TargetLine({
       // tile draws, wrapped only to be clickable (z-40, over the wire
       // handles that blanket the well at z-30). Unreachable overrides the
       // line's own green with red from outside.
-      <MinecraftTooltip content={() => <RecipeTooltip view={buildTargetTooltip(storage, result)} />}>
+      <MinecraftTooltip content={() => <RecipeTooltip view={buildTargetTooltip(storage, result, signed)} />}>
       <div
         role="button"
         tabIndex={0}
@@ -845,7 +846,7 @@ export function TargetLine({
         {/* Nudged up a couple of pixels so the dotted underline clears the
             tile's bottom edge instead of merging with it. */}
         <div className="relative -translate-y-[2px] underline decoration-dotted decoration-[1.5px] underline-offset-[3px]">
-          {target !== undefined && (target > 0 || (signed && target < 0)) ? (
+          {target !== undefined && (target > 0 || (signed && target < 0) || showZero) ? (
             <NetLine net={target} kind={storage.kind} role="product" />
           ) : (
             <div

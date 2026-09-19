@@ -448,6 +448,8 @@ export interface FactoryStorage {
    * errors a board.
    */
   targetPerSecond?: number;
+  /** Pool target rule. Absent means at-least for outputs and exact for negative inputs. */
+  poolTargetMode?: "at-least" | "exact" | "ignore";
   /** Buffers only; absent means `overflow`. See StorageBufferMode. */
   bufferMode?: StorageBufferMode;
   /** Ratio mode's unwired surplus share, 0–100; absent means no export. */

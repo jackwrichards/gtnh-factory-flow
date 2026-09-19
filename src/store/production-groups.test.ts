@@ -108,6 +108,22 @@ describe("production group mutations", () => {
     );
     expect(useFactoryStore.getState().project.storages).toHaveLength(2);
   });
+  it("saves target rules through clipboard and keeps scopes independent", () => {
+    const store = useFactoryStore.getState();
+    const group = store.createProductionGroup("Line")!;
+    store.addPoolStorage({ kind: "item", id: "x" }, "drain");
+    store.addPoolStorage({ kind: "item", id: "x" }, "drain", undefined, group);
+    const [root, local] = useFactoryStore.getState().project.storages!;
+    store.setPoolTargetMode(local.id, "exact");
+    expect(useFactoryStore.getState().project.storages!.find(s => s.id === root.id)?.poolTargetMode).toBeUndefined();
+    const payload = boardSelectionPayloadSchema.parse(captureBoardSelection(useFactoryStore.getState().project, [local.id]));
+    store.setProject({ ...empty(), nodes: [] });
+    store.pasteBoardItems(payload, { x: 100, y: 100 });
+    expect(useFactoryStore.getState().project.storages![0].poolTargetMode).toBe("exact");
+    useFactoryStore.setState({ isReadOnly: true });
+    store.setPoolTargetMode(useFactoryStore.getState().project.storages![0].id, "ignore");
+    expect(useFactoryStore.getState().project.storages![0].poolTargetMode).toBe("exact");
+  });
   it("does not permit mutations in a read-only plan", () => {
     const store = useFactoryStore.getState();
     const group = store.createProductionGroup("Line")!;

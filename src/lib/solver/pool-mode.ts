@@ -192,8 +192,13 @@ export function expandPool(project: FactoryProject): PoolExpansion {
     }
   }
   const inputTargetIds = new Set<string>();
+  const exactOutputIds = new Set<string>();
   for (const storage of project.storages ?? []) {
     let side = poolSideOf(storage, wiredIn.has(storage.id), wiredOut.has(storage.id));
+    // Ignored negative goals must not become unlimited input sources or new drains.
+    if (storage.poolTargetMode === "ignore" && (storage.targetPerSecond ?? 0) < 0) continue;
+    if (side === "drain" && storage.poolTargetMode === "exact" && storage.targetPerSecond !== undefined
+      && storage.targetPerSecond >= 0 && (!storage.drainMode || storage.drainMode === "product")) exactOutputIds.add(storage.id);
     if (side === "drain" && (storage.targetPerSecond ?? 0) < 0 && (!storage.drainMode || storage.drainMode === "product")) {
       inputTargetIds.add(storage.id);
       side = "source";
@@ -327,6 +332,7 @@ export function expandPool(project: FactoryProject): PoolExpansion {
       if (resource.kind === "power" && (!pool.feeders.length || !pool.takers.length)) continue;
       const poolId = uniqueStorageId(POOL_STORAGE_PREFIX + scopeTag + key);
       const hasInputTarget = pool.feeders.some((feeder) => inputTargetIds.has(feeder.id));
+      const hasExactOutput = pool.takers.some((taker) => exactOutputIds.has(taker.id));
       // An explicit input rate cannot be topped up by Ignore or banked unused.
       if (!hasInputTarget && (rule === "import" || (!group && rule === "share")) && pool.takers.length) {
         const sourceId = uniqueStorageId(POOL_STORAGE_PREFIX + "import:" + scopeTag + key);
@@ -341,7 +347,7 @@ export function expandPool(project: FactoryProject): PoolExpansion {
       }
       storages.push({
         id: poolId,
-        bufferMode: hasInputTarget ? "strict" : undefined,
+        bufferMode: hasInputTarget || hasExactOutput ? "strict" : undefined,
         kind: resource.kind,
         resourceId: resource.id,
         displayName: resource.displayName,

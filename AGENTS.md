@@ -1855,6 +1855,11 @@ Working notes for future agents on GTNH Factory Flow.
   goals: expand their product drawer to a source and enforce strict receiving balance.
   Explicit input goals prevent Ignore top-up in that pool; positive targets remain minimums.
   Signed values persist but are dormant outside Pool. See pool-input-targets.test.ts.
+- Product poolTargetMode offers at-least (default), exact, and ignore. Exact output
+  adds a ceiling and makes its receiving pool strict, including zero output goals;
+  other drain drawers must not bypass the ceiling. Ignore preserves the saved rate
+  but removes the target constraint. An ignored negative goal must NOT become an
+  unlimited source. Rules are dormant in wired Solve/Build. See pool-target-rules.test.ts.
 
 ## Verification
 

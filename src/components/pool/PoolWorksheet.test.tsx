@@ -434,6 +434,29 @@ describe("Pool worksheet", () => {
     expect(useFactoryStore.getState().project.storages?.[0].targetPerSecond).toBeUndefined();
   });
 
+  it("switches target rules without losing the saved rate and supports undo", () => {
+    render(<PoolWorksheet />);
+    const rule = screen.getByRole("combobox", { name: "Target rule for Copper Plate" });
+    fireEvent.change(rule, { target: { value: "ignore" } });
+    expect(useFactoryStore.getState().project.storages?.[0]).toMatchObject({ targetPerSecond: 0.5, poolTargetMode: "ignore" });
+    expect(useFactoryStore.getState().lastResult.nodes.machine.theoreticalMachinesRequired).toBe(0);
+    fireEvent.change(rule, { target: { value: "exact" } });
+    expect(useFactoryStore.getState().lastResult.nodes.machine.theoreticalMachinesRequired).toBeCloseTo(0.5);
+    act(() => useFactoryStore.getState().undo());
+    expect((screen.getByRole("combobox", { name: "Target rule for Copper Plate" }) as HTMLSelectElement).value).toBe("ignore");
+  });
+
+  it("accepts zero only as an exact output target", () => {
+    render(<PoolWorksheet />);
+    fireEvent.change(screen.getByRole("combobox", { name: "Target rule for Copper Plate" }), { target: { value: "exact" } });
+    fireEvent.click(screen.getByRole("button", { name: "Required amount" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Required amount" }), { target: { value: "0" } });
+    fireEvent.blur(screen.getByRole("textbox", { name: "Required amount" }));
+    expect(useFactoryStore.getState().project.storages?.[0].targetPerSecond).toBe(0);
+    expect(screen.getByRole("button", { name: "Required amount" }).textContent).toContain("0/s");
+    expect(useFactoryStore.getState().lastResult.nodes.machine.theoreticalMachinesRequired).toBe(0);
+  });
+
   it("edits the real product target and supports undo", () => {
     render(<PoolWorksheet />);
     fireEvent.click(screen.getByRole("button", { name: "Required amount" }));

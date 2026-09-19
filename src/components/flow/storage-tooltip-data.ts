@@ -87,6 +87,13 @@ export function buildStorageTooltip(
       break;
     case "product": {
       const target = storage.targetPerSecond;
+      if (mode === "pool" && storage.poolTargetMode === "ignore") {
+        view.subtitle = "Ignored target";
+        view.reason = "The saved amount does not drive production.";
+        view.rows = target !== undefined ? [{ label: "Saved target", value: rate(target) }] : [];
+        if ((target ?? 0) >= 0) view.rows.push({ label: "Produced", value: rate(inRate) });
+        break;
+      }
       if (mode === "pool" && target !== undefined && target < 0) {
         view.subtitle = "Input goal";
         view.rows = [{ label: "Consume", value: rate(-target) }, { label: "Consumed", value: rate(outRate) }];
@@ -126,15 +133,17 @@ export function buildStorageTooltip(
 }
 
 /** The required-amount field: the number, and what is reachable when it is not. */
-export function buildTargetTooltip(storage: FactoryStorage, figures: StorageThroughputResult | undefined): RecipeTooltipView {
+export function buildTargetTooltip(storage: FactoryStorage, figures: StorageThroughputResult | undefined, poolMode = false): RecipeTooltipView {
   const target = storage.targetPerSecond;
   const rate = (value: number) => formatSlotRate(value, storage.kind);
   const input = target !== undefined && target < 0;
-  const rows = target ? [{ label: input ? "Consume" : "Required", value: rate(Math.abs(target)) }] : [];
+  const ignored = poolMode && storage.poolTargetMode === "ignore";
+  const exact = poolMode && (storage.poolTargetMode === "exact" || input);
+  const rows = target !== undefined ? [{ label: ignored ? "Saved target" : input ? "Consume" : exact ? "Exactly" : "Required", value: rate(ignored ? target : Math.abs(target)) }] : [];
   if (figures?.targetUnreachable && figures.producedPerSecond >= 0) {
     rows.push({ label: "Reachable", value: rate(input ? figures.consumedPerSecond : figures.producedPerSecond) });
   }
-  return { title: input ? "Input goal" : "Required amount", rows, actions: [{ gesture: "left", label: "Edit amount" }] };
+  return { title: ignored ? "Ignored target" : input ? "Input goal" : exact ? "Exact output goal" : "Required amount", reason: ignored ? "The saved amount does not drive production." : undefined, rows, actions: [{ gesture: "left", label: "Edit amount" }] };
 }
 
 const NEXT_ACTION = (next: string): TooltipAction[] => [{ gesture: "left", label: `Switch to ${next}` }];

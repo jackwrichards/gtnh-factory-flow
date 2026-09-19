@@ -988,8 +988,11 @@ function Product({ storage }: { storage: FactoryStorage }) {
   const result = useFactoryStore((state) => state.lastResult.storages[storage.id]);
   const readOnly = useFactoryStore((state) => state.isReadOnly);
   const orderTarget = useOrderTarget("products", storage.id);
+  const ignored = storage.poolTargetMode === "ignore";
+  const inputGoal = (storage.targetPerSecond ?? 0) < 0;
+  const rule = ignored ? "ignore" : inputGoal ? "exact" : storage.poolTargetMode ?? "at-least";
   return (
-    <tr {...orderTarget} className="pool-product" data-worksheet-product={storage.id}>
+    <tr {...orderTarget} className="pool-product" data-worksheet-product={storage.id} data-target-ignored={ignored || undefined}>
       <td>
         <div className="pool-balance-name">
           <OrderHandle
@@ -1024,6 +1027,15 @@ function Product({ storage }: { storage: FactoryStorage }) {
         ) : null}
       </td>
       <td className="pool-product-target">
+        <div className="pool-target-controls">
+          <select aria-label={"Target rule for " + (storage.displayName ?? storage.resourceId)}
+            className="pool-target-rule" value={rule} disabled={readOnly}
+            title={ignored ? "Keep this amount saved without driving production." : rule === "exact" ? "Match this rate exactly; no extra output may accumulate in this pool." : "Produce this amount or more."}
+            onChange={(event) => useFactoryStore.getState().setPoolTargetMode(storage.id, event.target.value as NonNullable<FactoryStorage["poolTargetMode"]>)}>
+            {!inputGoal ? <option value="at-least">At least</option> : null}
+            <option value="exact">Exactly</option>
+            <option value="ignore">Ignore</option>
+          </select>
         {readOnly ? (
           <span>
             {storage.targetPerSecond === undefined
@@ -1033,9 +1045,12 @@ function Product({ storage }: { storage: FactoryStorage }) {
         ) : (
           <TargetLine storage={storage} result={result} />
         )}
+        </div>
       </td>
       <td className={result?.targetUnreachable ? "pool-flow-input" : "pool-sheet-muted"}>
-        {result?.targetUnreachable ? (
+        {ignored && inputGoal ? (
+          <span title="This input goal is ignored">—</span>
+        ) : result?.targetUnreachable ? (
           "Unreachable"
         ) : (
           <BalanceRate value={(storage.targetPerSecond ?? 0) < 0 ? (result?.consumedPerSecond ?? 0) : (result?.producedPerSecond ?? 0)} kind={storage.kind} sign={(storage.targetPerSecond ?? 0) < 0 ? -1 : 0} />

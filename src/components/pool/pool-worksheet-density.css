@@ -765,3 +765,19 @@
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr:first-child > .pool-actions-cell { grid-column: 3 / -1; grid-row: 2; }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] :is(.pool-status-cell, .pool-circuit-cell, .pool-takes-cell, .pool-makes-cell, .pool-actions-cell) { grid-row: calc(var(--pool-section-row) + 1); }
 }
+/* Target rules sit beside the saved amount; ignored goals remain editable. */
+.pool-worksheet--dense .pool-products-table th:nth-child(2) { width: 136px; }
+.pool-worksheet--dense .pool-products-table th:nth-child(3) { width: 70px; }
+.pool-target-controls { display: flex; align-items: center; justify-content: space-between; gap: 7px; padding-right: 8px; }
+.pool-target-controls > [data-tooltip-root] { min-width: 0; }
+.pool-target-rule { width: 64px; flex: 0 0 64px; padding: 1px 0; font: 10px var(--app-font); color: var(--mc-ink); background: transparent; border: 0; border-bottom: 1px dotted #ffffff40; cursor: pointer; }
+.pool-target-rule option { background: var(--surface, #24272c); color: var(--mc-ink); }
+.pool-target-rule:focus-visible { outline: 1px solid #adc7ff; }
+.pool-product[data-target-ignored] .pool-product-target [aria-label="Required amount"] { opacity: .5; }
+.pool-product[data-target-ignored] .pool-target-rule { color: var(--mc-ink-muted); }
+@container (max-width: 440px) {
+  .pool-worksheet--dense .pool-products-table th:nth-child(2) { width: 83px; }
+  .pool-worksheet--dense .pool-products-table th:nth-child(3) { width: 65px; }
+  .pool-target-controls { flex-direction: column; gap: 2px; padding: 3px 0; }
+  .pool-target-rule { flex: none; height: 18px; }
+}

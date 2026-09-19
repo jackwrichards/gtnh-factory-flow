@@ -450,6 +450,7 @@ interface FactoryStore {
   setStorageDrainMode: (storageId: string, drainMode: StorageDrainMode) => void;
   /** Solve mode's requirement on a product drawer; undefined clears it. */
   setStorageTarget: (storageId: string, targetPerSecond: number | undefined) => void;
+  setPoolTargetMode: (storageId: string, mode: NonNullable<FactoryStorage["poolTargetMode"]>) => void;
   /**
    * The board's three modes on one switch: build (both flags off), solve
    * (solveMode), pool (solveMode plus poolMode). One undo step.
@@ -2532,6 +2533,19 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
         project,
         lastResult: solveBooks(project),
       });
+    });
+  },
+  setPoolTargetMode: (storageId, poolTargetMode) => {
+    set((state) => {
+      if (state.isReadOnly) return state;
+      const typed = state.project.storages?.find((storage) => storage.id === storageId);
+      if (!typed) return state;
+      const roles = getStorageRoles(state.project);
+      const project = touchProject({ ...state.project, storages: state.project.storages?.map((storage) =>
+        storage.id === storageId || (storage.kind === typed.kind && storage.resourceId === typed.resourceId
+          && storage.productionGroupId === typed.productionGroupId && roles.get(storage.id) === "product")
+          ? { ...storage, poolTargetMode } : storage) });
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
     });
   },
   createProductionGroup: (name, parentId) => {

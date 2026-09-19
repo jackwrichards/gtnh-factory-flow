@@ -494,7 +494,8 @@ export function hasAnySolveNumbers(project: FactoryProject): boolean {
   return (
     (project.storages ?? []).some(
       (storage) =>
-        ((storage.targetPerSecond ?? 0) > 0 || (project.poolMode && (storage.targetPerSecond ?? 0) < 0)) &&
+        (!project.poolMode || storage.poolTargetMode !== "ignore") &&
+        ((storage.targetPerSecond ?? 0) > 0 || (project.poolMode && ((storage.targetPerSecond ?? 0) < 0 || (storage.poolTargetMode === "exact" && storage.targetPerSecond === 0)))) &&
         // A byproduct or trash drawer's number is DORMANT (typed while it
         // was a product, kept for the flip back): it asks nothing, so it
         // must not silence the needs-a-number notice.
@@ -526,12 +527,14 @@ function finalizeSolveModeResult(
   const targets = projectStorages
     .filter(
       (storage) =>
-        (roles.get(storage.id) === "product" && (storage.targetPerSecond ?? 0) > 0) ||
-        (project.poolMode && roles.get(storage.id) === "source" && (storage.targetPerSecond ?? 0) < 0),
+        (!project.poolMode || storage.poolTargetMode !== "ignore") && (
+          (roles.get(storage.id) === "product" && ((storage.targetPerSecond ?? 0) > 0 || (project.poolMode && storage.poolTargetMode === "exact" && storage.targetPerSecond === 0))) ||
+          (project.poolMode && roles.get(storage.id) === "source" && (storage.targetPerSecond ?? 0) < 0)),
     )
     .map((storage) => ({
       storageId: storage.id,
       amountPerSecond: storage.targetPerSecond!,
+      exact: project.poolMode && storage.poolTargetMode === "exact",
     }));
 
   const pins = project.nodes
@@ -544,7 +547,9 @@ function finalizeSolveModeResult(
       id: "solve-pins",
       kind: "resource-deficit",
       severity: "critical",
-      message: "The pinned machine counts cannot run together. Check their outputs have somewhere to go.",
+      message: targets.some((target) => target.exact || target.amountPerSecond < 0)
+        ? "The pinned machine counts conflict with each other or an exact target. Check the target rates and pinned counts."
+        : "The pinned machine counts cannot run together. Check their outputs have somewhere to go.",
     });
   }
 
