@@ -9,10 +9,12 @@ export function WorksheetPower({
   entries,
   id,
   compact = false,
+  title = "Power",
 }: {
   entries: MachineListEntry[];
   id?: string;
   compact?: boolean;
+  title?: string;
 }) {
   const sum = (key: "euT" | "avgEuT" | "madeEuT" | "avgMadeEuT" | "steamLs" | "avgSteamLs") =>
     entries.reduce((total, entry) => total + (entry[key] ?? 0), 0);
@@ -101,7 +103,7 @@ export function WorksheetPower({
   return (
     <section id={id} className="pool-sheet-power" aria-label="Pool power summary">
       <div className="pool-sheet-resource-heading">
-        <h3>Power</h3>
+        <h3>{title}</h3>
       </div>
       <div className="pool-resources-scroll">{table}</div>
     </section>

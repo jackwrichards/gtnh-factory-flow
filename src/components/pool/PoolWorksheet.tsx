@@ -28,6 +28,7 @@ import { ItemPickerPopover } from "../ItemPickerPopover";
 import { TargetLine } from "../flow/StorageNode";
 import { RecipeTooltip } from "../flow/RecipeTooltip";
 import { formatSignedRate } from "../inspector/flow-rate";
+import { WorksheetSettings } from "./WorksheetSettings";
 import { WorksheetPower } from "./WorksheetPower";
 import "../inspector/panel.css";
 import { buildStatusTooltip, buildPortTooltip } from "../flow/recipe-tooltip-data";
@@ -215,6 +216,10 @@ export function PoolWorksheet() {
           resources={scopeRows}
           readOnly={readOnly}
           collapsed={collapsed}
+          hasContents={Boolean(
+            groups.some((entry) => entry.owner.productionGroupId === group?.id) ||
+            project.productionGroups?.some((entry) => entry.parentId === group?.id),
+          )}
           inputs={inputs}
           outputs={outputs}
           power={<WorksheetPower entries={powerEntries} compact />}
@@ -308,35 +313,41 @@ export function PoolWorksheet() {
       >
         <WorksheetPointerDrag>
           <div className="pool-sheet-scroll">
-            <div className="pool-desired-products">
-              <ProductsPane id={`${summaryId}-products`}>
-                <div className="pool-products-heading">
-                  <h3>Desired products</h3>
-                  {!readOnly ? <AddPoolProduct /> : null}
-                </div>
-                <div className="pool-products-scroll">
-                  <table
-                    className="pool-summary-table pool-products-table"
-                    aria-label="Pool products"
-                  >
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Target</th>
-                        <th>Supplied</th>
-                        <th>
-                          <span className="sr-only">Actions</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {products.map((storage) => (
-                        <Product key={storage.id} storage={storage} />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </ProductsPane>
+            <div className="pool-overview">
+              <div className="pool-desired-products">
+                <ProductsPane id={`${summaryId}-products`}>
+                  <div className="pool-products-heading">
+                    <h3>Desired products</h3>
+                    {!readOnly ? <AddPoolProduct /> : null}
+                  </div>
+                  <div className="pool-products-scroll">
+                    <table
+                      className="pool-summary-table pool-products-table"
+                      aria-label="Pool products"
+                    >
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Target</th>
+                          <th>Supplied</th>
+                          <th>
+                            <span className="sr-only">Actions</span>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {products.map((storage) => (
+                          <Product key={storage.id} storage={storage} />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </ProductsPane>
+              </div>
+              <WorksheetPower
+                entries={groups.flatMap((entry) => (entry.machine ? [entry.machine] : []))}
+                title="Total power"
+              />
             </div>
             {result.stale ? (
               <p className="pool-sheet-notice" role="status">
@@ -492,7 +503,17 @@ const MachineRows = memo(function MachineRows({
 }) {
   useRateDisplayUnits();
   const { owner, machine, sections } = group;
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsAnchor, setSettingsAnchor] = useState<{
+    x: number;
+    top: number;
+    bottom: number;
+  } | null>(null);
+  const settingsOpen = Boolean(settingsAnchor);
+  const settingsButton = useRef<HTMLButtonElement>(null);
+  const closeSettings = () => {
+    setSettingsAnchor(null);
+    settingsButton.current?.focus({ preventScroll: true });
+  };
   const settingsId = useId();
   const orderTarget = useOrderTarget("machines", owner.id);
   const updateNode = useFactoryStore((state) => state.updateNode);
@@ -613,9 +634,17 @@ const MachineRows = memo(function MachineRows({
                       className="pool-sheet-icon-button"
                       aria-label={"Settings for " + label}
                       title="Machine settings and group"
+                      ref={settingsButton}
+                      data-worksheet-settings-anchor
+                      aria-haspopup="dialog"
                       aria-expanded={settingsOpen}
                       aria-controls={settingsId}
-                      onClick={() => setSettingsOpen((open) => !open)}
+                      onClick={(event) => {
+                        const box = event.currentTarget.getBoundingClientRect();
+                        setSettingsAnchor(
+                          settingsOpen ? null : { x: box.right, top: box.top, bottom: box.bottom },
+                        );
+                      }}
                     >
                       <Settings2 />
                     </button>
@@ -681,42 +710,32 @@ const MachineRows = memo(function MachineRows({
           </td>
         </tr>
       ))}
-      {settingsOpen && (settings || hasProductionGroups) ? (
-        <tr className="pool-settings-row">
-          <td colSpan={8}>
-            <div
-              id={settingsId}
-              className="pool-settings-section"
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.stopPropagation();
-                  setSettingsOpen(false);
-                }
-              }}
-            >
-              <strong>{label}</strong>
-              {hasProductionGroups ? (
-                <ProductionGroupSelect
-                  value={owner.productionGroupId}
-                  label={"Production group for " + label}
-                  disabled={readOnly}
-                  onChange={(id) =>
-                    useFactoryStore.getState().moveToProductionGroup([owner.id], id)
-                  }
-                />
-              ) : null}
-              {settings}
-              <button
-                type="button"
-                className="pool-sheet-icon-button"
-                aria-label="Close machine settings"
-                onClick={() => setSettingsOpen(false)}
-              >
-                <X />
-              </button>
-            </div>
-          </td>
-        </tr>
+      {settingsAnchor && (settings || hasProductionGroups) ? (
+        <WorksheetSettings
+          id={settingsId}
+          label={label}
+          anchor={settingsAnchor}
+          onClose={closeSettings}
+        >
+          <strong>{label}</strong>
+          {hasProductionGroups ? (
+            <ProductionGroupSelect
+              value={owner.productionGroupId}
+              label={"Production group for " + label}
+              disabled={readOnly}
+              onChange={(id) => useFactoryStore.getState().moveToProductionGroup([owner.id], id)}
+            />
+          ) : null}
+          {settings}
+          <button
+            type="button"
+            className="pool-sheet-icon-button"
+            aria-label="Close machine settings"
+            onClick={closeSettings}
+          >
+            <X />
+          </button>
+        </WorksheetSettings>
       ) : null}
     </tbody>
   );

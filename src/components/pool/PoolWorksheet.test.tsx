@@ -187,8 +187,8 @@ describe("Pool worksheet", () => {
   it("keeps summary sections fixed, uses signed inspector rates, and separates power", () => {
     render(<PoolWorksheet />);
     expect(screen.queryByRole("button", { name: /Reorder .* panel/ })).toBeNull();
-    const inputs = screen.getByRole("region", { name: "Inputs for Factory" });
-    const outputs = screen.getByRole("region", { name: "Outputs for Factory" });
+    const inputs = screen.getByRole("region", { name: "Inputs for All production" });
+    const outputs = screen.getByRole("region", { name: "Outputs for All production" });
     expect(within(inputs).getByRole("button", { name: "Copper Ingot" })).toBeTruthy();
     expect(inputs.textContent).toContain("0.5/s");
     expect(within(outputs).getByRole("button", { name: "Copper Plate" })).toBeTruthy();
@@ -274,7 +274,7 @@ describe("Pool worksheet", () => {
       hiddenResourceKeys: ["item:copper"],
     });
     render(<PoolWorksheet />);
-    const resources = screen.getByRole("region", { name: "Inputs for Factory" });
+    const resources = screen.getByRole("region", { name: "Inputs for All production" });
     expect(within(resources).getByRole("button", { name: "Copper Ingot" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Show only favourite resources" })).toBeNull();
   });
@@ -322,7 +322,7 @@ describe("Pool worksheet", () => {
     expect(screen.queryByRole("button", { name: "Disable machine" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Enable machine" })).toBeNull();
   });
-  it("edits machine-specific settings below the machine and omits empty settings sections", () => {
+  it("edits machine settings in a dismissible popover without adding a table row", () => {
     const project = fixture();
     project.recipes[0].machineConfigControls = [
       {
@@ -340,10 +340,11 @@ describe("Pool worksheet", () => {
     const { container } = render(<PoolWorksheet />);
     expect(container.querySelector(".pool-settings-section")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Settings for Bender" }));
-    const settings = container.querySelector(".pool-settings-section") as HTMLElement;
+    const settings = screen.getByRole("dialog", { name: "Settings for Bender" });
     fireEvent.click(within(settings).getByRole("button", { name: "Next Solenoid" }));
     expect(useFactoryStore.getState().project.nodes[0].machineConfigTiers?.solenoidCoil).toBe("mv");
-    expect(container.querySelector(".pool-settings-row")?.contains(settings)).toBe(true);
+    expect(container.querySelector(".pool-settings-row")).toBeNull();
+    expect(document.activeElement).toBe(settings);
     expect(screen.queryByRole("columnheader", { name: "Settings" })).toBeNull();
     act(() => useFactoryStore.getState().undo());
     expect(
@@ -362,17 +363,37 @@ describe("Pool worksheet", () => {
         cancelable: true,
       }),
     ).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Close machine settings" }));
-    expect(container.querySelector(".pool-settings-section")).toBeNull();
+    fireEvent.keyDown(settings, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Settings for Bender" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Settings for Bender" }));
+    fireEvent.click(screen.getByRole("button", { name: "Settings for Bender" }));
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("dialog", { name: "Settings for Bender" })).toBeNull();
   });
-  it("shows desired products followed by one always-visible factory total", () => {
+  it("opens only the selected machine's settings popover", () => {
+    const project = fixture();
+    project.productionGroups = [{ id: "line", name: "Line" }];
+    project.nodes.push({ ...project.nodes[0], id: "second" });
+    useFactoryStore.getState().setProject(project);
+    render(<PoolWorksheet />);
+    const buttons = screen.getAllByRole("button", { name: "Settings for Bender" });
+    fireEvent.click(buttons[0]);
+    expect(buttons[0].getAttribute("aria-expanded")).toBe("true");
+    fireEvent.pointerDown(buttons[1]);
+    fireEvent.click(buttons[1]);
+    expect(buttons[0].getAttribute("aria-expanded")).toBe("false");
+    expect(buttons[1].getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  });
+
+  it("shows desired products beside total power and an all-production summary", () => {
     const { container } = render(<PoolWorksheet />);
     const scroller = container.querySelector(".pool-sheet-scroll")!;
     expect(scroller.querySelector(".pool-desired-products")).not.toBeNull();
     expect(screen.getByRole("heading", { name: "Desired products" })).toBeDefined();
-    expect(screen.getByRole("region", { name: "Inputs for Factory" })).toBeDefined();
-    expect(screen.getByRole("region", { name: "Outputs for Factory" })).toBeDefined();
-    expect(screen.queryByRole("button", { name: "Material rules for Factory pool" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Inputs for All production" })).toBeDefined();
+    expect(screen.getByRole("region", { name: "Outputs for All production" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "Material rules for All production pool" })).toBeNull();
     expect(container.querySelector(".pool-summary-toggles")).toBeNull();
   });
 
@@ -462,6 +483,8 @@ describe("production group controls", () => {
   it("creates, names and nests groups, moves a machine, and undoes the move", () => {
     render(<PoolWorksheet />);
     fireEvent.click(screen.getByRole("button", { name: "Add production group" }));
+    expect(screen.queryByRole("button", { name: "Collapse Group 1" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Move group Group 1" }).getAttribute("title")).toBeNull();
     const name = screen.getByRole("textbox", { name: "Production group name" });
     fireEvent.change(name, { target: { value: "Copper line" } }); fireEvent.blur(name);
     const id = useFactoryStore.getState().project.productionGroups![0].id;
@@ -484,7 +507,7 @@ describe("production group controls", () => {
     expect(link.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(link);
     expect(useFactoryStore.getState().project.productionGroups![0].resourceRules).toEqual({ "item:copper": "share" });
-    fireEvent.click(screen.getByRole("button", { name: "Ignore Copper Ingot in Factory" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ignore Copper Ingot in All production" }));
     expect(useFactoryStore.getState().project.poolResourceRules).toEqual({ "item:copper": "import" });
     expect(useFactoryStore.getState().project.recipes).toBe(before);
     fireEvent.click(link);
@@ -508,7 +531,7 @@ describe("production group controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add product" }));
     fireEvent.click(screen.getByRole("button", { name: "Pick Copper Ingot" }));
     expect(useFactoryStore.getState().project.storages!.find((s) => s.resourceId === "copper")?.productionGroupId).toBeUndefined();
-    fireEvent.click(screen.getByRole("button", { name: "Ungroup Copper line" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete group Copper line" }));
     expect(useFactoryStore.getState().project.nodes).toHaveLength(1);
     expect(useFactoryStore.getState().project.storages).toHaveLength(2);
     expect(useFactoryStore.getState().project.nodes[0].productionGroupId).toBeUndefined();
@@ -518,9 +541,11 @@ describe("production group controls", () => {
     useFactoryStore.getState().setProject(p);
     const { container } = render(<PoolWorksheet />);
     expect(screen.queryByLabelText("Parent of Copper line")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Collapse Copper line" }));
+    expect(screen.queryByRole("button", { name: "Collapse Copper line" })).toBeNull();
     pointerDrop(screen.getByRole("button", { name: "Reorder machine Bender" }), container.querySelector('[data-production-group="line"]')!);
     expect(useFactoryStore.getState().project.nodes[0].productionGroupId).toBe("line");
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Copper line" }));
+    expect(container.querySelector('[data-worksheet-node="machine"]')).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Expand Copper line" }));
     pointerDrop(screen.getByRole("button", { name: "Reorder machine Bender" }), container.querySelector('[data-production-group="factory"]')!);
     expect(useFactoryStore.getState().project.nodes[0].productionGroupId).toBeUndefined();
