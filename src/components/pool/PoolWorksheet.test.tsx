@@ -375,6 +375,10 @@ describe("Pool worksheet", () => {
   it("keeps each machine settings dropdown independently expandable", () => {
     const project = fixture();
     project.productionGroups = [{ id: "line", name: "Line" }];
+    project.recipes[0].machineConfigControls = [{
+      id: "solenoidCoil", label: "Solenoid", defaultKey: "lv", minimumKey: "lv",
+      tiers: [{ key: "lv", label: "LV", resource: { kind: "item", id: "lv-solenoid", amount: 1 } }, { key: "mv", label: "MV", resource: { kind: "item", id: "mv-solenoid", amount: 1 } }],
+    }];
     project.nodes.push({ ...project.nodes[0], id: "second" });
     useFactoryStore.getState().setProject(project);
     render(<PoolWorksheet />);
@@ -525,15 +529,19 @@ describe("Pool worksheet", () => {
 
 describe("production group controls", () => {
   it("creates, names and nests groups, moves a machine, and undoes the move", () => {
-    render(<PoolWorksheet />);
+    const { container } = render(<PoolWorksheet />);
     fireEvent.click(screen.getByRole("button", { name: "Add production group" }));
     expect(screen.queryByRole("button", { name: "Collapse Group 1" })).toBeNull();
     expect(screen.getByRole("button", { name: "Move group Group 1" }).getAttribute("title")).toBeNull();
     const name = screen.getByRole("textbox", { name: "Production group name" });
     fireEvent.change(name, { target: { value: "Copper line" } }); fireEvent.blur(name);
     const id = useFactoryStore.getState().project.productionGroups![0].id;
-    fireEvent.click(screen.getByRole("button", { name: "Settings for Bender" }));
-    fireEvent.change(screen.getByLabelText("Production group for Bender"), { target: { value: id } });
+    const settingsButton = screen.getByRole("button", { name: "Settings for Bender" }) as HTMLButtonElement;
+    expect(settingsButton.disabled).toBe(true);
+    fireEvent.click(settingsButton);
+    expect(screen.queryByRole("region", { name: "Machine settings for Bender" })).toBeNull();
+    expect(screen.queryByLabelText("Production group for Bender")).toBeNull();
+    pointerDrop(screen.getByRole("button", { name: "Reorder machine Bender" }), container.querySelector(`[data-production-group="${id}"]`)!);
     expect(useFactoryStore.getState().project.nodes[0].productionGroupId).toBe(id);
     act(() => useFactoryStore.getState().undo());
     expect(useFactoryStore.getState().project.nodes[0].productionGroupId).toBeUndefined();

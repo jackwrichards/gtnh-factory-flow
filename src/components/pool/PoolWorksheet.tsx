@@ -1,7 +1,7 @@
 "use client";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
 import { getPoolGroupResources } from "@/lib/solver/pool-mode";
-import { ProductionGroupSelect, ProductionScopeHeader } from "./ProductionGroups";
+import { ProductionScopeHeader } from "./ProductionGroups";
 
 import {
   memo,
@@ -488,9 +488,6 @@ const MachineRows = memo(function MachineRows({
   const settingsId = useId();
   const orderTarget = useOrderTarget("machines", owner.id);
   const updateNode = useFactoryStore((state) => state.updateNode);
-  const hasProductionGroups = useFactoryStore((state) =>
-    Boolean(state.project.productionGroups?.length),
-  );
   const first = sections[0];
   const handler = first.recipe ? getSelectedMachineHandler(first.recipe, owner) : undefined;
   const label = machine?.label ?? handler?.label ?? "Missing recipe";
@@ -508,7 +505,7 @@ const MachineRows = memo(function MachineRows({
       {...orderTarget}
       data-worksheet-node={owner.id}
       data-collapsed={collapsed || undefined}
-      data-settings-open={settingsOpen || undefined}
+      data-settings-open={(settingsOpen && Boolean(settings)) || undefined}
       className={owner.enabled === false ? "pool-machine-off" : undefined}
     >
       {visibleSections.map((section, index) => (
@@ -599,21 +596,20 @@ const MachineRows = memo(function MachineRows({
             <div className="pool-row-actions">
               {index === 0 ? (
                 <>
-                  {settings || hasProductionGroups ? (
-                    <button
-                      type="button"
-                      className="pool-sheet-icon-button pool-settings-toggle"
-                      aria-label={"Settings for " + label}
-                      title="Machine settings"
-                      ref={settingsButton}
-                      aria-expanded={settingsOpen}
-                      aria-controls={settingsId}
-                      onClick={() => setSettingsOpen((open) => !open)}
-                    >
-                      <Settings2 />
-                      <span>Settings</span>
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    className="pool-sheet-icon-button pool-settings-toggle"
+                    aria-label={"Settings for " + label}
+                    title="Machine settings"
+                    ref={settingsButton}
+                    disabled={!settings}
+                    aria-expanded={Boolean(settings) && settingsOpen}
+                    aria-controls={settings ? settingsId : undefined}
+                    onClick={() => setSettingsOpen((open) => !open)}
+                  >
+                    <Settings2 />
+                    <span>Settings</span>
+                  </button>
                   {!readOnly ? (
                     <>
                       <button
@@ -675,7 +671,7 @@ const MachineRows = memo(function MachineRows({
           </td>
         </tr>
       ))}
-      {settingsOpen && (settings || hasProductionGroups) ? (
+      {settingsOpen && settings ? (
         <tr className="pool-settings-row">
           <td colSpan={8}>
             <div
@@ -691,16 +687,6 @@ const MachineRows = memo(function MachineRows({
               }}
             >
               <strong>Machine settings</strong>
-              {hasProductionGroups ? (
-                <ProductionGroupSelect
-                  value={owner.productionGroupId}
-                  label={"Production group for " + label}
-                  disabled={readOnly}
-                  onChange={(id) =>
-                    useFactoryStore.getState().moveToProductionGroup([owner.id], id)
-                  }
-                />
-              ) : null}
               {settings}
               <button
                 type="button"

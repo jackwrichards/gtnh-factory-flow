@@ -38,6 +38,9 @@
   width: 78px;
 }
 .pool-worksheet--dense .pool-col-actions {
+  width: 128px;
+}
+.pool-worksheet--dense .pool-sheet-table:has(> tbody[data-worksheet-node] .pool-collapse-machine) > colgroup > .pool-col-actions {
   width: 148px;
 }
 .pool-worksheet--dense .pool-sheet-table > tbody {
@@ -617,6 +620,12 @@
   gap: 4px;
   font-size: 10px;
 }
+.pool-worksheet--dense .pool-settings-toggle:disabled {
+  opacity: 0.35;
+  cursor: default;
+  color: var(--mc-ink-muted);
+  background: transparent;
+}
 .pool-worksheet--dense .pool-settings-toggle[aria-expanded="true"] {
   color: #adc7ff;
   background: #6f9cff18;
@@ -683,7 +692,8 @@
 @container (max-width: 850px) {
   .pool-worksheet--dense .pool-col-machine { width: 208px; }
   .pool-worksheet--dense .pool-col-power { width: 68px; }
-  .pool-worksheet--dense .pool-col-actions { width: 104px; }
+  .pool-worksheet--dense .pool-col-actions { width: 88px; }
+  .pool-worksheet--dense .pool-sheet-table:has(> tbody[data-worksheet-node] .pool-collapse-machine) > colgroup > .pool-col-actions { width: 108px; }
   .pool-worksheet--dense .pool-settings-toggle > span { display: none; }
   .pool-worksheet--dense .pool-settings-toggle { width: 19px; padding: 0; }
   .pool-worksheet--dense .pool-column-headings th { font-size: 9px; }
@@ -692,7 +702,6 @@
 @container (max-width: 650px) {
   .pool-worksheet--dense .pool-col-machine { width: 180px; }
   .pool-worksheet--dense .pool-col-power { width: 62px; }
-  .pool-worksheet--dense .pool-col-actions { width: 98px; }
   .pool-worksheet--dense .pool-machine-layout { gap: 3px; }
 }
 /* Small worksheets: controls on one line, materials on the next. */
