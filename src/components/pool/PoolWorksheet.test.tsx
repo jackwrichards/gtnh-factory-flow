@@ -100,6 +100,7 @@ beforeEach(() => {
   writeWorkspaceView({ ...DEFAULT_WORKSPACE_VIEW });
   useFactoryStore.setState({ isReadOnly: false, checklistMode: false });
   useFactoryStore.getState().setProject(fixture());
+  useFactoryStore.getState().clearResourceBrowser();
   vi.mocked(playBoardSound).mockClear();
 });
 afterEach(() => {
@@ -196,6 +197,7 @@ describe("Pool worksheet", () => {
     expect(screen.queryByRole("table", { name: "Pool resource balance" })).toBeNull();
     const power = screen.getByRole("region", { name: "Pool power summary" });
     const totals = power.textContent;
+    fireEvent.keyDown(document, { key: "f", ctrlKey: true });
     fireEvent.change(screen.getByRole("textbox", { name: "Filter worksheet" }), {
       target: { value: "not present" },
     });
@@ -403,14 +405,25 @@ describe("Pool worksheet", () => {
     expect(container.querySelector(".pool-summary-toggles")).toBeNull();
   });
 
-  it("filters without changing the plan, books or undo history", () => {
+  it("opens search on demand and clears it without changing the plan, books or undo history", () => {
     const { project, lastResult, undoHistory } = useFactoryStore.getState();
     render(<PoolWorksheet />);
     expect(screen.getByRole("table", { name: "Recipes running in the pool" })).toBeDefined();
+    expect(screen.queryByRole("textbox", { name: "Filter worksheet" })).toBeNull();
+    expect(screen.getByText("Drag items here")).toBeTruthy();
+    expect(screen.queryByText("Change machine: click its icon")).toBeNull();
+    fireEvent.keyDown(document, { key: "f", ctrlKey: true });
     fireEvent.change(screen.getByRole("textbox", { name: "Filter worksheet" }), {
       target: { value: "not present" },
     });
     expect(screen.getByText("No recipes match this filter.")).toBeDefined();
+    expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Filter worksheet" }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("textbox", { name: "Filter worksheet" })).toBeNull();
+    expect(screen.queryByText("No recipes match this filter.")).toBeNull();
+    fireEvent.keyDown(document, { key: "f", metaKey: true });
+    fireEvent.click(screen.getByRole("button", { name: "Close worksheet search" }));
+    expect(screen.queryByRole("textbox", { name: "Filter worksheet" })).toBeNull();
 
     const after = useFactoryStore.getState();
     expect(after.project).toBe(project);
@@ -571,6 +584,7 @@ describe("production group controls", () => {
     const view = render(<PoolWorksheet />);
     fireEvent.click(screen.getByRole("button", { name: "Collapse Copper line" }));
     expect(view.container.querySelector('[data-worksheet-node="machine"]')).toBeNull();
+    fireEvent.keyDown(document, { key: "f", ctrlKey: true });
     fireEvent.change(screen.getByLabelText("Filter worksheet"), { target: { value: "Copper" } });
     expect(view.container.querySelector('[data-worksheet-node="machine"]')).not.toBeNull();
   });

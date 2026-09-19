@@ -5,6 +5,7 @@ import { ProductionScopeHeader } from "./ProductionGroups";
 
 import {
   memo,
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -90,6 +91,32 @@ export function PoolWorksheet() {
   const readOnly = useFactoryStore((state) => state.isReadOnly);
   useRateDisplayUnits();
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null);
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setQuery("");
+    rootRef.current?.focus({ preventScroll: true });
+  }, []);
+  useEffect(() => {
+    if (searchOpen) searchInput.current?.focus();
+  }, [searchOpen]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || useFactoryStore.getState().recipeBrowserResource ||
+          document.querySelector('[role="dialog"], [data-item-picker]')) return;
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setSearchOpen(true);
+        searchInput.current?.select();
+      } else if (event.key === "Escape" && searchOpen) {
+        event.preventDefault();
+        closeSearch();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [searchOpen, closeSearch]);
   useEffect(() => {
     const scrollers = rootRef.current?.querySelectorAll<HTMLElement>(
       ".pool-products-scroll, .pool-sheet-balance .pool-resources-scroll",
@@ -277,6 +304,7 @@ export function PoolWorksheet() {
   return (
     <section
       ref={rootRef}
+      tabIndex={-1}
       data-viewer-inspect
       data-pool-worksheet
       className="pool-worksheet pool-worksheet--dense nodrag nopan nowheel"
@@ -323,7 +351,7 @@ export function PoolWorksheet() {
                     >
                       <thead>
                         <tr>
-                          <th><div className="pool-overview-title"><h3>Desired products</h3><span className="pool-target-hint">+ output · − input</span></div></th>
+                          <th><div className="pool-overview-title"><h3>Desired products</h3>{!readOnly ? <span className="pool-drop-hint">Drag items here</span> : null}</div></th>
                           <th title="Positive amounts set output goals; negative amounts set input goals.">Target (±)</th>
                           <th>Actual</th>
                           <th>
@@ -353,12 +381,14 @@ export function PoolWorksheet() {
                   : "Calculating… Showing the previous results."}
               </p>
             ) : null}
-            <div className="pool-machine-toolbar">
-              <label className="pool-sheet-search"><Search className="h-3.5 w-3.5" />
-                <input aria-label="Filter worksheet" placeholder="Search machines or items" value={query} onChange={(event) => setQuery(event.target.value)} />
-              </label>
-              <span className="pool-chooser-hint">Change machine: click its icon</span>
-            </div>
+            {searchOpen ? (
+              <div className="pool-machine-toolbar" role="search" aria-label="Find in worksheet">
+                <label className="pool-sheet-search"><Search className="h-3.5 w-3.5" />
+                  <input ref={searchInput} aria-label="Filter worksheet" placeholder="Search machines or items" value={query} onChange={(event) => setQuery(event.target.value)} />
+                </label>
+                <button type="button" className="pool-sheet-icon-button" aria-label="Close worksheet search" title="Close search (Esc)" onClick={closeSearch}><X /></button>
+              </div>
+            ) : null}
             <table className="pool-sheet-table" aria-label="Recipes running in the pool">
               <colgroup>
                 <col className="pool-col-picture" />
