@@ -116,7 +116,7 @@ it("shows existing sources with no rate in Pool and keeps zero-input limits thro
   act(() => useFactoryStore.getState().setPoolMode(true));
   const pool = render(<PoolWorksheet />);
   const row = pool.container.querySelector('[data-worksheet-product="input"]')! as HTMLElement;
-  expect(within(row).getByText("input rate?")).toBeTruthy();
+  expect(within(row).getByText("rate?")).toBeTruthy();
   fireEvent.change(within(row).getByRole("combobox"), { target: { value: "at-most" } });
   fireEvent.click(within(row).getByRole("button", { name: "Required amount" }));
   const field = within(row).getByRole("textbox");
@@ -150,4 +150,34 @@ it("makes both the source rate and rule read-only for viewers", () => {
   expect(screen.queryByRole("textbox")).toBeNull();
   useFactoryStore.getState().setStorageTargetMode("input", "ignore");
   expect(useFactoryStore.getState().project.storages![0].targetMode).toBeUndefined();
+});
+
+it("offers the same rules for both rate directions", () => {
+  const p = project();
+  render(
+    <>
+      <StorageTargetRule storage={p.storages![0]} input />
+      <StorageTargetRule storage={p.storages![1]} input={false} />
+    </>,
+  );
+  const menus = screen.getAllByRole("combobox") as HTMLSelectElement[];
+  expect([...menus[0].options].map((o) => o.value)).toEqual([
+    "at-least",
+    "exact",
+    "at-most",
+    "ignore",
+  ]);
+  expect([...menus[1].options].map((o) => o.value)).toEqual(
+    [...menus[0].options].map((o) => o.value),
+  );
+});
+
+it("keeps the chosen rule when the signed rate changes direction", () => {
+  act(() => useFactoryStore.getState().setPoolMode(true));
+  const store = useFactoryStore.getState();
+  store.setStorageTargetMode("input", "at-most");
+  store.setStorageTarget("input", 4);
+  expect(useFactoryStore.getState().project.storages![0]).toMatchObject({ targetPerSecond: 4, targetMode: "at-most", poolSide: "drain" });
+  store.setStorageTarget("input", -4);
+  expect(useFactoryStore.getState().project.storages![0]).toMatchObject({ targetPerSecond: -4, targetMode: "at-most", poolSide: "source" });
 });

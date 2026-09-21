@@ -556,16 +556,19 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             />
             {/* No wood face, no glass box: the dark tinted card IS the
                 surface, and the item fills nearly the whole well. */}
-            <div className="flex min-h-0 w-full flex-1 items-center justify-center gap-1">
+            <div className="relative flex min-h-0 w-full flex-1 items-center justify-center gap-1">
+              {solveMode && (role === "source" || role === "product") ? (
+                <StorageTargetRule storage={storage} input={isInputRate(storage, role)} compact className="!absolute right-1 top-1 z-40" />
+              ) : null}
               <ResourceIcon
                 resource={{ ...storage, id: storage.resourceId, amount: 1 }}
                 showAmount={false}
                 bare
                 iconPixelSize={storageIconPixelSize(
-                  role === "buffer" && storage.bufferMode === "ratio" ? 20 : solveMode && (role === "source" || role === "product") ? 24 : isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
+                  role === "buffer" && storage.bufferMode === "ratio" ? 20 : isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
                   storage,
                 )}
-                className={role === "buffer" && storage.bufferMode === "ratio" ? "!h-[20px] !w-[20px] shrink-0" : solveMode && (role === "source" || role === "product") ? "!h-6 !w-6" : "!h-[36px] !w-[36px]"}
+                className={role === "buffer" && storage.bufferMode === "ratio" ? "!h-[20px] !w-[20px] shrink-0" : "!h-[36px] !w-[36px]"}
               />
               {role === "buffer" && storage.bufferMode === "ratio" ? <RatioSetupOutput storageId={storage.id} percentage={ratioExportShare(storage) * 100} /> : null}
             </div>
@@ -576,7 +579,6 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               </div>
             ) : solveMode && (role === "product" || role === "source") ? (
               <div className="storage-target-controls nodrag nopan relative z-30 flex flex-col items-center gap-0.5" onPointerDown={event => event.stopPropagation()}>
-                <StorageTargetRule storage={storage} input={isInputRate(storage, role)} className="h-3.5 max-w-[76px] bg-transparent text-[8px] leading-none text-[var(--mc-ink-muted)] [&_option]:bg-[var(--surface)]" />
                 <TargetLine storage={storage} result={result} input={isInputRate(storage, role)} />
               </div>
             ) : (
@@ -869,7 +871,7 @@ export function TargetLine({
                 askBlink ? "animate-pulse text-[var(--flow-output)]" : "text-[var(--flow-output)] opacity-60",
               ].join(" ")}
             >
-              {input ? "input rate?" : "rate?"}
+              rate?
             </div>
           )}
           <Pencil

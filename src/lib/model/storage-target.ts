@@ -43,7 +43,9 @@ export function targetModeHelp(mode: TargetMode, input: boolean): string {
   if (mode === "ignore")
     return "Keep the saved rate without enforcing it. An input source remains available.";
   if (mode === "at-most")
-    return "Use up to this much fresh input; unused supply is allowed. This limit alone does not request production.";
+    return input
+      ? "Use up to this much fresh input; unused supply is allowed. This limit alone does not request production."
+      : "Make up to this much output. This limit alone does not request production.";
   if (mode === "exact")
     return input ? "Use exactly this much fresh input." : "Make exactly this much output.";
   return input ? "Use at least this much fresh input." : "Make this much output or more.";

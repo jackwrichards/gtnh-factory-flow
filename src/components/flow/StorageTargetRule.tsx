@@ -1,4 +1,5 @@
 "use client";
+import { SlidersHorizontal } from "lucide-react";
 import type { FactoryStorage } from "@/lib/model/types";
 import {
   storageTargetMode,
@@ -13,24 +14,26 @@ export function StorageTargetRule({
   storage,
   input,
   className = "",
+  compact = false,
 }: {
   storage: FactoryStorage;
   input: boolean;
   className?: string;
+  compact?: boolean;
 }) {
   const readOnly = useFactoryStore((state) => state.isReadOnly || state.checklistMode);
   const setMode = useFactoryStore((state) => state.setStorageTargetMode);
   const mode = storageTargetMode(storage, input ? "source" : "product");
-  const options: TargetMode[] = input
-    ? ["at-least", "exact", "at-most", "ignore"]
-    : ["at-least", "exact", "ignore"];
-  return (
+  const options: TargetMode[] = ["at-least", "exact", "at-most", "ignore"];
+  const select = (
     <select
-      className={className}
+      className={
+        compact ? "absolute inset-0 h-full w-full cursor-pointer opacity-0 text-[12px]" : className
+      }
       aria-label={"Target rule for " + (storage.displayName ?? storage.resourceId)}
       value={mode}
       disabled={readOnly}
-      title={targetModeHelp(mode, input)}
+      title={"Rate rule: " + TARGET_MODE_LABELS[mode] + ". " + targetModeHelp(mode, input)}
       onPointerDown={(event) => event.stopPropagation()}
       onKeyDown={(event) => event.stopPropagation()}
       onChange={(event) => setMode(storage.id, event.target.value as TargetMode)}
@@ -41,5 +44,18 @@ export function StorageTargetRule({
         </option>
       ))}
     </select>
+  );
+  return compact ? (
+    <span
+      className={
+        "nodrag nopan relative inline-flex h-4 w-4 items-center justify-center rounded-sm text-[var(--mc-ink-muted)] hover:bg-white/10 focus-within:ring-1 focus-within:ring-current " +
+        className
+      }
+    >
+      <SlidersHorizontal aria-hidden className="h-3 w-3" />
+      {select}
+    </span>
+  ) : (
+    select
   );
 }

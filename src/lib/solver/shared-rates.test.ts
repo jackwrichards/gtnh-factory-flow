@@ -69,6 +69,24 @@ for (const pool of [false, true])
       expect(r.storages.ingot.producedPerSecond).toBeCloseTo(3);
       expect(r.storages.ingot.targetUnreachable).not.toBe(true);
     });
+    it("caps output without hiding surplus in Pool", () => {
+      const p = fixture(pool);
+      p.storages![1].targetMode = "at-most";
+      p.storages![1].targetPerSecond = 3;
+      const r = calculateThroughput(p);
+      expect(r.storages.ingot.producedPerSecond).toBe(0);
+      expect(r.storages.ore.consumedPerSecond).toBe(0);
+      expect(r.storages.ore.targetUnreachable).toBe(true);
+    });
+    it("permits zero output ceilings", () => {
+      const p = fixture(pool);
+      p.storages![1].targetMode = "at-most";
+      p.storages![1].targetPerSecond = 0;
+      const r = calculateThroughput(p);
+      expect(r.storages.ingot.producedPerSecond).toBe(0);
+      expect(r.storages.ore.consumedPerSecond).toBe(0);
+      expect(r.storages.ore.targetUnreachable).toBe(true);
+    });
     it("does not turn a ceiling into a production demand", () => {
       const p = fixture(pool);
       p.storages![0].targetMode = "at-most";

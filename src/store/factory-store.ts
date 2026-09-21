@@ -1,6 +1,6 @@
 "use client";
 
-import { isInputRate, storageTargetMode, type TargetMode } from "@/lib/model/storage-target";
+import { isInputRate, type TargetMode } from "@/lib/model/storage-target";
 
 import { dissolveProductionGroup, productionGroupDescendants } from "@/lib/model/production-groups";
 import type { ProductionGroup, PoolResourceRule } from "@/lib/model/types";
@@ -2512,9 +2512,7 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       const oldInput = isInputRate(typed, roles.get(storageId));
       const value = !state.project.poolMode && oldInput && targetPerSecond !== undefined ? -Math.abs(targetPerSecond) : targetPerSecond;
       const input = value === undefined || value === 0 ? oldInput : value < 0;
-      const directionChanged = oldInput !== input;
-      const mode = storageTargetMode(typed, roles.get(storageId));
-      const targetMode = directionChanged && mode !== "ignore" && mode !== "exact" ? (input ? "exact" : "at-least") : typed.targetMode;
+      const targetMode = typed.targetMode;
       const project = touchProject({ ...state.project, storages: state.project.storages?.map((storage) => {
         const twin = storage.kind === typed.kind && storage.resourceId === typed.resourceId
           && storage.productionGroupId === typed.productionGroupId && roles.get(storage.id) === roles.get(storageId)

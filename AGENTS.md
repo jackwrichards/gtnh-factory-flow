@@ -1860,7 +1860,7 @@ Working notes for future agents on GTNH Factory Flow.
   solver/store production-groups.test.ts files.
 - Rates and rules are SHARED by wired Solve and Pool on FactoryStorage:
   targetPerSecond stores signed input/output amounts; targetMode offers at-least,
-  exact, ignore, and at-most for inputs. storage-target.ts is the shared interpretation.
+  exact, ignore, and at-most for either direction. storage-target.ts is the shared interpretation.
   Board source editors show positive magnitudes; Desired rates in Pool shows negative
   inputs and positive outputs, including existing wired sources with no rate.
   At most is a ceiling, not demand; Exactly uses the whole input. Zero limits work.
@@ -1868,7 +1868,7 @@ Working notes for future agents on GTNH Factory Flow.
   available. Legacy poolTargetMode values still load, and legacy negative goals are
   exact unless ignored. Build keeps settings dormant. Mode changes never alter wires.
   Pool input limits enforce strict receiving balance and block automatic top-up.
-  Exact Pool outputs cap all exports from their receiving pool, including other drains.
+  Exact and At most Pool outputs cap all exports from their receiving pool, including other drains.
   Separate source drawers retain independent rates. Group scopes apply only in Pool.
   See shared-rates.test.ts, StorageTargets.test.tsx, pool-input-targets.test.ts and
   pool-target-rules.test.ts.
