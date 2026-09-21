@@ -8,18 +8,18 @@ type RateStatus = { label: string; tone: "muted" | "met" | "failed"; explain?: b
 export function targetStatus(storage: FactoryStorage, role: StorageRole | undefined,
   result: StorageThroughputResult | undefined, stale = false, held = false): RateStatus {
   const mode = storageTargetMode(storage, role);
-  if (mode === "ignore") return { label: "Ignored", tone: "muted" };
-  if (!hasStorageTarget(storage, role)) return { label: "No target", tone: "muted" };
-  if (stale || !result) return { label: held ? "Recalculate" : "Updating…", tone: "muted" };
+  if (mode === "ignore") return { label: "Rate not enforced", tone: "muted" };
+  if (!hasStorageTarget(storage, role)) return { label: "No rate set", tone: "muted" };
+  if (stale || !result) return { label: held ? "Waiting to recalculate" : "Calculating…", tone: "muted" };
   const target = Math.abs(storage.targetPerSecond!);
   const actual = isInputRate(storage, role) ? result.consumedPerSecond : result.producedPerSecond;
   // Treat rounding at the solver's relative precision as equality, including large EU targets.
   const tolerance = Math.max(1e-7, target * 1e-5);
   if (result.targetUnreachable) return {
-    label: actual < target - tolerance ? "Short" : actual > target + tolerance ? "Over limit" : "Not met",
+    label: actual < target - tolerance ? "Below requested rate" : actual > target + tolerance ? "Rate limit exceeded" : "Target not met",
     tone: "failed", explain: true,
   };
-  if (mode === "at-most") return { label: "Within limit", tone: "met" };
-  if (mode === "at-least" && actual > target + tolerance) return { label: "Above target", tone: "met" };
-  return { label: "Met", tone: "met" };
+  if (mode === "at-most") return { label: "Within rate limit", tone: "met" };
+  if (mode === "at-least" && actual > target + tolerance) return { label: "Above requested rate", tone: "met" };
+  return { label: "Requested rate met", tone: "met" };
 }

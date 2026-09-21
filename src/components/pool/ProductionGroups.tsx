@@ -119,9 +119,6 @@ export function ProductionScopeHeader({
     >
       <tr>
         <td colSpan={8}>
-          <div className={overview ? "pool-scope-overview" : undefined}>
-            {overview}
-            <div className="pool-scope-content">
           <div className="pool-production-heading">
             {group ? (
               <>
@@ -220,8 +217,6 @@ export function ProductionScopeHeader({
               ) : null}
             </div>
           </div>
-          {materials.size ? (
-            <section className="pool-scope-materials" aria-label={"Materials for " + name}>
               {materials.size > pageSize || materialQuery ? <div className="pool-material-toolbar">
                 {materials.size > pageSize || materialQuery ? <input type="search" className="pool-rule-search" aria-label={"Find material in " + name}
                   placeholder="Find material…" value={materialQuery} onChange={(event) => { setMaterialQuery(event.target.value); setMaterialPage(0); }} /> : null}
@@ -231,6 +226,11 @@ export function ProductionScopeHeader({
                   <button type="button" className="pool-sheet-icon-button" aria-label={"Next materials for " + name} disabled={page + 1 === pageCount} onClick={() => setMaterialPage(page + 1)}><ChevronRight /></button>
                 </div> : null}
               </div> : null}
+          <div className={overview ? "pool-scope-overview" : undefined}>
+            {overview}
+            <div className="pool-scope-content">
+          {materials.size ? (
+            <section className="pool-scope-materials" aria-label={"Materials for " + name}>
               <div className="pool-material-strip">
                 {["Inputs", "Outputs", "Internal"].map((label, index) => {
                   const entries = visibleMaterials.filter(([, entry]) => direction(entry) === index);

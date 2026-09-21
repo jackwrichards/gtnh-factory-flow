@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { playBoardSound } from "@/lib/board-sounds";
-import { AlertTriangle, Check, CircleDashed, LoaderCircle, ArrowRight, CircleHelp } from "lucide-react";
+import { ArrowRight, CircleHelp } from "lucide-react";
 import type { FactoryProject, FactoryStorage, NodeThroughputResult, ThroughputResult } from "@/lib/model/types";
 import type { StorageRole } from "@/lib/model/storage-role";
 import { hasStorageTarget, isInputRate, storageTargetMode } from "@/lib/model/storage-target";
@@ -49,11 +49,10 @@ export function PoolSituation({ project, result, products, roles, resources, rec
   const pending = result.stale || targets.some(storage => !result.storages[storage.id]);
   const state = pending ? "pending" : failed.length || issues.length ? "blocked" : requested || running ? "running" : "idle";
   const title = pending ? result.held ? "Waiting for Recalculate" : "Calculating…" : failed.length ? "Targets not met" : issues.length ? "Setup needs attention" : requested ? "All targets met" : running ? "Running from machine settings" : "No production requested";
-  const Icon = pending ? LoaderCircle : failed.length || issues.length ? AlertTriangle : requested || running ? Check : CircleDashed;
   return <>
-    <div className="pool-situation-scope">Production status{groupCount > 0 ? <span>including {groupCount} {groupCount === 1 ? "group" : "groups"}</span> : null}</div>
+    <div className="pool-situation-scope">Status{groupCount > 0 ? <span>including {groupCount} {groupCount === 1 ? "group" : "groups"}</span> : null}</div>
     <div className="pool-situation-top">
-      <h3 className="pool-situation-heading" data-state={state} role="status"><Icon size={13} aria-hidden />{title}</h3>
+      <h3 className="pool-situation-heading" data-state={state} role="status"><span className="pool-state-dot" aria-hidden />{title}</h3>
       {!pending && targets.length > 0 ? <span className="pool-situation-counts" title="Rate rules satisfied">{targets.length - failed.length}/{targets.length} rates met</span> : null}
     </div>
     {pending ? <p>Showing the previous calculation.</p> : <>
@@ -76,12 +75,12 @@ export function PoolSituation({ project, result, products, roles, resources, rec
           <p className="pool-rule-intro">Goal: 1 product. Uses 100 water, recycles 30.</p>
           <section className="pool-rule-example-case" aria-label="Match example">
             <div className="pool-situation-scope">Match</div>
-            <h4 className="pool-situation-heading" data-state="blocked"><AlertTriangle size={13} aria-hidden />Target not met <span>· 70 water missing</span></h4>
+            <h4 className="pool-situation-heading" data-state="blocked"><span className="pool-state-dot" aria-hidden />Target not met <span>· 70 water missing</span></h4>
             <ProductionFlow inputs={0} running={0} outputs={0} />
           </section>
           <section className="pool-rule-example-case" aria-label="Ignore example">
             <div className="pool-situation-scope">Ignore</div>
-            <h4 className="pool-situation-heading" data-state="running"><Check size={13} aria-hidden />Target met <span>· 70 water imported</span></h4>
+            <h4 className="pool-situation-heading" data-state="running"><span className="pool-state-dot" aria-hidden />Target met <span>· 70 water imported</span></h4>
             <ProductionFlow inputs={1} running={1} outputs={1} />
           </section>
           <p className="pool-rule-group-note"><strong>In groups:</strong> Ignore shares with the parent. Its rules still apply.</p>

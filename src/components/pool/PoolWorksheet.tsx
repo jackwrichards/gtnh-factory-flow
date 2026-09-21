@@ -18,7 +18,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { AlertTriangle, ChevronDown, Copy, Plus, RefreshCw, Search, Settings, Trash2, X } from "lucide-react";
+import { ChevronDown, Copy, Plus, RefreshCw, Search, Settings, Trash2, X } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { resourceLabel, isCropProductionRecipe } from "@/lib/model";
 import { isCustomRateRecipe } from "@/lib/model/custom-rate";
@@ -1058,8 +1058,8 @@ function Product({ storage, role, onExplain }: { storage: FactoryStorage; onExpl
       </td>
       <td className="pool-product-status" data-tone={status.tone}>
         {status.explain ? <button type="button" onClick={onExplain} aria-label={status.label + ": explain target for " + (storage.displayName ?? storage.resourceId)}>
-          <AlertTriangle size={10} aria-hidden />{status.label}<span className="pool-status-why">Why?</span>
-        </button> : <span>{status.label}</span>}
+          <span className="pool-state-dot" aria-hidden />{status.label}<span className="pool-status-why">Why?</span>
+        </button> : <span className="pool-rate-state"><span className="pool-state-dot" aria-hidden />{status.label}</span>}
       </td>
       <td>
         {!readOnly ? (

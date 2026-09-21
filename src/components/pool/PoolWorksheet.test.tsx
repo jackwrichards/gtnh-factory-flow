@@ -626,9 +626,9 @@ describe("production group controls", () => {
     render(<PoolWorksheet />);
     const rules = screen.getByRole("region", { name: "Materials for All production" });
     expect(within(rules).getAllByRole("combobox")).toHaveLength(24);
-    fireEvent.click(within(rules).getByRole("button", { name: "Next materials for All production" }));
-    expect(within(rules).getByText("25–48 / 1002")).toBeTruthy();
-    fireEvent.change(within(rules).getByRole("searchbox", { name: "Find material in All production" }), { target: { value: "material-999" } });
+    fireEvent.click(screen.getByRole("button", { name: "Next materials for All production" }));
+    expect(screen.getByText("25–48 / 1002")).toBeTruthy();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Find material in All production" }), { target: { value: "material-999" } });
     expect(within(rules).getAllByRole("combobox")).toHaveLength(1);
     fireEvent.change(within(rules).getByRole("combobox", { name: "Supply for material-999 in All production" }), { target: { value: "auto" } });
     expect(useFactoryStore.getState().project.poolResourceRules?.["item:material-999"]).toBeUndefined();
@@ -744,7 +744,7 @@ it("keeps root material-rule counts separate from child group rules", () => {
   p.nodes.push({ ...p.nodes[0], id: "maker", recipeId: "copper-maker" });
   useFactoryStore.getState().setProject(p);render(<PoolWorksheet />);
   const status = screen.getByRole("region", { name: "Production status" });
-  expect(within(status).getByText("Production status")).toBeTruthy();
+  expect(within(status).getByText("Status")).toBeTruthy();
   expect(status.textContent).toContain("including 1 group");
   const root = within(status).getByLabelText("All production material rules");
   expect(root.textContent).toContain("0 materials must balance");
