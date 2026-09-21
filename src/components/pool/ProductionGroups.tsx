@@ -1,5 +1,7 @@
 "use client";
 
+import { ROOT_MATCH_HELP, GROUP_MATCH_HELP } from "./material-rule-help";
+
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, FolderPlus, GripVertical, Trash2 } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
@@ -107,9 +109,7 @@ export function ProductionScopeHeader({
   const pageCount = Math.max(1, Math.ceil(filteredMaterials.length / pageSize));
   const page = Math.min(materialPage, pageCount - 1);
   const visibleMaterials = filteredMaterials.slice(page * pageSize, (page + 1) * pageSize);
-  const ruleHelp = group
-    ? "Automatic: match production and consumption here exactly; otherwise share with parent. Share with parent bypasses local balancing."
-    : "Automatic: match production and consumption exactly when both exist; otherwise import or export. Import anyway allows outside supply and unused surplus.";
+  const ruleHelp = group ? GROUP_MATCH_HELP : ROOT_MATCH_HELP;
   return (
     <tbody
       className="pool-production-scope"
@@ -249,12 +249,12 @@ export function ProductionScopeHeader({
                         <strong>{sign < 0 ? "−" : sign > 0 ? "+" : ""}{rate}</strong><small>{unit}</small>
                       </span>
                     {row ? <span className="pool-material-rule-control" data-auto={!row.rule || undefined}><select className="pool-material-rule" data-auto={!row.rule || undefined} aria-label={(group ? "Sharing for " : "Supply for ") + material + " in " + name}
-                      title={ruleHelp} value={row.rule ?? "auto"} disabled={readOnly}
+                      title={group && row.rule === "import" ? ROOT_MATCH_HELP : ruleHelp} value={row.rule ?? "auto"} disabled={readOnly}
                       onChange={(event) => useFactoryStore.getState().setPoolResourceRule(group?.id, row.key, event.target.value === "auto" ? undefined : event.target.value === "share" ? "share" : "import")}>
-                      <option value="auto">Auto</option>
-                      {group ? <option value="share">Share with parent</option> : <option value="import">Import anyway</option>}
-                      {group && row.rule === "import" ? <option value="import">Outside supply</option> : null}
-                      {!group && row.rule === "share" ? <option value="share">Import anyway</option> : null}
+                      <option value="auto">Match</option>
+                      {group ? <option value="share">Ignore</option> : <option value="import">Ignore</option>}
+                      {group && row.rule === "import" ? <option value="import">Ignore · outside supply</option> : null}
+                      {!group && row.rule === "share" ? <option value="share">Ignore</option> : null}
                     </select><ChevronDown size={8} aria-hidden /></span> : <span className="pool-material-inherited" title="This total includes a child group's local material. Change its rule in that group.">Within groups</span>}
                   </div>;
                 })}

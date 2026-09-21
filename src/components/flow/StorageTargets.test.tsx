@@ -206,4 +206,12 @@ it("keeps the actual rate visible alongside a compact unreachable warning", () =
   expect(screen.queryByText("Unreachable")).toBeNull();
   const warning=screen.getByLabelText("Target cannot be met");
   expect(warning.closest("td")!.textContent).toContain("0/s");
+  const help = screen.getByText(/A requested rate cannot be met/).closest("details")!;
+  expect(help.open).toBe(false);
+  fireEvent.click(warning);
+  expect(help.open).toBe(true);
+  expect(within(help).getByText(/partially recycled material/)).toBeTruthy();
+  expect(useFactoryStore.getState().project.poolResourceRules).toBeUndefined();
+  act(() => useFactoryStore.getState().setStorageTarget("output", undefined));
+  expect(screen.queryByText(/A requested rate cannot be met/)).toBeNull();
 });

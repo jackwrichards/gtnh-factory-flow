@@ -592,7 +592,9 @@ describe("production group controls", () => {
     expect(screen.queryByRole("button", { name: "Material rules for Copper line" })).toBeNull();
     const link = screen.getByRole("combobox", { name: "Sharing for Copper Ingot in Copper line" }) as HTMLSelectElement;
     expect(link.value).toBe("auto");
-    expect(within(link).getByRole("option", { name: "Auto" })).toBeTruthy();
+    expect(within(link).getByRole("option", { name: "Match" })).toBeTruthy();
+    expect(within(link).getByRole("option", { name: "Ignore" })).toBeTruthy();
+    expect(link.title).toContain("parent group");
     fireEvent.change(link, { target: { value: "share" } });
     expect(useFactoryStore.getState().project.productionGroups![0].resourceRules).toEqual({ "item:copper": "share" });
     expect(link.value).toBe("share");

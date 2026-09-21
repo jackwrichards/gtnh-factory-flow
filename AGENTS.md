@@ -1844,9 +1844,9 @@ Working notes for future agents on GTNH Factory Flow.
   the available horizontal space. Red negative is input; green positive is output; gray zero is no net flow.
   Gross input/output remain on the rate tooltip. The tables use the available width
   with bounded height, search, and 24 entries per page. Child-local totals without
-  a parent material row keep their controls in the child. Automatic uses a producer when present, else
-  imports; Import anyway permits imports alongside production. Share with parent is
-  the group-level Ignore rule. There is no general never-import rule. Do not restore separate Resources/Materials panels or three-way rule selects.
+  a parent material row keep their controls in the child. Labels are Match / Ignore, as in
+  Shadow. Match balances paired materials exactly; root Ignore permits imports and surplus,
+  group Ignore passes both sides to the parent. Failed targets offer a compact Why explainer. There is no general never-import rule. Do not restore separate Resources/Materials panels or three-way rule selects.
   Group headings accept machine/group pointer drops, even when empty or collapsed. Group
   totals include closed child surplus/imports without counting shared ports twice. Legacy
   scoped targets and direct child imports remain explicit and editable, never silently lost.

@@ -813,7 +813,7 @@
 }
 /* Target rules sit beside the saved amount; ignored goals remain editable. */
 .pool-worksheet--dense .pool-products-table th:nth-child(2) { width: 136px; }
-.pool-worksheet--dense .pool-products-table th:nth-child(3) { width: 70px; }
+.pool-worksheet--dense .pool-products-table th:nth-child(3) { width: 104px; }
 .pool-target-controls { display: flex; align-items: center; justify-content: space-between; gap: 7px; padding-right: 8px; }
 .pool-target-controls > [data-tooltip-root] { min-width: 0; }
 .pool-target-rule { width: 64px; flex: 0 0 64px; padding: 1px 0; font: 10px var(--app-font); color: var(--mc-ink); background: transparent; border: 0; border-bottom: 1px dotted #ffffff40; cursor: pointer; }
@@ -823,7 +823,7 @@
 .pool-product[data-target-ignored] .pool-target-rule { color: var(--mc-ink-muted); }
 @container (max-width: 440px) {
   .pool-worksheet--dense .pool-products-table th:nth-child(2) { width: 83px; }
-  .pool-worksheet--dense .pool-products-table th:nth-child(3) { width: 65px; }
+  .pool-worksheet--dense .pool-products-table th:nth-child(3) { width: 104px; }
   .pool-target-controls { flex-direction: column; gap: 2px; padding: 3px 0; }
   .pool-target-rule { flex: none; height: 18px; }
 }
@@ -841,10 +841,9 @@
 .pool-material-rate { white-space: nowrap; font: 9px/11px var(--app-font); font-variant-numeric: tabular-nums; }
 .pool-material-rate strong { font-weight: 600; }
 .pool-material-rate small { margin-left: 2px; font-size: 7px; color: color-mix(in srgb, currentColor 35%, #9ca3af); }
-.pool-material-columns:has(.pool-material-rule-control:not([data-auto])),
 .pool-material-columns:has(.pool-material-inherited) { grid-template-columns: repeat(auto-fill, minmax(min(100%, 164px), 164px)); }
-.pool-material-rule-control { position: relative; display: inline-flex; width: 84px; }
-.pool-material-rule-control[data-auto] { width: 27px; }
+.pool-material-rule-control { position: relative; display: inline-flex; width: 40px; }
+.pool-material-rule-control[data-auto] { width: 40px; }
 .pool-material-rule-control > svg { position: absolute; right: 0; top: 5px; pointer-events: none; color: var(--mc-ink-muted); }
 .pool-material-rule { appearance: none; display: block; width: 100%; height: 18px; padding: 0 9px 0 0; border: 0; background: transparent; color: var(--mc-ink-muted); font: 8px var(--app-font); cursor: pointer; }
 .pool-material-rule option { background: var(--surface, #24272c); color: var(--mc-ink); }

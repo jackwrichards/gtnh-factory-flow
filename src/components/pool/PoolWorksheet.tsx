@@ -1,4 +1,5 @@
 "use client";
+import { ROOT_MATCH_HELP, TARGET_MATCH_HELP } from "./material-rule-help";
 import { isInputRate, storageTargetMode } from "@/lib/model/storage-target";
 import { StorageTargetRule } from "../flow/StorageTargetRule";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
@@ -68,6 +69,14 @@ import "./pool-worksheet-density.css";
 
 export function PoolWorksheet() {
   const summaryId = useId();
+  const targetHelp = useRef<HTMLDetailsElement>(null);
+  const explainTarget = () => {
+    const details = targetHelp.current;
+    if (!details) return;
+    details.open = true;
+    details.scrollIntoView?.({ block: "nearest" });
+    details.querySelector("summary")?.focus();
+  };
   const rootRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const root = rootRef.current;
@@ -362,12 +371,22 @@ export function PoolWorksheet() {
                       </thead>
                       <tbody>
                         {products.map((storage) => (
-                          <Product key={storage.id} storage={storage} role={roles.get(storage.id)} />
+                          <Product key={storage.id} storage={storage} role={roles.get(storage.id)} onExplain={explainTarget} />
                         ))}
                       </tbody>
                     </table>
                   </div>
                 </ProductsPane>
+                {products.some(storage => result.storages[storage.id]?.targetUnreachable) ? (
+                  <details ref={targetHelp} className="pool-target-help">
+                    <summary><AlertTriangle aria-hidden size={12} />A requested rate cannot be met. <span>Why?</span></summary>
+                    <div>
+                      <p>{TARGET_MATCH_HELP}</p>
+                      <p><strong>Match / Ignore:</strong> {ROOT_MATCH_HELP}</p>
+                      <p>Inside a group, Ignore shares the material with its parent. Ignore on a desired rate is different: it stops enforcing that saved target.</p>
+                    </div>
+                  </details>
+                ) : null}
               </div>
               <WorksheetPower
                 entries={groups.flatMap((entry) => (entry.machine ? [entry.machine] : []))}
@@ -997,7 +1016,7 @@ function MachinePower({ entry }: { entry?: MachineListEntry }) {
   );
 }
 
-function Product({ storage, role }: { storage: FactoryStorage; role: StorageRole | undefined }) {
+function Product({ storage, role, onExplain }: { storage: FactoryStorage; onExplain: () => void; role: StorageRole | undefined }) {
   const scopeName = useFactoryStore(
     (state) =>
       state.project.productionGroups?.find((group) => group.id === storage.productionGroupId)?.name,
@@ -1059,10 +1078,10 @@ function Product({ storage, role }: { storage: FactoryStorage; role: StorageRole
       <td className={result?.targetUnreachable ? "pool-flow-input" : "pool-sheet-muted"}>
         <span className="inline-flex max-w-full items-center justify-end gap-1">
           {result?.targetUnreachable ? (
-            <MinecraftTooltip content="This target cannot be met with the current recipes, connections and rate rules.">
-              <span tabIndex={0} aria-label="Target cannot be met" className="inline-flex shrink-0 text-[var(--flow-input)]">
+            <MinecraftTooltip content="Explain why this target cannot be met.">
+              <button type="button" onClick={onExplain} aria-label="Target cannot be met" className="inline-flex shrink-0 text-[var(--flow-input)]">
                 <AlertTriangle aria-hidden className="h-3 w-3" />
-              </span>
+              </button>
             </MinecraftTooltip>
           ) : null}
           <BalanceRate value={inputGoal ? (result?.consumedPerSecond ?? 0) : (result?.producedPerSecond ?? 0)} kind={storage.kind} sign={inputGoal ? -1 : 0} />

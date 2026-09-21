@@ -16,12 +16,14 @@ Desired rates uses a narrower table beside a permanent Total power breakdown. Al
 
 ## Material rules (the reference's Ignore)
 
-Pool imports missing inputs automatically; no rules need enabling for ordinary plans. Supply and sharing selectors sit directly beside each material in the group header; nothing needs opening to see the current rule. Each material defaults to **Auto**: at the root, use its producer if one exists, otherwise import it. **Import anyway** permits imports even when a producer exists and may idle that producer. Inside groups, **Share with parent** bypasses local balancing. There is no general **never import** or explicit **keep inside** rule. Auto retains a material locally only when the group both makes and uses it; one-sided materials reach the parent. These are the same balancing rules the reference calls Ignore:
+Material selectors use the reference names **Match** and **Ignore**. Match balances a material exactly when both production and consumption exist. At the root, materials with no producer import automatically and materials with no consumer export. Ignore at the root permits both imports and surplus; inside a group it passes both sides to the parent. Neither choice disables a recipe. Existing saved rule values are unchanged. Explicit desired-rate limits still apply.
+
+When a desired rate cannot be met, a compact **Why?** explanation appears below the rates. The warning icon opens it too. It explains partial recycling, surplus, groups and other possible blockers; it never changes rules or claims a particular material is the cause without evidence.
 
 | Scope | Matching normally | Ignore |
 | --- | --- | --- |
 | Production group | Materials both made and consumed here balance locally. One-sided resources reach the parent. | Both sides reach the parent, which can match them with other machines. |
-| Factory | Materials with producers balance; materials nobody produces import automatically. | Permit imports even when a producer exists. |
+| Factory | Materials with producers balance; materials nobody produces import automatically. | Permit imports and surplus even when both production and consumption exist. |
 
 Children resolve first. Ignoring a material in the parent cannot change a match already kept inside a child. Ignore it at each intervening group if it needs to reach Factory. Materials with saved rules remain in the strip even if their machines move elsewhere, so the setting can be cleared.
 
@@ -33,7 +35,7 @@ Desired rates are global requests, like the reference. Group inputs and outputs 
 
 Existing plans from the earlier group interface retain scoped targets and direct outside-supply policies. A scoped target is labeled in Desired rates and has a **Make global** action. A saved direct-supply rule inside a group is explicitly labeled **Outside supply**. New sharing overrides inside groups always use parent sharing.
 
-In Pool Solve, Auto balances intermediate production and consumption exactly, like the reference calculator. A fixed input therefore drives the downstream chain without needing a final output target. Materials no recipe makes are imported as needed; terminal outputs and byproducts can leave the plan. Import anyway explicitly permits both outside supply and local surplus. Share with parent moves balancing to the parent.
+In Pool Solve, Match balances intermediate production and consumption exactly, like the reference calculator. A fixed input therefore drives the downstream chain without needing a final output target. Materials no recipe makes are imported as needed; terminal outputs and byproducts can leave the plan. Ignore explicitly permits both outside supply and local surplus. Ignore inside a group moves balancing to the parent.
 
 Wired Solve uses the same exact balance through direct wires and default intermediate drawers. Explicit overflow and ratio choices still apply. Its extra ingredients need connected source drawers; it does not create imports across missing wires. Build retains its existing overflow behavior.
 
@@ -43,7 +45,7 @@ The rate and rule belong to the drawer and apply in both wired Solve and Pool. S
 
 ## Balancing versus optimization
 
-Exact intermediate balance defines valid flows; the objective chooses among those flows. The planner minimizes fractional machine count, then imports, stored surplus where allowed, and total flow. Shadow minimizes recipe runs instead. Either objective continues a fully balanced serial chain from a fixed input, but competing routes may differ: two fast steps can need fewer machines than one slow step, while still performing more recipe runs. Neither objective promises maximum final yield. Explicit Import anyway or overflow storage relaxes balancing; changing the objective alone does not make an overflowing intermediate continue downstream.
+Exact intermediate balance defines valid flows; the objective chooses among those flows. The planner minimizes fractional machine count, then imports, stored surplus where allowed, and total flow. Shadow minimizes recipe runs instead. Either objective continues a fully balanced serial chain from a fixed input, but competing routes may differ: two fast steps can need fewer machines than one slow step, while still performing more recipe runs. Neither objective promises maximum final yield. Explicit Ignore or overflow storage relaxes balancing; changing the objective alone does not make an overflowing intermediate continue downstream.
 
 ## Saved data and implementation
 
