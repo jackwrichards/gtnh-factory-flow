@@ -14,6 +14,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -159,6 +160,27 @@ export function PoolWorksheet() {
   const workspace = useWorkspaceView();
   const savedOrder = (kind: string) => workspace.poolWorksheetOrder[`${project.id}:${kind}`] ?? [];
   const groups = useMemo(() => buildWorksheetGroups(project, result), [project, result]);
+  // Keep numeric/status columns aligned without reserving space for values
+  // this plan does not display. Observe the content, not its allocated cell.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const columns = [
+      { variable: "--pool-count-width", selector: ".pool-machine-count [data-tooltip-root] > div", minimum: 28, padding: 0 },
+      { variable: "--pool-status-width", selector: ".pool-status", minimum: 48, padding: 8 },
+      { variable: "--pool-power-width", selector: ".pool-machine-power-value", minimum: 48, padding: 8 },
+    ].map(column => ({ ...column, elements: [...root.querySelectorAll<HTMLElement>(column.selector)] }));
+    const measure = () => {
+      for (const column of columns) {
+        const width = Math.max(column.minimum, ...column.elements.map(element => element.offsetWidth + column.padding));
+        root.style.setProperty(column.variable, width + "px");
+      }
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
+    for (const column of columns) for (const element of column.elements) observer?.observe(element);
+    return () => observer?.disconnect();
+  }, [groups, workspace, query]);
   const orderedGroups = orderWorksheetEntries(
     groups,
     savedOrder("machines"),

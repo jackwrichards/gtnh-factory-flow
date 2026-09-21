@@ -35,7 +35,7 @@
   width: 26px;
 }
 .pool-worksheet--dense .pool-col-power {
-  width: 78px;
+  width: var(--pool-power-width, 64px);
 }
 .pool-worksheet--dense .pool-col-actions {
   width: 88px;
@@ -159,8 +159,8 @@
 }
 .pool-worksheet--dense .pool-machine-count {
   flex-shrink: 0;
-  flex-basis: 65px;
-  width: 65px;
+  flex-basis: var(--pool-count-width, 40px);
+  width: var(--pool-count-width, 40px);
   display: flex;
   justify-content: flex-start;
 }
@@ -670,7 +670,7 @@
 }
 
 /* Readable worksheet columns; headings belong to the scope they describe. */
-.pool-worksheet--dense .pool-col-status { width: 112px; }
+.pool-worksheet--dense .pool-col-status { width: var(--pool-status-width, 96px); }
 .pool-worksheet--dense .pool-col-circuit { width: 42px; }
 .pool-worksheet--dense .pool-column-headings > tr { height: 20px; }
 .pool-worksheet--dense .pool-column-headings th {
@@ -720,7 +720,7 @@
 .pool-status-heading-dot { display: none; }
 @container (max-width: 850px) {
   .pool-worksheet--dense .pool-col-machine { width: 280px; }
-  .pool-worksheet--dense .pool-col-power { width: 68px; }
+  .pool-worksheet--dense .pool-col-power { width: var(--pool-power-width, 64px); }
   .pool-worksheet--dense .pool-col-actions { width: 88px; }
   .pool-worksheet--dense .pool-sheet-table:has(> tbody[data-worksheet-node] .pool-collapse-machine) > colgroup > .pool-col-actions { width: 108px; }
   .pool-worksheet--dense .pool-column-headings th { font-size: 9px; }
@@ -728,7 +728,7 @@
 }
 @container (max-width: 650px) {
   .pool-worksheet--dense .pool-col-machine { width: 280px; }
-  .pool-worksheet--dense .pool-col-power { width: 62px; }
+  .pool-worksheet--dense .pool-col-power { width: var(--pool-power-width, 64px); }
   .pool-worksheet--dense .pool-machine-layout { gap: 3px; }
 }
 /* Small worksheets: controls on one line, materials on the next. */
@@ -932,3 +932,11 @@
   .pool-rates-columns > th:first-child { flex: 1; min-width: 0; }
   .pool-rates-columns > th:last-child { flex: 0 0 34px; }
 }
+
+/* Measure the natural labels, then share their widths across every row. */
+.pool-worksheet--dense .pool-section-status { align-items: flex-start; }
+.pool-worksheet--dense .pool-status,
+.pool-worksheet--dense .pool-machine-power-value,
+.pool-worksheet--dense .pool-machine-count [data-tooltip-root] > div,
+.pool-worksheet--dense .pool-machine-count button { width: max-content; flex-shrink: 0; white-space: nowrap; }
+.pool-worksheet--dense .pool-machine-power-value { flex-wrap: nowrap; }
