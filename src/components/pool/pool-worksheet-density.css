@@ -892,7 +892,7 @@
 .pool-situation-help > summary { position: absolute; top: 5px; right: 8px; display: flex; align-items: center; gap: 3px; cursor: pointer; list-style: none; }
 .pool-situation-help > summary::-webkit-details-marker { display: none; }
 .pool-situation-help > summary:hover { color: var(--mc-ink); }
-.pool-situation-help > .pool-rule-guide { position: absolute; z-index: 60; top: calc(100% + 4px); right: 0; width: min(520px, 100%); max-height: min(480px, 65vh); overflow: auto; padding: 10px; background: var(--surface, #24272c); border: 1px solid #adc7ff50; box-shadow: 0 4px 12px #0006; font-size: 10px; }
+.pool-situation-help > .pool-rule-guide { position: absolute; z-index: 60; top: calc(100% + 4px); right: 0; width: min(380px, 100%); max-height: min(480px, 65vh); overflow: auto; padding: 10px; background: var(--surface, #24272c); border: 1px solid #adc7ff50; box-shadow: 0 4px 12px #0006; font-size: 10px; }
 @container (max-width: 1120px) {
   .pool-worksheet--dense .pool-overview { grid-template-columns: minmax(0, 560px) minmax(220px, 260px); grid-template-areas: "rates power" "situation situation"; justify-content: space-between; }
 }
@@ -908,24 +908,23 @@
 .pool-rule-guide > header { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--mc-ink); font-size: 11px; }
 .pool-rule-guide > header > button { padding: 2px; color: var(--mc-ink-muted); cursor: pointer; }
 .pool-rule-guide > header > button:hover { color: var(--mc-ink); }
-.pool-rule-guide .pool-rule-example-label { margin: 6px 0; }
-.pool-rule-examples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.pool-rule-example { min-width: 0; padding: 6px; background: #6f9cff0a; border-top: 2px solid #adc7ff70; }
-.pool-rule-example + .pool-rule-example { border-color: var(--flow-output); }
-.pool-rule-example h4 { margin: 0 0 6px; font-size: 11px; }
-.pool-rule-example > div { display: flex; flex-wrap: wrap; gap: 2px 4px; align-items: baseline; }
-.pool-rule-example p { margin: 6px 0 2px; font-weight: 600; }
-.pool-rule-example small { display: block; font-size: 9px; color: var(--mc-ink-muted); }
-.pool-rule-guide .pool-rule-group-note { padding: 6px 0; border-bottom: 1px solid #ffffff18; }
-.pool-rule-scope-table { width: 100%; margin: 6px 0; border-collapse: collapse; font-size: 9px; }
-.pool-rule-scope-table th { text-align: left; font-weight: 500; }
-.pool-rule-scope-table :is(th, td) { padding: 3px 4px; border-bottom: 1px solid #ffffff12; }
-.pool-rule-scope-table :is(th, td):not(:first-child) { text-align: center; }
-.pool-rule-guide .pool-rule-footnote { margin: 6px 0 0; font-size: 9px; }
-.pool-rule-automatic { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; padding-top: 7px; border-top: 1px solid #ffffff18; }
-.pool-rule-automatic > span { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.pool-rule-guide .pool-rule-intro { margin: 6px 0; font-size: 9px; }
+.pool-rule-meaning { margin: 0; }
+.pool-rule-meaning > div { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 7px; margin: 3px 0; }
+.pool-rule-meaning dt { font-weight: 600; }
+.pool-rule-meaning dd { margin: 0; color: var(--mc-ink); }
+.pool-rule-example { margin: 8px 0; padding: 7px; background: #6f9cff0a; border: 1px solid #adc7ff24; }
+.pool-rule-example h4 { margin: 0; font-size: 10px; color: var(--mc-ink); }
+.pool-rule-example h4 > span { font-size: 9px; font-weight: 400; color: var(--mc-ink-muted); }
+.pool-rule-example-row { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; gap: 2px 7px; margin-top: 6px; }
+.pool-rule-water-bar { display: grid; grid-template-columns: minmax(76px, 3fr) 7fr; min-width: 0; font-size: 9px; line-height: 22px; }
+.pool-rule-water-bar > span { display: flex; align-items: center; justify-content: space-between; gap: 3px; padding: 0 4px; white-space: nowrap; color: var(--flow-output); background: color-mix(in srgb, var(--flow-output) 12%, transparent); }
+.pool-rule-water-bar > .pool-rule-water-missing { color: var(--flow-input); background: color-mix(in srgb, var(--flow-input) 9%, transparent); border-left: 1px dashed var(--flow-input); }
+.pool-rule-water-bar > .pool-rule-water-imported { color: #adc7ff; background: #6f9cff20; border-left: 1px solid #adc7ff70; }
+.pool-rule-guide .pool-rule-group-note { margin: 6px 0 0; font-size: 9px; }
+.pool-rule-group-note strong { color: var(--mc-ink); }
+.pool-rule-guide .pool-rule-footnote { margin: 4px 0 0; font-size: 9px; }
 @container (max-width: 440px) {
-  .pool-rule-examples { grid-template-columns: minmax(0, 1fr); }
   .pool-situation-flow { font-size: 9px; gap: 3px 4px; }
   .pool-situation-flow strong { font-size: 10px; }
 }
