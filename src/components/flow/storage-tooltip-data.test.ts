@@ -86,6 +86,9 @@ describe("drawer tooltips are words and figures", () => {
     ]);
     const strict = { ...p, storages: p.storages!.map((s) => (s.id === "out" ? { ...s, bufferMode: "strict" as const } : s)) };
     expect(tip(strict, "out").subtitle).toBe("Buffer · Strict");
+    expect(tip({ ...p, solveMode: true }, "out").subtitle).toBe("Buffer · Strict");
+    const overflow = { ...p, solveMode: true, storages: p.storages!.map(s => s.id === "out" ? { ...s, bufferMode: "overflow" as const } : s) };
+    expect(tip(overflow, "out").subtitle).toBe("Buffer");
   });
   it("requires a wire on an idle drawer and marks inert drawers in pool mode", () => {
     const idle = plan({ edges: [] });

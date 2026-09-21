@@ -12,7 +12,7 @@ import type {
   StorageThroughputResult,
 } from "@/lib/model/types";
 import { formatCompact, formatPowerValue, makeResourceKey, trimTrailingDecimalZeros } from "@/lib/model";
-import { isDrainRole, storageRoleFor, type StorageRole } from "@/lib/model/storage-role";
+import { effectiveBufferMode, isDrainRole, storageRoleFor, type StorageRole } from "@/lib/model/storage-role";
 import {
   rateMultiplierForKind,
   rateSuffixForKind,
@@ -127,8 +127,8 @@ const ROLE_TINTS: Record<StorageRole, string> = {
 };
 
 /** Both strict and ratio buffers pass through without banking surplus. */
-function isStrictBuffer(storage: FactoryStorage): boolean {
-  return storage.bufferMode === "strict" || storage.bufferMode === "ratio";
+function isStrictBuffer(storage: FactoryStorage, solveMode: boolean): boolean {
+  return effectiveBufferMode(storage, solveMode) === "strict" || storage.bufferMode === "ratio";
 }
 
 // Inline (not utility classes) so React Flow's own handle stylesheet can
@@ -493,7 +493,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               tile's hexagon inset by 1.5px - hugging the frame, so the
               stroke stays off the word and the net line - and they can be
               exact because STORAGE_NODE_WIDTH/HEIGHT are fixed. */}
-          {role === "buffer" && !isStrictBuffer(storage) ? (
+          {role === "buffer" && !isStrictBuffer(storage, solveMode) ? (
             <svg
               aria-hidden
               className="pointer-events-none absolute inset-0 z-0"
@@ -962,11 +962,12 @@ function StorageHeader({
   tint: string;
   role: StorageRole;
 }) {
+  const solveMode = useFactoryStore((state) => state.project.solveMode === true);
   const storageId = storage.id;
   const deleteStorage = useFactoryStore((state) => state.deleteStorage);
   const noun = isTank ? "tank" : "drawer";
   const presentation = ROLE_PRESENTATION[role];
-  const strict = role === "buffer" && isStrictBuffer(storage);
+  const strict = role === "buffer" && isStrictBuffer(storage, solveMode);
   const ratio = role === "buffer" && storage.bufferMode === "ratio";
   const word = ratio ? "RATIO" : strict ? "STRICT" : presentation.word;
 
@@ -1014,7 +1015,7 @@ function StorageHeader({
       {isDrainRole(role) ? (
         <DrainModeSwap storageId={storageId} role={role} kind={storage.kind} />
       ) : null}
-      {role === "buffer" ? <BufferModeSwap storageId={storageId} mode={storage.bufferMode ?? "overflow"} /> : null}
+      {role === "buffer" ? <BufferModeSwap storageId={storageId} mode={effectiveBufferMode(storage, solveMode)} /> : null}
     </div>
   );
 }

@@ -115,11 +115,11 @@ describe("Pool worksheet books", () => {
 });
 
 describe("production group totals", () => {
-  it("includes a nested child's local surplus without counting shared inputs twice", () => {
+  it("includes a nested child's explicit surplus without counting shared inputs twice", () => {
     const project = worksheetFixture();
     project.productionGroups = [
       { id: "parent", name: "Parent" },
-      { id: "child", name: "Child", parentId: "parent" },
+      { id: "child", name: "Child", parentId: "parent", resourceRules: { "item:plate": "import" } },
     ];
     project.nodes[0].extraRecipes = undefined;
     project.nodes[0].productionGroupId = "child";

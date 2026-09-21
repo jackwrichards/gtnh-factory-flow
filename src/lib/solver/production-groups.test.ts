@@ -106,11 +106,13 @@ describe("production scopes", () => {
       1.5,
     );
   });
-  it("continues banking local surplus without sharing it outside", () => {
+  it("balances a pinned producer through its local consumer without sharing outside", () => {
     const p = fixture();
     p.nodes[0].solvePin = 1;
     const result = calculateThroughput(p);
-    expect(result.storages["pool:group:line:item:x"].netPerSecond).toBeCloseTo(1);
+    expect(result.storages["pool:group:line:item:x"].netPerSecond).toBeCloseTo(0);
+    expect(count(result, "inside")).toBeCloseTo(2);
+    expect(result.storages.y.producedPerSecond).toBeCloseTo(2);
     expect(result.externalInputs.find((r) => r.resourceId === "x")?.deficitPerSecond).toBeCloseTo(
       1,
     );

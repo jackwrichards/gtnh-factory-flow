@@ -1,6 +1,6 @@
 import type { FactoryProject, NodeThroughputResult, ResourceKey } from "@/lib/model/types";
 import { makeResourceKey } from "@/lib/model/resources";
-import { getStorageRoles } from "@/lib/model/storage-role";
+import { effectiveBufferMode, getStorageRoles } from "@/lib/model/storage-role";
 import { listSharedMachineGroups } from "@/lib/model/shared-machine";
 import { isPoolEdgeId } from "./pool-mode";
 import { collectTrashNodeIds } from "@/lib/model/trash";
@@ -138,7 +138,7 @@ export function solveSolveMode(
     if (role === "product" || role === "byproduct" || role === "trash") {
       return "sink";
     }
-    return storage.bufferMode === "strict" || (storage.bufferMode === "ratio" && (storage.ratioExportPercent ?? 0) <= 0) ? "strict-buffer" : "buffer";
+    return effectiveBufferMode(storage, true) === "strict" || (storage.bufferMode === "ratio" && (storage.ratioExportPercent ?? 0) <= 0) ? "strict-buffer" : "buffer";
   };
 
   const flowVar = new Map<string, number>();
@@ -235,8 +235,8 @@ export function solveSolveMode(
     }
   }
 
-  // Buffer pools: inflow equals outflow plus fill; a strict buffer's fill is
-  // pinned at zero.
+  // Default intermediate drawers balance exactly, like direct wires. Only an
+  // explicit overflow choice or ratio export may store unused production.
   for (const storage of project.storages ?? []) {
     const kind = storageKind(storage.id);
     if (kind !== "buffer" && kind !== "strict-buffer") {

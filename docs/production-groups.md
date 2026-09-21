@@ -33,16 +33,22 @@ Desired rates are global requests, like the reference. Group inputs and outputs 
 
 Existing plans from the earlier group interface retain scoped targets and direct outside-supply policies. A scoped target is labeled in Desired rates and has a **Make global** action. A saved direct-supply rule inside a group is explicitly labeled **Outside supply**. New sharing overrides inside groups always use parent sharing.
 
-Surplus remains allowed automatically. Local surplus stays in that group's pool and appears in totals; it does not silently satisfy another group's demand. Ignore the local match to make that material available to the parent.
+In Pool Solve, Auto balances intermediate production and consumption exactly, like the reference calculator. A fixed input therefore drives the downstream chain without needing a final output target. Materials no recipe makes are imported as needed; terminal outputs and byproducts can leave the plan. Import anyway explicitly permits both outside supply and local surplus. Share with parent moves balancing to the parent.
+
+Wired Solve uses the same exact balance through direct wires and default intermediate drawers. Explicit overflow and ratio choices still apply. Its extra ingredients need connected source drawers; it does not create imports across missing wires. Build retains its existing overflow behavior.
 
 Desired rates lists both source and product drawers. The Target (±) column accepts positive output goals and negative input goals. For example, −100/s of ore with Exactly sizes the line to consume 100 ore per second of fresh input; recycled ore is additional circulation, not fresh supply. Actual uses the same sign. Both directions offer At least / Exactly / At most / Ignore. Rules apply to the magnitude; the sign sets the direction. At most caps the rate and does not request production by itself. Exactly allows zero and fixes the rate. In Pool an exact or capped output also prevents surplus banking in its receiving pool. Ignore retains the rate without enforcing it; an ignored source remains available. A finite input limit cannot be bypassed by automatic outside supply in its receiving pool.
 
 The rate and rule belong to the drawer and apply in both wired Solve and Pool. Source amounts are positive magnitudes on the board and negative in Pool. Build preserves them without enforcing them. Mode changes preserve all wires; a setup created in Pool still needs wires to run on the board. Targets and rules survive saves, JSON, clipboard, and undo. Legacy poolTargetMode values remain readable. Impossible or conflicting targets are reported. Group scopes apply only in Pool.
 
+## Balancing versus optimization
+
+Exact intermediate balance defines valid flows; the objective chooses among those flows. The planner minimizes fractional machine count, then imports, stored surplus where allowed, and total flow. Shadow minimizes recipe runs instead. Either objective continues a fully balanced serial chain from a fixed input, but competing routes may differ: two fast steps can need fewer machines than one slow step, while still performing more recipe runs. Neither objective promises maximum final yield. Explicit Import anyway or overflow storage relaxes balancing; changing the objective alone does not make an overflowing intermediate continue downstream.
+
 ## Saved data and implementation
 
 Production groups are independent of canvas boards and physical shared machines. All recipe sections of a shared machine inherit their owner's group. Optional project fields productionGroups and poolResourceRules hold the hierarchy and policies; nodes and storages carry productionGroupId. Imports repair invalid hierarchies and memberships. Clipboard copying carries ancestor groups and remaps their IDs. Collapse state is local workspace preference.
 
-The solver expands shared machines first, then resource scopes deepest-first. Internal share rules implement child Ignore; root import rules implement Factory Ignore. Existing conservation, target and surplus accounting run over the expanded graph. Cell/fluid helpers remain scoped. Saved wires, recipe data and Build/wired Solve behavior are unchanged.
+The solver expands shared machines first, then resource scopes deepest-first. Internal share rules implement child Ignore; root import rules implement Factory Ignore. Existing conservation, target and surplus accounting run over the expanded graph. Cell/fluid helpers remain scoped. Saved wires and recipe data remain unchanged. Group scopes do not affect wired Solve or Build.
 
 Regression coverage includes the solver/store production-groups.test.ts files, PoolWorksheet.test.tsx, and worksheet-model.test.ts. Browser checks cover real pointer moves into empty/collapsed groups, moving groups, Ignore persistence, and desktop/phone layouts.

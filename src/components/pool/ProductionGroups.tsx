@@ -108,8 +108,8 @@ export function ProductionScopeHeader({
   const page = Math.min(materialPage, pageCount - 1);
   const visibleMaterials = filteredMaterials.slice(page * pageSize, (page + 1) * pageSize);
   const ruleHelp = group
-    ? "Automatic: balance here when both produced and consumed here; otherwise share with parent. Share with parent bypasses local balancing."
-    : "Automatic: use a producer when present; otherwise import. Import anyway permits imports even when a producer exists.";
+    ? "Automatic: match production and consumption here exactly; otherwise share with parent. Share with parent bypasses local balancing."
+    : "Automatic: match production and consumption exactly when both exist; otherwise import or export. Import anyway allows outside supply and unused surplus.";
   return (
     <tbody
       className="pool-production-scope"

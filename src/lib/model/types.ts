@@ -422,12 +422,13 @@ export interface FactoryNode {
 export type StorageDrainMode = "product" | "byproduct" | "trash";
 
 /**
- * How a BUFFER treats a surplus. `overflow` (the default) catches what its
+ * How a BUFFER treats a surplus. `overflow` (the Build default) catches what its
  * takers leave, filling at a visible rate, so the feeder never clogs on it -
  * the way a real chest or tank behaves. `strict` passes through only what is
  * pulled and hands the surplus back to the feeder as a clog, for players who
  * want the imbalance surfaced instead of stored. `ratio` divides incoming and
  * outgoing flows by fixed shares, banking only its explicit Export percentage.
+ * Solve defaults to strict balancing unless a mode is explicitly selected.
  * No mode can run the tank net-negative: a buffer never invents supply.
  */
 export type StorageBufferMode = "overflow" | "strict" | "ratio";
@@ -451,7 +452,7 @@ export interface FactoryStorage {
   targetMode?: "at-least" | "at-most" | "exact" | "ignore";
   /** Legacy Pool rule, read when targetMode is absent. */
   poolTargetMode?: "at-least" | "exact" | "ignore";
-  /** Buffers only; absent means `overflow`. See StorageBufferMode. */
+  /** Buffers only; absent means `overflow` in Build, `strict` in Solve. See StorageBufferMode. */
   bufferMode?: StorageBufferMode;
   /** Ratio mode's unwired surplus share, 0–100; absent means no export. */
   ratioExportPercent?: number;

@@ -1,4 +1,4 @@
-import type { FactoryProject, FactoryStorage } from "./types";
+import type { FactoryProject, FactoryStorage, StorageBufferMode } from "./types";
 
 /**
  * What a drawer IS. Four jobs that happen to share one card, and they mean
@@ -156,4 +156,9 @@ export function describeStorage(
 /** One drawer's role. Prefer `getStorageRoles` when asking about several. */
 export function getStorageRole(project: FactoryProject, storageId: string): StorageRole {
   return getStorageRoles(project).get(storageId) ?? "idle";
+}
+
+/** Solve balances intermediate drawers unless storage/ratio behavior was explicitly chosen. */
+export function effectiveBufferMode(storage: Pick<FactoryStorage, "bufferMode">, solveMode: boolean): StorageBufferMode {
+  return storage.bufferMode ?? (solveMode ? "strict" : "overflow");
 }

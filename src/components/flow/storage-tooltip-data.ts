@@ -1,3 +1,4 @@
+import { effectiveBufferMode } from "@/lib/model/storage-role";
 import { isInputRate, storageTargetMode, targetModeHelp, TARGET_MODE_LABELS } from "@/lib/model/storage-target";
 import type {
   FactoryProject,
@@ -57,7 +58,7 @@ export function buildStorageTooltip(
   role: StorageRole,
 ): RecipeTooltipView {
   const mode = tooltipMode(project);
-  const strict = role === "buffer" && storage.bufferMode === "strict";
+  const strict = role === "buffer" && effectiveBufferMode(storage, project.solveMode === true) === "strict";
   const figures: StorageThroughputResult | undefined = result?.storages[storage.id];
   const rate = (value: number) => formatSlotRate(value, storage.kind);
   const view: RecipeTooltipView = {

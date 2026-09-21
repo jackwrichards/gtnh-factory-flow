@@ -344,7 +344,12 @@ export function expandPool(project: FactoryProject): PoolExpansion {
       }
       storages.push({
         id: poolId,
-        bufferMode: hasInputTarget || hasOutputLimit ? "strict" : undefined,
+        // Auto matches intermediate production and consumption, including when
+        // only an input rate drives the chain. Import anyway deliberately
+        // breaks that match: it can import a shortfall or keep a surplus.
+        bufferMode: hasInputTarget || hasOutputLimit ? "strict"
+          : rule === "import" || (!group && rule === "share") ? "overflow"
+          : project.solveMode ? "strict" : undefined,
         kind: resource.kind,
         resourceId: resource.id,
         displayName: resource.displayName,
