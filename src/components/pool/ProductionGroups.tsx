@@ -250,7 +250,13 @@ export function ProductionScopeHeader({
                   const sign = Math.sign(net);
                   const rate = formatPoolSignedRate(sign ? Math.abs(net) : 0, resource.kind, sign);
                   const unit = rateSuffixForKind(resource.kind).trim();
-                  return <div className="pool-scope-material" key={key} data-material-key={key}>
+                  return <div className="pool-scope-material" key={key} data-material-key={key} data-material-draggable={!readOnly || undefined}
+                    onPointerDown={(event) => {
+                      // The icon owns its browse/drag gestures; Skip remains a button.
+                      // Rates and the rest of the row are generous pickup space.
+                      if ((event.target as Element).closest("button, input, select, a")) return;
+                      begin(event, { resource });
+                    }}>
                     {renderResource(resource)}
                       <span className={"pool-material-rate " + (sign < 0 ? "pool-flow-input" : sign > 0 ? "pool-flow-output" : "pool-flow-internal")}
                         aria-label={material + ": " + (sign < 0 ? "net input " : sign > 0 ? "net output " : "no net flow ") + formatSlotRateBare(Math.abs(net), resource.kind) + unit}

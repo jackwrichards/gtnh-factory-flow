@@ -568,6 +568,7 @@ const MachineRows = memo(function MachineRows({
   };
   const settingsId = useId();
   const orderTarget = useOrderTarget("machines", owner.id);
+  const { begin, suppressClick } = useWorksheetPointerDrag();
   const updateNode = useFactoryStore((state) => state.updateNode);
   const first = sections[0];
   const handler = first.recipe ? getSelectedMachineHandler(first.recipe, owner) : undefined;
@@ -584,6 +585,23 @@ const MachineRows = memo(function MachineRows({
   const renderRows = (controls: ReactNode, picture: ReactNode, settings: ReactNode) => (
     <tbody
       {...orderTarget}
+      onPointerDownCapture={(event) => {
+        // Keep touch scrolling, item pickup, open editors, and menus independent.
+        const target = event.target as Element;
+        if (
+          event.pointerType !== "mouse" ||
+          !event.currentTarget.contains(target) ||
+          target.closest(
+            '.pool-resource-link, .pool-order-handle, .pool-settings-row, input, textarea, select, a, [contenteditable="true"], [role="dialog"], [role="listbox"], [role="menu"]',
+          )
+        ) return;
+        begin(event, { kind: "machines", id: owner.id, label: "machine " + label });
+      }}
+      onClickCapture={(event) => {
+        if (!suppressClick(event.currentTarget)) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
       data-worksheet-node={owner.id}
       data-collapsed={collapsed || undefined}
       data-settings-open={(settingsOpen && Boolean(settings)) || undefined}

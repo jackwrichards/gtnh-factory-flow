@@ -940,3 +940,8 @@
 .pool-worksheet--dense .pool-machine-count [data-tooltip-root] > div,
 .pool-worksheet--dense .pool-machine-count button { width: max-content; flex-shrink: 0; white-space: nowrap; }
 .pool-worksheet--dense .pool-machine-power-value { flex-wrap: nowrap; }
+
+/* Larger invisible pickup areas keep the compact artwork and layout unchanged. */
+.pool-scope-material[data-material-draggable] { cursor: grab; }
+.pool-worksheet--dense .pool-port-list .pool-resource-link { position: relative; }
+.pool-worksheet--dense .pool-port-list .pool-resource-link::after { content: ""; position: absolute; inset: -2px; }

@@ -216,7 +216,14 @@ export function WorksheetPointerDrag({ children }: { children: ReactNode }) {
     [readOnly, move],
   );
   const context = useMemo(
-    () => ({ begin, suppressClick: (element: HTMLElement) => draggedSource.current === element }),
+    () => ({
+      begin,
+      suppressClick: (element: HTMLElement) => {
+        if (draggedSource.current !== element) return false;
+        draggedSource.current = undefined;
+        return true;
+      },
+    }),
     [begin],
   );
   return (

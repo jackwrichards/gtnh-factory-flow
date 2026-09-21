@@ -41,7 +41,7 @@ function pointerDrop(source: HTMLElement, target: Element, cancel = false) {
     pointer("pointermove", window, 32, 22);
     pointer("pointermove", window, 34, 24);
     expect(document.querySelector(".pool-drag-preview")).not.toBeNull();
-    expect(root?.hasAttribute("data-resource-dragging")).toBe(source.classList.contains("pool-resource-link"));
+    expect(root?.hasAttribute("data-resource-dragging")).toBe(source.matches(".pool-resource-link, .pool-material-rate, .pool-scope-material"));
     if (cancel) fireEvent.keyDown(window, { key: "Escape" });
     pointer("pointerup", window, 30, 20);
     expect(document.querySelector(".pool-drag-preview")).toBeNull();
@@ -256,6 +256,22 @@ describe("Pool worksheet", () => {
     expect(useFactoryStore.getState().project.storages).toHaveLength(1);
   });
 
+  it.each(["rate", "space"])("drags a material by its %s without browsing or changing Skip", (pickup) => {
+    const { container } = render(<PoolWorksheet />);
+    const material = container.querySelector<HTMLElement>('.pool-scope-material[data-material-key="item:copper"]')!;
+    const source = pickup === "rate" ? material.querySelector<HTMLElement>(".pool-material-rate")! : material;
+    const zone = screen.getByLabelText("Desired rates drop zone");
+    pointerDrop(source, zone, true);
+    expect(useFactoryStore.getState().project.storages).toHaveLength(1);
+    pointerDrop(source, zone);
+    expect(useFactoryStore.getState().project.storages).toHaveLength(2);
+    expect(useFactoryStore.getState().project.storages?.[1].resourceId).toBe("copper");
+    expect(useFactoryStore.getState().project.poolResourceRules).toBeUndefined();
+    expect(useFactoryStore.getState().recipeBrowserResource).toBeFalsy();
+    act(() => useFactoryStore.getState().undo());
+    expect(useFactoryStore.getState().project.storages).toHaveLength(1);
+  });
+
   it("advertises Desired rates during native resource dragging and clears after cancellation", () => {
     render(<PoolWorksheet />);
     const zone = screen.getByLabelText("Desired rates drop zone");
@@ -294,6 +310,25 @@ describe("Pool worksheet", () => {
       ],
     ).toEqual(["second", "machine"]);
   });
+
+  it.each([".pool-machine-title", ".pool-status-cell", ".pool-power-cell", ".pool-takes-cell", '[aria-label="Duplicate machine"]', '.pool-machine-count button'])(
+    "drags the machine from %s without triggering its click action", (selector) => {
+      const project = fixture();
+      project.nodes.push({ ...project.nodes[0], id: "second" });
+      useFactoryStore.getState().setProject(project);
+      const { container } = render(<PoolWorksheet />);
+      const before = useFactoryStore.getState().project;
+      const source = container.querySelector<HTMLElement>('[data-worksheet-node="second"] ' + selector)!;
+      const target = container.querySelector('[data-worksheet-node="machine"]')!;
+      pointerDrop(source, target);
+      expect([...container.querySelectorAll('[data-worksheet-node]')].map(row => row.getAttribute('data-worksheet-node'))).toEqual(['second', 'machine']);
+      expect(useFactoryStore.getState().project).toBe(before);
+      expect(container.querySelector('.pool-machine-count input')).toBeNull();
+      // A subsequent ordinary click must still work.
+      fireEvent.click(container.querySelector('[data-worksheet-node="second"] [aria-label="Duplicate machine"]')!);
+      expect(useFactoryStore.getState().project.nodes).toHaveLength(3);
+    },
+  );
 
   it("adds a product directly from the Products plus button", () => {
     render(<PoolWorksheet />);
@@ -709,7 +744,7 @@ describe("production group controls", () => {
     fireEvent.click(screen.getByRole("button", { name: "Collapse Copper line" }));
     expect(container.querySelector('[data-worksheet-node="machine"]')).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Expand Copper line" }));
-    pointerDrop(screen.getByRole("button", { name: "Reorder machine Bender" }), container.querySelector('[data-production-group="factory"]')!);
+    pointerDrop(container.querySelector<HTMLElement>('[data-worksheet-node="machine"] .pool-power-cell')!, container.querySelector('[data-production-group="factory"]')!);
     expect(useFactoryStore.getState().project.nodes[0].productionGroupId).toBeUndefined();
     act(() => useFactoryStore.getState().undo());
     expect(useFactoryStore.getState().project.nodes[0].productionGroupId).toBe("line");
