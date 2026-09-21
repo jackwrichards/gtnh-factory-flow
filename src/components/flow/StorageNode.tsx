@@ -810,6 +810,14 @@ export function TargetLine({
     );
     setEditing(true);
   };
+  const clearRate = (event: { button: number; preventDefault: () => void; stopPropagation: () => void }) => {
+    if (event.button !== 1) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (locked) return;
+    setEditing(false);
+    setStorageTarget(storage.id, undefined);
+  };
   // Typed figures are read in the BOARD'S rate unit and stored per second,
   // converted at the edges, so the number always matches the board around it.
   const commit = () => {
@@ -848,7 +856,8 @@ export function TargetLine({
           }
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        onMouseDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => { event.stopPropagation(); if (event.button === 1) event.preventDefault(); }}
+        onAuxClick={clearRate}
         aria-label="Required amount"
         className={[
           "nodrag group/target relative z-40 flex cursor-pointer justify-center text-[var(--flow-output)] hover:brightness-125",
@@ -904,7 +913,8 @@ export function TargetLine({
           event.stopPropagation();
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        onMouseDown={(event) => event.stopPropagation()}
+        onMouseDown={(event) => { event.stopPropagation(); if (event.button === 1) event.preventDefault(); }}
+        onAuxClick={clearRate}
         onTouchStart={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
         inputMode={signed ? "text" : "decimal"}

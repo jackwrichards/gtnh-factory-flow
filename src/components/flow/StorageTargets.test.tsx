@@ -181,3 +181,29 @@ it("keeps the chosen rule when the signed rate changes direction", () => {
   store.setStorageTarget("input", -4);
   expect(useFactoryStore.getState().project.storages![0]).toMatchObject({ targetPerSecond: -4, targetMode: "at-most", poolSide: "source" });
 });
+
+it("middle-click clears a rate without changing the rule or wires, and supports undo", () => {
+  useFactoryStore.getState().setStorageTarget("input", 10);
+  useFactoryStore.getState().setStorageTargetMode("input", "exact");
+  render(<BoardSource />);
+  fireEvent(screen.getByRole("button", { name: "Required amount" }), new MouseEvent("auxclick", { button: 1, bubbles: true }));
+  expect(useFactoryStore.getState().project.storages![0].targetPerSecond).toBeUndefined();
+  expect(useFactoryStore.getState().project.storages![0].targetMode).toBe("exact");
+  expect(screen.getByText("rate?")).toBeTruthy();
+  expect(useFactoryStore.getState().project.edges).toEqual(project().edges);
+  act(() => useFactoryStore.getState().undo());
+  expect(useFactoryStore.getState().project.storages![0].targetPerSecond).toBe(-10);
+});
+it("middle-click cannot clear rates in read-only mode", () => {
+  useFactoryStore.getState().setStorageTarget("input", 10);
+  useFactoryStore.setState({ isReadOnly: true });render(<BoardSource />);
+  fireEvent(screen.getByRole("button", { name: "Required amount" }), new MouseEvent("auxclick", { button: 1, bubbles: true }));
+  expect(useFactoryStore.getState().project.storages![0].targetPerSecond).toBe(-10);
+});
+it("keeps the actual rate visible alongside a compact unreachable warning", () => {
+  const p = project();p.poolMode = true;p.nodes = [];p.edges = [];p.storages![1].poolSide = "drain";
+  useFactoryStore.getState().setProject(p);render(<PoolWorksheet />);
+  expect(screen.queryByText("Unreachable")).toBeNull();
+  const warning=screen.getByLabelText("Target cannot be met");
+  expect(warning.closest("td")!.textContent).toContain("0/s");
+});

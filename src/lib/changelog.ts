@@ -47,6 +47,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.3.1",
+    date: "2026-09-20",
+    headline: "Small fixes for desired rates",
+    notes: [
+      "*Clear a rate with a middle-click.* Reset a rate to rate? in Solve or Pool without removing the drawer or its connections.",
+      "*A clearer Actual column.* When a Pool target cannot be met, its actual rate stays visible beside a small warning. Hover the warning for details.",
+    ],
+  },
+  {
     version: "3.3.0",
     date: "2026-09-20",
     headline: "A clearer, more compact Pool planner",

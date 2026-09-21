@@ -151,7 +151,7 @@ export function buildTargetTooltip(storage: FactoryStorage, figures: StorageThro
   if (figures?.targetUnreachable && figures.producedPerSecond >= 0) {
     rows.push({ label: "Reachable", value: rate(input ? figures.consumedPerSecond : figures.producedPerSecond) });
   }
-  return { title: ignored ? "Ignored target" : input ? "Input goal" : exact ? "Exact output goal" : "Required amount", reason: targetModeHelp(rule, input), rows, actions: [{ gesture: "left", label: "Edit amount" }] };
+  return { title: ignored ? "Ignored target" : input ? "Input goal" : exact ? "Exact output goal" : "Required amount", reason: targetModeHelp(rule, input), rows, bullets: ["Middle-click to clear the rate."], actions: [{ gesture: "left", label: "Edit amount" }] };
 }
 
 const NEXT_ACTION = (next: string): TooltipAction[] => [{ gesture: "left", label: `Switch to ${next}` }];

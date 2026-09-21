@@ -16,7 +16,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { ChevronDown, Copy, Plus, RefreshCw, Search, Settings2, Trash2, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, Copy, Plus, RefreshCw, Search, Settings2, Trash2, X } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { resourceLabel, isCropProductionRecipe } from "@/lib/model";
 import { isCustomRateRecipe } from "@/lib/model/custom-rate";
@@ -1051,11 +1051,16 @@ function Product({ storage, role }: { storage: FactoryStorage; role: StorageRole
         </div>
       </td>
       <td className={result?.targetUnreachable ? "pool-flow-input" : "pool-sheet-muted"}>
-        {result?.targetUnreachable ? (
-          "Unreachable"
-        ) : (
+        <span className="inline-flex max-w-full items-center justify-end gap-1">
+          {result?.targetUnreachable ? (
+            <MinecraftTooltip content="This target cannot be met with the current recipes, connections and rate rules.">
+              <span tabIndex={0} aria-label="Target cannot be met" className="inline-flex shrink-0 text-[var(--flow-input)]">
+                <AlertTriangle aria-hidden className="h-3 w-3" />
+              </span>
+            </MinecraftTooltip>
+          ) : null}
           <BalanceRate value={inputGoal ? (result?.consumedPerSecond ?? 0) : (result?.producedPerSecond ?? 0)} kind={storage.kind} sign={inputGoal ? -1 : 0} />
-        )}
+        </span>
       </td>
       <td>
         {!readOnly ? (
