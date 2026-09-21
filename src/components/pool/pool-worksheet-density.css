@@ -162,7 +162,7 @@
   flex-basis: 65px;
   width: 65px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 .pool-worksheet--dense .pool-machine-count [data-tooltip-root] > div {
   height: 20px;
@@ -807,10 +807,8 @@
 .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(4) { width: 90px; }
 .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(5) { width: 190px; }
 .pool-worksheet--dense .pool-products-table .pool-rates-columns th:last-child { width: 34px; }
-.pool-rates-title-row { padding: 0 5px; border-bottom: 1px solid #ffffff18; background: #ffffff06; text-align: left; }
-.pool-rates-title-row .pool-overview-title { min-height: 20px; }
-.pool-rates-title-row .pool-add-product { margin-left: auto; }
-.pool-rates-title-row .pool-drop-hint { overflow: visible; flex-shrink: 0; }
+.pool-rates-name-heading .pool-overview-title { min-height: 20px; }
+.pool-rates-name-heading .pool-drop-hint { overflow: visible; flex-shrink: 0; }
 .pool-worksheet--dense .pool-products-table :is(.pool-product-rule, .pool-product-status),
 .pool-worksheet--dense .pool-products-table .pool-rates-columns :is(th:nth-child(2), th:nth-child(5)) { text-align: left; }
 .pool-product-status { font: 10px var(--app-font); color: var(--mc-ink-muted); }
@@ -834,7 +832,7 @@
 
 /* Compact material tables keep direction, rate and supply rule on one line. */
 .pool-scope-materials { margin-bottom: 2px; }
-.pool-material-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); align-items: start; gap: 8px; overflow: visible; }
+.pool-material-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); align-items: start; gap: 8px; overflow: visible; }
 .pool-material-table { width: 100%; min-width: 0; table-layout: auto; border-collapse: collapse; background: #6f9cff0d; }
 .pool-material-table caption { padding: 1px 4px; text-align: left; font: 9px/16px var(--app-font); color: var(--mc-ink-muted); background: #6f9cff0d; }
 .pool-material-table td { padding: 0 4px; }
@@ -918,3 +916,19 @@
 .pool-worksheet .pool-sheet-products[data-resource-drop] { --pool-drop-wash: color-mix(in srgb, #78a7bc 20%, var(--surface, #24272c)); outline: 2px solid #78a7bc; }
 .pool-worksheet--dense[data-resource-dragging] .pool-overview .pool-sheet-products :is(caption, th, td),
 .pool-worksheet--dense .pool-overview .pool-sheet-products:is([data-resource-ready], [data-resource-drop]) :is(caption, th, td) { background-color: var(--pool-drop-wash); }
+
+/* Enlarge only the worksheet content; toolbar, board and the surrounding app keep their size. */
+.pool-worksheet--dense > .pool-sheet-scroll { zoom: 1.3; container-type: inline-size; }
+.pool-worksheet--dense .pool-col-circuit { width: 54px; }
+.pool-worksheet--dense .pool-rates-columns > th:last-child { text-align: center; }
+.pool-rates-columns > th:last-child .pool-add-product { display: flex; justify-content: center; }
+@container pool-rates (max-width: 640px) {
+  .pool-rates-name-heading .pool-drop-hint { display: none; }
+}
+@container pool-rates (max-width: 400px) {
+  .pool-products-table > thead { display: block; }
+  .pool-rates-columns { display: flex; align-items: center; }
+  .pool-rates-columns > th:not(:first-child):not(:last-child) { display: none; }
+  .pool-rates-columns > th:first-child { flex: 1; min-width: 0; }
+  .pool-rates-columns > th:last-child { flex: 0 0 34px; }
+}

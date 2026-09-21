@@ -438,7 +438,9 @@ describe("Pool worksheet", () => {
     const { container } = render(<PoolWorksheet />);
     const scroller = container.querySelector(".pool-sheet-scroll")!;
     expect(scroller.querySelector(".pool-desired-products")).not.toBeNull();
-    expect(screen.getByRole("heading", { name: "Desired rates" })).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Desired rates" }).closest("th")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Add rate" }).closest("th")).not.toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Item" })).toBeNull();
     expect(screen.getByRole("region", { name: "Materials for All production" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Materials for All production" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Material rules for All production pool" })).toBeNull();

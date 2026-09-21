@@ -370,17 +370,14 @@ export function PoolWorksheet() {
                       className="pool-summary-table pool-products-table"
                       aria-label="Pool products"
                     >
-                      <caption className="pool-rates-title-row">
-                        <div className="pool-overview-title"><h3>Desired rates</h3>{!readOnly ? <><span className="pool-drop-hint">(Drag items here)</span><AddPoolProduct /></> : null}</div>
-                      </caption>
                       <thead>
                         <tr className="pool-rates-columns">
-                          <th scope="col">Item</th>
+                          <th scope="col" className="pool-rates-name-heading"><div className="pool-overview-title"><h3>Desired rates</h3>{!readOnly ? <span className="pool-drop-hint">(Drag items here)</span> : null}</div></th>
                           <th scope="col">Rule</th>
                           <th scope="col" title="Positive amounts set output goals; negative amounts set input goals.">Target (±)</th>
                           <th scope="col">Actual</th>
                           <th scope="col">Status</th>
-                          <th scope="col"><span className="sr-only">Actions</span></th>
+                          <th scope="col"><span className="sr-only">Actions</span>{!readOnly ? <AddPoolProduct /> : null}</th>
                         </tr>
                       </thead>
                       <tbody>
