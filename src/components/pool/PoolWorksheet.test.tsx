@@ -201,7 +201,7 @@ describe("Pool worksheet", () => {
     expect(within(inputTable).getByRole("button", { name: "Copper Ingot" })).toBeTruthy();
     expect(within(inputTable).queryByRole("button", { name: "Copper Plate" })).toBeNull();
     expect(within(outputTable).getByRole("button", { name: "Copper Plate" })).toBeTruthy();
-    expect(within(inputTable).getByRole("combobox", { name: "Supply for Copper Ingot in All production" })).toBeTruthy();
+    expect(within(inputTable).getByRole("button", { name: "Skip balance for Copper Ingot in All production" })).toBeTruthy();
     expect(screen.queryByText(/Net:/)).toBeNull();
     expect(screen.queryByRole("table", { name: "Pool resource balance" })).toBeNull();
     const power = screen.getByRole("region", { name: "Pool power summary" });
@@ -591,19 +591,17 @@ describe("production group controls", () => {
     const before = useFactoryStore.getState().project.recipes;
     render(<PoolWorksheet />);
     expect(screen.queryByRole("button", { name: "Material rules for Copper line" })).toBeNull();
-    const link = screen.getByRole("combobox", { name: "Sharing for Copper Ingot in Copper line" }) as HTMLSelectElement;
-    expect(link.value).toBe("auto");
-    expect(within(link).getByRole("option", { name: "Match" })).toBeTruthy();
-    expect(within(link).getByRole("option", { name: "Ignore" })).toBeTruthy();
-    expect(link.title).toBe("Match made and used amounts.");
-    fireEvent.change(link, { target: { value: "share" } });
+    const link = screen.getByRole("button", { name: "Skip balance for Copper Ingot in Copper line" });
+    expect(link.getAttribute("aria-pressed")).toBe("false");
+    expect(link.title).toBe("Match: balance made and used.");
+    fireEvent.click(link);
     expect(useFactoryStore.getState().project.productionGroups![0].resourceRules).toEqual({ "item:copper": "share" });
-    expect(link.value).toBe("share");
-    expect(link.title).toBe("Share with the parent group.");
-    fireEvent.change(screen.getByRole("combobox", { name: "Supply for Copper Ingot in All production" }), { target: { value: "import" } });
+    expect(link.getAttribute("aria-pressed")).toBe("true");
+    expect(link.title).toBe("Ignore: share with parent.");
+    fireEvent.click(screen.getByRole("button", { name: "Skip balance for Copper Ingot in All production" }));
     expect(useFactoryStore.getState().project.poolResourceRules).toEqual({ "item:copper": "import" });
     expect(useFactoryStore.getState().project.recipes).toBe(before);
-    fireEvent.change(screen.getByRole("combobox", { name: "Sharing for Copper Ingot in Copper line" }), { target: { value: "auto" } });
+    fireEvent.click(screen.getByRole("button", { name: "Skip balance for Copper Ingot in Copper line" }));
     expect(useFactoryStore.getState().project.productionGroups![0].resourceRules?.["item:copper"]).toBeUndefined();
   });
   it("combines both boundary directions without offering a parent override for child-local totals", () => {
@@ -616,23 +614,42 @@ describe("production group controls", () => {
     const net = within(materials).getByLabelText("Copper Ingot: net output 1/s");
     expect(net.textContent).toBe("+1/s");
     expect(net.getAttribute("title")).toBe("Input: 2/s; output: 3/s");
-    expect(within(materials).queryByRole("combobox")).toBeNull();
+    expect(within(materials).queryByRole("button", { name: /^Skip balance for/ })).toBeNull();
     expect(within(materials).getByText("Within groups")).toBeTruthy();
   });
-  it("pages large rule lists and searches materials beyond the visible page", () => {
+  it("shows every material without paging or filtering, including large saved rule lists", () => {
     const project = fixture();
     project.poolResourceRules = Object.fromEntries(Array.from({ length: 1000 }, (_, index) => ["item:material-" + index, "import"]));
     useFactoryStore.getState().setProject(project);
     render(<PoolWorksheet />);
     const rules = screen.getByRole("region", { name: "Materials for All production" });
-    expect(within(rules).getAllByRole("combobox")).toHaveLength(24);
-    fireEvent.click(screen.getByRole("button", { name: "Next materials for All production" }));
-    expect(screen.getByText("25–48 / 1002")).toBeTruthy();
-    fireEvent.change(screen.getByRole("searchbox", { name: "Find material in All production" }), { target: { value: "material-999" } });
-    expect(within(rules).getAllByRole("combobox")).toHaveLength(1);
-    fireEvent.change(within(rules).getByRole("combobox", { name: "Supply for material-999 in All production" }), { target: { value: "auto" } });
+    expect(within(rules).getAllByRole("button", { name: /^Skip balance for/ })).toHaveLength(1002);
+    expect(screen.queryByRole("button", { name: /Next materials|Previous materials/ })).toBeNull();
+    expect(screen.queryByRole("searchbox", { name: /Find material/ })).toBeNull();
+    fireEvent.click(within(rules).getByRole("button", { name: "Skip balance for material-999 in All production" }));
     expect(useFactoryStore.getState().project.poolResourceRules?.["item:material-999"]).toBeUndefined();
-    expect(within(rules).getByText("No matching materials.")).toBeTruthy();
+    expect(within(rules).getAllByRole("button", { name: /^Skip balance for/ })).toHaveLength(1001);
+  });
+  it.each([undefined, { id: "line", name: "Copper line" }])("keeps stopped ingredients and products distinct from intermediates in scope %s", (group) => {
+    const resource = (id: string, made: boolean, used: boolean, drawer?: "source" | "product") => ({
+      groupId: group?.id, key: ("item:" + id) as `item:${string}`, resource: { kind: "item" as const, id, amount: 1 },
+      route: "local" as const, made: 0, used: 0, product: 0,
+      feeders: [...(made ? [{ id: "producer", storage: false }] : []), ...(drawer === "source" ? [{ id: "source", storage: true }] : [])],
+      takers: [...(used ? [{ id: "consumer", storage: false }] : []), ...(drawer === "product" ? [{ id: "product", storage: true }] : [])],
+    });
+    const rows = [resource("ore", false, true, "source"), resource("dust", true, true), resource("plate", true, false, "product")];
+    const { rerender } = render(<table><ProductionScopeHeader group={group} resources={rows} readOnly={false} power={null}
+      inputs={[]} outputs={[]} renderResource={(item) => <span>{item.id}</span>} /></table>);
+    const scope = group?.name ?? "All production";
+    expect(within(screen.getByRole("table", { name: "Inputs for " + scope })).getByText("ore")).toBeTruthy();
+    expect(within(screen.getByRole("table", { name: "Outputs for " + scope })).getByText("plate")).toBeTruthy();
+    expect(within(screen.getByRole("table", { name: "Internal for " + scope })).getByText("dust")).toBeTruthy();
+    expect(screen.getAllByLabelText(/no net flow 0/)).toHaveLength(3);
+    // Actual outside supply takes precedence once a paired material is imported.
+    rerender(<table><ProductionScopeHeader group={group} resources={rows} readOnly={false} power={null}
+      inputs={[{ resource: rows[1].resource, rate: 2 }]} outputs={[]} renderResource={(item) => <span>{item.id}</span>} /></table>);
+    expect(within(screen.getByRole("table", { name: "Inputs for " + scope })).getByText("dust")).toBeTruthy();
+    expect(screen.getByLabelText("dust: net input 2/s")).toBeTruthy();
   });
   it("collapses a production line and restores it when searching", () => {
     const p = fixture(); p.productionGroups = [{ id: "line", name: "Copper line" }]; p.nodes[0].productionGroupId = "line";
@@ -690,7 +707,7 @@ describe("production group controls", () => {
     expect(screen.queryByRole("button", { name: "Add production group" })).toBeNull();
     expect(screen.getByRole("region", { name: "Materials for Copper line" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Move group Copper line" })).toBeNull();
-    expect((screen.getByRole("combobox", { name: "Sharing for Copper Ingot in Copper line" }) as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Skip balance for Copper Ingot in Copper line" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Collapse Copper line" }));
     expect(useFactoryStore.getState().project.productionGroups).toEqual(p.productionGroups);
   });

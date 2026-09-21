@@ -802,11 +802,11 @@
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] :is(.pool-status-cell, .pool-circuit-cell, .pool-takes-cell, .pool-makes-cell, .pool-actions-cell) { grid-row: calc(var(--pool-section-row) + 1); }
 }
 /* Rate rules and outcomes are separate, labeled columns. */
-.pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(2) { width: 70px; }
+.pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(2) { width: 74px; }
 .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(3) { width: 100px; }
 .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(4) { width: 90px; }
 .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(5) { width: 190px; }
-.pool-worksheet--dense .pool-products-table .pool-rates-columns th:last-child { width: 24px; }
+.pool-worksheet--dense .pool-products-table .pool-rates-columns th:last-child { width: 34px; }
 .pool-rates-title-row { padding: 0 5px; border-bottom: 1px solid #ffffff18; background: #ffffff06; text-align: left; }
 .pool-rates-title-row .pool-overview-title { min-height: 20px; }
 .pool-rates-title-row .pool-add-product { margin-left: auto; }
@@ -834,29 +834,24 @@
 
 /* Compact material tables keep direction, rate and supply rule on one line. */
 .pool-scope-materials { margin-bottom: 2px; }
-.pool-material-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 10px; min-height: 18px; margin-bottom: 2px; }
 .pool-material-strip { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; overflow: visible; }
 .pool-material-table { flex: 1 1 auto; width: auto; min-width: min-content; table-layout: auto; border-collapse: collapse; background: #6f9cff0d; }
 .pool-material-table caption { padding: 1px 4px; text-align: left; font: 9px/16px var(--app-font); color: var(--mc-ink-muted); background: #6f9cff0d; }
 .pool-material-table td { padding: 0 4px; }
-.pool-material-columns { display: grid; grid-template-columns: repeat(2, 18px minmax(64px, max-content) max-content); column-gap: 3px; justify-content: start; }
-.pool-scope-material { display: grid; grid-column: span 3; grid-template-columns: subgrid; align-items: center; min-width: 0; height: 22px; border-bottom: 1px solid #ffffff08; }
+.pool-material-columns { display: grid; grid-template-columns: repeat(auto-fit, 16px var(--pool-material-rate-width, 50px) var(--pool-material-rule-width, 18px)); column-gap: 1px; justify-content: start; font: 7.5px/11px var(--app-font); }
+.pool-scope-material { display: grid; grid-column: span 3; grid-template-columns: subgrid; align-items: center; min-width: 0; height: 20px; border-bottom: 1px solid #ffffff08; }
 .pool-scope-material .pool-resource-link { height: 18px; justify-content: center; }
+.pool-scope-material .pool-item-icon { width: 16px !important; height: 16px !important; }
 .pool-material-rate { text-align: right; white-space: nowrap; font: 9px/11px var(--app-font); font-variant-numeric: tabular-nums; }
 .pool-material-rate strong { font-weight: 600; }
-.pool-material-rate small { margin-left: 2px; font-size: 7px; color: color-mix(in srgb, currentColor 35%, #9ca3af); }
+.pool-material-rate small { margin-left: 1px; font-size: 6px; color: color-mix(in srgb, currentColor 35%, #9ca3af); }
 
-.pool-material-rule-control { position: relative; display: inline-flex; align-items: center; width: 40px; height: 16px; margin-left: 2px; border-radius: 3px; background: #ffffff06; box-shadow: inset 0 0 0 1px #adc7ff0a; }
-.pool-material-rule-control > svg { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--mc-ink-muted); }
-.pool-material-rule { appearance: none; display: block; width: 100%; height: 16px; padding: 0 11px 0 4px; border: 0; border-radius: inherit; background: transparent; color: var(--mc-ink-muted); font: 7px/16px var(--app-font); cursor: pointer; }
-.pool-material-rule-control:hover { background: #ffffff0b; }
-.pool-material-rule option { background: var(--surface, #24272c); color: var(--mc-ink); }
-.pool-material-rule:focus-visible { outline: 1px solid #adc7ff; }
-.pool-material-rule:disabled { cursor: default; }
+.pool-material-ignore { width: 18px; height: 15px; padding: 0; cursor: pointer; border: 1px solid #ffffff12; border-radius: 2px; background: #ffffff04; color: var(--mc-ink-muted); font: 6px/13px var(--app-font); }
+.pool-material-ignore[aria-pressed="true"] { background: #6f9cff20; border-color: #adc7ff60; color: #adc7ff; }
+.pool-material-ignore:hover { border-color: #adc7ff; }
+.pool-material-ignore:focus-visible { outline: 1px solid #adc7ff; outline-offset: 1px; }
+.pool-material-ignore:disabled { cursor: default; opacity: .5; }
 .pool-material-inherited { display: block; height: 17px; font: 9px/17px var(--app-font); color: var(--mc-ink-muted); }
-.pool-rule-search { width: 150px; min-width: 80px; height: 20px; padding: 0 5px; font-size: 10px; background: #0002; border: 1px solid #ffffff18; }
-.pool-rule-pages { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--mc-ink-muted); white-space: nowrap; }
-.pool-rule-pages button:disabled { opacity: .3; cursor: default; }
 
 /* A bounded rate list, live context in the middle, and power at the far right. */
 .pool-worksheet--dense .pool-overview > .pool-desired-products { grid-area: rates; width: 100%; min-width: 0; container: pool-rates / inline-size; }
@@ -909,37 +904,60 @@
   .pool-situation-flow strong { font-size: 10px; }
 }
 
-/* Status sits beside the root material summary, below the full-width rate table. */
-.pool-scope-overview { display: grid; grid-template-columns: minmax(240px, 280px) minmax(0, 1fr); align-items: start; gap: 10px; }
+/* All four sections share the available width, including the space below Status. */
+.pool-scope-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: start; gap: 8px; }
 .pool-scope-content { min-width: 0; container-type: inline-size; }
-@container (max-width: 720px) {
-  .pool-scope-overview { grid-template-columns: 1fr; }
+.pool-scope-overview > .pool-scope-content,
+.pool-scope-overview .pool-scope-materials,
+.pool-scope-overview .pool-material-strip { display: contents; container-type: normal; }
+.pool-scope-overview .pool-material-table { width: 100%; min-width: 0; }
+@container (max-width: 980px) {
+  .pool-scope-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-
+@container (max-width: 580px) {
+  .pool-scope-overview { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* One summary, with aligned section captions below the All production heading. */
 .pool-situation > .pool-situation-scope { min-height: 18px; margin-bottom: 0; padding: 1px 100px 1px 0; font: 9px/16px var(--app-font); color: var(--mc-ink-muted); }
 .pool-situation > .pool-situation-top { margin-top: 2px; }
 .pool-situation-help > button { top: 1px; right: 4px; font: 9px/16px var(--app-font); }
 
-/* Rates remain readable when the panel itself gets narrow, even beside power. */
-@container pool-rates (max-width: 610px) {
+.pool-rate-label-compact { display: none; }
+/* Tighten the status and number columns before rearranging a rate row. */
+@container pool-rates (max-width: 680px) {
+  .pool-rate-label-full { display: none; }
+  .pool-rate-label-compact { display: inline; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(2) { width: 74px; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(3) { width: 88px; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(4) { width: 78px; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(5) { width: 130px; }
+  .pool-worksheet--dense .pool-overview .pool-product > .pool-product-status { font-size: 9px; white-space: normal; }
+  .pool-product-status button { flex-wrap: wrap; }
+}
+@container pool-rates (max-width: 520px) {
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(2) { width: 74px; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(3) { width: 80px; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(4) { width: 70px; }
+  .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(5) { width: 105px; }
+}
+/* A phone rate has two lines: item/status, then rule/target/actual. */
+@container pool-rates (max-width: 400px) {
   .pool-worksheet--dense .pool-products-table { display: block; width: 100%; }
   .pool-products-table > caption { display: block; width: 100%; }
   .pool-products-table > thead { display: none; }
   .pool-products-table > tbody { display: block; }
-  .pool-products-table .pool-product { position: relative; display: grid; grid-template-columns: 70px minmax(0, 1fr) minmax(0, 1fr); gap: 0 6px; padding: 2px 4px; border-bottom: 1px solid #ffffff18; }
+  .pool-products-table .pool-product { position: relative; display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr) 20px; gap: 2px 6px; padding: 2px 4px; border-bottom: 1px solid #ffffff18; }
   .pool-worksheet--dense .pool-overview .pool-product > td { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; height: auto; min-height: 20px; padding: 0; border: 0; }
-  .pool-products-table .pool-product > td:first-child { grid-column: 1 / -1; padding-right: 24px; align-items: flex-start; }
-  .pool-products-table .pool-product > td:nth-child(2) { align-items: flex-start; }
+  .pool-worksheet--dense .pool-overview .pool-product > td:first-child { grid-column: 1 / 3; grid-row: 1; align-items: flex-start; }
+  .pool-worksheet--dense .pool-overview .pool-product > td:nth-child(2) { grid-column: 1; grid-row: 2; align-items: flex-start; }
+  .pool-products-table .pool-product > td:nth-child(3) { grid-column: 2; grid-row: 2; }
+  .pool-products-table .pool-product > td:nth-child(4) { grid-column: 3 / 5; grid-row: 2; }
   .pool-products-table .pool-product > td:nth-child(2)::before { content: "Rule"; }
   .pool-products-table .pool-product > td:nth-child(3)::before { content: "Target (±)"; }
   .pool-products-table .pool-product > td:nth-child(4)::before { content: "Actual"; }
   .pool-products-table .pool-product > td::before { font: 8px/12px var(--app-font); color: var(--mc-ink-muted); }
-  .pool-products-table .pool-product > .pool-product-status { grid-column: 1 / -1; align-items: flex-start; }
-  .pool-products-table .pool-product > td:last-child { position: absolute; top: 1px; right: 2px; }
+  .pool-worksheet--dense .pool-overview .pool-product > .pool-product-status { grid-column: 3; grid-row: 1; align-items: flex-start; font-size: 8px; text-align: left; }
+  .pool-products-table .pool-product > td:last-child { grid-column: 4; grid-row: 1; }
   .pool-target-controls { padding-right: 0; }
-}
-@container (max-width: 270px) {
-  .pool-material-columns { grid-template-columns: 18px minmax(64px, max-content) max-content; }
 }

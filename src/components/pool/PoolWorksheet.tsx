@@ -1058,8 +1058,8 @@ function Product({ storage, role, onExplain }: { storage: FactoryStorage; onExpl
       </td>
       <td className="pool-product-status" data-tone={status.tone}>
         {status.explain ? <button type="button" onClick={onExplain} aria-label={status.label + ": explain target for " + (storage.displayName ?? storage.resourceId)}>
-          <span className="pool-state-dot" aria-hidden />{status.label}<span className="pool-status-why">Why?</span>
-        </button> : <span className="pool-rate-state"><span className="pool-state-dot" aria-hidden />{status.label}</span>}
+          <span className="pool-state-dot" aria-hidden /><span className="pool-rate-label-full">{status.label}</span><span className="pool-rate-label-compact">{status.compact ?? status.label}</span><span className="pool-status-why">Why?</span>
+        </button> : <span className="pool-rate-state"><span className="pool-state-dot" aria-hidden /><span className="pool-rate-label-full">{status.label}</span><span className="pool-rate-label-compact">{status.compact ?? status.label}</span></span>}
       </td>
       <td>
         {!readOnly ? (
