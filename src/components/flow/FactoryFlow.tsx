@@ -7575,7 +7575,7 @@ const SolveModeNotice = memo(function SolveModeNotice({
       </span>
       {/* One line, never a count: what the solve needs is one number,
           anywhere. The button still points at the products missing theirs. */}
-      <span className="whitespace-nowrap compact:whitespace-normal">Set at least one product rate or machine count.</span>
+      <span className="whitespace-nowrap compact:whitespace-normal">Set an input/output rate or pin a machine count.</span>
       {missingCount > 0 ? (
         <button
           type="button"
@@ -7637,7 +7637,7 @@ const MODE_KEYS: Array<{
   {
     mode: "solve",
     label: "Solve mode",
-    setup: "Connect machines and set target production rates.",
+    setup: "Connect machines and set input or output rates.",
     result: "Required machine counts.",
     note: "Switching modes keeps your setup and existing wires. Recipes added in Pool need wiring here.",
     Icon: Sigma,
@@ -7649,7 +7649,7 @@ const MODE_KEYS: Array<{
   {
     mode: "pool",
     label: "Pool mode",
-    setup: "Add recipes to the list and set target production rates.",
+    setup: "Add recipes and set input or output rates.",
     result: "Required machine counts.",
     details: ["Resources are shared without wires.", "Inputs with no producer are imported automatically."],
     note: "Switching modes keeps your setup and existing wires. Pool shares materials automatically; Build and Solve need wires.",

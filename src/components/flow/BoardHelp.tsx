@@ -144,7 +144,7 @@ const SOLVE_MODE: HelpCard = {
   rows: [
     { text: "Connect recipes and set a *target*" },
     { text: "*Machine counts* are calculated" },
-    { text: "Target: *drawer rate* or *pinned count*" },
+    { text: "Target: *input/output rate* or *pinned count*" },
   ],
 };
 
@@ -154,7 +154,7 @@ const POOL_MODE: HelpCard = {
     { text: "Choose recipes and set a *target*" },
     { text: "Counts and resource flow are *automatic*" },
     { text: "Inputs with no producer are *imported*" },
-    { chip: "+", tone: "pool", text: "Add a *product drawer*; set its rate" },
+    { chip: "+", tone: "pool", text: "Add a rate: *positive output*, *negative input*" },
   ],
 };
 

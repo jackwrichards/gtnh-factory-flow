@@ -1833,7 +1833,7 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Pool Production Groups
 
-- The UI follows the reference: global Desired products, Factory grand total, nested group
+- The UI follows the reference: global Desired rates, All production grand total, nested group
   totals in compact, always-visible Inputs / Outputs / Internal tables. Each material
   has its icon, signed net rate, and supply/sharing selector on one line; columns use
   the available horizontal space. Red negative is input; green positive is output; gray zero is no net flow.
@@ -1857,15 +1857,21 @@ Working notes for future agents on GTNH Factory Flow.
   are available in the same scope. All sections of a shared machine inherit its owner.
 - Groups/rules must survive saves, JSON and clipboard remapping; collapse is local workspace
   state. Build and wired Solve ignore these scopes. See docs/production-groups.md and the
-  solver/store production-groups.test.ts files. Pool negative targets are exact net input
-  goals: expand their product drawer to a source and enforce strict receiving balance.
-  Explicit input goals prevent Ignore top-up in that pool; positive targets remain minimums.
-  Signed values persist but are dormant outside Pool. See pool-input-targets.test.ts.
-- Product poolTargetMode offers at-least (default), exact, and ignore. Exact output
-  adds a ceiling and makes its receiving pool strict, including zero output goals;
-  other drain drawers must not bypass the ceiling. Ignore preserves the saved rate
-  but removes the target constraint. An ignored negative goal must NOT become an
-  unlimited source. Rules are dormant in wired Solve/Build. See pool-target-rules.test.ts.
+  solver/store production-groups.test.ts files.
+- Rates and rules are SHARED by wired Solve and Pool on FactoryStorage:
+  targetPerSecond stores signed input/output amounts; targetMode offers at-least,
+  exact, ignore, and at-most for inputs. storage-target.ts is the shared interpretation.
+  Board source editors show positive magnitudes; Desired rates in Pool shows negative
+  inputs and positive outputs, including existing wired sources with no rate.
+  At most is a ceiling, not demand; Exactly uses the whole input. Zero limits work.
+  Ignore retains the saved amount without enforcing it; an ignored source remains
+  available. Legacy poolTargetMode values still load, and legacy negative goals are
+  exact unless ignored. Build keeps settings dormant. Mode changes never alter wires.
+  Pool input limits enforce strict receiving balance and block automatic top-up.
+  Exact Pool outputs cap all exports from their receiving pool, including other drains.
+  Separate source drawers retain independent rates. Group scopes apply only in Pool.
+  See shared-rates.test.ts, StorageTargets.test.tsx, pool-input-targets.test.ts and
+  pool-target-rules.test.ts.
 
 ## Verification
 

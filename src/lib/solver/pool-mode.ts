@@ -1,3 +1,4 @@
+import { hasStorageTarget, storageTargetMode } from "../model/storage-target";
 import { normalizeProductionGroups, productionGroupTree } from "../model/production-groups";
 import {
   getFilledCellFluidEquivalent,
@@ -195,14 +196,10 @@ export function expandPool(project: FactoryProject): PoolExpansion {
   const exactOutputIds = new Set<string>();
   for (const storage of project.storages ?? []) {
     let side = poolSideOf(storage, wiredIn.has(storage.id), wiredOut.has(storage.id));
-    // Ignored negative goals must not become unlimited input sources or new drains.
-    if (storage.poolTargetMode === "ignore" && (storage.targetPerSecond ?? 0) < 0) continue;
-    if (side === "drain" && storage.poolTargetMode === "exact" && storage.targetPerSecond !== undefined
-      && storage.targetPerSecond >= 0 && (!storage.drainMode || storage.drainMode === "product")) exactOutputIds.add(storage.id);
-    if (side === "drain" && (storage.targetPerSecond ?? 0) < 0 && (!storage.drainMode || storage.drainMode === "product")) {
-      inputTargetIds.add(storage.id);
-      side = "source";
-    }
+    const mode = storageTargetMode(storage, side === "source" ? "source" : "product");
+    if (side === "drain" && mode === "exact" && hasStorageTarget(storage)
+      && (!storage.drainMode || storage.drainMode === "product")) exactOutputIds.add(storage.id);
+    if (side === "source" && hasStorageTarget(storage, "source")) inputTargetIds.add(storage.id);
     if (!side) continue;
     const pool = poolFor(
       { ...storage, id: storage.resourceId, amount: 1 },

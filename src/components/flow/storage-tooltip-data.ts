@@ -1,3 +1,4 @@
+import { isInputRate, storageTargetMode, targetModeHelp, TARGET_MODE_LABELS } from "@/lib/model/storage-target";
 import type {
   FactoryProject,
   FactoryStorage,
@@ -71,8 +72,8 @@ export function buildStorageTooltip(
       ? { ...view, subtitle: "Drawer · Not pooled" }
       : { ...view, requirement: "You must connect it." };
   }
-  if (mode === "pool" && role !== "product") {
-    // Only product drawers are live in pool mode; the rest stand inert.
+  if (mode === "pool" && role !== "product" && role !== "source") {
+    // Only source/product drawers are live in Pool; other drawers stand inert.
     return { ...view, subtitle: `${view.subtitle} · Not pooled` };
   }
   if (!figures) {
@@ -82,26 +83,33 @@ export function buildStorageTooltip(
   const inRate = figures.producedPerSecond;
   const outRate = figures.consumedPerSecond;
   switch (role) {
-    case "source":
-      view.rows = [{ label: "Supplied", value: rate(outRate) }];
+    case "source": {
+      const target = storage.targetPerSecond;
+      const rule = storageTargetMode(storage, "source");
+      if (mode !== "build" && target !== undefined) {
+        view.rows.push({ label: rule === "ignore" ? "Saved target" : TARGET_MODE_LABELS[rule], value: rate(Math.abs(target)) });
+        if (figures.targetUnreachable) view.reason = "No machine count meets this input rate with the current wires and targets.";
+      }
+      view.rows.push({ label: "Supplied", value: rate(outRate) });
       break;
+    }
     case "product": {
       const target = storage.targetPerSecond;
-      if (mode === "pool" && storage.poolTargetMode === "ignore") {
+      if (mode !== "build" && storageTargetMode(storage, role) === "ignore") {
         view.subtitle = "Ignored target";
         view.reason = "The saved amount does not drive production.";
         view.rows = target !== undefined ? [{ label: "Saved target", value: rate(target) }] : [];
         if ((target ?? 0) >= 0) view.rows.push({ label: "Produced", value: rate(inRate) });
         break;
       }
-      if (mode === "pool" && target !== undefined && target < 0) {
+      if (mode !== "build" && target !== undefined && target < 0) {
         view.subtitle = "Input goal";
         view.rows = [{ label: "Consume", value: rate(-target) }, { label: "Consumed", value: rate(outRate) }];
         if (figures.targetUnreachable) view.reason = "No machine count consumes the requested input amount.";
         break;
       }
-      const hasTarget = mode !== "build" && target !== undefined && target > 0;
-      if (hasTarget) view.rows.push({ label: "Required", value: rate(target) });
+      const hasTarget = mode !== "build" && target !== undefined && (target > 0 || storageTargetMode(storage, role) === "exact");
+      if (hasTarget) view.rows.push({ label: storageTargetMode(storage, role) === "exact" ? "Exactly" : "Required", value: rate(target) });
       view.rows.push({ label: "Produced", value: rate(inRate) });
       if (hasTarget && target > inRate + EPS && differs(target, inRate)) {
         view.rows.push({ label: "Shortfall", value: rate(target - inRate) });
@@ -133,17 +141,17 @@ export function buildStorageTooltip(
 }
 
 /** The required-amount field: the number, and what is reachable when it is not. */
-export function buildTargetTooltip(storage: FactoryStorage, figures: StorageThroughputResult | undefined, poolMode = false): RecipeTooltipView {
+export function buildTargetTooltip(storage: FactoryStorage, figures: StorageThroughputResult | undefined, poolMode = false, input = isInputRate(storage)): RecipeTooltipView {
   const target = storage.targetPerSecond;
   const rate = (value: number) => formatSlotRate(value, storage.kind);
-  const input = target !== undefined && target < 0;
-  const ignored = poolMode && storage.poolTargetMode === "ignore";
-  const exact = poolMode && (storage.poolTargetMode === "exact" || input);
-  const rows = target !== undefined ? [{ label: ignored ? "Saved target" : input ? "Consume" : exact ? "Exactly" : "Required", value: rate(ignored ? target : Math.abs(target)) }] : [];
+  const rule = storageTargetMode(storage, input ? "source" : "product");
+  const ignored = rule === "ignore";
+  const exact = rule === "exact";
+  const rows = target !== undefined ? [{ label: ignored ? "Saved target" : input ? (rule === "exact" ? "Consume" : TARGET_MODE_LABELS[rule]) : exact ? "Exactly" : "Required", value: rate(ignored ? target : Math.abs(target)) }] : [];
   if (figures?.targetUnreachable && figures.producedPerSecond >= 0) {
     rows.push({ label: "Reachable", value: rate(input ? figures.consumedPerSecond : figures.producedPerSecond) });
   }
-  return { title: ignored ? "Ignored target" : input ? "Input goal" : exact ? "Exact output goal" : "Required amount", reason: ignored ? "The saved amount does not drive production." : undefined, rows, actions: [{ gesture: "left", label: "Edit amount" }] };
+  return { title: ignored ? "Ignored target" : input ? "Input goal" : exact ? "Exact output goal" : "Required amount", reason: targetModeHelp(rule, input), rows, actions: [{ gesture: "left", label: "Edit amount" }] };
 }
 
 const NEXT_ACTION = (next: string): TooltipAction[] => [{ gesture: "left", label: `Switch to ${next}` }];

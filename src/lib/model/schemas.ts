@@ -397,6 +397,7 @@ export const factoryStorageSchema = z.object({
   poolSide: z.enum(["source", "drain"]).optional(),
   // Solve mode's requirement on a product drawer; absent = unconstrained.
   targetPerSecond: z.number().finite().optional(),
+  targetMode: z.enum(["at-least", "at-most", "exact", "ignore"]).optional(),
   poolTargetMode: z.enum(["at-least", "exact", "ignore"]).optional(),
   pocketId: z.string().min(1).optional(),
   position: z.object({

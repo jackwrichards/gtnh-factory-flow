@@ -1,5 +1,7 @@
 "use client";
 
+import { isInputRate, storageTargetMode, type TargetMode } from "@/lib/model/storage-target";
+
 import { dissolveProductionGroup, productionGroupDescendants } from "@/lib/model/production-groups";
 import type { ProductionGroup, PoolResourceRule } from "@/lib/model/types";
 
@@ -448,8 +450,9 @@ interface FactoryStore {
   ) => void;
   /** Drains only: flip between pulling the feeder flat out and catching the extra. */
   setStorageDrainMode: (storageId: string, drainMode: StorageDrainMode) => void;
-  /** Solve mode's requirement on a product drawer; undefined clears it. */
+  /** Shared Solve/Pool rate on a source or product; undefined clears it. */
   setStorageTarget: (storageId: string, targetPerSecond: number | undefined) => void;
+  setStorageTargetMode: (storageId: string, mode: TargetMode) => void;
   setPoolTargetMode: (storageId: string, mode: NonNullable<FactoryStorage["poolTargetMode"]>) => void;
   /**
    * The board's three modes on one switch: build (both flags off), solve
@@ -2502,49 +2505,37 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
   },
   setStorageTarget: (storageId, targetPerSecond) => {
     set((state) => {
-      // Duplicate PRODUCT drawers of one resource (a board built in build
-      // mode, or two placed before pool mode refused a second) carry ONE
-      // ask: typing on any of them writes all of them, so the solve never
-      // reads two different amounts for the same thing.
-      const typed = (state.project.storages ?? []).find((storage) => storage.id === storageId);
+      if (state.isReadOnly || (targetPerSecond !== undefined && !Number.isFinite(targetPerSecond))) return state;
+      const typed = state.project.storages?.find((storage) => storage.id === storageId);
+      if (!typed) return state;
       const roles = getStorageRoles(state.project);
-      const twins = new Set(
-        typed
-          ? (state.project.storages ?? [])
-              .filter(
-                (storage) =>
-                  storage.kind === typed.kind &&
-                  storage.resourceId === typed.resourceId &&
-                  storage.productionGroupId === typed.productionGroupId &&
-                  roles.get(storage.id) === "product",
-              )
-              .map((storage) => storage.id)
-          : [],
-      );
-      twins.add(storageId);
-      const project = touchProject({
-        ...state.project,
-        storages: (state.project.storages ?? []).map((storage) =>
-          twins.has(storage.id) ? { ...storage, targetPerSecond } : storage,
-        ),
-      });
-
-      return withProjectHistory(state, {
-        project,
-        lastResult: solveBooks(project),
-      });
+      const oldInput = isInputRate(typed, roles.get(storageId));
+      const value = !state.project.poolMode && oldInput && targetPerSecond !== undefined ? -Math.abs(targetPerSecond) : targetPerSecond;
+      const input = value === undefined || value === 0 ? oldInput : value < 0;
+      const directionChanged = oldInput !== input;
+      const mode = storageTargetMode(typed, roles.get(storageId));
+      const targetMode = directionChanged && mode !== "ignore" && mode !== "exact" ? (input ? "exact" : "at-least") : typed.targetMode;
+      const project = touchProject({ ...state.project, storages: state.project.storages?.map((storage) => {
+        const twin = storage.kind === typed.kind && storage.resourceId === typed.resourceId
+          && storage.productionGroupId === typed.productionGroupId && roles.get(storage.id) === roles.get(storageId)
+          && roles.get(storageId) === "product";
+        return storage.id === storageId || twin ? { ...storage, targetPerSecond: value, targetMode,
+          poolSide: state.project.poolMode || roles.get(storageId) === "source" ? (input ? "source" : "drain") : storage.poolSide } : storage;
+      }) });
+      return withProjectHistory(state, { project, lastResult: solveBooks(project) });
     });
   },
-  setPoolTargetMode: (storageId, poolTargetMode) => {
+  setPoolTargetMode: (storageId, mode) => get().setStorageTargetMode(storageId, mode),
+  setStorageTargetMode: (storageId, targetMode) => {
     set((state) => {
       if (state.isReadOnly) return state;
       const typed = state.project.storages?.find((storage) => storage.id === storageId);
       if (!typed) return state;
       const roles = getStorageRoles(state.project);
       const project = touchProject({ ...state.project, storages: state.project.storages?.map((storage) =>
-        storage.id === storageId || (storage.kind === typed.kind && storage.resourceId === typed.resourceId
-          && storage.productionGroupId === typed.productionGroupId && roles.get(storage.id) === "product")
-          ? { ...storage, poolTargetMode } : storage) });
+        storage.id === storageId || (state.project.poolMode && storage.kind === typed.kind && storage.resourceId === typed.resourceId
+          && storage.productionGroupId === typed.productionGroupId && roles.get(storage.id) === "product" && roles.get(storageId) === "product")
+          ? { ...storage, targetMode, poolTargetMode: undefined } : storage) });
       return withProjectHistory(state, { project, lastResult: solveBooks(project) });
     });
   },

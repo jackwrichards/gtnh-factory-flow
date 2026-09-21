@@ -53,7 +53,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     notes: [
       "Organize Pool into named, nested production groups with their own material balances.",
       "Compact recipe rows adapt to narrower screens, with labeled columns, accessible status details, icon-based machine selection and inline settings.",
-      "Choose At least, Exactly or Ignore per output target, or use a negative target to size the line from an exact input rate.",
+      "Edit input and output rates in both Solve and Pool, with shared At least, Exactly and Ignore rules plus At most input limits.",
       "Drag machines and whole groups onto group headings, including empty or collapsed groups. Groups persist through saves, undo and copy/paste.",
     ],
   },

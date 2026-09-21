@@ -1,4 +1,6 @@
 "use client";
+import { isInputRate, storageTargetMode } from "@/lib/model/storage-target";
+import { StorageTargetRule } from "../flow/StorageTargetRule";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
 import { getPoolGroupResources } from "@/lib/solver/pool-mode";
 import { ProductionScopeHeader } from "./ProductionGroups";
@@ -20,7 +22,7 @@ import { resourceLabel, isCropProductionRecipe } from "@/lib/model";
 import { isCustomRateRecipe } from "@/lib/model/custom-rate";
 import { type MachineListEntry } from "@/lib/model/machine-list";
 import type { ResourceAmount, FactoryStorage, ProductionGroup } from "@/lib/model/types";
-import { getStorageRoles } from "@/lib/model/storage-role";
+import { getStorageRoles, type StorageRole } from "@/lib/model/storage-role";
 import { powerDisplayFromEuT, powerDisplaySuffix, rateSuffixForKind } from "@/lib/model/rate-unit";
 import { ResourceIcon } from "../nei/ResourceIcon";
 import { MinecraftTooltip } from "../nei/MinecraftTooltip";
@@ -171,7 +173,7 @@ export function PoolWorksheet() {
   );
   const roles = useMemo(() => getStorageRoles(project), [project]);
   const products = orderWorksheetEntries(
-    (project.storages ?? []).filter((storage) => roles.get(storage.id) === "product"),
+    (project.storages ?? []).filter((storage) => roles.get(storage.id) === "product" || roles.get(storage.id) === "source"),
     savedOrder("products"),
     (storage) => storage.id,
   );
@@ -348,7 +350,7 @@ export function PoolWorksheet() {
                     >
                       <thead>
                         <tr>
-                          <th><div className="pool-overview-title"><h3>Desired products</h3>{!readOnly ? <span className="pool-drop-hint">Drag items here</span> : null}</div></th>
+                          <th><div className="pool-overview-title"><h3>Desired rates</h3>{!readOnly ? <span className="pool-drop-hint">Drag items here</span> : null}</div></th>
                           <th title="Positive amounts set output goals; negative amounts set input goals.">Target (±)</th>
                           <th>Actual</th>
                           <th>
@@ -359,7 +361,7 @@ export function PoolWorksheet() {
                       </thead>
                       <tbody>
                         {products.map((storage) => (
-                          <Product key={storage.id} storage={storage} />
+                          <Product key={storage.id} storage={storage} role={roles.get(storage.id)} />
                         ))}
                       </tbody>
                     </table>
@@ -420,7 +422,7 @@ function ProductsPane({ children, id }: { children: ReactNode; id: string }) {
     <div
       className="pool-sheet-products"
       id={id}
-      aria-label="Products drop zone"
+      aria-label="Desired rates drop zone"
       data-resource-drop={hover || undefined}
       onDragOver={(event) => {
         if (!readOnly && event.dataTransfer.types.includes(RESOURCE_DRAG_TYPE)) {
@@ -455,7 +457,7 @@ function AddPoolProduct({ groupId }: { groupId?: string }) {
       <button
         type="button"
         className="pool-add-button"
-        aria-label={groupId ? "Add product to this group" : "Add product"}
+        aria-label={groupId ? "Add rate to this group" : "Add rate"}
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
@@ -989,7 +991,7 @@ function MachinePower({ entry }: { entry?: MachineListEntry }) {
   );
 }
 
-function Product({ storage }: { storage: FactoryStorage }) {
+function Product({ storage, role }: { storage: FactoryStorage; role: StorageRole | undefined }) {
   const scopeName = useFactoryStore(
     (state) =>
       state.project.productionGroups?.find((group) => group.id === storage.productionGroupId)?.name,
@@ -997,9 +999,8 @@ function Product({ storage }: { storage: FactoryStorage }) {
   const result = useFactoryStore((state) => state.lastResult.storages[storage.id]);
   const readOnly = useFactoryStore((state) => state.isReadOnly);
   const orderTarget = useOrderTarget("products", storage.id);
-  const ignored = storage.poolTargetMode === "ignore";
-  const inputGoal = (storage.targetPerSecond ?? 0) < 0;
-  const rule = ignored ? "ignore" : inputGoal ? "exact" : storage.poolTargetMode ?? "at-least";
+  const ignored = storageTargetMode(storage, role) === "ignore";
+  const inputGoal = isInputRate(storage, role);
   return (
     <tr {...orderTarget} className="pool-product" data-worksheet-product={storage.id} data-target-ignored={ignored || undefined}>
       <td>
@@ -1037,32 +1038,23 @@ function Product({ storage }: { storage: FactoryStorage }) {
       </td>
       <td className="pool-product-target">
         <div className="pool-target-controls">
-          <select aria-label={"Target rule for " + (storage.displayName ?? storage.resourceId)}
-            className="pool-target-rule" value={rule} disabled={readOnly}
-            title={ignored ? "Keep this amount saved without driving production." : rule === "exact" ? "Match this rate exactly; no extra output may accumulate in this pool." : "Produce this amount or more."}
-            onChange={(event) => useFactoryStore.getState().setPoolTargetMode(storage.id, event.target.value as NonNullable<FactoryStorage["poolTargetMode"]>)}>
-            {!inputGoal ? <option value="at-least">At least</option> : null}
-            <option value="exact">Exactly</option>
-            <option value="ignore">Ignore</option>
-          </select>
+          <StorageTargetRule storage={storage} input={inputGoal} className="pool-target-rule" />
         {readOnly ? (
           <span>
             {storage.targetPerSecond === undefined
               ? "No target"
-              : formatSlotRate(storage.targetPerSecond, storage.kind)}
+              : formatSlotRate((inputGoal ? -1 : 1) * Math.abs(storage.targetPerSecond), storage.kind)}
           </span>
         ) : (
-          <TargetLine storage={storage} result={result} formatDisplayRate={formatSlotRate} />
+          <TargetLine storage={storage} result={result} input={inputGoal} formatDisplayRate={formatSlotRate} />
         )}
         </div>
       </td>
       <td className={result?.targetUnreachable ? "pool-flow-input" : "pool-sheet-muted"}>
-        {ignored && inputGoal ? (
-          <span title="This input goal is ignored">—</span>
-        ) : result?.targetUnreachable ? (
+        {result?.targetUnreachable ? (
           "Unreachable"
         ) : (
-          <BalanceRate value={(storage.targetPerSecond ?? 0) < 0 ? (result?.consumedPerSecond ?? 0) : (result?.producedPerSecond ?? 0)} kind={storage.kind} sign={(storage.targetPerSecond ?? 0) < 0 ? -1 : 0} />
+          <BalanceRate value={inputGoal ? (result?.consumedPerSecond ?? 0) : (result?.producedPerSecond ?? 0)} kind={storage.kind} sign={inputGoal ? -1 : 0} />
         )}
       </td>
       <td>
@@ -1070,7 +1062,7 @@ function Product({ storage }: { storage: FactoryStorage }) {
           <button
             type="button"
             className="pool-sheet-icon-button"
-            aria-label={`Remove product ${storage.displayName ?? storage.resourceId}`}
+            aria-label={`Remove rate ${storage.displayName ?? storage.resourceId}`}
             onClick={() => useFactoryStore.getState().deleteStorage(storage.id)}
           >
             <X />

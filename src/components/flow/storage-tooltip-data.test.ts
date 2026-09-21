@@ -91,7 +91,7 @@ describe("drawer tooltips are words and figures", () => {
     const idle = plan({ edges: [] });
     expect(tip(idle, "out")).toMatchObject({ subtitle: "Drawer", requirement: "You must connect it." });
     const pool = plan({ solveMode: true, poolMode: true, nodes: [{ ...machine, solvePin: 1 }] });
-    expect(tip(pool, "src")).toMatchObject({ subtitle: "Source · Not pooled", rows: [], actions: [] });
+    expect(tip(pool, "src")).toMatchObject({ subtitle: "Source", rows: [{ label: "Supplied", value: "100 L/s" }], actions: [] });
     expect(tip(pool, "out").subtitle).toBe("Product");
     expect(tip(pool, "out").actions).toEqual([]);
     expect(tip(plan(), "out").actions).toEqual([{ gesture: "drag", label: "Drag to connect" }]);

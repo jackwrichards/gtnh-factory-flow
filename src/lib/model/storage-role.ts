@@ -81,7 +81,7 @@ export function getStorageRoles(project: FactoryProject): Map<string, StorageRol
  * the solve has run. Shared with the card, which reads its own wires.
  */
 export function storageRoleFor(
-  storage: Pick<FactoryStorage, "drainMode" | "poolSide">,
+  storage: Pick<FactoryStorage, "drainMode" | "poolSide" | "targetPerSecond">,
   fed: boolean,
   drawn: boolean,
   poolMode: boolean,
@@ -101,6 +101,7 @@ export function storageRoleFor(
   // Unwired, but declared in pool mode: it stays the product (or source) it
   // was made as, a lingering drawer rather than a blank one, until a wire
   // says otherwise.
+  if ((storage.targetPerSecond ?? 0) < 0) return "source";
   if (storage.poolSide === "drain") {
     return drainRole();
   }
@@ -118,10 +119,11 @@ export function storageRoleFor(
  * side - the pool is the buffer now - and stays idle.
  */
 export function poolSideOf(
-  storage: Pick<FactoryStorage, "poolSide">,
+  storage: Pick<FactoryStorage, "poolSide" | "targetPerSecond">,
   fed: boolean,
   drawn: boolean,
 ): "source" | "drain" | undefined {
+  if ((storage.targetPerSecond ?? 0) < 0) return "source";
   if (storage.poolSide) {
     return storage.poolSide;
   }

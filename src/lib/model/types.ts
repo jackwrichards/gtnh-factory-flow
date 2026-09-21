@@ -440,15 +440,16 @@ export interface FactoryStorage {
   /** Drains only; absent means `product`. See StorageDrainMode. */
   drainMode?: StorageDrainMode;
   /**
-   * Solve mode's question, typed on a PRODUCT drawer: make at least this much
-   * per second. In Pool, a negative number instead requests exact net input
-   * consumption at its absolute rate. Dormant outside Pool when negative.
-   * Ignored in plan mode and on other drawer roles; a product with
+   * Shared boundary target: negative for fresh input, positive for output.
+   * Source editors on the board show the magnitude; Pool shows the sign.
+   * Ignored in Build and on buffer/byproduct/trash drawers; a product with
    * no number is unconstrained (byproduct-shaped) so flipping the mode never
    * errors a board.
    */
   targetPerSecond?: number;
-  /** Pool target rule. Absent means at-least for outputs and exact for negative inputs. */
+  /** Shared Solve/Pool rate rule. Build retains the settings without enforcing them. */
+  targetMode?: "at-least" | "at-most" | "exact" | "ignore";
+  /** Legacy Pool rule, read when targetMode is absent. */
   poolTargetMode?: "at-least" | "exact" | "ignore";
   /** Buffers only; absent means `overflow`. See StorageBufferMode. */
   bufferMode?: StorageBufferMode;

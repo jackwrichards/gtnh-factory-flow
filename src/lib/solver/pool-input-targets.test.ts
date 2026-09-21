@@ -77,11 +77,12 @@ describe("Pool input goals", () => {
     const p = fixture(); p.nodes[0].enabled = false;
     expect(calculateThroughput(p).storages.ore.targetUnreachable).toBe(true);
   });
-  it("round trips signed targets and leaves them dormant outside Pool", () => {
+  it("round trips signed targets and reports missing wires outside Pool", () => {
     const p = fixture(); const parsed = parseFactoryProjectJson(serializeFactoryProject(p));
     expect(parsed.storages![0].targetPerSecond).toBe(-10);
     p.poolMode = false;
-    expect(hasAnySolveNumbers(p)).toBe(false);
+    expect(hasAnySolveNumbers(p)).toBe(true);
+    expect(calculateThroughput(p).storages.ore.targetUnreachable).toBe(true);
     expect(calculateThroughput(p).nodes.smelt.theoreticalMachinesRequired).toBe(0);
   });
 });

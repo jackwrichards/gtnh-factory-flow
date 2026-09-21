@@ -3,6 +3,7 @@
 import { LocateFixed } from "lucide-react";
 import type { FactoryStorage } from "@/lib/model/types";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
+import { StorageTargetRule } from "../flow/StorageTargetRule";
 import { TargetLine } from "../flow/StorageNode";
 
 export function ProductTargetRow({ storage, isLast }: { storage: FactoryStorage; isLast: boolean }) {
@@ -21,7 +22,8 @@ export function ProductTargetRow({ storage, isLast }: { storage: FactoryStorage;
         onClick={() => useFactoryStore.getState().focusBoardNode(storage.id)}>
         <LocateFixed className="h-3 w-3" />
       </button>
-      <div className="relative ml-auto mr-4" title="Product target"><TargetLine storage={storage} result={result} /></div>
+      <StorageTargetRule storage={storage} input={false} className="ml-auto max-w-[80px] bg-transparent text-[10px] text-fg-muted [&_option]:bg-[var(--surface)]" />
+      <div className="relative mr-4" title="Product target"><TargetLine storage={storage} result={result} /></div>
     </div>
   );
 }

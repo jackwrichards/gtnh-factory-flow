@@ -11,8 +11,8 @@ import { storageRatioEqualities } from "./storage-ratios";
 
 /**
  * SOLVE MODE: the planner's question turned around. Plan mode fixes the
- * machine counts and asks what flows; solve mode fixes the product amounts
- * (each product drawer's typed rate) and asks how many machines. Same
+ * machine counts and asks what flows; solve mode fixes input/output rates
+ * (each boundary drawer's typed rate) and asks how many machines. Same
  * conservation rows as equations-core.ts, but:
  *
  *  - each machine's act is UNBOUNDED above: act is "multiples of the built
@@ -22,8 +22,9 @@ import { storageRatioEqualities } from "./storage-ratios";
  *  - a product drawer's typed amount is a ROW: inflow >= target. Targets are
  *    minimums, not equalities, because fixed recipe ratios can force one
  *    product past its number while another lands exactly (the distillation
- *    tower shape); the overshoot reads as spare. Pool can opt into an exact
- *    output, pairing a ceiling with a strict receiving pool.
+ *    tower shape); the overshoot reads as spare. Either mode can opt into an exact
+ *    output. Input rates can be exact, minimums, or supply ceilings. Pool also
+ *    makes an exact output's receiving pool strict.
  *  - the objective is MINIMIZE TOTAL MACHINERY (sum of act x machineCount),
  *    This also settles under-determination: a chain
  *    no target needs solves to zero, which is itself the answer.
@@ -40,7 +41,7 @@ import { storageRatioEqualities } from "./storage-ratios";
  * jointly reachable - sources are unlimited and machinery is unbounded. An
  * infeasible solve therefore means some target is unreachable at ANY scale
  * (no wired path, or a bare port pinning its chain), and probing each target
- * alone identifies exactly which. Pool input goals and exact outputs add finite bounds;
+ * alone identifies exactly which. Input limits and exact outputs add finite bounds;
  * conflicting goals must be reported rather than silently dropped.
  */
 
@@ -48,6 +49,9 @@ export interface SolveModeTarget {
   storageId: string;
   amountPerSecond: number;
   exact?: boolean;
+  atMost?: boolean;
+  /** Explicit direction also represents a zero input limit. */
+  input?: boolean;
 }
 
 /** Run EXACTLY this many machines of this node; the line solves around it. */
@@ -63,7 +67,7 @@ export interface SolveModeResult {
   scaleByNode: Map<string, number>;
   /** Resource per second on each modeled wire at the solved scale. */
   edgeFlowPerSecond: Map<string, number>;
-  /** Product drawers whose typed amount no chain can reach at any scale. */
+  /** Source/product drawers whose target conflicts or has no usable path. */
   unreachableStorageIds: Set<string>;
   /** The pinned counts cannot all run together (an output with nowhere to
    * go, or two pins fighting through a shared port). */
@@ -303,14 +307,14 @@ export function solveSolveMode(
     }
   }
 
-  // Outputs default to minimums; exact outputs and negative inputs add a
+  // Outputs default to minimums; exact rates and input limits add a
   // ceiling. Their strict receiving pool prevents hidden surplus. Keep these
   // ceilings when probing other goals, so a conflict cannot bypass them.
-  const activeTargets = targets.filter((t) => t.amountPerSecond !== 0 || t.exact);
+  const activeTargets = targets.filter((t) => t.amountPerSecond !== 0 || t.exact || t.atMost);
   const unreachableStorageIds = new Set<string>();
   const rowsByTarget = new Map<string, LinearProgram["upperBounds"][number]>();
   for (const target of activeTargets) {
-    const input = target.amountPerSecond < 0;
+    const input = target.input ?? target.amountPerSecond < 0;
     const amount = Math.abs(target.amountPerSecond);
     const scale = 1 / Math.max(1, amount);
     const coefficients = new Map<number, number>();
@@ -319,9 +323,9 @@ export function solveSolveMode(
         coefficients.set(flowVar.get(edge.id)!, -scale);
       }
     }
-    if (!coefficients.size) { if (amount > 0) unreachableStorageIds.add(target.storageId); continue; }
-    rowsByTarget.set(target.storageId, { coefficients, rhs: -amount * scale });
-    if (input || target.exact) {
+    if (!coefficients.size) { if (amount > 0 && !target.atMost) unreachableStorageIds.add(target.storageId); continue; }
+    if (!target.atMost) rowsByTarget.set(target.storageId, { coefficients, rhs: -amount * scale });
+    if (target.exact || target.atMost || (input && target.input === undefined)) {
       const ceiling = new Map([...coefficients].map(([v, c]) => [v, -c]));
       if (!input && project.poolMode) {
         // Cap all exports from the same receiving pool, so another drawer
@@ -418,7 +422,7 @@ export function solveSolveMode(
       }
       const pinsAlone = solve({ maximize: probe, equalities, upperBounds });
       if (pinsAlone.status !== "optimal") {
-        for (const target of activeTargets) if (target.exact || target.amountPerSecond < 0) unreachableStorageIds.add(target.storageId);
+        for (const target of activeTargets) if (target.exact || target.atMost || (target.input === undefined && target.amountPerSecond < 0)) unreachableStorageIds.add(target.storageId);
         return { ...emptyResult("failed"), pinsInfeasible: true };
       }
     }

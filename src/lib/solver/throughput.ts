@@ -1,4 +1,5 @@
-﻿import {
+import { hasStorageTarget, isInputRate, storageTargetMode } from "../model/storage-target";
+import {
   getChanceMultiplier,
   isRecipeInputConsumed,
   makeResourceKey,
@@ -494,8 +495,7 @@ export function hasAnySolveNumbers(project: FactoryProject): boolean {
   return (
     (project.storages ?? []).some(
       (storage) =>
-        (!project.poolMode || storage.poolTargetMode !== "ignore") &&
-        ((storage.targetPerSecond ?? 0) > 0 || (project.poolMode && ((storage.targetPerSecond ?? 0) < 0 || (storage.poolTargetMode === "exact" && storage.targetPerSecond === 0)))) &&
+        hasStorageTarget(storage) &&
         // A byproduct or trash drawer's number is DORMANT (typed while it
         // was a product, kept for the flip back): it asks nothing, so it
         // must not silence the needs-a-number notice.
@@ -525,17 +525,18 @@ function finalizeSolveModeResult(
 ): ThroughputResult {
   const roles = getStorageRoles(project);
   const targets = projectStorages
-    .filter(
-      (storage) =>
-        (!project.poolMode || storage.poolTargetMode !== "ignore") && (
-          (roles.get(storage.id) === "product" && ((storage.targetPerSecond ?? 0) > 0 || (project.poolMode && storage.poolTargetMode === "exact" && storage.targetPerSecond === 0))) ||
-          (project.poolMode && roles.get(storage.id) === "source" && (storage.targetPerSecond ?? 0) < 0)),
-    )
-    .map((storage) => ({
-      storageId: storage.id,
-      amountPerSecond: storage.targetPerSecond!,
-      exact: project.poolMode && storage.poolTargetMode === "exact",
-    }));
+    .filter((storage) => {
+      const role = roles.get(storage.id);
+      return (role === "source" || role === "product") && hasStorageTarget(storage, role);
+    })
+    .map((storage) => {
+      const role = roles.get(storage.id);
+      const mode = storageTargetMode(storage, role);
+      const input = isInputRate(storage, role);
+      return { storageId: storage.id, input,
+        amountPerSecond: (input ? -1 : 1) * Math.abs(storage.targetPerSecond!),
+        exact: mode === "exact", atMost: mode === "at-most" };
+    });
 
   const pins = project.nodes
     .filter((node) => node.enabled && (node.solvePin ?? 0) > 0)
@@ -547,8 +548,8 @@ function finalizeSolveModeResult(
       id: "solve-pins",
       kind: "resource-deficit",
       severity: "critical",
-      message: targets.some((target) => target.exact || target.amountPerSecond < 0)
-        ? "The pinned machine counts conflict with each other or an exact target. Check the target rates and pinned counts."
+      message: targets.some((target) => target.exact || target.atMost)
+        ? "The pinned machine counts conflict with each other or a rate limit. Check the target rates and pinned counts."
         : "The pinned machine counts cannot run together. Check their outputs have somewhere to go.",
     });
   }
@@ -613,7 +614,7 @@ function finalizeSolveModeResult(
 
   for (const storage of projectStorages) {
     const result = storages[storage.id];
-    if (!result || (roles.get(storage.id) !== "product" && !(project.poolMode && (storage.targetPerSecond ?? 0) < 0))) {
+    if (!result || (roles.get(storage.id) !== "product" && roles.get(storage.id) !== "source")) {
       continue;
     }
     result.targetPerSecond = storage.targetPerSecond;
@@ -623,7 +624,7 @@ function finalizeSolveModeResult(
         id: `solve-target:${storage.id}`,
         kind: "resource-deficit",
         severity: "critical",
-        message: `${storage.displayName ?? storage.resourceId}: no chain can ${storage.targetPerSecond! < 0 ? "consume" : "make"} ${Math.abs(storage.targetPerSecond ?? 0).toFixed(2)}/s at these targets.`,
+        message: `${storage.displayName ?? storage.resourceId}: no chain can ${isInputRate(storage, roles.get(storage.id)) ? "use" : "make"} ${Math.abs(storage.targetPerSecond ?? 0).toFixed(2)}/s at these targets.`,
       });
     }
   }

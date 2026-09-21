@@ -229,7 +229,7 @@ describe("Pool worksheet", () => {
     const { container } = render(<PoolWorksheet />);
     const row = container.querySelector('[data-worksheet-node="machine"]') as HTMLElement;
     const item = within(row).getByRole("button", { name: "Copper Ingot" });
-    const products = screen.getByLabelText("Products drop zone");
+    const products = screen.getByLabelText("Desired rates drop zone");
     pointerDrop(item, products, true);
     expect(dragSounds()).toEqual(["pageOpen", "snap", "pageClose"]);
     vi.mocked(playBoardSound).mockClear();
@@ -278,7 +278,7 @@ describe("Pool worksheet", () => {
 
   it("adds a product directly from the Products plus button", () => {
     render(<PoolWorksheet />);
-    fireEvent.click(screen.getByRole("button", { name: "Add product" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add rate" }));
     fireEvent.click(screen.getByRole("button", { name: "Pick Copper Ingot" }));
     expect(useFactoryStore.getState().project.storages).toEqual(
       expect.arrayContaining([
@@ -419,7 +419,7 @@ describe("Pool worksheet", () => {
     const { container } = render(<PoolWorksheet />);
     const scroller = container.querySelector(".pool-sheet-scroll")!;
     expect(scroller.querySelector(".pool-desired-products")).not.toBeNull();
-    expect(screen.getByRole("heading", { name: "Desired products" })).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Desired rates" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Materials for All production" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Materials for All production" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Material rules for All production pool" })).toBeNull();
@@ -476,7 +476,7 @@ describe("Pool worksheet", () => {
     render(<PoolWorksheet />);
     const rule = screen.getByRole("combobox", { name: "Target rule for Copper Plate" });
     fireEvent.change(rule, { target: { value: "ignore" } });
-    expect(useFactoryStore.getState().project.storages?.[0]).toMatchObject({ targetPerSecond: 0.5, poolTargetMode: "ignore" });
+    expect(useFactoryStore.getState().project.storages?.[0]).toMatchObject({ targetPerSecond: 0.5, targetMode: "ignore" });
     expect(useFactoryStore.getState().lastResult.nodes.machine.theoreticalMachinesRequired).toBe(0);
     fireEvent.change(rule, { target: { value: "exact" } });
     expect(useFactoryStore.getState().lastResult.nodes.machine.theoreticalMachinesRequired).toBeCloseTo(0.5);
@@ -551,7 +551,7 @@ describe("Pool worksheet", () => {
     const { container } = render(<PoolWorksheet />);
     expect(screen.queryByRole("button", { name: "Required amount" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Remove machine" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Add product" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add rate" })).toBeNull();
 
     expect((container.querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
     expect(useFactoryStore.getState().project).toBe(project);
@@ -644,9 +644,9 @@ describe("production group controls", () => {
     const p = fixture(); p.productionGroups = [{ id: "line", name: "Copper line" }]; p.nodes[0].productionGroupId = "line"; p.storages![0].productionGroupId = "line";
     useFactoryStore.getState().setProject(p);
     render(<PoolWorksheet />);
-    expect(screen.queryByRole("button", { name: "Add product to this group" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add rate to this group" })).toBeNull();
     expect(screen.getByText("Target in Copper line")).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "Add product" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add rate" }));
     fireEvent.click(screen.getByRole("button", { name: "Pick Copper Ingot" }));
     expect(useFactoryStore.getState().project.storages!.find((s) => s.resourceId === "copper")?.productionGroupId).toBeUndefined();
     fireEvent.click(screen.getByRole("button", { name: "Delete group Copper line" }));

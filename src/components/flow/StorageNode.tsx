@@ -1,4 +1,6 @@
 "use client";
+import { isInputRate, storageTargetMode } from "@/lib/model/storage-target";
+import { StorageTargetRule } from "./StorageTargetRule";
 
 import { Handle, Position, useStoreApi, type Node, type NodeProps } from "@xyflow/react";
 import { memo, useState, type CSSProperties, type ReactNode } from "react";
@@ -241,10 +243,10 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   // buffer now). They stay on the board untouched - switching modes must
   // never delete anything - and read greyed and see-through while inert.
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
-  // Only a PRODUCT drawer is live in pool mode (Jack, 2026-09-06): the pool
+  // Source and product drawers are live in Pool: the pool
   // banks every surplus by itself, so byproduct and trash drawers change
-  // nothing a player can see on the board, and go grey with the sources.
-  const inertInPool = poolMode && role !== "product";
+  // nothing a player can see on the board, and go grey with buffers.
+  const inertInPool = poolMode && role !== "product" && role !== "source";
   const resourceKey = makeResourceKey(storage.kind, storage.resourceId);
   // Lit when a hovered port/label/drawer pulls this buffer into its flow scope.
   const isFlowScopeLit = useFactoryStore((state) =>
@@ -560,10 +562,10 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
                 showAmount={false}
                 bare
                 iconPixelSize={storageIconPixelSize(
-                  role === "buffer" && storage.bufferMode === "ratio" ? 20 : isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
+                  role === "buffer" && storage.bufferMode === "ratio" ? 20 : solveMode && (role === "source" || role === "product") ? 24 : isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
                   storage,
                 )}
-                className={role === "buffer" && storage.bufferMode === "ratio" ? "!h-[20px] !w-[20px] shrink-0" : "!h-[36px] !w-[36px]"}
+                className={role === "buffer" && storage.bufferMode === "ratio" ? "!h-[20px] !w-[20px] shrink-0" : solveMode && (role === "source" || role === "product") ? "!h-6 !w-6" : "!h-[36px] !w-[36px]"}
               />
               {role === "buffer" && storage.bufferMode === "ratio" ? <RatioSetupOutput storageId={storage.id} percentage={ratioExportShare(storage) * 100} /> : null}
             </div>
@@ -572,8 +574,11 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
                 <NetLine net={net} kind={storage.kind} role={role} width={52} />
                 <RatioSplitButton storageId={storage.id} />
               </div>
-            ) : solveMode && role === "product" ? (
-              <TargetLine storage={storage} result={result} />
+            ) : solveMode && (role === "product" || role === "source") ? (
+              <div className="storage-target-controls nodrag nopan relative z-30 flex flex-col items-center gap-0.5" onPointerDown={event => event.stopPropagation()}>
+                <StorageTargetRule storage={storage} input={isInputRate(storage, role)} className="h-3.5 max-w-[76px] bg-transparent text-[8px] leading-none text-[var(--mc-ink-muted)] [&_option]:bg-[var(--surface)]" />
+                <TargetLine storage={storage} result={result} input={isInputRate(storage, role)} />
+              </div>
             ) : (
               <NetLine net={net} kind={storage.kind} role={role} />
             )}
@@ -702,10 +707,10 @@ function rateFitClass(label: string, role: StorageRole, width = NET_LINE_WIDTH_B
 }
 
 /** The tile's one line of news: the net rate, sized to fit its silhouette. */
-function NetLine({ net, kind, role, width, formatRate = formatCompactRate }: { net: number; kind: string; role: StorageRole; width?: number; formatRate?: (value: number, kind: string) => string }) {
+function NetLine({ net, kind, role, width, formatRate = formatCompactRate, unsigned = false }: { net: number; kind: string; role: StorageRole; width?: number; formatRate?: (value: number, kind: string) => string; unsigned?: boolean }) {
   // The fit class and the colour read the TARGET value: the size and tone
   // land immediately, and only the digits ease their way there.
-  const label = `${net >= 0 ? "+" : ""}${formatRate(net, kind)}`;
+  const label = unsigned ? formatRate(Math.abs(net), kind) : `${net >= 0 ? "+" : ""}${formatRate(net, kind)}`;
   return (
     <div
       className={[
@@ -720,7 +725,7 @@ function NetLine({ net, kind, role, width, formatRate = formatCompactRate }: { n
         values={[net]}
         render={(shown) => {
           const value = shown[0] ?? net;
-          return `${value >= 0 ? "+" : ""}${formatRate(value, kind)}`;
+          return unsigned ? formatRate(Math.abs(value), kind) : `${value >= 0 ? "+" : ""}${formatRate(value, kind)}`;
         }}
       />
     </div>
@@ -773,25 +778,30 @@ export function TargetLine({
   storage,
   result,
   formatDisplayRate,
+  input = isInputRate(storage),
 }: {
   storage: FactoryStorage;
   result: StorageThroughputResult | undefined;
   formatDisplayRate?: (value: number, kind: string) => string;
+  input?: boolean;
 }) {
   const setStorageTarget = useFactoryStore((state) => state.setStorageTarget);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  const target = storage.targetPerSecond;
   const signed = useFactoryStore((state) => state.project.poolMode === true);
-  const showZero = signed && target === 0;
+  const locked = useFactoryStore((state) => state.isReadOnly || state.checklistMode);
+  const target = storage.targetPerSecond === undefined ? undefined : Math.abs(storage.targetPerSecond) * (signed && input ? -1 : 1);
+  const mode = storageTargetMode(storage, input ? "source" : "product");
+  const showZero = target === 0;
   const unreachable = result?.targetUnreachable === true;
   // While the solver has NOTHING to solve for - no amount, no pin, anywhere -
   // every empty rate line blinks the ask, in step with the board's notice.
-  const askBlink = useFactoryStore((state) => !hasAnySolveNumbers(state.project) && !(state.project.poolMode && storage.poolTargetMode === "ignore"));
+  const askBlink = useFactoryStore((state) => !hasAnySolveNumbers(state.project) && mode !== "ignore");
   const beginEdit = () => {
+    if (locked) return;
     setDraft(
       target !== undefined && (target > 0 || (signed && target < 0) || showZero)
-        ? formatDisplayRate && Math.abs(target * rateMultiplierForKind(storage.kind)) < 1
+        ? Math.abs(target * rateMultiplierForKind(storage.kind)) < 1
           ? (target * rateMultiplierForKind(storage.kind)).toLocaleString("en-US", { useGrouping: false, maximumSignificantDigits: 21 })
           : formatAmountWithSuffix(target * rateMultiplierForKind(storage.kind))
         : "",
@@ -807,11 +817,11 @@ export function TargetLine({
       return;
     }
     const value = parseAmountWithSuffix(draft);
-    if (value === undefined || !Number.isFinite(value) || (value <= 0 && !(signed && (value < 0 || (value === 0 && storage.poolTargetMode === "exact"))))) {
+    if (value === undefined || !Number.isFinite(value) || (!signed && value < 0) || (value === 0 && mode !== "exact" && mode !== "at-most")) {
       // Not a number: the field falls back to what it held.
       return;
     }
-    setStorageTarget(storage.id, value / rateMultiplierForKind(storage.kind));
+    setStorageTarget(storage.id, (input && !signed ? -Math.abs(value) : value) / rateMultiplierForKind(storage.kind));
   };
 
   if (!editing) {
@@ -820,7 +830,7 @@ export function TargetLine({
       // tile draws, wrapped only to be clickable (z-40, over the wire
       // handles that blanket the well at z-30). Unreachable overrides the
       // line's own green with red from outside.
-      <MinecraftTooltip content={() => <RecipeTooltip view={buildTargetTooltip(storage, result, signed)} />}>
+      <MinecraftTooltip content={() => <RecipeTooltip view={buildTargetTooltip(storage, result, signed, input)} />}>
       <div
         role="button"
         tabIndex={0}
@@ -851,7 +861,7 @@ export function TargetLine({
             tile's bottom edge instead of merging with it. */}
         <div className="relative -translate-y-[2px] underline decoration-dotted decoration-[1.5px] underline-offset-[3px]">
           {target !== undefined && (target > 0 || (signed && target < 0) || showZero) ? (
-            <NetLine net={target} kind={storage.kind} role="product" formatRate={formatDisplayRate} />
+            <NetLine net={input ? -Math.abs(target) : target} unsigned={input && !signed} kind={storage.kind} role={input ? "source" : "product"} formatRate={formatDisplayRate} />
           ) : (
             <div
               className={[
@@ -859,7 +869,7 @@ export function TargetLine({
                 askBlink ? "animate-pulse text-[var(--flow-output)]" : "text-[var(--flow-output)] opacity-60",
               ].join(" ")}
             >
-              rate?
+              {input ? "input rate?" : "rate?"}
             </div>
           )}
           <Pencil

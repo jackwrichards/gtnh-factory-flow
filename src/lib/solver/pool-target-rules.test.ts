@@ -74,7 +74,7 @@ describe("Pool target rules", () => {
     p.storages![0].productionGroupId = "line"; p.storages![0].poolTargetMode = "exact";
     expect(calculateThroughput(p).storages.b.targetUnreachable).toBe(true);
   });
-  it("round trips target rules and keeps them dormant in wired Solve", () => {
+  it("round trips target rules and applies them in wired Solve", () => {
     const p = fixture(); p.storages![0].poolTargetMode = "exact"; p.storages![1].poolTargetMode = "ignore";
     const parsed = parseFactoryProjectJson(serializeFactoryProject(p));
     expect(parsed.storages!.map(s => s.poolTargetMode)).toEqual(["exact", "ignore"]);
@@ -82,6 +82,6 @@ describe("Pool target rules", () => {
     p.storages!.push({ id: "ore", kind: "item", resourceId: "ore", position: { x: 0, y: 0 } });
     p.edges = [{ id: "in", source: "ore", target: "r", resourceKind: "item", resourceId: "ore" },
       ...["a", "b"].map(id => ({ id, source: "r", target: id, resourceKind: "item" as const, resourceId: id }))];
-    expect(calculateThroughput(p).nodes.r.theoreticalMachinesRequired).toBeCloseTo(1.5);
+    expect(calculateThroughput(p).nodes.r.theoreticalMachinesRequired).toBeCloseTo(1);
   });
 });
