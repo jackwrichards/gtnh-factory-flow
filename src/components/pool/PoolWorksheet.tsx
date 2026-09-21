@@ -17,7 +17,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { AlertTriangle, ChevronDown, Copy, Plus, RefreshCw, Search, Settings2, Trash2, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, Copy, Plus, RefreshCw, Search, Settings, Trash2, X } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { resourceLabel, isCropProductionRecipe } from "@/lib/model";
 import { isCustomRateRecipe } from "@/lib/model/custom-rate";
@@ -643,8 +643,7 @@ const MachineRows = memo(function MachineRows({
                     aria-controls={settings ? settingsId : undefined}
                     onClick={() => setSettingsOpen((open) => !open)}
                   >
-                    <Settings2 />
-                    <span>Settings</span>
+                    <Settings aria-hidden />
                   </button>
                   {!readOnly ? (
                     <>

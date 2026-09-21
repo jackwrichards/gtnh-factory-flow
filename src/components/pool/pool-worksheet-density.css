@@ -38,10 +38,10 @@
   width: 78px;
 }
 .pool-worksheet--dense .pool-col-actions {
-  width: 128px;
+  width: 88px;
 }
 .pool-worksheet--dense .pool-sheet-table:has(> tbody[data-worksheet-node] .pool-collapse-machine) > colgroup > .pool-col-actions {
-  width: 148px;
+  width: 108px;
 }
 .pool-worksheet--dense .pool-sheet-table > tbody {
   display: table-row-group;
@@ -235,6 +235,7 @@
 }
 .pool-worksheet--dense .pool-row-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 1px;
 }
@@ -254,12 +255,12 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 1px 5px;
+  gap: 1px 2px;
   grid-template: none;
 }
 .pool-worksheet--dense .pool-port {
   flex: 0 0 auto;
-  min-width: 28px;
+  min-width: 24px;
 }
 .pool-worksheet--dense .flow-port.pool-port-line {
   display: flex;
@@ -282,15 +283,15 @@
 }
 .pool-worksheet--dense .pool-port-rate {
   padding: 0;
-  font: 9px/9px var(--app-font);
+  font: 8px/9px var(--app-font);
   color: var(--mc-ink-muted);
 }
 .pool-worksheet--dense .pool-port-rate strong {
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 500;
 }
 .pool-worksheet--dense .pool-port-rate small {
-  font-size: 8px;
+  font-size: 7px;
   margin-left: 1px;
 }
 .pool-worksheet--dense .pool-takes-cell::before,
@@ -652,11 +653,9 @@
 }
 
 .pool-worksheet--dense .pool-settings-toggle {
-  width: auto;
-  flex: 0 0 auto;
-  padding: 0 4px;
-  gap: 4px;
-  font-size: 10px;
+  width: 19px;
+  flex: 0 0 19px;
+  padding: 0;
 }
 .pool-worksheet--dense .pool-settings-toggle:disabled {
   opacity: 0.35;
@@ -732,8 +731,6 @@
   .pool-worksheet--dense .pool-col-power { width: 68px; }
   .pool-worksheet--dense .pool-col-actions { width: 88px; }
   .pool-worksheet--dense .pool-sheet-table:has(> tbody[data-worksheet-node] .pool-collapse-machine) > colgroup > .pool-col-actions { width: 108px; }
-  .pool-worksheet--dense .pool-settings-toggle > span { display: none; }
-  .pool-worksheet--dense .pool-settings-toggle { width: 19px; padding: 0; }
   .pool-worksheet--dense .pool-column-headings th { font-size: 9px; }
   .pool-worksheet--dense .pool-column-headings th:first-child > span { display: none; }
 }
