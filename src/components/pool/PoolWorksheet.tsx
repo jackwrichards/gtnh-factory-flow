@@ -32,13 +32,10 @@ import { CircuitChip, RecipeNodeEditor, SolvedMachinesStat } from "../flow/Recip
 import { ItemPickerPopover } from "../ItemPickerPopover";
 import { TargetLine } from "../flow/StorageNode";
 import { RecipeTooltip } from "../flow/RecipeTooltip";
-import { formatPoolPowerValue as formatPowerValue, formatPoolEnergyPerUnitParts as formatEnergyPerUnitParts, formatPoolRate as formatSlotRate, formatPoolRateBare as formatSlotRateBare, formatPoolSignedRate as formatSignedRate } from "./worksheet-format";
+import { formatPoolPowerValue as formatPowerValue, formatPoolRate as formatSlotRate, formatPoolRateBare as formatSlotRateBare, formatPoolSignedRate as formatSignedRate } from "./worksheet-format";
 import { WorksheetPower } from "./WorksheetPower";
 import "../inspector/panel.css";
 import { buildStatusTooltip, buildPortTooltip } from "../flow/recipe-tooltip-data";
-import {
-  portReadsEnergy,
-} from "../flow/flow-explainers";
 import type { RailPort } from "../flow/node-verdict";
 import {
   getRecipeProgrammedCircuit,
@@ -844,9 +841,6 @@ function PortList({
                 nameTooltip={false}
                 iconsOnly
               />
-              <span className="pool-port-rate">
-                <PortRate port={port} />
-              </span>
             </div>
           </MinecraftTooltip>
         </div>
@@ -854,27 +848,10 @@ function PortList({
       {nonConsumed.map((resource, index) => (
         <div className="pool-port flow-port pool-port-line" key={`nc:${index}`}>
           <ResourceLink resource={resource} nodeId={nodeId} iconsOnly />
-          <span className="pool-port-rate">NC · ×{resource.amount}</span>
+          <span className="pool-port-note">NC · ×{resource.amount}</span>
         </div>
       ))}
     </div>
-  );
-}
-
-function PortRate({ port }: { port: RailPort }) {
-  if (port.free) return <>Free</>;
-  const energy = portReadsEnergy(port);
-  const parts = energy
-    ? formatEnergyPerUnitParts(port.energyPerUnit!, port.kind)
-    : {
-        value: formatSlotRateBare(port.currentPerSecond, port.kind),
-        unit: rateSuffixForKind(port.kind).trim(),
-      };
-  return (
-    <span className={energy ? "text-amber-300" : undefined}>
-      <strong>{parts.value}</strong>
-      <small>{parts.unit}</small>
-    </span>
   );
 }
 

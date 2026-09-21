@@ -125,7 +125,8 @@ describe("Pool worksheet", () => {
     expect(row.querySelectorAll("tr")).toHaveLength(1);
     expect(row.querySelector(".pool-machine-count")?.textContent).toContain("×2");
     expect(row.querySelector(".pool-status-cell")).not.toBeNull();
-    expect(row.querySelector(".pool-port-rate")).not.toBeNull();
+    expect(row.querySelector(".pool-port-rate")).toBeNull();
+    expect(row.querySelectorAll(".pool-port-list .pool-resource-link").length).toBeGreaterThan(0);
     expect(within(row as HTMLElement).getByRole("button", { name: "Copper Foil" })).toBeTruthy();
     expect(useFactoryStore.getState().project).toBe(before);
     view.unmount();

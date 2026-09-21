@@ -260,7 +260,7 @@
 }
 .pool-worksheet--dense .pool-port {
   flex: 0 0 auto;
-  min-width: 24px;
+  min-width: 22px;
 }
 .pool-worksheet--dense .flow-port.pool-port-line {
   display: flex;
@@ -268,7 +268,7 @@
   align-items: center;
   justify-content: center;
   min-height: 0;
-  height: 27px;
+  height: 22px;
   width: auto;
   padding: 0 1px;
   border: 0;
@@ -281,19 +281,8 @@
   justify-content: center;
   align-items: center;
 }
-.pool-worksheet--dense .pool-port-rate {
-  padding: 0;
-  font: 8px/9px var(--app-font);
-  color: var(--mc-ink-muted);
-}
-.pool-worksheet--dense .pool-port-rate strong {
-  font-size: 8px;
-  font-weight: 500;
-}
-.pool-worksheet--dense .pool-port-rate small {
-  font-size: 7px;
-  margin-left: 1px;
-}
+.pool-worksheet--dense .pool-port-note { font: 7px/8px var(--app-font); color: var(--mc-ink-muted); white-space: nowrap; }
+.pool-worksheet--dense .pool-port-line:has(.pool-port-note) { height: 28px; }
 .pool-worksheet--dense .pool-takes-cell::before,
 .pool-worksheet--dense .pool-makes-cell::before {
   display: none;
@@ -840,10 +829,10 @@
 .pool-material-rate strong { font-weight: 600; }
 .pool-material-rate small { margin-left: 2px; font-size: 7px; color: color-mix(in srgb, currentColor 35%, #9ca3af); }
 .pool-material-columns:has(.pool-material-inherited) { grid-template-columns: repeat(auto-fill, minmax(min(100%, 164px), 164px)); }
-.pool-material-rule-control { position: relative; display: inline-flex; width: 40px; }
-.pool-material-rule-control[data-auto] { width: 40px; }
-.pool-material-rule-control > svg { position: absolute; right: 0; top: 5px; pointer-events: none; color: var(--mc-ink-muted); }
-.pool-material-rule { appearance: none; display: block; width: 100%; height: 18px; padding: 0 9px 0 0; border: 0; background: transparent; color: var(--mc-ink-muted); font: 8px var(--app-font); cursor: pointer; }
+.pool-material-rule-control { position: relative; display: inline-flex; align-items: center; width: 40px; height: 16px; margin-left: 2px; border-radius: 3px; background: #ffffff06; box-shadow: inset 0 0 0 1px #adc7ff0a; }
+.pool-material-rule-control > svg { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--mc-ink-muted); }
+.pool-material-rule { appearance: none; display: block; width: 100%; height: 16px; padding: 0 11px 0 4px; border: 0; border-radius: inherit; background: transparent; color: var(--mc-ink-muted); font: 7px/16px var(--app-font); cursor: pointer; }
+.pool-material-rule-control:hover { background: #ffffff0b; }
 .pool-material-rule option { background: var(--surface, #24272c); color: var(--mc-ink); }
 .pool-material-rule:focus-visible { outline: 1px solid #adc7ff; }
 .pool-material-rule:disabled { cursor: default; }
