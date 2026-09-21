@@ -110,7 +110,6 @@ function ResourceIconComponent({
       <CategoryIconImage resource={resource} iconPixelSize={iconPixelSize} />
 
       {resource && showAmount ? <AmountLabel resource={resource} /> : null}
-      {resource?.chance !== undefined ? <ChanceLabel chance={resource.chance} /> : null}
 
       {/* A circuit is the setting the recipe runs on, not an ingredient. It is
           never consumed, so "NC" says nothing a player does not already know
@@ -456,19 +455,6 @@ function isNotConsumedTooltipLine(line: string) {
 
 function isNbtTooltipLine(line: string) {
   return line.trim().toLowerCase().startsWith("nbt:");
-}
-
-function ChanceLabel({ chance }: { chance: number }) {
-  if (!Number.isFinite(chance) || chance >= 1) {
-    return null;
-  }
-
-  const label = `${trimAmount(chance * 100)}%`;
-  return (
-    <span className="absolute left-0 top-0 max-w-[95%] truncate font-mono text-[8px] font-black leading-none text-[#ffff55] drop-shadow-[1px_1px_0_#000]">
-      {label}
-    </span>
-  );
 }
 
 function IconImage({

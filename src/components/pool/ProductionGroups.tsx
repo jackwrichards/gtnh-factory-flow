@@ -1,6 +1,6 @@
 "use client";
 
-import { ROOT_MATCH_HELP, GROUP_MATCH_HELP } from "./material-rule-help";
+import { materialRuleHelp } from "./material-rule-help";
 
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, FolderPlus, GripVertical, Trash2 } from "lucide-react";
@@ -109,7 +109,6 @@ export function ProductionScopeHeader({
   const pageCount = Math.max(1, Math.ceil(filteredMaterials.length / pageSize));
   const page = Math.min(materialPage, pageCount - 1);
   const visibleMaterials = filteredMaterials.slice(page * pageSize, (page + 1) * pageSize);
-  const ruleHelp = group ? GROUP_MATCH_HELP : ROOT_MATCH_HELP;
   return (
     <tbody
       className="pool-production-scope"
@@ -249,7 +248,7 @@ export function ProductionScopeHeader({
                         <strong>{rate}</strong><small>{unit}</small>
                       </span>
                     {row ? <span className="pool-material-rule-control" data-auto={!row.rule || undefined}><select className="pool-material-rule" data-auto={!row.rule || undefined} aria-label={(group ? "Sharing for " : "Supply for ") + material + " in " + name}
-                      title={group && row.rule === "import" ? ROOT_MATCH_HELP : ruleHelp} value={row.rule ?? "auto"} disabled={readOnly}
+                      title={materialRuleHelp(row.rule, Boolean(group))} value={row.rule ?? "auto"} disabled={readOnly}
                       onChange={(event) => useFactoryStore.getState().setPoolResourceRule(group?.id, row.key, event.target.value === "auto" ? undefined : event.target.value === "share" ? "share" : "import")}>
                       <option value="auto">Match</option>
                       {group ? <option value="share">Ignore</option> : <option value="import">Ignore</option>}

@@ -594,10 +594,11 @@ describe("production group controls", () => {
     expect(link.value).toBe("auto");
     expect(within(link).getByRole("option", { name: "Match" })).toBeTruthy();
     expect(within(link).getByRole("option", { name: "Ignore" })).toBeTruthy();
-    expect(link.title).toContain("parent group");
+    expect(link.title).toBe("Match made and used amounts.");
     fireEvent.change(link, { target: { value: "share" } });
     expect(useFactoryStore.getState().project.productionGroups![0].resourceRules).toEqual({ "item:copper": "share" });
     expect(link.value).toBe("share");
+    expect(link.title).toBe("Share with the parent group.");
     fireEvent.change(screen.getByRole("combobox", { name: "Supply for Copper Ingot in All production" }), { target: { value: "import" } });
     expect(useFactoryStore.getState().project.poolResourceRules).toEqual({ "item:copper": "import" });
     expect(useFactoryStore.getState().project.recipes).toBe(before);

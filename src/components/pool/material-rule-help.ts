@@ -1,3 +1,7 @@
-/** Shadow's material-link terminology; these rules never disable a recipe. */
-export const ROOT_MATCH_HELP = "Match balances production and consumption exactly when both exist. Materials with no producer are imported; materials with no consumer are exported. Ignore permits imports and surplus even when both exist. Recipes remain enabled and their materials are still counted. Explicit rate limits still apply.";
-export const GROUP_MATCH_HELP = "Match balances production and consumption inside this group. Ignore passes both sides to the parent group, where its rule applies. It does not disable recipes or discard their materials.";
+import type { PoolResourceRule } from "@/lib/model/types";
+
+/** Keep hover help brief; the Material rules guide carries the example. */
+export function materialRuleHelp(rule: PoolResourceRule | undefined, inGroup: boolean): string {
+  if (!rule) return "Match made and used amounts.";
+  return inGroup && rule === "share" ? "Share with the parent group." : "Allow outside supply and surplus.";
+}
