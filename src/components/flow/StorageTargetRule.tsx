@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useRef } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import type { FactoryStorage } from "@/lib/model/types";
 import {
@@ -8,6 +9,8 @@ import {
   type TargetMode,
 } from "@/lib/model/storage-target";
 import { useFactoryStore } from "@/store/factory-store";
+
+const TARGET_OPTIONS: TargetMode[] = ["at-least", "exact", "at-most", "ignore"];
 
 /** One rate rule editor shared by the canvas and Pool. */
 export function StorageTargetRule({
@@ -24,9 +27,25 @@ export function StorageTargetRule({
   const readOnly = useFactoryStore((state) => state.isReadOnly || state.checklistMode);
   const setMode = useFactoryStore((state) => state.setStorageTargetMode);
   const mode = storageTargetMode(storage, input ? "source" : "product");
-  const options: TargetMode[] = ["at-least", "exact", "at-most", "ignore"];
+  const selectRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    const element = selectRef.current;
+    if (!element) return;
+    // Native listener: React wheel events are passive and cannot stop page/board scrolling.
+    const onWheel = (event: WheelEvent) => {
+      if (readOnly || event.ctrlKey || event.deltaY === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const index = TARGET_OPTIONS.indexOf(mode);
+      const next = TARGET_OPTIONS[Math.max(0, Math.min(TARGET_OPTIONS.length - 1, index + Math.sign(event.deltaY)))];
+      if (next !== mode) setMode(storage.id, next);
+    };
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => element.removeEventListener("wheel", onWheel);
+  }, [mode, readOnly, setMode, storage.id]);
   const select = (
     <select
+      ref={selectRef}
       className={
         compact ? "absolute inset-0 h-full w-full cursor-pointer opacity-0 text-[12px]" : className
       }
@@ -38,7 +57,7 @@ export function StorageTargetRule({
       onKeyDown={(event) => event.stopPropagation()}
       onChange={(event) => setMode(storage.id, event.target.value as TargetMode)}
     >
-      {options.map((option) => (
+      {TARGET_OPTIONS.map((option) => (
         <option key={option} value={option}>
           {TARGET_MODE_LABELS[option]}
         </option>

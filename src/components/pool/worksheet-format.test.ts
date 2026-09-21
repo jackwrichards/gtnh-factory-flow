@@ -25,3 +25,12 @@ describe("Pool rate display", () => {
     expect(formatPoolRateBare(0.000084, "fluid")).toBe("0.3");
   });
 });
+
+it("displays numerical residue as zero in every unit but preserves small rates", () => {
+  for (const unit of ["tick", "second", "hour"] as const) {
+    setActiveRateUnit(unit);
+    expect(formatPoolRateBare(5.169878828456423e-26)).toBe("0");
+    expect(formatPoolSignedRate(5.169878828456423e-26, "item", -1)).toBe("0");
+    expect(formatPoolRateBare(1e-12)).toBe("(<.001)");
+  }
+});

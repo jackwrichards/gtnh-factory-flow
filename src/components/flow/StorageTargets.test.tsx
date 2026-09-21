@@ -236,3 +236,39 @@ it("explains the clicked target and updates its requested rate", () => {
   fireEvent.click(screen.getAllByLabelText("Target cannot be met")[0]);
   expect(within(help).getByText("Ingot")).toBeTruthy();
 });
+
+it.each([false, true])("scrolls rate rules without scrolling the page (Pool: %s)", (pool) => {
+  act(() => useFactoryStore.getState().setPoolMode(pool));
+  render(pool ? <PoolWorksheet /> : <BoardSource />);
+  const select = screen.getByRole("combobox", { name: "Target rule for Ore" });
+  const initial = useFactoryStore.getState().project;
+  const wheel = () => fireEvent(select, new WheelEvent("wheel", { deltaY: 100, bubbles: true, cancelable: true }));
+  expect(wheel()).toBe(false);
+  expect((select as HTMLSelectElement).value).toBe("at-most");
+  wheel();expect((select as HTMLSelectElement).value).toBe("ignore");
+  wheel();expect((select as HTMLSelectElement).value).toBe("ignore");
+  fireEvent.wheel(select, { deltaY: -100 });expect((select as HTMLSelectElement).value).toBe("at-most");
+  expect(useFactoryStore.getState().project.edges).toEqual(initial.edges);
+  expect(useFactoryStore.getState().project.storages![0].targetPerSecond).toBe(initial.storages![0].targetPerSecond);
+  act(() => useFactoryStore.getState().undo());
+  expect((select as HTMLSelectElement).value).toBe("ignore");
+});
+it.each(["isReadOnly", "checklistMode"] as const)("does not wheel-edit rate rules in %s", (lock) => {
+  useFactoryStore.setState({ [lock]: true });render(<BoardSource />);
+  fireEvent.wheel(screen.getByRole("combobox"), { deltaY: 100 });
+  expect(useFactoryStore.getState().project.storages![0].targetMode).toBeUndefined();
+});
+it("shows stopped target residue as zero without changing the solved value", () => {
+  const p = project();p.poolMode = true;p.nodes = [];p.edges = [];p.storages![1].poolSide = "drain";
+  useFactoryStore.getState().setProject(p);
+  const lastResult = useFactoryStore.getState().lastResult;
+  useFactoryStore.setState({ lastResult: { ...lastResult, storages: {
+    ...lastResult.storages, output: { ...lastResult.storages.output, producedPerSecond: 5.169878828456423e-26 },
+  } } });
+  render(<PoolWorksheet />);
+  const warning = screen.getByLabelText("Target cannot be met");
+  expect(warning.closest("td")!.textContent).toBe("0/s");
+  fireEvent.click(warning);
+  expect(screen.getByText(/This target is stopped, not running slowly/)).toBeTruthy();
+  expect(useFactoryStore.getState().lastResult.storages.output.producedPerSecond).toBe(5.169878828456423e-26);
+});
