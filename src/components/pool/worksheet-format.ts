@@ -5,8 +5,8 @@ import { formatEnergyPerUnitParts, formatSlotRateBare } from "../flow/flow-expla
 /** Display-only floor, applied after converting into the selected unit. */
 export function formatPoolRateBare(value: number, kind = "item"): string {
   const shown = value * rateMultiplierForKind(kind);
-  if (kind !== "power" && shown !== 0 && Math.abs(shown) < 0.00001) {
-    return shown < 0 ? ">-.00001" : "<.00001";
+  if (kind !== "power" && shown !== 0 && Math.abs(shown) < 0.001) {
+    return shown < 0 ? "(−<.001)" : "(<.001)";
   }
   return compactBound(formatSlotRateBare(value, kind));
 }
@@ -17,7 +17,8 @@ export function formatPoolRate(value: number, kind: string): string {
 
 export function formatPoolSignedRate(value: number, kind: string, sign: number): string {
   const text = formatPoolRateBare(Math.abs(value), kind);
-  return text === "0" ? text : (sign < 0 ? "−" : sign > 0 ? "+" : "") + text;
+  const prefix = sign < 0 ? "−" : sign > 0 ? "+" : "";
+  return text === "0" ? text : text.startsWith("(") ? `(${prefix}${text.slice(1)}` : prefix + text;
 }
 
 function compactBound(text: string): string {

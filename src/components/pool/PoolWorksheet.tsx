@@ -1,5 +1,5 @@
 "use client";
-import { ROOT_MATCH_HELP, TARGET_MATCH_HELP } from "./material-rule-help";
+import { TargetRateHelp } from "./TargetRateHelp";
 import { isInputRate, storageTargetMode } from "@/lib/model/storage-target";
 import { StorageTargetRule } from "../flow/StorageTargetRule";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
@@ -70,7 +70,9 @@ import "./pool-worksheet-density.css";
 export function PoolWorksheet() {
   const summaryId = useId();
   const targetHelp = useRef<HTMLDetailsElement>(null);
-  const explainTarget = () => {
+  const [explainedTarget, setExplainedTarget] = useState<string>();
+  const explainTarget = (id: string) => {
+    setExplainedTarget(id);
     const details = targetHelp.current;
     if (!details) return;
     details.open = true;
@@ -187,6 +189,8 @@ export function PoolWorksheet() {
     savedOrder("products"),
     (storage) => storage.id,
   );
+  const failedTargets = products.filter(storage => result.storages[storage.id]?.targetUnreachable);
+  const helpTarget = failedTargets.find(storage => storage.id === explainedTarget) ?? failedTargets[0];
   const ids = {
     machines: orderedGroups.map((group) => group.owner.id),
     products: products.map((storage) => storage.id),
@@ -371,20 +375,17 @@ export function PoolWorksheet() {
                       </thead>
                       <tbody>
                         {products.map((storage) => (
-                          <Product key={storage.id} storage={storage} role={roles.get(storage.id)} onExplain={explainTarget} />
+                          <Product key={storage.id} storage={storage} role={roles.get(storage.id)} onExplain={() => explainTarget(storage.id)} />
                         ))}
                       </tbody>
                     </table>
                   </div>
                 </ProductsPane>
-                {products.some(storage => result.storages[storage.id]?.targetUnreachable) ? (
+                {helpTarget ? (
                   <details ref={targetHelp} className="pool-target-help">
-                    <summary><AlertTriangle aria-hidden size={12} />A requested rate cannot be met. <span>Why?</span></summary>
-                    <div>
-                      <p>{TARGET_MATCH_HELP}</p>
-                      <p><strong>Match / Ignore:</strong> {ROOT_MATCH_HELP}</p>
-                      <p>Inside a group, Ignore shares the material with its parent. Ignore on a desired rate is different: it stops enforcing that saved target.</p>
-                    </div>
+                    <summary><AlertTriangle aria-hidden size={12} />Target not met. <span>Why?</span></summary>
+                    <TargetRateHelp storage={helpTarget} input={isInputRate(helpTarget, roles.get(helpTarget.id))}
+                      result={result.storages[helpTarget.id]} project={project} resources={groupResources} />
                   </details>
                 ) : null}
               </div>
@@ -1071,7 +1072,7 @@ function Product({ storage, role, onExplain }: { storage: FactoryStorage; onExpl
               : formatSlotRate((inputGoal ? -1 : 1) * Math.abs(storage.targetPerSecond), storage.kind)}
           </span>
         ) : (
-          <TargetLine storage={storage} result={result} input={inputGoal} formatDisplayRate={formatSlotRate} />
+          <TargetLine inlinePencil storage={storage} result={result} input={inputGoal} formatDisplayRate={formatSlotRate} />
         )}
         </div>
       </td>

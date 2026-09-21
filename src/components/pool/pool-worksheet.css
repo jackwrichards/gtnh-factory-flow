@@ -1067,3 +1067,9 @@ body[data-pool-dragging] [data-tooltip-companion] { visibility: hidden; pointer-
 .pool-target-help > div { padding: 4px 8px; border-left: 2px solid var(--flow-input); background: color-mix(in srgb, var(--flow-input) 4%, transparent); }
 .pool-target-help p { margin: 0 0 6px; }
 .pool-target-help p:last-child { margin-bottom: 0; }
+
+.pool-target-help-name { display: block; color: var(--mc-ink); margin-bottom: 4px; }
+.pool-target-help-rates { display: flex; flex-wrap: wrap; gap: 2px 18px; margin-bottom: 6px; color: var(--mc-ink-muted); }
+.pool-target-help .pool-help-goal, .pool-target-help .pool-help-ignore { color: var(--flow-output); font-weight: 600; }
+.pool-target-help .pool-help-actual { color: var(--flow-input); font-weight: 600; }
+.pool-target-help .pool-help-match { color: #adc7ff; font-weight: 600; }

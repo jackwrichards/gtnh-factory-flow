@@ -218,7 +218,7 @@ describe("Pool worksheet", () => {
     useFactoryStore.getState().setProject(project);
     render(<PoolWorksheet />);
     const target = screen.getByRole("button", { name: "Required amount" });
-    expect(target.textContent).toContain("<.00001");
+    expect(target.textContent).toContain("<.001");
     fireEvent.click(target);
     const field = screen.getByRole("textbox", { name: "Required amount" }) as HTMLInputElement;
     expect(Number(field.value)).toBe(0.000000084);

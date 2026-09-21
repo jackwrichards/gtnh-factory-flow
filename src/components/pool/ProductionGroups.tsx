@@ -8,7 +8,7 @@ import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
 import type { ProductionGroup, ResourceAmount } from "@/lib/model/types";
 import type { getPoolGroupResources } from "@/lib/solver/pool-mode";
-import { formatPoolRateBare as formatSlotRateBare } from "./worksheet-format";
+import { formatPoolRateBare as formatSlotRateBare, formatPoolSignedRate } from "./worksheet-format";
 import { rateSuffixForKind } from "@/lib/model/rate-unit";
 import { useWorksheetPointerDrag } from "./worksheet-pointer-drag";
 
@@ -239,14 +239,14 @@ export function ProductionScopeHeader({
                   const material = resource.displayName ?? resource.id;
                   const net = output - input;
                   const sign = Math.sign(net);
-                  const rate = formatSlotRateBare(sign ? Math.abs(net) : 0, resource.kind);
+                  const rate = formatPoolSignedRate(sign ? Math.abs(net) : 0, resource.kind, sign);
                   const unit = rateSuffixForKind(resource.kind).trim();
                   return <div className="pool-scope-material" key={key} data-material-key={key}>
                     {renderResource(resource)}
                       <span className={"pool-material-rate " + (sign < 0 ? "pool-flow-input" : sign > 0 ? "pool-flow-output" : "pool-flow-internal")}
-                        aria-label={material + ": " + (sign < 0 ? "net input " : sign > 0 ? "net output " : "no net flow ") + rate + unit}
+                        aria-label={material + ": " + (sign < 0 ? "net input " : sign > 0 ? "net output " : "no net flow ") + formatSlotRateBare(Math.abs(net), resource.kind) + unit}
                         title={"Input: " + formatSlotRateBare(input, resource.kind) + unit + "; output: " + formatSlotRateBare(output, resource.kind) + unit}>
-                        <strong>{sign < 0 ? "−" : sign > 0 ? "+" : ""}{rate}</strong><small>{unit}</small>
+                        <strong>{rate}</strong><small>{unit}</small>
                       </span>
                     {row ? <span className="pool-material-rule-control" data-auto={!row.rule || undefined}><select className="pool-material-rule" data-auto={!row.rule || undefined} aria-label={(group ? "Sharing for " : "Supply for ") + material + " in " + name}
                       title={group && row.rule === "import" ? ROOT_MATCH_HELP : ruleHelp} value={row.rule ?? "auto"} disabled={readOnly}

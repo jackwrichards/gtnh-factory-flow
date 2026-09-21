@@ -206,12 +206,33 @@ it("keeps the actual rate visible alongside a compact unreachable warning", () =
   expect(screen.queryByText("Unreachable")).toBeNull();
   const warning=screen.getByLabelText("Target cannot be met");
   expect(warning.closest("td")!.textContent).toContain("0/s");
-  const help = screen.getByText(/A requested rate cannot be met/).closest("details")!;
+  const help = screen.getByText(/Target not met/).closest("details")!;
   expect(help.open).toBe(false);
   fireEvent.click(warning);
   expect(help.open).toBe(true);
-  expect(within(help).getByText(/partially recycled material/)).toBeTruthy();
+  expect(within(help).getByText("Ingot")).toBeTruthy();
+  expect(within(help).getByText(/Make at least/)).toBeTruthy();
+  expect(within(help).getByText(/Currently making/)).toBeTruthy();
+  expect(within(help).getByText(/Add or enable recipes/)).toBeTruthy();
   expect(useFactoryStore.getState().project.poolResourceRules).toBeUndefined();
   act(() => useFactoryStore.getState().setStorageTarget("output", undefined));
-  expect(screen.queryByText(/A requested rate cannot be met/)).toBeNull();
+  expect(screen.queryByText(/Target not met/)).toBeNull();
+});
+
+it("explains the clicked target and updates its requested rate", () => {
+  const p = project();p.poolMode = true;p.nodes = [];p.edges = [];
+  p.storages = [
+    { ...p.storages![1], id: "first", poolSide: "drain" },
+    { ...p.storages![1], id: "second", resourceId: "plate", displayName: "Plate", targetPerSecond: 7, poolSide: "drain" },
+  ];
+  useFactoryStore.getState().setProject(p);render(<PoolWorksheet />);
+  fireEvent.click(screen.getAllByLabelText("Target cannot be met")[1]);
+  const help = screen.getByText(/Target not met/).closest("details")!;
+  expect(within(help).getByText("Plate")).toBeTruthy();
+  expect(within(help).queryByText("Ingot")).toBeNull();
+  expect(within(help).getByText("7/s")).toBeTruthy();
+  act(() => useFactoryStore.getState().setStorageTarget("second", 9));
+  expect(within(help).getByText("9/s")).toBeTruthy();
+  fireEvent.click(screen.getAllByLabelText("Target cannot be met")[0]);
+  expect(within(help).getByText("Ingot")).toBeTruthy();
 });

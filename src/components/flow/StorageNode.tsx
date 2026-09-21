@@ -788,11 +788,13 @@ export function TargetLine({
   storage,
   result,
   formatDisplayRate,
+  inlinePencil = false,
   input = isInputRate(storage),
 }: {
   storage: FactoryStorage;
   result: StorageThroughputResult | undefined;
   formatDisplayRate?: (value: number, kind: string) => string;
+  inlinePencil?: boolean;
   input?: boolean;
 }) {
   const setStorageTarget = useFactoryStore((state) => state.setStorageTarget);
@@ -878,7 +880,7 @@ export function TargetLine({
             idiom - and a pencil riding the text's right shoulder. */}
         {/* Nudged up a couple of pixels so the dotted underline clears the
             tile's bottom edge instead of merging with it. */}
-        <div className="relative -translate-y-[2px] underline decoration-dotted decoration-[1.5px] underline-offset-[3px]">
+        <div className={`relative underline decoration-dotted decoration-[1.5px] underline-offset-[3px] ${inlinePencil ? "inline-flex items-center gap-[3px]" : "-translate-y-[2px]"}`}>
           {target !== undefined && (target > 0 || (signed && target < 0) || showZero) ? (
             <NetLine net={input ? -Math.abs(target) : target} unsigned={input && !signed} kind={storage.kind} role={input ? "source" : "product"} formatRate={formatDisplayRate} />
           ) : (
@@ -895,7 +897,7 @@ export function TargetLine({
             aria-hidden
             // Centred on the ink-and-underline block, not the line's box:
             // the glyphs sit low in it, so dead-centre floated the pencil.
-            className="absolute left-full top-[calc(50%+2px)] ml-[2px] h-[11px] w-[11px] -translate-y-1/2 fill-current opacity-70 group-hover/target:opacity-100"
+            className={`h-[11px] w-[11px] fill-current opacity-70 group-hover/target:opacity-100 ${inlinePencil ? "shrink-0" : "absolute left-full top-[calc(50%+2px)] ml-[2px] -translate-y-1/2"}`}
           />
         </div>
       </div>
