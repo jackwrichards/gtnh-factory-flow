@@ -2,7 +2,7 @@
 
 import { materialRuleHelp } from "./material-rule-help";
 
-import type { CSSProperties, ReactNode } from "react";
+import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { ChevronDown, FolderPlus, GripVertical, Trash2 } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
@@ -79,6 +79,23 @@ export function ProductionScopeHeader({
   useRateDisplayUnits();
   const groups = useFactoryStore((state) => state.project.productionGroups);
   const { begin } = useWorksheetPointerDrag();
+  const scopeRef = useRef<HTMLTableSectionElement>(null);
+  useLayoutEffect(() => {
+    const sections = [...(scopeRef.current?.querySelectorAll<HTMLElement>(".pool-material-columns") ?? [])]
+      .map(element => ({ element, rates: [...element.querySelectorAll<HTMLElement>(".pool-material-rate")] }));
+    const measure = () => {
+      for (const { element, rates } of sections) {
+        // Intrinsic rate widths include the smaller unit text. Character counts
+        // overestimate these, leaving room unused before the next column fits.
+        const width = Math.max(1, ...rates.map(rate => rate.offsetWidth + 1));
+        element.style.setProperty("--pool-material-rate-width", width + "px");
+      }
+    };
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
+    for (const { rates } of sections) for (const rate of rates) observer?.observe(rate);
+    return () => observer?.disconnect();
+  }, [resources, inputs, outputs]);
   const name = group?.name ?? "All production";
   const excluded = group ? productionGroupDescendants(groups ?? [], group.id) : new Set<string>();
   const canMove =
@@ -111,6 +128,7 @@ export function ProductionScopeHeader({
     .sort(([, a], [, b]) => direction(a) - direction(b) || (a.resource.displayName ?? a.resource.id).localeCompare(b.resource.displayName ?? b.resource.id));
   return (
     <tbody
+      ref={scopeRef}
       className="pool-production-scope"
       data-production-group={group?.id ?? "factory"}
       data-pool-group-target={group?.id ?? ""}
@@ -222,16 +240,10 @@ export function ProductionScopeHeader({
                 {["Inputs", "Outputs", "Internal"].map((label, index) => {
                   const entries = visibleMaterials.filter(([, entry]) => direction(entry) === index);
                   if (!entries.length) return null;
-                  // Size each repeated rate column from its actual text, rather than stretching empty space.
-                  const rateChars = Math.max(...entries.map(([, entry]) => {
-                    const net = entry.output - entry.input;
-                    return formatPoolSignedRate(Math.abs(net), entry.resource.kind, Math.sign(net)).length
-                      + rateSuffixForKind(entry.resource.kind).trim().length * .8;
-                  }));
                   return <table className="pool-material-table" key={label} aria-label={label + " for " + name}>
                     <caption title={index === 2 ? "Made and used within this scope, with no net flow." : undefined}>{label}</caption>
                     <tbody><tr>
-                      <td><div className="pool-material-columns" style={{ "--pool-material-rate-width": `${Math.ceil(rateChars) + 1}ch`, "--pool-material-rule-width": entries.some(([, entry]) => !entry.row) ? "80px" : "22px" } as CSSProperties}>
+                      <td><div className="pool-material-columns" style={{ "--pool-material-rule-width": entries.some(([, entry]) => !entry.row) ? "80px" : "22px" } as CSSProperties}>
                 {entries.map(([key, { resource, row, input, output }]) => {
                   const material = resource.displayName ?? resource.id;
                   const net = output - input;

@@ -840,7 +840,7 @@
 .pool-scope-material { display: grid; grid-column: span 3; grid-template-columns: subgrid; align-items: center; min-width: 0; height: 20px; border-bottom: 1px solid #ffffff08; }
 .pool-scope-material .pool-resource-link { height: 18px; justify-content: center; }
 .pool-scope-material .pool-item-icon { width: 16px !important; height: 16px !important; }
-.pool-material-rate { text-align: left; white-space: nowrap; font: 9px/11px var(--app-font); font-variant-numeric: tabular-nums; }
+.pool-material-rate { width: max-content; text-align: left; white-space: nowrap; font: 9px/11px var(--app-font); font-variant-numeric: tabular-nums; }
 .pool-material-rate strong { font-weight: 600; }
 .pool-material-rate small { margin-left: 1px; font-size: 6px; color: color-mix(in srgb, currentColor 35%, #9ca3af); }
 
