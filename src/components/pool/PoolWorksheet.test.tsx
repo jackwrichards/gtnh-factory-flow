@@ -732,3 +732,28 @@ describe("production status", () => {
     expect(within(status).getByText("A machine is missing its recipe.")).toBeTruthy();
   });
 });
+
+it("keeps root material-rule counts separate from child group rules", () => {
+  const p = fixture();
+  p.productionGroups = [{ id: "line", name: "Copper line", resourceRules: { "item:plate": "share" } }];
+  p.poolResourceRules = { "item:ore": "import" };
+  p.nodes[0].productionGroupId = "line";
+  p.recipes.push({ ...p.recipes[0], id: "copper-maker", inputs: [{ kind: "item", id: "ore", amount: 1 }], outputs: [{ kind: "item", id: "copper", amount: 1 }] });
+  p.nodes.push({ ...p.nodes[0], id: "maker", recipeId: "copper-maker" });
+  useFactoryStore.getState().setProject(p);render(<PoolWorksheet />);
+  const status = screen.getByRole("region", { name: "Production status" });
+  expect(within(status).getByText("Whole setup")).toBeTruthy();
+  expect(status.textContent).toContain("including 1 group");
+  const root = within(status).getByLabelText("All production material rules");
+  expect(root.textContent).toContain("0 materials must balance");
+  expect(root.textContent).toContain("1 on Ignore");
+  fireEvent.click(within(status).getByText("Rules by group"));
+  const table = within(status).getByRole("table", { name: "Material rules by scope" });
+  const row = within(table).getByText("Copper line").closest("tr")!;
+  expect([...row.querySelectorAll("td")].map(cell => cell.textContent)).toEqual(["1", "0", "1"]);
+  expect(within(status).getByRole("region", { name: "Match example" })).toBeTruthy();
+  expect(within(status).getByText("Blocked · short by 70")).toBeTruthy();
+  expect(within(status).getByText("Allowed · 100 supplied")).toBeTruthy();
+  fireEvent.click(within(status).getByRole("button", { name: "Close material rules" }));
+  expect(status.querySelector("details")!.open).toBe(false);
+});
