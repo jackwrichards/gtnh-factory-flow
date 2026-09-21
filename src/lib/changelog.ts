@@ -52,6 +52,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "Clearer interchangeable ingredients",
     notes: [
       "Ingredients such as any wooden planks cycle through their accepted item icons. Rates and wire colors stay steady.",
+      "Cycling icons blend gently into each other, keeping the current item visible until the next image is ready.",
       "Existing plans recover missing ingredient icons on recipe cards and supply drawers, without changing their connections.",
     ],
   },

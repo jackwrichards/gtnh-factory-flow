@@ -359,10 +359,91 @@ function CyclingCategoryIcon({ faces, iconPixelSize }: {
   );
   return (
     <span ref={ref} className="flex h-full w-full shrink-0 items-center justify-center">
-      <IconImage resource={faces[tick % faces.length]} iconPixelSize={iconPixelSize} />
+      <CategoryIconTransition face={faces[tick % faces.length]} iconPixelSize={iconPixelSize} />
     </span>
   );
 }
+
+function categoryFaceKey(face: AlternativeCycleFace): string {
+  return JSON.stringify([face.kind, face.id, face.iconPath, face.iconAtlas]);
+}
+
+/** Two persistent layers trade places after decoding. Reusing them avoids
+ * remounting the sprite tree on every tick, including on large boards. */
+function CategoryIconTransition({ face, iconPixelSize }: {
+  face: AlternativeCycleFace;
+  iconPixelSize?: number;
+}) {
+  const [frames, setFrames] = useState<{
+    faces: [AlternativeCycleFace, AlternativeCycleFace?];
+    shown: 0 | 1;
+    pending?: 0 | 1;
+    ready?: boolean;
+  }>({ faces: [face], shown: 0 });
+  useEffect(() => {
+    const key = categoryFaceKey(face);
+    setFrames((current) => {
+      if (categoryFaceKey(current.faces[current.shown]!) === key) {
+        return current.pending !== undefined ? { faces: current.faces, shown: current.shown } : current;
+      }
+      if (current.pending !== undefined && categoryFaceKey(current.faces[current.pending]!) === key) return current;
+      const pending = current.shown === 0 ? 1 : 0;
+      const faces: typeof current.faces = [...current.faces];
+      faces[pending] = face;
+      return { faces, shown: current.shown, pending };
+    });
+  }, [face]);
+  const markReady = useCallback((key: string) => {
+    setFrames((current) => current.pending !== undefined && categoryFaceKey(current.faces[current.pending]!) === key && !current.ready
+      ? { ...current, ready: true } : current);
+  }, []);
+  const finish = useCallback((key: string) => {
+    setFrames((current) => current.pending !== undefined && current.ready && categoryFaceKey(current.faces[current.pending]!) === key
+      ? { faces: current.faces, shown: current.pending } : current);
+  }, []);
+  return (
+    <span className="relative flex h-full w-full items-center justify-center">
+      {frames.faces.map((entry, index) => entry && (
+        <CategoryIconFrame
+          key={index}
+          face={entry}
+          iconPixelSize={iconPixelSize}
+          phase={index === frames.shown ? frames.ready ? "outgoing" : "current"
+            : index === frames.pending && frames.ready ? "incoming" : "loading"}
+          onReady={markReady}
+          onFinish={finish}
+        />
+      ))}
+    </span>
+  );
+}
+
+const CategoryIconFrame = memo(function CategoryIconFrame({ face, iconPixelSize, phase, onReady, onFinish }: {
+  face: AlternativeCycleFace;
+  iconPixelSize?: number;
+  phase: "current" | "loading" | "incoming" | "outgoing";
+  onReady: (key: string) => void;
+  onFinish: (key: string) => void;
+}) {
+  const key = categoryFaceKey(face);
+  const ready = useCallback(() => onReady(key), [key, onReady]);
+  return (
+    <span
+      data-category-frame={phase}
+      aria-hidden={phase === "loading" || phase === "outgoing" || undefined}
+      className={`absolute inset-0 flex items-center justify-center ${phase === "incoming" ? "category-icon-enter" : phase === "outgoing" ? "category-icon-leave" : ""}`}
+      style={phase === "loading" ? { opacity: 0 } : undefined}
+      onAnimationEnd={(event) => {
+        if (event.target === event.currentTarget && phase === "incoming") onFinish(key);
+      }}
+    >
+      <CategoryFrameImage resource={face} iconPixelSize={iconPixelSize} onReady={ready} />
+    </span>
+  );
+});
+
+// Phase changes only update the overlapping layers, not the fitted sprites.
+const CategoryFrameImage = memo(IconImage);
 
 function isBeeSpeciesResource(resource: Pick<ResourceAmount, "id">) {
   return resource.id.startsWith("factoryflow:bee_species:");
@@ -393,12 +474,14 @@ function ChanceLabel({ chance }: { chance: number }) {
 function IconImage({
   resource,
   iconPixelSize,
+  onReady,
 }: {
   resource?: Pick<
     ResourceAmount,
     "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
   >;
   iconPixelSize?: number;
+  onReady?: () => void;
 }) {
   if (!resource) {
     return null;
@@ -406,7 +489,7 @@ function IconImage({
 
   const atlas = resource.iconAtlas;
   if (atlas) {
-    return <AtlasIconImage resource={resource} atlas={atlas} iconPixelSize={iconPixelSize} />;
+    return <AtlasIconImage resource={resource} atlas={atlas} iconPixelSize={iconPixelSize} onReady={onReady} />;
   }
 
   // POWER has no sprite anywhere: EU is app-synthesized, and its face is a
@@ -433,7 +516,7 @@ function IconImage({
     );
   }
 
-  return <SpriteImage resource={resource} iconPath={iconPath} iconPixelSize={iconPixelSize} />;
+  return <SpriteImage resource={resource} iconPath={iconPath} iconPixelSize={iconPixelSize} onReady={onReady} />;
 }
 
 /**
@@ -477,10 +560,12 @@ function SpriteImage({
   resource,
   iconPath,
   iconPixelSize,
+  onReady,
 }: {
   resource: Pick<ResourceAmount, "kind" | "id" | "displayName">;
   iconPath: string;
   iconPixelSize?: number;
+  onReady?: () => void;
 }) {
   const [status, setStatus] = useState<"loading" | "loaded" | "failed">("loading");
   const [fitScale, setFitScale] = useState<number>();
@@ -497,6 +582,17 @@ function SpriteImage({
         : undefined,
     );
   }, [iconPath, resource.kind]);
+
+  useEffect(() => {
+    if (status !== "loaded" || !onReady) return;
+    let active = true;
+    const image = imageRef.current;
+    if (!image) return;
+    // onLoad alone can precede decoding; never uncover an undecoded frame.
+    const decoded = image.decode ? image.decode() : Promise.resolve();
+    void decoded.then(() => { if (active) onReady(); }, () => {});
+    return () => { active = false; };
+  }, [status, iconPath, onReady]);
 
   return (
     <>
@@ -804,29 +900,36 @@ function AtlasIconImage({
   resource,
   atlas,
   iconPixelSize,
+  onReady,
 }: {
   resource: Pick<ResourceAmount, "kind" | "id" | "displayName">;
   atlas: ResourceIconAtlasRef;
   iconPixelSize?: number;
+  onReady?: () => void;
 }) {
   const positionX = getAtlasBackgroundPosition(atlas.x, atlas.atlasWidth, atlas.width);
   const positionY = getAtlasBackgroundPosition(atlas.y, atlas.atlasHeight, atlas.height);
   const [fitScale, setFitScale] = useState<number>();
   useEffect(() => {
     setFitScale(undefined);
-    if (resource.kind !== "item") return;
+    if (resource.kind !== "item" && !onReady) return;
     let active = true;
     const image = new Image();
     image.onload = () => {
-      if (active) setFitScale(getSpriteFitScale(image, {
+      if (!active) return;
+      if (resource.kind === "item") setFitScale(getSpriteFitScale(image, {
         x: atlas.x, y: atlas.y, width: atlas.width, height: atlas.height,
       }));
+      if (onReady) {
+        const decoded = image.decode ? image.decode() : Promise.resolve();
+        void decoded.then(() => { if (active) onReady(); }, () => {});
+      }
     };
     image.src = atlas.imagePath;
     return () => {
       active = false;
     };
-  }, [resource.kind, atlas.imagePath, atlas.x, atlas.y, atlas.width, atlas.height]);
+  }, [resource.kind, atlas.imagePath, atlas.x, atlas.y, atlas.width, atlas.height, onReady]);
 
   return (
     <span

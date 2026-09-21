@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ResourceIcon } from "./ResourceIcon";
 import { advanceAlternativeCycleForTests, resetAlternativeCycleForTests, ALTERNATIVE_CYCLE_INTERVAL_MS } from "@/lib/nei/alternative-cycle";
@@ -15,18 +15,62 @@ const category = {
 };
 afterEach(() => { cleanup(); resetAlternativeCycleForTests(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 describe("category preview icons", () => {
-  it("cycles artwork only, leaving the category label, quantity, and input data stable", () => {
+  it("keeps the old sprite until the next has decoded, then promotes the mounted image", async () => {
     const original = structuredClone(category);
     const { container } = render(<ResourceIcon resource={category} showName tooltip={false} />);
     const text = container.textContent;
     expect(text).toContain("Any wooden planks");
-    expect(container.querySelector("img")?.getAttribute("src")).toBe("/oak.png");
+    const oak = container.querySelector("img")!;
     act(() => advanceAlternativeCycleForTests());
-    expect(container.querySelector("img")?.getAttribute("src")).toBe("/spruce.png");
+    const pending = container.querySelector('[data-category-frame="loading"]')!;
+    const spruce = pending.querySelector("img")!;
+    expect(spruce.getAttribute("src")).toBe("/spruce.png");
+    expect(container.querySelector('[data-category-frame="current"] img')).toBe(oak);
+    expect((pending as HTMLElement).style.opacity).toBe("0");
+    let decode!: () => void;
+    spruce.decode = vi.fn(() => new Promise<void>((resolve) => { decode = resolve; }));
+    await act(async () => { fireEvent.load(spruce); });
+    expect(container.querySelector('[data-category-frame="incoming"]')).toBeNull();
+    expect(container.querySelector('[data-category-frame="current"] img')).toBe(oak);
+    await act(async () => { decode(); });
+    const incoming = container.querySelector('[data-category-frame="incoming"]')!;
+    expect(incoming.querySelector("img")).toBe(spruce);
+    expect(container.querySelector('[data-category-frame="outgoing"] img')).toBe(oak);
+    // jsdom lacks AnimationEvent, so React registers its WebKit fallback.
+    fireEvent(incoming, new Event("webkitAnimationEnd", { bubbles: true }));
+    expect(container.querySelectorAll('[data-category-frame="current"]')).toHaveLength(1);
+    expect(container.querySelector('[data-category-frame="current"] img')).toBe(spruce);
     expect(container.textContent).toBe(text);
     expect(category).toEqual(original);
     act(() => advanceAlternativeCycleForTests());
-    expect(container.querySelector("img")?.getAttribute("src")).toBe("/oak.png");
+    expect(container.querySelector('[data-category-frame="loading"] img')).toBe(oak);
+    await act(async () => { fireEvent.load(oak); });
+    fireEvent(container.querySelector('[data-category-frame="incoming"]')!, new Event("webkitAnimationEnd", { bubbles: true }));
+    expect(container.querySelector('[data-category-frame="current"] img')).toBe(oak);
+  });
+  it("keeps the current sprite when the incoming image fails", () => {
+    const { container } = render(<ResourceIcon resource={category} tooltip={false} />);
+    const oak = container.querySelector("img");
+    act(() => advanceAlternativeCycleForTests());
+    fireEvent.error(container.querySelector('[data-category-frame="loading"] img')!);
+    expect(container.querySelector('[data-category-frame="current"] img')).toBe(oak);
+    expect(container.querySelector('[data-category-frame="incoming"]')).toBeNull();
+    act(() => advanceAlternativeCycleForTests());
+    expect(container.querySelectorAll('[data-category-frame="current"]')).toHaveLength(1);
+    expect(container.querySelector("img")).toBe(oak);
+  });
+  it("ignores a stale decode after the next cycle has cancelled that image", async () => {
+    const { container } = render(<ResourceIcon resource={category} tooltip={false} />);
+    const oak = container.querySelector("img");
+    act(() => advanceAlternativeCycleForTests());
+    const spruce = container.querySelector('[data-category-frame="loading"] img')! as HTMLImageElement;
+    let decode!: () => void;
+    spruce.decode = () => new Promise<void>((resolve) => { decode = resolve; });
+    await act(async () => { fireEvent.load(spruce); });
+    act(() => advanceAlternativeCycleForTests());
+    await act(async () => { decode(); });
+    expect(container.querySelectorAll('[data-category-frame="current"]')).toHaveLength(1);
+    expect(container.querySelector('[data-category-frame="current"] img')).toBe(oak);
   });
   it("never cycles a concrete item just because it lists substitutes", () => {
     const { container } = render(<ResourceIcon resource={{ ...category, id: "oak", iconPath: "/oak.png", displayName: "Oak Planks" }} tooltip={false} />);
@@ -55,7 +99,7 @@ describe("category preview icons", () => {
     expect(container.querySelector("img")?.getAttribute("src")).toBe("/oak.png");
     (container.firstElementChild as HTMLElement).style.visibility = "visible";
     act(() => advanceAlternativeCycleForTests(2));
-    expect(container.querySelector("img")?.getAttribute("src")).toBe("/spruce.png");
+    expect(container.querySelector('[data-category-frame="loading"] img')?.getAttribute("src")).toBe("/spruce.png");
   });
   it("unsubscribes offscreen icons and cleans up the shared visibility observer", () => {
     vi.useFakeTimers();

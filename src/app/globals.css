@@ -2637,3 +2637,12 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 [data-view-only] button[data-viewer-disabled] {
   opacity: 0.5;
 }
+
+/* Loaded category sprites overlap briefly; neither frame fades through empty. */
+@keyframes category-icon-enter { from { opacity: 0; } to { opacity: 1; } }
+@keyframes category-icon-leave { from { opacity: 1; } to { opacity: 0; } }
+.category-icon-enter { animation: category-icon-enter 110ms ease-in-out both; }
+.category-icon-leave { animation: category-icon-leave 110ms ease-in-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .category-icon-enter, .category-icon-leave { animation-duration: 1ms; }
+}
