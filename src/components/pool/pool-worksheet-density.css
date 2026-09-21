@@ -909,18 +909,11 @@
 .pool-rule-guide > header > button { padding: 2px; color: var(--mc-ink-muted); cursor: pointer; }
 .pool-rule-guide > header > button:hover { color: var(--mc-ink); }
 .pool-rule-guide .pool-rule-intro { margin: 6px 0; font-size: 9px; }
-.pool-rule-meaning { margin: 0; }
-.pool-rule-meaning > div { display: grid; grid-template-columns: 42px minmax(0, 1fr); gap: 7px; margin: 3px 0; }
-.pool-rule-meaning dt { font-weight: 600; }
-.pool-rule-meaning dd { margin: 0; color: var(--mc-ink); }
-.pool-rule-example { margin: 8px 0; padding: 7px; background: #6f9cff0a; border: 1px solid #adc7ff24; }
-.pool-rule-example h4 { margin: 0; font-size: 10px; color: var(--mc-ink); }
-.pool-rule-example h4 > span { font-size: 9px; font-weight: 400; color: var(--mc-ink-muted); }
-.pool-rule-example-row { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; gap: 2px 7px; margin-top: 6px; }
-.pool-rule-water-bar { display: grid; grid-template-columns: minmax(76px, 3fr) 7fr; min-width: 0; font-size: 9px; line-height: 22px; }
-.pool-rule-water-bar > span { display: flex; align-items: center; justify-content: space-between; gap: 3px; padding: 0 4px; white-space: nowrap; color: var(--flow-output); background: color-mix(in srgb, var(--flow-output) 12%, transparent); }
-.pool-rule-water-bar > .pool-rule-water-missing { color: var(--flow-input); background: color-mix(in srgb, var(--flow-input) 9%, transparent); border-left: 1px dashed var(--flow-input); }
-.pool-rule-water-bar > .pool-rule-water-imported { color: #adc7ff; background: #6f9cff20; border-left: 1px solid #adc7ff70; }
+.pool-rule-example-tag { font-size: 9px; font-weight: 400; color: var(--mc-ink-muted); }
+.pool-rule-example-case { margin: 7px 0; padding: 3px 8px; background: color-mix(in srgb, #6f9cff 7%, var(--surface, #24272c)); border: 1px solid #adc7ff24; }
+.pool-rule-example-case .pool-situation-scope { padding-right: 0; }
+.pool-rule-example-case .pool-situation-heading { flex-wrap: wrap; gap: 3px 5px; }
+.pool-rule-example-case .pool-situation-heading > span { font-size: 9px; font-weight: 400; }
 .pool-rule-guide .pool-rule-group-note { margin: 6px 0 0; font-size: 9px; }
 .pool-rule-group-note strong { color: var(--mc-ink); }
 .pool-rule-guide .pool-rule-footnote { margin: 4px 0 0; font-size: 9px; }
