@@ -186,6 +186,11 @@ export function ProductionScopeHeader({
             ) : (
               <strong>{name}</strong>
             )}
+            {materials.size > 0 && !collapsed ? (
+              <span className="pool-balance-hint">
+                Balance on: materials made and used here must match. Off: {group ? "share with the parent group." : "allow outside supply and surplus."}
+              </span>
+            ) : null}
             {group && !hasContents ? (
               <span className="pool-production-summary">Empty · drag recipes here</span>
             ) : null}
@@ -243,7 +248,7 @@ export function ProductionScopeHeader({
                   return <table className="pool-material-table" key={label} aria-label={label + " for " + name}>
                     <caption title={index === 2 ? "Made and used within this scope, with no net flow." : undefined}>{label}</caption>
                     <tbody><tr>
-                      <td><div className="pool-material-columns" style={{ "--pool-material-rule-width": entries.some(([, entry]) => !entry.row) ? "80px" : "22px" } as CSSProperties}>
+                      <td><div className="pool-material-columns" style={{ "--pool-material-rule-width": entries.some(([, entry]) => !entry.row) ? "80px" : "36px" } as CSSProperties}>
                 {entries.map(([key, { resource, row, input, output }]) => {
                   const material = resource.displayName ?? resource.id;
                   const net = output - input;
@@ -252,7 +257,7 @@ export function ProductionScopeHeader({
                   const unit = rateSuffixForKind(resource.kind).trim();
                   return <div className="pool-scope-material" key={key} data-material-key={key} data-material-draggable={!readOnly || undefined}
                     onPointerDown={(event) => {
-                      // The icon owns its browse/drag gestures; Skip remains a button.
+                      // The icon owns its browse/drag gestures; Balance remains a button.
                       // Rates and the rest of the row are generous pickup space.
                       if ((event.target as Element).closest("button, input, select, a")) return;
                       begin(event, { resource });
@@ -263,11 +268,11 @@ export function ProductionScopeHeader({
                         title={"Input: " + formatSlotRateBare(input, resource.kind) + unit + "; output: " + formatSlotRateBare(output, resource.kind) + unit}>
                         <strong>{rate}</strong><small>{unit}</small>
                       </span>
-                    {row ? <button type="button" className="pool-material-ignore"
-                      aria-label={"Skip balance for " + material + " in " + name} aria-pressed={Boolean(row.rule)}
+                    {row ? <button type="button" className="pool-material-balance"
+                      aria-label={"Balance " + material + " in " + name} aria-pressed={!row.rule}
                       title={materialRuleHelp(row.rule, Boolean(group))} disabled={readOnly}
                       onClick={() => useFactoryStore.getState().setPoolResourceRule(group?.id, row.key, row.rule ? undefined : group ? "share" : "import")}>
-                      Skip
+                      Balance
                     </button> : <span className="pool-material-inherited" title="This total includes a child group's local material. Change its rule in that group.">Within groups</span>}
                   </div>;
                 })}

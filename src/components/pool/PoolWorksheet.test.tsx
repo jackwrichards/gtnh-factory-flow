@@ -204,7 +204,7 @@ describe("Pool worksheet", () => {
     expect(within(inputTable).getByRole("button", { name: "Copper Ingot" })).toBeTruthy();
     expect(within(inputTable).queryByRole("button", { name: "Copper Plate" })).toBeNull();
     expect(within(outputTable).getByRole("button", { name: "Copper Plate" })).toBeTruthy();
-    expect(within(inputTable).getByRole("button", { name: "Skip balance for Copper Ingot in All production" })).toBeTruthy();
+    expect(within(inputTable).getByRole("button", { name: "Balance Copper Ingot in All production" })).toBeTruthy();
     expect(screen.queryByText(/Net:/)).toBeNull();
     expect(screen.queryByRole("table", { name: "Pool resource balance" })).toBeNull();
     const power = screen.getByRole("region", { name: "Pool power summary" });
@@ -256,7 +256,7 @@ describe("Pool worksheet", () => {
     expect(useFactoryStore.getState().project.storages).toHaveLength(1);
   });
 
-  it.each(["rate", "space"])("drags a material by its %s without browsing or changing Skip", (pickup) => {
+  it.each(["rate", "space"])("drags a material by its %s without browsing or changing Balance", (pickup) => {
     const { container } = render(<PoolWorksheet />);
     const material = container.querySelector<HTMLElement>('.pool-scope-material[data-material-key="item:copper"]')!;
     const source = pickup === "rate" ? material.querySelector<HTMLElement>(".pool-material-rate")! : material;
@@ -646,21 +646,24 @@ describe("production group controls", () => {
     const before = useFactoryStore.getState().project.recipes;
     render(<PoolWorksheet />);
     expect(screen.queryByRole("button", { name: "Material rules for Copper line" })).toBeNull();
-    const link = screen.getByRole("button", { name: "Skip balance for Copper Ingot in Copper line" });
-    expect(link.getAttribute("aria-pressed")).toBe("false");
-    expect(link.title).toBe("Skip is off. Turn on to share this material with the parent group.");
+    const link = screen.getByRole("button", { name: "Balance Copper Ingot in Copper line" });
+    expect(screen.getByRole("button", { name: "Balance Copper Ingot in Copper line" }).getAttribute("aria-pressed")).toBe("true");
+    expect(link.title).toBe("Balance on. Turn off to share with the parent group.");
     fireEvent.click(link);
     expect(useFactoryStore.getState().project.productionGroups![0].resourceRules).toEqual({ "item:copper": "share" });
-    expect(link.getAttribute("aria-pressed")).toBe("true");
-    expect(link.title).toBe("Skip is on: the parent group handles supply and surplus.");
-    const rootRule = screen.getByRole("button", { name: "Skip balance for Copper Ingot in All production" });
-    expect(rootRule.title).toBe("Skip is off. Turn on to allow outside supply and surplus.");
+    expect(link.getAttribute("aria-pressed")).toBe("false");
+    expect(link.title).toBe("Balance off: the parent group handles supply and surplus.");
+    const rootRule = screen.getByRole("button", { name: "Balance Copper Ingot in All production" });
+    expect(rootRule.getAttribute("aria-pressed")).toBe("true");
+    expect(rootRule.title).toBe("Balance on. Turn off to allow outside supply and surplus.");
     fireEvent.click(rootRule);
-    expect(screen.getByRole("button", { name: "Skip balance for Copper Ingot in All production" }).title).toBe("Skip is on: outside supply and surplus are allowed.");
+    expect(screen.getByRole("button", { name: "Balance Copper Ingot in All production" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "Balance Copper Ingot in All production" }).title).toBe("Balance off: outside supply and surplus are allowed.");
     expect(useFactoryStore.getState().project.poolResourceRules).toEqual({ "item:copper": "import" });
     expect(useFactoryStore.getState().project.recipes).toBe(before);
-    fireEvent.click(screen.getByRole("button", { name: "Skip balance for Copper Ingot in Copper line" }));
+    fireEvent.click(screen.getByRole("button", { name: "Balance Copper Ingot in Copper line" }));
     expect(useFactoryStore.getState().project.productionGroups![0].resourceRules?.["item:copper"]).toBeUndefined();
+    expect(screen.getByRole("button", { name: "Balance Copper Ingot in Copper line" }).getAttribute("aria-pressed")).toBe("true");
   });
   it("combines both boundary directions without offering a parent override for child-local totals", () => {
     const resource = { kind: "item" as const, id: "copper", displayName: "Copper Ingot", amount: 1 };
@@ -672,7 +675,7 @@ describe("production group controls", () => {
     const net = within(materials).getByLabelText("Copper Ingot: net output 1/s");
     expect(net.textContent).toBe("+1/s");
     expect(net.getAttribute("title")).toBe("Input: 2/s; output: 3/s");
-    expect(within(materials).queryByRole("button", { name: /^Skip balance for/ })).toBeNull();
+    expect(within(materials).queryByRole("button", { name: /^Balance/ })).toBeNull();
     expect(within(materials).getByText("Within groups")).toBeTruthy();
   });
   it("shows every material without paging or filtering, including large saved rule lists", () => {
@@ -681,12 +684,12 @@ describe("production group controls", () => {
     useFactoryStore.getState().setProject(project);
     render(<PoolWorksheet />);
     const rules = screen.getByRole("region", { name: "Materials for All production" });
-    expect(within(rules).getAllByRole("button", { name: /^Skip balance for/ })).toHaveLength(1002);
+    expect(within(rules).getAllByRole("button", { name: /^Balance/ })).toHaveLength(1002);
     expect(screen.queryByRole("button", { name: /Next materials|Previous materials/ })).toBeNull();
     expect(screen.queryByRole("searchbox", { name: /Find material/ })).toBeNull();
-    fireEvent.click(within(rules).getByRole("button", { name: "Skip balance for material-999 in All production" }));
+    fireEvent.click(within(rules).getByRole("button", { name: "Balance material-999 in All production" }));
     expect(useFactoryStore.getState().project.poolResourceRules?.["item:material-999"]).toBeUndefined();
-    expect(within(rules).getAllByRole("button", { name: /^Skip balance for/ })).toHaveLength(1001);
+    expect(within(rules).getAllByRole("button", { name: /^Balance/ })).toHaveLength(1001);
   });
   it.each([undefined, { id: "line", name: "Copper line" }])("keeps stopped ingredients and products distinct from intermediates in scope %s", (group) => {
     const resource = (id: string, made: boolean, used: boolean, drawer?: "source" | "product") => ({
@@ -765,7 +768,7 @@ describe("production group controls", () => {
     expect(screen.queryByRole("button", { name: "Add production group" })).toBeNull();
     expect(screen.getByRole("region", { name: "Materials for Copper line" })).toBeDefined();
     expect(screen.queryByRole("button", { name: "Move group Copper line" })).toBeNull();
-    expect((screen.getByRole("button", { name: "Skip balance for Copper Ingot in Copper line" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Balance Copper Ingot in Copper line" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Collapse Copper line" }));
     expect(useFactoryStore.getState().project.productionGroups).toEqual(p.productionGroups);
   });

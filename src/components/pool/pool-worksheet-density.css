@@ -836,7 +836,7 @@
 .pool-material-table { width: 100%; min-width: 0; table-layout: auto; border-collapse: collapse; background: #6f9cff0d; }
 .pool-material-table caption { padding: 1px 4px; text-align: left; font: 9px/16px var(--app-font); color: var(--mc-ink-muted); background: #6f9cff0d; }
 .pool-material-table td { padding: 0 4px; }
-.pool-material-columns { display: grid; grid-template-columns: repeat(auto-fit, 16px var(--pool-material-rate-width, 50px) var(--pool-material-rule-width, 22px)); column-gap: 3px; justify-content: start; font: 7.5px/11px var(--app-font); }
+.pool-material-columns { display: grid; grid-template-columns: repeat(auto-fit, 16px var(--pool-material-rate-width, 50px) var(--pool-material-rule-width, 36px)); column-gap: 3px; justify-content: start; font: 7.5px/11px var(--app-font); }
 .pool-scope-material { display: grid; grid-column: span 3; grid-template-columns: subgrid; align-items: center; min-width: 0; height: 20px; border-bottom: 1px solid #ffffff08; }
 .pool-scope-material .pool-resource-link { height: 18px; justify-content: center; }
 .pool-scope-material .pool-item-icon { width: 16px !important; height: 16px !important; }
@@ -844,11 +844,11 @@
 .pool-material-rate strong { font-weight: 600; }
 .pool-material-rate small { margin-left: 1px; font-size: 6px; color: color-mix(in srgb, currentColor 35%, #9ca3af); }
 
-.pool-material-ignore { width: 18px; height: 15px; padding: 0; cursor: pointer; border: 1px solid #ffffff12; border-radius: 2px; background: #ffffff04; color: var(--mc-ink-muted); font: 6px/13px var(--app-font); }
-.pool-material-ignore[aria-pressed="true"] { background: #6f9cff20; border-color: #adc7ff60; color: #adc7ff; }
-.pool-material-ignore:hover { border-color: #adc7ff; }
-.pool-material-ignore:focus-visible { outline: 1px solid #adc7ff; outline-offset: 1px; }
-.pool-material-ignore:disabled { cursor: default; opacity: .5; }
+.pool-material-balance { width: 32px; height: 15px; padding: 0; cursor: pointer; border: 1px solid #ffffff12; border-radius: 2px; background: #ffffff04; color: var(--mc-ink-muted); font: 6px/13px var(--app-font); }
+.pool-material-balance[aria-pressed="true"] { background: #6f9cff20; border-color: #adc7ff60; color: #adc7ff; }
+.pool-material-balance:hover { border-color: #adc7ff; }
+.pool-material-balance:focus-visible { outline: 1px solid #adc7ff; outline-offset: 1px; }
+.pool-material-balance:disabled { cursor: default; opacity: .5; }
 .pool-material-inherited { display: block; height: 17px; font: 9px/17px var(--app-font); color: var(--mc-ink-muted); }
 
 /* Desired rates and power share the top row; target help is only opened on demand. */
@@ -945,3 +945,8 @@
 .pool-scope-material[data-material-draggable] { cursor: grab; }
 .pool-worksheet--dense .pool-port-list .pool-resource-link { position: relative; }
 .pool-worksheet--dense .pool-port-list .pool-resource-link::after { content: ""; position: absolute; inset: -2px; }
+
+.pool-balance-hint { flex: 1 1 300px; min-width: 0; margin-left: 8px; color: var(--mc-ink-muted); font: 8px/13px var(--app-font); }
+@container (max-width: 600px) {
+  .pool-balance-hint { order: 1; flex-basis: 100%; margin-left: 0; }
+}
