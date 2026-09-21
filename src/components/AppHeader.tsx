@@ -8,20 +8,9 @@ import { OPEN_SHARE_DIALOG_EVENT } from "@/lib/setups-tab";
 import { useIsCompactViewport } from "@/lib/compact-view";
 import {
   markNotesReadAndNotify,
-  markVersionSeen,
-  readLastSeenVersion,
   subscribeToNotesRead,
   unseenEntries,
 } from "@/lib/whats-new";
-import {
-  PREVIEW_RELEASE_SPOTLIGHT_EVENT,
-  RELEASE_SPOTLIGHTS,
-  markSpotlightSeen,
-  pickSpotlight,
-  readSeenSpotlights,
-  type ReleaseSpotlight as Spotlight,
-} from "@/lib/release-spotlight";
-import { ReleaseSpotlight } from "./ReleaseSpotlight";
 import { ChangelogDialog } from "./ChangelogDialog";
 import { APP_VERSION } from "@/lib/version";
 import { AccountMenu } from "./community/AccountMenu";
@@ -64,51 +53,6 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
   const [isChangelogOpen, setChangelogOpen] = useState(false);
   // Shift-click the version chip. See DevMenu.
   const [isDevMenuOpen, setDevMenuOpen] = useState(false);
-  // The release POSTER: the one thing allowed to arrive by itself, and only
-  // for a release that was written one (release-spotlight.ts). Decided in an
-  // effect, not during render, because the answer is in localStorage.
-  const [spotlight, setSpotlight] = useState<Spotlight>();
-  useEffect(() => {
-    const due = pickSpotlight({
-      lastSeenVersion: readLastSeenVersion(),
-      seen: readSeenSpotlights(),
-      appVersion: APP_VERSION,
-    });
-    setSpotlight(due);
-    // Stamping is what tells the NEXT release that this browser has been here
-    // before. It is not what the chip's dot reads — that has its own stamp,
-    // written only by opening the notes, or this load would put it out before
-    // anyone saw it. It waits while a notice is due, though: a notice is spent when
-    // it is CLOSED, not when it is rendered, so somebody who reloads before
-    // reading it gets it again. Closing files it in the seen list instead.
-    if (!due) {
-      markVersionSeen();
-    }
-  }, []);
-  // The dev menu previews it without touching what this browser has seen.
-  const [preview, setPreview] = useState<Spotlight>();
-  useEffect(() => {
-    const open = (event: Event) => {
-      const version = (event as CustomEvent<string | undefined>).detail;
-      setPreview(
-        (version ? RELEASE_SPOTLIGHTS.find((entry) => entry.version === version) : undefined) ??
-          RELEASE_SPOTLIGHTS[0],
-      );
-    };
-    window.addEventListener(PREVIEW_RELEASE_SPOTLIGHT_EVENT, open);
-    return () => window.removeEventListener(PREVIEW_RELEASE_SPOTLIGHT_EVENT, open);
-  }, []);
-  const shownSpotlight = preview ?? spotlight;
-  const closeSpotlight = () => {
-    if (preview) {
-      setPreview(undefined);
-      return;
-    }
-    if (spotlight) {
-      markSpotlightSeen(spotlight.version);
-      setSpotlight(undefined);
-    }
-  };
   // The share dialog lives up here rather than in BoardActions so the compact
   // menu can close behind it without unmounting it. The export dialog for the
   // same reason.
@@ -135,12 +79,7 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
         <span className="shrink-0">
           GTNH <span className="text-cyan-500">Planner</span>
         </span>
-        {/* THE CHIP OPENS THE NOTES AGAIN (Jack, 2026-09-09): players went
-            looking for what's new and found nothing to press. The release
-            NOTICE still arrives once on its own and says the headline; this
-            is the way back to the whole history afterwards, and to a release
-            somebody skipped. Shift-click is still the way in to the DEV
-            MENU. */}
+        {/* Release notes open only on request. Shift-click opens the dev menu. */}
         <button
           type="button"
           onClick={(event) => {
@@ -189,9 +128,6 @@ export function AppHeader({ onLoadDatasetVersion }: AppHeaderProps) {
       <div className="app-header-tabs min-w-0 flex-1 compact:order-last compact:basis-full">
         <DesignTabs />
       </div>
-      {shownSpotlight ? (
-        <ReleaseSpotlight spotlight={shownSpotlight} onClose={closeSpotlight} />
-      ) : null}
       {isChangelogOpen ? (
         <ChangelogDialog unseenVersions={unseenVersions} onClose={() => setChangelogOpen(false)} />
       ) : null}

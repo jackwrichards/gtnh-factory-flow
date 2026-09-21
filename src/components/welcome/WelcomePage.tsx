@@ -36,8 +36,8 @@ import { WelcomeBackdrop } from "./WelcomeBackdrop";
  * checkbox at the foot is how a regular stops arriving here.
  *
  * There is no "new in vX" section any more (Jack, 2026-09-08): the player
- * facing changelog is gone, and a release announces itself once through
- * ReleaseSpotlight.
+ * facing release notes are available from the header version chip. Returning
+ * visitors are never interrupted by an automatic release popup.
  */
 
 const COMMUNITY_TILE_COUNT = 15;

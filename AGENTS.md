@@ -36,16 +36,10 @@ Working notes for future agents on GTNH Factory Flow.
     writes that on every load, so the very load that should have raised the
     dot would have put it out first. A first visit stamps silently and shows
     no dot - somebody who has never seen the app does not want a history.
-- What ANNOUNCES a release is the NOTICE, `src/lib/release-spotlight.ts`
-  plus `ReleaseSpotlight.tsx`: a window that arrives ONCE, on the first visit
-  after a release, carrying a line per change (icon plus a spec-sheet TITLE,
-  no sentences) and a close key. A release with no entry in
-  `RELEASE_SPOTLIGHTS` shows nothing at all, which is the per-release opt-in.
-  A brand new browser never sees one; a returning one does; closing it files
-  it in `seen-spotlights.v1` and it never returns. The number it prints
-  (`release: "3.0"`) is hard coded per notice. Preview it from the dev menu's
-  "Release popup". Its own file carries the writing rules; read them before
-  touching the copy.
+- Release announcements NEVER open automatically (Jack, 2026-09-20). The
+  central release poster and its dev preview were removed. Players can read
+  release notes by clicking the version chip; its unread dot remains. Write
+  clear, concrete bullets about what changed for players, without internal jargon.
 - `main` is the ONLY branch, by explicit decision (2026-08-19): all work lands
   on it, and stale feature branches were deleted after verifying main carried
   every patch. Do not accumulate long-lived branches; the unmerged

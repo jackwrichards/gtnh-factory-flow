@@ -2,7 +2,6 @@
 
 import { Check, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { PREVIEW_RELEASE_SPOTLIGHT_EVENT } from "@/lib/release-spotlight";
 import {
   BOARD_TIMELAPSE_SPEEDS,
   getBoardTimelapseCameraMode,
@@ -528,25 +527,7 @@ export function DevMenu({ onClose }: { onClose: () => void }) {
             </button>
           </div>
 
-          <div className="mt-2 rounded border border-line px-3 py-2.5">
-            <span className="block text-base leading-tight text-fg">Release popup</span>
-            <span className="mt-0.5 block text-xs text-fg-muted">
-              The poster players get once, on the first visit after a release that was written
-              one. Previewing it here changes nothing about what this browser has been shown.
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                requestAnimationFrame(() =>
-                  window.dispatchEvent(new CustomEvent(PREVIEW_RELEASE_SPOTLIGHT_EVENT)),
-                );
-              }}
-              className="mt-2.5 w-full rounded border border-cyan-700 bg-cyan-500/10 px-3 py-1.5 text-sm text-cyan-300 hover:bg-cyan-500/20"
-            >
-              Preview
-            </button>
-          </div>
+
 
           <div className="mt-2 rounded border border-line px-3 py-2.5">
             <span className="block text-base leading-tight text-fg">Score</span>

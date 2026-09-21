@@ -3,26 +3,9 @@
 import { CHANGELOG, type ChangelogEntry } from "@/lib/changelog";
 import { APP_VERSION } from "@/lib/version";
 
-/**
- * Noticing that the app changed under you.
- *
- * Two different situations, and they want two different answers:
- *
- * - you were away and it shipped while you were gone. The code running is the
- *   new code, so the only question is whether this browser has been here
- *   before and what it has already been shown. That is the version stamp
- *   below, read by `pickSpotlight` in release-spotlight.ts, and the answer is
- *   the release notice that arrives once.
- * - you had the tab open and it shipped. The code running is the OLD code and
- *   cannot become the new one on its own, so the honest thing is to say a new
- *   version exists and offer a reload. `useDeployedVersion` asks the server.
- *
- * THE NOTES ARE BACK (Jack, 2026-09-09): the header's version chip opens
- * the full changelog again and wears a dot when a release has shipped that
- * this browser has not read. That dot keeps its OWN stamp, below - the one
- * above is written on every load by the release notice and could never let a
- * dot light.
- */
+/** Release notes are opt-in through the version chip; unread notes get a dot.
+ * Tabs running an older bundle can still offer a reload through useDeployedVersion.
+ * The legacy last-seen stamp remains readable for compatibility but opens no UI. */
 const LAST_SEEN_KEY = "gtnh-factory-flow.last-seen-version.v1";
 
 /**

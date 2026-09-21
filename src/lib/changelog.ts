@@ -48,13 +48,16 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "3.3.0",
-    date: "2026-09-18",
-    headline: "Production groups in Pool",
+    date: "2026-09-20",
+    headline: "A clearer, more compact Pool planner",
     notes: [
-      "Organize Pool into named, nested production groups with their own material balances.",
-      "Compact recipe rows adapt to narrower screens, with labeled columns, accessible status details, icon-based machine selection and inline settings.",
-      "Edit input and output rates in both Solve and Pool, with shared At least, Exactly, At most and Ignore rules.",
-      "Drag machines and whole groups onto group headings, including empty or collapsed groups. Groups persist through saves, undo and copy/paste.",
+      "*More room on screen.* Pool has shorter recipe rows, clearer columns and compact power totals.",
+      "*Production groups.* Organize recipes into named groups. Drag recipes between groups, nest groups, and collapse lines you are not working on.",
+      "*Clear material totals.* See each group’s inputs and outputs together, and choose which materials it shares with the rest of your factory.",
+      "*Start with inputs or outputs.* In Desired rates, use a negative number for input and a positive number for output.",
+      "*Rate rules.* Choose At least, Exactly, At most or Ignore for each rate. Rates and rules carry between Solve and Pool; existing wires stay untouched.",
+      "*Machine controls.* Click a machine’s icon to change it, or open settings from its recipe row. Crop and bee machines have their own controls.",
+      "*No more release popup.* Click the version number whenever you want to read what changed.",
     ],
   },
   {
