@@ -1846,7 +1846,7 @@ Working notes for future agents on GTNH Factory Flow.
   with bounded height, search, and 24 entries per page. Child-local totals without
   a parent material row keep their controls in the child. Labels are Match / Ignore, as in
   Shadow. Match balances paired materials exactly; root Ignore permits imports and surplus,
-  group Ignore passes both sides to the parent. Failed targets offer a compact Why explainer. There is no general never-import rule. Do not restore separate Resources/Materials panels or three-way rule selects.
+  group Ignore passes both sides to the parent. A compact status strip sits between bounded Desired rates and right-aligned power. It shows live success/failure, actual recipe activity, boundary counts and Match/Ignore counts; Rules opens definitions without expanding the layout. Target warnings focus their explanation. There is no general never-import rule. Do not restore separate Resources/Materials panels or three-way rule selects.
   Group headings accept machine/group pointer drops, even when empty or collapsed. Group
   totals include closed child surplus/imports without counting shared ports twice. Legacy
   scoped targets and direct child imports remain explicit and editable, never silently lost.

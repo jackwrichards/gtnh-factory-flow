@@ -535,7 +535,8 @@
 /* Overview and scope balances use the available width, with no empty summary rows. */
 .pool-worksheet--dense .pool-overview {
   display: grid;
-  grid-template-columns: minmax(280px, 520px) minmax(220px, 280px);
+  grid-template-columns: minmax(360px, 560px) minmax(240px, 1fr) 260px;
+  grid-template-areas: "rates situation power";
   gap: 12px;
   align-items: start;
   margin-bottom: 4px;
@@ -864,4 +865,41 @@
   .pool-worksheet--dense .pool-overview .pool-products-table td { display: flex; align-items: center; justify-content: flex-end; height: auto; min-height: 20px; }
   .pool-worksheet--dense .pool-products-table td:first-child { justify-content: flex-start; }
   .pool-target-controls { width: 100%; }
+}
+
+/* A bounded rate list, live context in the middle, and power at the far right. */
+.pool-worksheet--dense .pool-overview > .pool-desired-products { grid-area: rates; width: 100%; max-width: 560px; }
+.pool-worksheet--dense .pool-overview > .pool-situation { grid-area: situation; min-width: 0; position: relative; font: 10px/1.4 var(--app-font); padding: 2px 8px; color: var(--mc-ink-muted); }
+.pool-worksheet--dense .pool-overview > .pool-sheet-power { grid-area: power; justify-self: end; max-width: 260px; }
+.pool-worksheet--dense .pool-overview .pool-power-table th:first-child { width: 94px; }
+.pool-situation:focus-visible { outline: 1px solid #adc7ff; outline-offset: 2px; }
+.pool-situation-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 10px; }
+.pool-situation-heading { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; margin: 0; color: var(--mc-ink); }
+.pool-situation-heading[data-state="blocked"] { color: var(--flow-input); }
+.pool-situation-heading[data-state="running"] { color: var(--flow-output); }
+.pool-situation p { margin: 3px 0; }
+.pool-situation-counts { font-size: 9px; white-space: nowrap; }
+.pool-situation-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; margin: 5px 0; }
+.pool-situation-flow > span { white-space: nowrap; }
+.pool-situation-flow > svg { flex-shrink: 0; opacity: .45; }
+.pool-situation-flow strong { font-size: 11px; }
+.pool-situation-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; font-size: 9px; }
+.pool-situation > .pool-target-explanation { padding: 3px 6px; margin: 4px 0; border-left: 2px solid var(--flow-input); background: color-mix(in srgb, var(--flow-input) 4%, transparent); }
+.pool-situation .pool-target-help-name { margin-bottom: 2px; }
+.pool-situation .pool-target-help-rates { margin-bottom: 2px; gap: 2px 10px; }
+.pool-situation-check { color: var(--mc-ink-muted); }
+.pool-situation-help { margin-left: auto; }
+.pool-situation-help > summary { display: flex; align-items: center; gap: 3px; cursor: pointer; list-style: none; }
+.pool-situation-help > summary::-webkit-details-marker { display: none; }
+.pool-situation-help > summary:hover { color: var(--mc-ink); }
+.pool-situation-help > div { position: absolute; z-index: 60; top: 100%; right: 0; width: min(400px, 100%); padding: 10px; background: var(--surface, #24272c); border: 1px solid var(--mc-61); box-shadow: 0 4px 12px #0006; font-size: 11px; }
+.pool-situation-rules { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 10px; }
+.pool-situation-rules dt { font-weight: 600; }
+.pool-situation-rules dd { margin: 0; }
+@container (max-width: 1120px) {
+  .pool-worksheet--dense .pool-overview { grid-template-columns: minmax(0, 560px) minmax(220px, 260px); grid-template-areas: "rates power" "situation situation"; justify-content: space-between; }
+}
+@container (max-width: 650px) {
+  .pool-worksheet--dense .pool-overview { grid-template-columns: minmax(0, 1fr); grid-template-areas: "rates" "situation" "power"; }
+  .pool-worksheet--dense .pool-overview > .pool-sheet-power { justify-self: end; }
 }

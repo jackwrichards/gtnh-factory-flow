@@ -1062,9 +1062,6 @@ body[data-pool-dragging] [data-tooltip-companion] { visibility: hidden; pointer-
 }
 
 .pool-target-help { margin-top: 4px; font-family: var(--app-font); font-size: 11px; line-height: 1.5; }
-.pool-target-help > summary { display: flex; align-items: center; gap: 5px; padding: 3px 6px; cursor: pointer; color: var(--flow-input); }
-.pool-target-help > summary > span { margin-left: auto; text-decoration: underline; }
-.pool-target-help > div { padding: 4px 8px; border-left: 2px solid var(--flow-input); background: color-mix(in srgb, var(--flow-input) 4%, transparent); }
 .pool-target-help p { margin: 0 0 6px; }
 .pool-target-help p:last-child { margin-bottom: 0; }
 

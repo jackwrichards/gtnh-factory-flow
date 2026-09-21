@@ -1,5 +1,5 @@
 "use client";
-import { TargetRateHelp } from "./TargetRateHelp";
+import { PoolSituation } from "./PoolSituation";
 import { isInputRate, storageTargetMode } from "@/lib/model/storage-target";
 import { StorageTargetRule } from "../flow/StorageTargetRule";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
@@ -69,15 +69,14 @@ import "./pool-worksheet-density.css";
 
 export function PoolWorksheet() {
   const summaryId = useId();
-  const targetHelp = useRef<HTMLDetailsElement>(null);
+  const targetHelp = useRef<HTMLElement>(null);
   const [explainedTarget, setExplainedTarget] = useState<string>();
   const explainTarget = (id: string) => {
     setExplainedTarget(id);
     const details = targetHelp.current;
     if (!details) return;
-    details.open = true;
     details.scrollIntoView?.({ block: "nearest" });
-    details.querySelector("summary")?.focus();
+    details.focus({ preventScroll: true });
   };
   const rootRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -381,26 +380,16 @@ export function PoolWorksheet() {
                     </table>
                   </div>
                 </ProductsPane>
-                {helpTarget ? (
-                  <details ref={targetHelp} className="pool-target-help">
-                    <summary><AlertTriangle aria-hidden size={12} />Target not met. <span>Why?</span></summary>
-                    <TargetRateHelp storage={helpTarget} input={isInputRate(helpTarget, roles.get(helpTarget.id))}
-                      result={result.storages[helpTarget.id]} project={project} resources={groupResources} />
-                  </details>
-                ) : null}
               </div>
+              <section ref={targetHelp} tabIndex={-1} className="pool-situation pool-target-help" aria-label="Production status">
+                <PoolSituation project={project} result={result} products={products} roles={roles} resources={groupResources}
+                  recipes={groups.flatMap(group => group.sections.map(section => section.result))} selectedTarget={helpTarget} />
+              </section>
               <WorksheetPower
                 entries={groups.flatMap((entry) => (entry.machine ? [entry.machine] : []))}
                 title="Total power"
               />
             </div>
-            {result.stale ? (
-              <p className="pool-sheet-notice" role="status">
-                {result.held
-                  ? "Results are waiting for Recalculate."
-                  : "Calculating… Showing the previous results."}
-              </p>
-            ) : null}
             {searchOpen ? (
               <div className="pool-machine-toolbar" role="search" aria-label="Find in worksheet">
                 <label className="pool-sheet-search"><Search className="h-3.5 w-3.5" />

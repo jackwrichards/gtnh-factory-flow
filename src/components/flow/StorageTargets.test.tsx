@@ -206,17 +206,17 @@ it("keeps the actual rate visible alongside a compact unreachable warning", () =
   expect(screen.queryByText("Unreachable")).toBeNull();
   const warning=screen.getByLabelText("Target cannot be met");
   expect(warning.closest("td")!.textContent).toContain("0/s");
-  const help = screen.getByText(/Target not met/).closest("details")!;
-  expect(help.open).toBe(false);
+  const help = screen.getByRole("region", { name: "Production status" });
+  expect(within(help).getByText("Targets not met")).toBeTruthy();
   fireEvent.click(warning);
-  expect(help.open).toBe(true);
+  expect(document.activeElement).toBe(help);
   expect(within(help).getByText("Ingot")).toBeTruthy();
   expect(within(help).getByText(/Make at least/)).toBeTruthy();
   expect(within(help).getByText(/Currently making/)).toBeTruthy();
   expect(within(help).getByText(/Add or enable recipes/)).toBeTruthy();
   expect(useFactoryStore.getState().project.poolResourceRules).toBeUndefined();
   act(() => useFactoryStore.getState().setStorageTarget("output", undefined));
-  expect(screen.queryByText(/Target not met/)).toBeNull();
+  expect(screen.queryByText("Targets not met")).toBeNull();
 });
 
 it("explains the clicked target and updates its requested rate", () => {
@@ -227,7 +227,7 @@ it("explains the clicked target and updates its requested rate", () => {
   ];
   useFactoryStore.getState().setProject(p);render(<PoolWorksheet />);
   fireEvent.click(screen.getAllByLabelText("Target cannot be met")[1]);
-  const help = screen.getByText(/Target not met/).closest("details")!;
+  const help = screen.getByRole("region", { name: "Production status" });
   expect(within(help).getByText("Plate")).toBeTruthy();
   expect(within(help).queryByText("Ingot")).toBeNull();
   expect(within(help).getByText("7/s")).toBeTruthy();
@@ -269,6 +269,6 @@ it("shows stopped target residue as zero without changing the solved value", () 
   const warning = screen.getByLabelText("Target cannot be met");
   expect(warning.closest("td")!.textContent).toBe("0/s");
   fireEvent.click(warning);
-  expect(screen.getByText(/This target is stopped, not running slowly/)).toBeTruthy();
+  expect(screen.getByText(/This target is stopped/)).toBeTruthy();
   expect(useFactoryStore.getState().lastResult.storages.output.producedPerSecond).toBe(5.169878828456423e-26);
 });

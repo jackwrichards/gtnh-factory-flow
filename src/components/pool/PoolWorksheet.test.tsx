@@ -693,3 +693,42 @@ describe("production group controls", () => {
     expect(useFactoryStore.getState().project.productionGroups).toEqual(p.productionGroups);
   });
 });
+
+describe("production status", () => {
+  it("explains a working setup and keeps the panel when a target is ignored", () => {
+    render(<PoolWorksheet />);
+    const status = screen.getByRole("region", { name: "Production status" });
+    expect(within(status).getByText("All targets met")).toBeTruthy();
+    expect(status.textContent).toContain("1 recipe running");
+    expect(status.textContent).toContain("1/1 rates met");
+    expect(status.textContent).toContain("1 input");
+    act(() => useFactoryStore.getState().setStorageTargetMode("product", "ignore"));
+    expect(within(status).queryByText("All targets met")).toBeNull();
+    expect(within(status).getByText("No production requested")).toBeTruthy();
+    expect(status.textContent).toContain("1 ignored target");
+  });
+  it("does not mistake a maximum-only rate for a production request", () => {
+    useFactoryStore.getState().setStorageTargetMode("product", "at-most");
+    render(<PoolWorksheet />);
+    const status = screen.getByRole("region", { name: "Production status" });
+    expect(within(status).getByText("No production requested")).toBeTruthy();
+    expect(status.textContent).toContain("1/1 rates met");
+  });
+  it("does not present stale results as a current success", () => {
+    const result = useFactoryStore.getState().lastResult;
+    useFactoryStore.setState({ lastResult: { ...result, stale: true, held: true } });
+    render(<PoolWorksheet />);
+    const status = screen.getByRole("region", { name: "Production status" });
+    expect(within(status).getByText("Waiting for Recalculate")).toBeTruthy();
+    expect(within(status).queryByText("All targets met")).toBeNull();
+    expect(status.textContent).toContain("previous calculation");
+  });
+  it("reports other solver failures even when target rates are met", () => {
+    const result = useFactoryStore.getState().lastResult;
+    useFactoryStore.setState({ lastResult: { ...result, bottlenecks: [{ id: "missing", kind: "missing-recipe", severity: "critical", message: "A machine is missing its recipe." }] } });
+    render(<PoolWorksheet />);
+    const status = screen.getByRole("region", { name: "Production status" });
+    expect(within(status).getByText("Setup needs attention")).toBeTruthy();
+    expect(within(status).getByText("A machine is missing its recipe.")).toBeTruthy();
+  });
+});
