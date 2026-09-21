@@ -1,0 +1,553 @@
+{
+  "schemaVersion": 1,
+  "id": "manual-project",
+  "name": "Bug example",
+  "view": {
+    "canvasPattern": "dots",
+    "canvasTheme": "charcoal",
+    "fixedEdgeWidth": false,
+    "linePulseMode": false,
+    "rateUnit": "minute",
+    "leftPanelOpen": true,
+    "rightPanelOpen": true,
+    "showHiddenResources": false,
+    "favouritesOnly": false,
+    "trendsOpen": true,
+    "hiddenResourceKeys": [
+      "fluid:water",
+      "item:gregtech:gt.metaitem.01@2010"
+    ],
+    "favouriteResourceKeys": []
+  },
+  "recipes": [
+    {
+      "id": "oracle:local-2.9.0-beta-2:crafting:shaped:95dcd370a7c5abf7",
+      "name": "Shaped Crafting: Wooden Axe",
+      "kind": "gregtech_machine",
+      "category": "crafting",
+      "machineType": "Shaped Crafting",
+      "minimumTier": "NONE",
+      "durationTicks": 1,
+      "eut": 0,
+      "inputs": [
+        {
+          "kind": "item",
+          "id": "oredict:plankWood",
+          "amount": 1,
+          "displayName": "Ore Dictionary: plankWood",
+          "tooltip": [
+            "Ore dictionary: plankWood",
+            "Accepts: Oak Planks, Greatwood Planks, Silverwood Planks, Colored Oak Planks (White Frequency), Colored Oak Planks (Orange Frequency), Colored Oak Planks (Magenta Frequency), Colored Oak Planks (Light Blue Frequency), Colored Oak Planks (Yellow Frequency), Colored Oak Planks (Lime Frequency), Colored Oak Planks (Pink Frequency), Colored Oak Planks (Gray Frequency), Colored Oak Planks (Light Gray Frequency), +71 more"
+          ],
+          "alternatives": [
+            {
+              "kind": "item",
+              "id": "minecraft:planks@32767",
+              "displayName": "Oak Planks",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/oak_planks-1db6e86ee655.png",
+              "dominantColor": "#6a5635",
+              "modId": "minecraft",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "thaumcraft:blockwoodendevice@6",
+              "displayName": "Greatwood Planks",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/greatwood_planks-80c9a2b3cbec.png",
+              "dominantColor": "#221815",
+              "modId": "Thaumcraft",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "thaumcraft:blockwoodendevice@7",
+              "displayName": "Silverwood Planks",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/silverwood_planks-ac1419285d90.png",
+              "dominantColor": "#aeaa9b",
+              "modId": "Thaumcraft",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "extrautilities:colorwoodplanks",
+              "displayName": "Colored Oak Planks (White Frequency)",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/colored_oak_planks_white_frequency-df06d8c0bb5f.png",
+              "dominantColor": "#858586",
+              "modId": "ExtraUtilities",
+              "amount": 1
+            }
+          ]
+        },
+        {
+          "kind": "item",
+          "id": "oredict:plankWood",
+          "amount": 1,
+          "displayName": "Ore Dictionary: plankWood",
+          "tooltip": [
+            "Ore dictionary: plankWood",
+            "Accepts: Oak Planks, Greatwood Planks, Silverwood Planks, Colored Oak Planks (White Frequency), Colored Oak Planks (Orange Frequency), Colored Oak Planks (Magenta Frequency), Colored Oak Planks (Light Blue Frequency), Colored Oak Planks (Yellow Frequency), Colored Oak Planks (Lime Frequency), Colored Oak Planks (Pink Frequency), Colored Oak Planks (Gray Frequency), Colored Oak Planks (Light Gray Frequency), +71 more"
+          ],
+          "alternatives": [
+            {
+              "kind": "item",
+              "id": "minecraft:planks@32767",
+              "displayName": "Oak Planks",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/oak_planks-1db6e86ee655.png",
+              "dominantColor": "#6a5635",
+              "modId": "minecraft",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "thaumcraft:blockwoodendevice@6",
+              "displayName": "Greatwood Planks",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/greatwood_planks-80c9a2b3cbec.png",
+              "dominantColor": "#221815",
+              "modId": "Thaumcraft",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "thaumcraft:blockwoodendevice@7",
+              "displayName": "Silverwood Planks",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/silverwood_planks-ac1419285d90.png",
+              "dominantColor": "#aeaa9b",
+              "modId": "Thaumcraft",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "extrautilities:colorwoodplanks",
+              "displayName": "Colored Oak Planks (White Frequency)",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/colored_oak_planks_white_frequency-df06d8c0bb5f.png",
+              "dominantColor": "#858586",
+              "modId": "ExtraUtilities",
+              "amount": 1
+            }
+          ]
+        },
+        {
+          "kind": "item",
+          "id": "oredict:plankWood",
+          "amount": 1,
+          "displayName": "Ore Dictionary: plankWood",
+          "tooltip": [
+            "Ore dictionary: plankWood",
+            "Accepts: Oak Planks, Greatwood Planks, Silverwood Planks, Colored Oak Planks (White Frequency), Colored Oak Planks (Orange Frequency), Colored Oak Planks (Magenta Frequency), Colored Oak Planks (Light Blue Frequency), Colored Oak Planks (Yellow Frequency), Colored Oak Planks (Lime Frequency), Colored Oak Planks (Pink Frequency), Colored Oak Planks (Gray Frequency), Colored Oak Planks (Light Gray Frequency), +71 more"
+          ],
+          "alternatives": [
+            {
+              "kind": "item",
+              "id": "minecraft:planks@32767",
+              "displayName": "Oak Planks",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/oak_planks-1db6e86ee655.png",
+              "dominantColor": "#6a5635",
+              "modId": "minecraft",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "thaumcraft:blockwoodendevice@6",
+              "displayName": "Greatwood Planks",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/greatwood_planks-80c9a2b3cbec.png",
+              "dominantColor": "#221815",
+              "modId": "Thaumcraft",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "thaumcraft:blockwoodendevice@7",
+              "displayName": "Silverwood Planks",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/silverwood_planks-ac1419285d90.png",
+              "dominantColor": "#aeaa9b",
+              "modId": "Thaumcraft",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "extrautilities:colorwoodplanks",
+              "displayName": "Colored Oak Planks (White Frequency)",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/colored_oak_planks_white_frequency-df06d8c0bb5f.png",
+              "dominantColor": "#858586",
+              "modId": "ExtraUtilities",
+              "amount": 1
+            }
+          ]
+        },
+        {
+          "kind": "item",
+          "id": "oredict:stickWood",
+          "amount": 1,
+          "displayName": "Ore Dictionary: stickWood",
+          "tooltip": [
+            "Ore dictionary: stickWood",
+            "Accepts: Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, +4 more"
+          ],
+          "alternatives": [
+            {
+              "kind": "item",
+              "id": "minecraft:stick",
+              "displayName": "Stick",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/stick-a52eda84b444.png",
+              "dominantColor": "#3f2f12",
+              "modId": "minecraft",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "natura:natura.stick",
+              "displayName": "Stick",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/stick-7f31754c358d.png",
+              "dominantColor": "#9a626b",
+              "modId": "Natura",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "natura:natura.stick@1",
+              "displayName": "Stick",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/stick-d1e9dc90a7c2.png",
+              "dominantColor": "#7c6b51",
+              "modId": "Natura",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "natura:natura.stick@2",
+              "displayName": "Stick",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/stick-dbb1f6b92201.png",
+              "dominantColor": "#525252",
+              "modId": "Natura",
+              "amount": 1
+            }
+          ]
+        },
+        {
+          "kind": "item",
+          "id": "oredict:stickWood",
+          "amount": 1,
+          "displayName": "Ore Dictionary: stickWood",
+          "tooltip": [
+            "Ore dictionary: stickWood",
+            "Accepts: Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, +4 more"
+          ],
+          "alternatives": [
+            {
+              "kind": "item",
+              "id": "minecraft:stick",
+              "displayName": "Stick",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/stick-a52eda84b444.png",
+              "dominantColor": "#3f2f12",
+              "modId": "minecraft",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "natura:natura.stick",
+              "displayName": "Stick",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/stick-7f31754c358d.png",
+              "dominantColor": "#9a626b",
+              "modId": "Natura",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "natura:natura.stick@1",
+              "displayName": "Stick",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/stick-d1e9dc90a7c2.png",
+              "dominantColor": "#7c6b51",
+              "modId": "Natura",
+              "amount": 1
+            },
+            {
+              "kind": "item",
+              "id": "natura:natura.stick@2",
+              "displayName": "Stick",
+              "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/stick-dbb1f6b92201.png",
+              "dominantColor": "#525252",
+              "modId": "Natura",
+              "amount": 1
+            }
+          ]
+        }
+      ],
+      "outputs": [
+        {
+          "kind": "item",
+          "id": "minecraft:wooden_axe",
+          "amount": 1,
+          "displayName": "Wooden Axe",
+          "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/wooden_axe-e5d3c0352f5b.png",
+          "dominantColor": "#2d220d",
+          "modId": "minecraft",
+          "neiSlot": {
+            "x": 124,
+            "y": 26
+          }
+        }
+      ],
+      "notes": "Exported by the GTNH calculation oracle from Minecraft/Forge crafting registries.",
+      "source": {
+        "datasetVersionId": "local-2.9.0-beta-2",
+        "recipeMap": "Shaped Crafting",
+        "exporter": "gtnh-oracle",
+        "rawRecipeId": "95dcd370a7c5abf7"
+      },
+      "nei": {
+        "itemInputGrid": {
+          "width": 3,
+          "height": 3
+        },
+        "itemOutputGrid": {
+          "width": 1,
+          "height": 1
+        },
+        "slots": [
+          {
+            "side": "input",
+            "kind": "item",
+            "slotIndex": 0,
+            "x": 25,
+            "y": 8
+          },
+          {
+            "side": "input",
+            "kind": "item",
+            "slotIndex": 1,
+            "x": 43,
+            "y": 8
+          },
+          {
+            "side": "input",
+            "kind": "item",
+            "slotIndex": 2,
+            "x": 61,
+            "y": 8
+          },
+          {
+            "side": "input",
+            "kind": "item",
+            "slotIndex": 3,
+            "x": 25,
+            "y": 26
+          },
+          {
+            "side": "input",
+            "kind": "item",
+            "slotIndex": 4,
+            "x": 43,
+            "y": 26
+          },
+          {
+            "side": "input",
+            "kind": "item",
+            "slotIndex": 5,
+            "x": 61,
+            "y": 26
+          },
+          {
+            "side": "input",
+            "kind": "item",
+            "slotIndex": 6,
+            "x": 25,
+            "y": 44
+          },
+          {
+            "side": "input",
+            "kind": "item",
+            "slotIndex": 7,
+            "x": 43,
+            "y": 44
+          },
+          {
+            "side": "input",
+            "kind": "item",
+            "slotIndex": 8,
+            "x": 61,
+            "y": 44
+          },
+          {
+            "side": "output",
+            "kind": "item",
+            "slotIndex": 0,
+            "x": 124,
+            "y": 26
+          }
+        ],
+        "progressBars": [
+          {
+            "x": 84,
+            "y": 26,
+            "width": 24,
+            "height": 17,
+            "direction": "right"
+          }
+        ]
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "id": "node-5e054e36-5e8e-4e41-8be3-e6614ca1681f",
+      "recipeId": "oracle:local-2.9.0-beta-2:crafting:shaped:95dcd370a7c5abf7",
+      "machineCount": 1,
+      "parallel": 1,
+      "overclockTier": "NONE",
+      "recipeInputOverrides": {
+        "0": {
+          "kind": "item",
+          "id": "oredict:plankWood",
+          "amount": 1,
+          "displayName": "Ore Dictionary: plankWood",
+          "tooltip": [
+            "Ore dictionary: plankWood",
+            "Accepts: Oak Planks, Greatwood Planks, Silverwood Planks, Colored Oak Planks (White Frequency), Colored Oak Planks (Orange Frequency), Colored Oak Planks (Magenta Frequency), Colored Oak Planks (Light Blue Frequency), Colored Oak Planks (Yellow Frequency), Colored Oak Planks (Lime Frequency), Colored Oak Planks (Pink Frequency), Colored Oak Planks (Gray Frequency), Colored Oak Planks (Light Gray Frequency), +71 more"
+          ]
+        },
+        "1": {
+          "kind": "item",
+          "id": "oredict:plankWood",
+          "amount": 1,
+          "displayName": "Ore Dictionary: plankWood",
+          "tooltip": [
+            "Ore dictionary: plankWood",
+            "Accepts: Oak Planks, Greatwood Planks, Silverwood Planks, Colored Oak Planks (White Frequency), Colored Oak Planks (Orange Frequency), Colored Oak Planks (Magenta Frequency), Colored Oak Planks (Light Blue Frequency), Colored Oak Planks (Yellow Frequency), Colored Oak Planks (Lime Frequency), Colored Oak Planks (Pink Frequency), Colored Oak Planks (Gray Frequency), Colored Oak Planks (Light Gray Frequency), +71 more"
+          ]
+        },
+        "2": {
+          "kind": "item",
+          "id": "oredict:plankWood",
+          "amount": 1,
+          "displayName": "Ore Dictionary: plankWood",
+          "tooltip": [
+            "Ore dictionary: plankWood",
+            "Accepts: Oak Planks, Greatwood Planks, Silverwood Planks, Colored Oak Planks (White Frequency), Colored Oak Planks (Orange Frequency), Colored Oak Planks (Magenta Frequency), Colored Oak Planks (Light Blue Frequency), Colored Oak Planks (Yellow Frequency), Colored Oak Planks (Lime Frequency), Colored Oak Planks (Pink Frequency), Colored Oak Planks (Gray Frequency), Colored Oak Planks (Light Gray Frequency), +71 more"
+          ]
+        },
+        "3": {
+          "kind": "item",
+          "id": "oredict:stickWood",
+          "amount": 1,
+          "displayName": "Ore Dictionary: stickWood",
+          "tooltip": [
+            "Ore dictionary: stickWood",
+            "Accepts: Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, +4 more"
+          ]
+        },
+        "4": {
+          "kind": "item",
+          "id": "oredict:stickWood",
+          "amount": 1,
+          "displayName": "Ore Dictionary: stickWood",
+          "tooltip": [
+            "Ore dictionary: stickWood",
+            "Accepts: Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, Stick, +4 more"
+          ]
+        }
+      },
+      "enabled": true,
+      "position": {
+        "x": -320,
+        "y": -240
+      }
+    }
+  ],
+  "storages": [
+    {
+      "id": "storage-ffbba55b-3625-405e-9922-0e2f9e8d03aa",
+      "kind": "item",
+      "resourceId": "minecraft:wooden_axe",
+      "displayName": "Wooden Axe",
+      "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/wooden_axe-e5d3c0352f5b.png",
+      "dominantColor": "#2d220d",
+      "poolSide": "drain",
+      "position": {
+        "x": 120,
+        "y": -300
+      }
+    },
+    {
+      "id": "storage-50339bd7-4ff0-446f-b91a-78be871bcf85",
+      "kind": "item",
+      "resourceId": "oredict:stickWood",
+      "displayName": "Ore Dictionary: stickWood",
+      "position": {
+        "x": -300,
+        "y": -40
+      }
+    },
+    {
+      "id": "storage-bf6d60c3-497e-44d0-9799-0e3f21f0783a",
+      "kind": "item",
+      "resourceId": "oredict:plankWood",
+      "displayName": "Ore Dictionary: plankWood",
+      "position": {
+        "x": -320,
+        "y": -400
+      }
+    }
+  ],
+  "annotations": [],
+  "pockets": [],
+  "edges": [
+    {
+      "id": "edge-9dd6416d-d2ca-443d-989d-0d96070c1727",
+      "source": "node-5e054e36-5e8e-4e41-8be3-e6614ca1681f",
+      "target": "storage-ffbba55b-3625-405e-9922-0e2f9e8d03aa",
+      "sourceHandle": "output:item:minecraft%3Awooden_axe",
+      "targetHandle": "input:item:minecraft%3Awooden_axe",
+      "resourceKind": "item",
+      "resourceId": "minecraft:wooden_axe",
+      "label": "Wooden Axe"
+    },
+    {
+      "id": "edge-b131516d-0304-40cf-be15-99fe7d56d1ec",
+      "source": "storage-50339bd7-4ff0-446f-b91a-78be871bcf85",
+      "target": "node-5e054e36-5e8e-4e41-8be3-e6614ca1681f",
+      "sourceHandle": "output:item:oredict%3AstickWood",
+      "targetHandle": "input:item:oredict%3AstickWood",
+      "resourceKind": "item",
+      "resourceId": "oredict:stickWood",
+      "label": "stickWood"
+    },
+    {
+      "id": "edge-2de17e0c-a6eb-45b4-9ed8-db48bf3d215d",
+      "source": "storage-bf6d60c3-497e-44d0-9799-0e3f21f0783a",
+      "target": "node-5e054e36-5e8e-4e41-8be3-e6614ca1681f",
+      "sourceHandle": "output:item:oredict%3AplankWood",
+      "targetHandle": "input:item:oredict%3AplankWood",
+      "resourceKind": "item",
+      "resourceId": "oredict:plankWood",
+      "label": "plankWood"
+    }
+  ],
+  "fuelProfiles": [
+    {
+      "id": "benzene",
+      "name": "Benzene",
+      "fuelFluidId": "benzene",
+      "euPerLiter": 32000,
+      "notes": "GTNH generator fuel value."
+    },
+    {
+      "id": "biodiesel",
+      "name": "Biodiesel",
+      "fuelFluidId": "biodiesel",
+      "euPerLiter": 12800,
+      "notes": "GTNH generator fuel value."
+    },
+    {
+      "id": "steam",
+      "name": "Steam",
+      "fuelFluidId": "steam",
+      "euPerLiter": 16,
+      "notes": "GTNH steam turbine value."
+    }
+  ],
+  "selectedFuelProfileId": "biodiesel",
+  "notes": "Dataset-backed plan. Recipes must come from a normalized GTNH dataset.",
+  "metadata": {
+    "createdAt": "2026-09-18T19:10:13.382Z",
+    "updatedAt": "2026-09-21T02:41:58.422Z"
+  }
+}

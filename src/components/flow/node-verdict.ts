@@ -7,7 +7,7 @@ import type {
   ResourceKind,
   ThroughputResult,
 } from "@/lib/model/types";
-import { isFreeRecipeInput, isOreDictionaryResource, isRecipeInputConsumed, makeResourceKey } from "@/lib/model";
+import { isFreeRecipeInput, isOreDictionaryResource, isRecipeInputConsumed, makeResourceKey, resourceLabel } from "@/lib/model";
 import { getPoolProject, isPoolStorageId } from "@/lib/solver/pool-mode";
 import { findDeathSpirals, type DeathSpiral } from "./death-spiral";
 import { findClogLocks, type ClogLock } from "./clog-lock";
@@ -1757,14 +1757,14 @@ export function buildRailPorts(
       const slot = resources.find(
         (entry) => entry.kind === kind && entry.id === resourceId,
       );
-      // Keep the dictionary's matching/handle identity, but show an actual
-      // accepted item, as the recipe search does before a choice is wired in.
+      // The first member supplies stable color/art for non-animated contexts.
+      // Keep the group identity and label; ResourceIcon cycles only its artwork.
       const face = slot && isOreDictionaryResource(slot)
         ? slot.alternatives?.find((entry) => entry.kind === slot.kind && !isOreDictionaryResource(entry))
         : undefined;
       const resource = slot && face ? {
         ...slot,
-        displayName: face.displayName,
+        displayName: resourceLabel(slot),
         iconPath: face.iconPath,
         iconAtlas: face.iconAtlas,
         dominantColor: face.dominantColor,
@@ -1943,7 +1943,9 @@ export function buildRailPorts(
           ? getInputSupplyHatch(hatchRecipe, hatchNode, { kind, id: resourceId }) : undefined,
         hatchSupplied: Boolean(isInput && hatchNode && hatchRecipe
           && isHatchSuppliedInput(hatchRecipe, hatchNode, { kind, id: resourceId })),
-        displayName: face?.displayName ?? displayName ?? resource?.displayName ?? resourceId,
+        displayName: isOreDictionaryResource({ id: resourceId })
+          ? resourceLabel(slot ?? { id: resourceId })
+          : displayName ?? resource?.displayName ?? resourceId,
         handleId: handleFor(side, { kind, id: resourceId }),
         resource,
         connected,

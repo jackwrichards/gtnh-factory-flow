@@ -1,12 +1,20 @@
 "use client";
 
-import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import {
+  getAlternativeCycleFaces,
+  getAlternativeCycleTick,
+  getServerAlternativeCycleTick,
+  subscribeToAlternativeCycle,
+  type AlternativeCycleFace,
+} from "@/lib/nei/alternative-cycle";
 import { Zap } from "lucide-react";
 import type { ResourceAmount, ResourceIconAtlasRef, ResourceKind } from "@/lib/model/types";
 import { NEI_TEXTURES } from "@/lib/nei-renderer/theme/textures";
 import {
   formatNumberWithThousands,
   resourceLabel,
+  isOreDictionaryResource,
   stripOreDictionaryPrefix,
   trimTrailingDecimalZeros,
 } from "@/lib/model/resources";
@@ -99,7 +107,7 @@ function ResourceIconComponent({
         className,
       ].join(" ")}
     >
-      <IconImage resource={resource} iconPixelSize={iconPixelSize} />
+      <CategoryIconImage resource={resource} iconPixelSize={iconPixelSize} />
 
       {resource && showAmount ? <AmountLabel resource={resource} /> : null}
       {resource?.chance !== undefined ? <ChanceLabel chance={resource.chance} /> : null}
@@ -293,6 +301,67 @@ function buildTooltipLabel(
 function isOreDictionaryNoiseLine(line: string): boolean {
   const normalized = line.trim().toLowerCase();
   return normalized.startsWith("accepts:") || normalized.startsWith("ore dictionary:");
+}
+
+// Only this leaf subscribes to the clock. Names, amounts, handles, wire colors
+// and the solver never see a preview face. Concrete resources stay still.
+function CategoryIconImage(props: { resource?: DisplayResourceAmount; iconPixelSize?: number }) {
+  const faces = props.resource && isOreDictionaryResource(props.resource)
+    ? getAlternativeCycleFaces(props.resource).filter((face) => face.iconPath || face.iconAtlas)
+    : [];
+  if (!props.resource || faces.length === 0) return <IconImage {...props} />;
+  if (faces.length === 1) return <IconImage resource={faces[0]} iconPixelSize={props.iconPixelSize} />;
+  return <CyclingCategoryIcon faces={faces} iconPixelSize={props.iconPixelSize} />;
+}
+
+const visibleCategoryIcons = new Map<Element, (visible: boolean) => void>();
+let categoryIconObserver: IntersectionObserver | undefined;
+const subscribeToNothing = () => () => {};
+
+/** Glance mode keeps the full card mounted but hidden. Those hidden copies
+ * must not animate; one observer also pauses offscreen and collapsed rows. */
+function observeCategoryIcon(element: Element, onVisible: (visible: boolean) => void) {
+  if (typeof IntersectionObserver === "undefined") return () => {};
+  categoryIconObserver ??= new IntersectionObserver((entries) => {
+    for (const entry of entries) visibleCategoryIcons.get(entry.target)?.(entry.isIntersecting);
+  });
+  visibleCategoryIcons.set(element, onVisible);
+  categoryIconObserver.observe(element);
+  return () => {
+    categoryIconObserver?.unobserve(element);
+    visibleCategoryIcons.delete(element);
+    if (visibleCategoryIcons.size === 0) {
+      categoryIconObserver?.disconnect();
+      categoryIconObserver = undefined;
+    }
+  };
+}
+
+function CyclingCategoryIcon({ faces, iconPixelSize }: {
+  faces: AlternativeCycleFace[];
+  iconPixelSize?: number;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [visible, setVisible] = useState(typeof IntersectionObserver === "undefined");
+  useEffect(() => {
+    if (ref.current) return observeCategoryIcon(ref.current, setVisible);
+  }, []);
+  // IntersectionObserver tracks clipping, but CSS visibility preserves the
+  // hidden detail layer's layout box. Skip those copies before notifying React.
+  const subscribeVisible = useCallback((notify: () => void) =>
+    subscribeToAlternativeCycle(() => {
+      if (ref.current && getComputedStyle(ref.current).visibility !== "hidden") notify();
+    }), []);
+  const tick = useSyncExternalStore(
+    visible ? subscribeVisible : subscribeToNothing,
+    visible ? getAlternativeCycleTick : getServerAlternativeCycleTick,
+    getServerAlternativeCycleTick,
+  );
+  return (
+    <span ref={ref} className="flex h-full w-full shrink-0 items-center justify-center">
+      <IconImage resource={faces[tick % faces.length]} iconPixelSize={iconPixelSize} />
+    </span>
+  );
 }
 
 function isBeeSpeciesResource(resource: Pick<ResourceAmount, "id">) {

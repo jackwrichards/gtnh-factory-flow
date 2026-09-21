@@ -47,6 +47,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.3.2",
+    date: "2026-09-20",
+    headline: "Clearer interchangeable ingredients",
+    notes: [
+      "Ingredients such as any wooden planks cycle through their accepted item icons. Rates and wire colors stay steady.",
+      "Existing plans recover missing ingredient icons on recipe cards and supply drawers, without changing their connections.",
+    ],
+  },
+  {
     version: "3.3.1",
     date: "2026-09-20",
     headline: "Small fixes for desired rates",

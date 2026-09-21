@@ -1,4 +1,5 @@
 import type { FactoryNode, Recipe, ResourceAmount, ResourceKind } from "./types";
+import { isOreDictionaryResource } from "./resources";
 
 /**
  * The recipe's input amount, restated in the units of the substitute actually
@@ -38,6 +39,10 @@ export function applyRecipeInputOverrides(
   const inputs = recipe.inputs.map((input, index) => {
     const override = node.recipeInputOverrides?.[String(index)];
     if (!override) {
+      return input;
+    }
+    // Legacy category wires saved the group itself as a choice, hiding its members.
+    if (isOreDictionaryResource(input) && override.kind === input.kind && override.id === input.id) {
       return input;
     }
     changed = true;

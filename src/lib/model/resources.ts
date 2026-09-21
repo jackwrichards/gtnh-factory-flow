@@ -56,14 +56,19 @@ export function parseResourceKey(key: ResourceKey): {
   };
 }
 
-export function resourceLabel(resource: Pick<ResourceAmount, "id" | "displayName">): string {
+export function resourceLabel(resource: Pick<ResourceAmount, "id" | "displayName"> & Partial<Pick<ResourceAmount, "alternatives">>): string {
+  if (isOreDictionaryResource(resource)) {
+    const group = resource.id.slice("oredict:".length);
+    const woodNames: Record<string, string> = {
+      plankWood: "wooden planks", stickWood: "wooden sticks", logWood: "wood logs",
+    };
+    const words = group.replace(/([a-z0-9])([A-Z])/g, "$1 $2").toLowerCase();
+    const memberName = resource.alternatives?.find((entry) => !isVirtualChoiceResource(entry))?.displayName;
+    return `Any ${woodNames[group] ?? memberName ?? words}`;
+  }
   const displayName = stripOreDictionaryPrefix(resource.displayName);
   if (displayName) {
     return displayName;
-  }
-
-  if (isOreDictionaryResource(resource)) {
-    return resource.id.slice("oredict:".length);
   }
 
   return resource.id;

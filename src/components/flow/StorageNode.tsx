@@ -38,6 +38,8 @@ import { hasAnySolveNumbers } from "@/lib/solver/throughput";
 import { openRatioEditor } from "./ratio-editor";
 import { RatioSetupOutput } from "./RatioWireLabel";
 import { ratioExportShare } from "@/lib/model/storage-ratios";
+import { getCategoryPresentation } from "@/lib/model/category-presentation";
+import { resourceLabel } from "@/lib/model/resources";
 
 
 export interface StorageNodeData extends Record<string, unknown> {
@@ -206,6 +208,9 @@ function storageIconPixelSize(
 
 function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   const { storage, result } = data;
+  const category = useFactoryStore((state) =>
+    getCategoryPresentation(state.project.recipes, storage.kind, storage.resourceId),
+  );
   const reactFlowStore = useStoreApi();
   // The invisible wire handles blanket the card body, and React Flow does not
   // select a node for clicks that land on a handle - so a plain click (no
@@ -282,7 +287,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
         )
       : undefined;
   const net = result?.netPerSecond ?? 0;
-  const title = storage.displayName ?? storage.resourceId;
+  const title = resourceLabel(category ?? { id: storage.resourceId, displayName: storage.displayName });
   const isTank = storage.kind === "fluid";
   const isPlainFluid = isTank && !storage.iconPath && !storage.iconAtlas;
   // The card wears its JOB's colour, the same dialect the side panel already
@@ -424,7 +429,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               rather than as its contents. Node SIZE is untouched, which is
               what the router cares about. */}
           <ResourceIcon
-            resource={{ ...storage, id: storage.resourceId, amount: 1 }}
+            resource={{ ...storage, id: storage.resourceId, amount: 1, alternatives: category?.alternatives }}
             showAmount={false}
             bare
             iconPixelSize={storageIconPixelSize(GLANCE_ICON_PX, storage)}
@@ -561,7 +566,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
                 <StorageTargetRule storage={storage} input={isInputRate(storage, role)} compact className="!absolute right-1 top-1 z-40" />
               ) : null}
               <ResourceIcon
-                resource={{ ...storage, id: storage.resourceId, amount: 1 }}
+                resource={{ ...storage, id: storage.resourceId, amount: 1, alternatives: category?.alternatives }}
                 showAmount={false}
                 bare
                 iconPixelSize={storageIconPixelSize(
@@ -610,6 +615,9 @@ export function StorageTileFace({
   role: StorageRole;
   net?: number;
 }) {
+  const category = useFactoryStore((state) =>
+    getCategoryPresentation(state.project.recipes, storage.kind, storage.resourceId),
+  );
   const isTank = storage.kind === "fluid";
   const isPlainFluid = isTank && !storage.iconPath && !storage.iconAtlas;
   const tint = storageTint(storage, role);
@@ -638,7 +646,7 @@ export function StorageTileFace({
         <div className="relative mx-auto flex min-h-0 w-full flex-1 flex-col">
           <div className="grid min-h-0 w-full flex-1 place-items-center">
             <ResourceIcon
-              resource={{ ...storage, id: storage.resourceId, amount: 1 }}
+              resource={{ ...storage, id: storage.resourceId, amount: 1, alternatives: category?.alternatives }}
               showAmount={false}
               bare
               iconPixelSize={storageIconPixelSize(

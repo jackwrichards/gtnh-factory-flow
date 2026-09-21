@@ -61,13 +61,13 @@ function rails(p: FactoryProject) {
 }
 
 describe("issue #49: repeated Auto Workbench ingredients", () => {
-  it("shows four concrete names and icons before wiring, keeping the dictionary match", () => {
+  it("shows stable category names and representative icons before wiring", () => {
     const inputs = rails(project());
     expect(inputs.map((port) => port.displayName)).toEqual([
       "Sticky Resin",
-      "Fine Copper Wire",
-      "1x Copper Wire",
-      "Charcoal Dust",
+      "Any Fine Copper Wire",
+      "Any 1x Copper Wire",
+      "Any Charcoal Dust",
     ]);
     expect(inputs.every((port) => port.resource?.iconPath)).toBe(true);
     expect(inputs[1]?.resourceId).toBe("oredict:wireFineCopper");

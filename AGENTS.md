@@ -112,6 +112,17 @@ Working notes for future agents on GTNH Factory Flow.
 - Oredict recipes selected from a concrete item must render/link as that concrete item when compatible. Spruce Log must not silently become Oak Log after node creation, refresh, or reload.
 - Tooltips should not show noisy ore dictionary internals when the node was created from a concrete item context unless that is explicitly useful.
 - Resource matching/handles must use the effective rendered recipe/resource, including concrete oredict overrides, not only the raw recipe.
+- Unresolved ore-dictionary inputs cycle their item ART only (2026-09-20).
+  Names stay "Any …"; rates, wire colors, handles, and solver identity stay
+  fixed. ResourceIcon uses the shared alternative clock only in its art leaf;
+  hidden/offscreen copies pause through one shared visibility observer and a
+  CSS visibility check before notifying React.
+  Search does not offer a manual picker for dictionary groups; concrete
+  substitute pickers and saved/connected concrete contexts still work.
+  A dictionary wire does not select a member. Legacy same-category overrides
+  must retain the original recipe alternatives. Drawers and summary rows borrow
+  saved recipe members through category-presentation.ts; never store animation
+  frames or invent a concrete source just to give a category an icon.
 
 ## Cells Are Items
 
@@ -220,7 +231,7 @@ Working notes for future agents on GTNH Factory Flow.
   hand-craft as the second handler. Purging the crafting maps from the
   dataset itself is a pipeline decision that has NOT been made.
 - Result cards merge duplicate slot entries (nine planks is one line, x9) and
-  oredict slots wear their first concrete face; both are display-only.
+  oredict slots cycle through concrete faces; both are display-only.
   Chips that satisfy a stencil condition ring cyan; chips browse on
   click/right-click like port rows. The stencil's arrow SWAPS the two sides.
 - WHERE AN ADD LANDS: every spawn runs `nearestFreeSpot` over

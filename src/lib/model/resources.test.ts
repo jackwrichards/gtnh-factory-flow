@@ -55,7 +55,7 @@ describe("resource helpers", () => {
 
   it("removes ore dictionary noise from labels used in recipes", () => {
     expect(resourceLabel({ id: "oredict:stickWood", displayName: "Ore Dictionary: stickWood" })).toBe(
-      "stickWood",
+      "Any wooden sticks",
     );
   });
 

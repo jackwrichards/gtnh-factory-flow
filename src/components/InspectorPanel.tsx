@@ -16,7 +16,8 @@ import { getUiScale } from "@/lib/ui-scale";
 import "./inspector/panel.css";
 import { ProductTargetRow } from "./inspector/ProductTargetRow";
 import { MachineShoppingList } from "./MachineShoppingList";
-import { makeResourceKey } from "@/lib/model/resources";
+import { makeResourceKey, resourceLabel } from "@/lib/model/resources";
+import { getCategoryPresentation } from "@/lib/model/category-presentation";
 import { formatSignedRate } from "./inspector/flow-rate";
 import { getStorageRoles } from "@/lib/model/storage-role";
 import {
@@ -1450,7 +1451,10 @@ const FlowResourceRow = memo(function FlowResourceRow({
   const netEnergy = energyEuT !== undefined && balance.kind !== "power"
     ? energyPerUnit(energyEuT, Math.abs(netValue)) : undefined;
   const unit = rateUnitFor(balance.kind);
-  const name = balance.displayName ?? balance.resourceId;
+  const category = useFactoryStore((state) =>
+    getCategoryPresentation(state.project.recipes, balance.kind, balance.resourceId),
+  );
+  const name = resourceLabel(category ?? { id: balance.resourceId, displayName: balance.displayName });
 
   return (
     // The row is a group, not one button: the star and the eye are their own
@@ -1534,7 +1538,8 @@ const FlowResourceRow = memo(function FlowResourceRow({
               kind: balance.kind,
               id: balance.resourceId,
               amount: 1,
-              displayName: balance.displayName,
+              displayName: name,
+              alternatives: category?.alternatives,
               iconPath: resource?.iconPath,
               iconAtlas: resource?.iconAtlas,
               // Needed for the fluid fallback, which has no art to fall back on.

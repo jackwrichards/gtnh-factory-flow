@@ -35,7 +35,7 @@ import {
 import type { MachineTier, ResourceAmount } from "@/lib/model/types";
 import { getVoltageTierIndex } from "@/lib/model/tiers";
 import { energyPerUnitSuffix, type TimeRateUnit } from "@/lib/model/rate-unit";
-import { formatCompact } from "@/lib/model/resources";
+import { formatCompact, resourceLabel } from "@/lib/model/resources";
 import { playBoardSound } from "@/lib/board-sounds";
 import { ENERGY_READING_TEXT } from "./flow/flow-explainers";
 import { GT_TIER_COLORS } from "./flow/tier-colors";
@@ -1477,7 +1477,7 @@ export function RecipeSearchOverlay({
               onPointerDown={(event) => event.stopPropagation()}
             >
               <div className="truncate px-2 py-1 text-[11px] font-bold text-[var(--mc-ink-muted)]">
-                {chipMenu.resource.displayName ?? chipMenu.resource.id}
+                {resourceLabel(chipMenu.resource)}
               </div>
               {(
                 [
@@ -1933,8 +1933,8 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
   // Crafting-grid recipes arrive one slot at a time (nine separate Iron
   // Plates), and oredict slots arrive wearing their oredict name. The chips
   // read as a shopping list instead: same items merged with their amounts
-  // summed, many-form slots wearing a face - the first by default, or the
-  // one PICKED here. Picks ride onto the board with the add.
+  // summed. Dictionary groups retain their identity while their icons cycle.
+  // Explicit concrete substitute picks still ride onto the board with the add.
   const [inputPicks, setInputPicks] = useState<RecipeInputPicks>({});
   const inputChips = useMemo(() => {
     const merged = new Map<string, { raw: (typeof preview.inputs)[number]; indexes: number[] }>();
@@ -1949,7 +1949,9 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
       }
     });
     return [...merged.values()].map(({ raw, indexes }) => {
-      const faces = getAlternativeCycleFaces(raw);
+      // Dictionary members preview interchangeably; concrete substitutes keep
+      // their picker because their quantities can differ.
+      const faces = isOreDictionaryResource(raw) ? [] : getAlternativeCycleFaces(raw);
       const face = inputPicks[indexes[0]] ?? faces[0];
       return {
         raw,
@@ -2523,7 +2525,7 @@ function ResourceChip({
       {/* The icon is the big thing; the name is smaller and may take a
           second line rather than losing its second word to an ellipsis. */}
       <span className="min-w-0 flex-1 line-clamp-2 whitespace-normal text-[12px] font-bold leading-tight text-[var(--mc-ink)]">
-        {resource.displayName ?? resource.id}
+        {resourceLabel(resource)}
       </span>
       <span
         className={[

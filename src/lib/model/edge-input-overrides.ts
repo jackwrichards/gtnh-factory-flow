@@ -1,5 +1,5 @@
 import type { FactoryEdge, FactoryProject, ResourceAmount } from "./types";
-import { isRecipeInputConsumed, resourceMatchesInput } from "./resources";
+import { isOreDictionaryResource, isRecipeInputConsumed, resourceMatchesInput } from "./resources";
 import { inputOverrideAmount } from "./recipe-input-overrides";
 import { sectionHandleId, sectionNodeView, splitSectionHandleId } from "./shared-machine";
 
@@ -15,6 +15,8 @@ export function applyEdgeInputOverride(
   resource?: ResourceFace,
 ): FactoryProject {
   if (edge.crossForm) return project;
+  // Supplying an entire category does not select one of its members.
+  if (isOreDictionaryResource({ id: edge.resourceId })) return project;
   const card = project.nodes.find((node) => node.id === edge.target);
   const { section, handleId } = splitSectionHandleId(edge.targetHandle);
   if (!card || (section > 0 && !card.extraRecipes?.[section - 1])) return project;

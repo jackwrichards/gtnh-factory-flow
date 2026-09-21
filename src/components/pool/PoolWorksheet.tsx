@@ -25,6 +25,7 @@ import type { ResourceAmount, FactoryStorage, ProductionGroup } from "@/lib/mode
 import { getStorageRoles, type StorageRole } from "@/lib/model/storage-role";
 import { powerDisplayFromEuT, powerDisplaySuffix, rateSuffixForKind } from "@/lib/model/rate-unit";
 import { ResourceIcon } from "../nei/ResourceIcon";
+import { getCategoryPresentation } from "@/lib/model/category-presentation";
 import { MinecraftTooltip } from "../nei/MinecraftTooltip";
 import { CircuitChip, RecipeNodeEditor, SolvedMachinesStat } from "../flow/RecipeNode";
 import { ItemPickerPopover } from "../ItemPickerPopover";
@@ -882,13 +883,18 @@ function ResourceLink({
   nameTooltip?: boolean;
   iconsOnly?: boolean;
 }) {
+  const category = useFactoryStore((state) =>
+    getCategoryPresentation(state.project.recipes, resource.kind, resource.id),
+  );
+  const displayResource = category ? { ...resource, alternatives: category.alternatives } : resource;
+  const hasCategoryArt = displayResource.alternatives?.some((face) => face.iconPath || face.iconAtlas);
   const { begin, suppressClick } = useWorksheetPointerDrag();
   const browse = (mode: BrowseMode) => {
     if (resource.kind === "power") return;
     useFactoryStore.getState().browseResource({ ...resource, anchorNodeId: nodeId }, mode);
   };
   const { pressHandlers, menu, wasDragged, wasTouch, openFromTap } = useBrowseMenu({
-    name: resourceLabel(resource),
+    name: resourceLabel(displayResource),
     onPick: browse,
   });
   return (
@@ -896,8 +902,8 @@ function ResourceLink({
       <button
         type="button"
         className="pool-resource-link"
-        aria-label={iconsOnly ? resourceLabel(resource) : undefined}
-        title={iconsOnly && nameTooltip ? resourceLabel(resource) : undefined}
+        aria-label={iconsOnly ? resourceLabel(displayResource) : undefined}
+        title={iconsOnly && nameTooltip ? resourceLabel(displayResource) : undefined}
         draggable={false}
         onDragStart={(event) => event.preventDefault()}
         {...pressHandlers}
@@ -924,13 +930,13 @@ function ResourceLink({
           }
         }}
       >
-        {iconsOnly && !resource.iconPath && !resource.iconAtlas && resource.kind !== "power" ? (
+        {iconsOnly && !resource.iconPath && !resource.iconAtlas && !hasCategoryArt && resource.kind !== "power" ? (
           <span className="pool-resource-fallback" aria-hidden>
-            {resourceLabel(resource).slice(0, 2)}
+            {resourceLabel(displayResource).slice(0, 2)}
           </span>
         ) : (
           <ResourceIcon
-            resource={resource}
+            resource={displayResource}
             size="sm"
             bare
             className={
@@ -947,8 +953,8 @@ function ResourceLink({
           />
         )}
         {iconsOnly ? null : (
-          <span title={nameTooltip ? resourceLabel(resource) : undefined}>
-            {resourceLabel(resource)}
+          <span title={nameTooltip ? resourceLabel(displayResource) : undefined}>
+            {resourceLabel(displayResource)}
           </span>
         )}
       </button>
