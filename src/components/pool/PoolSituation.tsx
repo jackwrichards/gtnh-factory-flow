@@ -1,4 +1,7 @@
-import { AlertTriangle, Check, CircleDashed, LoaderCircle, ArrowRight, CircleHelp, X } from "lucide-react";
+import { useId, useRef, useState } from "react";
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+import { playBoardSound } from "@/lib/board-sounds";
+import { AlertTriangle, Check, CircleDashed, LoaderCircle, ArrowRight, CircleHelp } from "lucide-react";
 import type { FactoryProject, FactoryStorage, NodeThroughputResult, ThroughputResult } from "@/lib/model/types";
 import type { StorageRole } from "@/lib/model/storage-role";
 import { hasStorageTarget, isInputRate, storageTargetMode } from "@/lib/model/storage-target";
@@ -15,6 +18,20 @@ export function PoolSituation({ project, result, products, roles, resources, rec
   recipes: (NodeThroughputResult | undefined)[];
   selectedTarget?: FactoryStorage;
 }) {
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const rulesId = useId();
+  const rulesPanel = useRef<HTMLDivElement>(null);
+  const rulesButton = useRef<HTMLButtonElement>(null);
+  const setRulesVisible = (open: boolean) => {
+    if (open === rulesOpen) return;
+    playBoardSound(open ? "pageOpen" : "pageClose");
+    setRulesOpen(open);
+  };
+  useDropdownDismiss(rulesOpen, {
+    refs: [rulesPanel, rulesButton],
+    onClose: () => setRulesVisible(false),
+    fade: true,
+  });
   const targets = products.filter(storage => hasStorageTarget(storage, roles.get(storage.id)));
   const failed = targets.filter(storage => result.storages[storage.id]?.targetUnreachable);
   const requested = targets.some(storage => storageTargetMode(storage, roles.get(storage.id)) !== "at-most" && Math.abs(storage.targetPerSecond ?? 0) > 0);
@@ -52,15 +69,10 @@ export function PoolSituation({ project, result, products, roles, resources, rec
         <span className="pool-help-ignore">{rootRules.outside} on Ignore</span>
       </div>
       {ignoredTargets > 0 ? <span title="Saved targets that are not enforced">{ignoredTargets} ignored {ignoredTargets === 1 ? "target" : "targets"}</span> : null}
-      <details className="pool-situation-help" onKeyDown={event => {
-        if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); }
-      }}>
-        <summary><CircleHelp size={12} aria-hidden />Rules example</summary>
-        <div className="pool-rule-guide">
-          <header><strong>Material rules <span className="pool-rule-example-tag">(Example)</span></strong><button type="button" aria-label="Close material rules" onClick={event => {
-            const details = event.currentTarget.closest("details");
-            if (details) { details.open = false; details.querySelector("summary")?.focus(); }
-          }}><X size={13} aria-hidden /></button></header>
+      <div className="pool-situation-help">
+        <button ref={rulesButton} type="button" aria-expanded={rulesOpen} aria-controls={rulesId} onClick={() => setRulesVisible(!rulesOpen)}><CircleHelp size={12} aria-hidden />Rules example</button>
+        {rulesOpen ? <div ref={rulesPanel} id={rulesId} className="pool-rule-guide" role="region" aria-label="Material rules example">
+          <header><strong>Material rules <span className="pool-rule-example-tag">(Example)</span></strong></header>
           <p className="pool-rule-intro">Goal: 1 product. Uses 100 water, recycles 30.</p>
           <section className="pool-rule-example-case" aria-label="Match example">
             <div className="pool-situation-scope">Match</div>
@@ -74,8 +86,8 @@ export function PoolSituation({ project, result, products, roles, resources, rec
           </section>
           <p className="pool-rule-group-note"><strong>In groups:</strong> Ignore shares with the parent. Its rules still apply.</p>
           <p className="pool-rule-footnote">Desired rates still apply.</p>
-        </div>
-      </details>
+        </div> : null}
+      </div>
     </div>
   </>;
 }
