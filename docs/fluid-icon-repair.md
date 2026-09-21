@@ -1,6 +1,10 @@
 # Repairing faint fluid icons without Minecraft
 
-The existing exported PNGs contain the fluid color and texture. Repair them with:
+The existing exported PNGs contain the fluid color and texture. Only captures
+below 20% mean painted opacity are repaired; readable translucent artwork such
+as water is preserved byte-for-byte. Start from the original exported PNGs if an
+earlier broad repair already brightened them: lowering the threshold cannot
+undo that transformation. Repair them with:
 
 ```powershell
 node tools/dataset-pipeline/scripts/normalize-fluid-icon-alpha.mjs public/datasets/gtnh/local-2.9.0-beta-2 --rename

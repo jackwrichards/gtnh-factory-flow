@@ -65,7 +65,7 @@ function read(dir, file) {
 }
 
 describe("fluid icon repair for immutable texture URLs", () => {
-  it.each([17, 255])(
+  it.each([17, 51, 126, 195, 255])(
     "repairs or readdresses alpha %i captures in every artifact without losing old URLs",
     (alpha) => {
       const f = fixture(alpha);
@@ -75,10 +75,10 @@ describe("fluid icon repair for immutable texture URLs", () => {
       const bytes = fs.readFileSync(path.join(f.rendered, path.basename(newPath)));
       expect(newPath).toContain(crypto.createHash("sha1").update(bytes).digest("hex").slice(0, 12));
       const png = PNG.sync.read(bytes);
-      expect(png.data[5 * 4 + 3]).toBe(255);
+      expect(png.data[5 * 4 + 3]).toBe(alpha < 51 ? 255 : alpha);
       expect(png.data[3]).toBe(0); // Keep the export's transparent padding.
       if (alpha === 17) expect(png.data[5 * 4 + 2]).toBeGreaterThan(100);
-      else expect(bytes).toEqual(f.original); // Already-repaired pixels are not brightened twice.
+      else expect(bytes).toEqual(f.original); // Readable translucency and already-repaired pixels are preserved exactly.
       expect(fs.readFileSync(path.join(f.rendered, f.basename))).toEqual(f.original);
       expect(fs.readFileSync(path.join(f.rendered, "item-111111111111.png"))).toEqual(f.original);
       for (const artifact of f.artifacts) {

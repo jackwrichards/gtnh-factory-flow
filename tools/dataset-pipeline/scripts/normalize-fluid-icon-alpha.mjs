@@ -5,17 +5,18 @@ import crypto from "node:crypto";
 import { PNG } from "pngjs";
 
 /**
- * Make ghost fluids visible: turn translucent fluid icons into solid chips
+ * Make ghost fluids visible: turn nearly invisible fluid icons into solid chips
  * of their own colour.
  *
  * The oracle exporter captures fluid icons exactly as the game draws them,
  * and the game draws gases at 10-30% opacity riding a dim noise texture. The
  * hue in those pixels is the fluid's real tint - oxygen teal, hydrogen red -
  * but at that alpha and brightness the capture simply vanishes on the
- * planner's dark board. This pass rebuilds every translucent FLUID icon as
+ * planner's dark board. This pass rebuilds only nearly invisible FLUID icons as
  * an opaque chip: the capture's average colour lifted to a readable
  * luminance, shaded by the original alpha pattern so it still reads as a
- * liquid. Item icons are never touched: some are legitimately translucent,
+ * liquid. Readable translucent fluids such as water retain their exact pixels.
+ * Item icons are never touched: some are legitimately translucent,
  * and none of them hide behind a fluid's render alpha.
  *
  * Two modes:
@@ -49,10 +50,10 @@ if (!datasetDir || !fs.existsSync(datasetDir)) {
 }
 
 /**
- * Icons whose average visible pixel is at least this opaque (0.95) carry
- * their own look and are left alone - milk and lava already read fine.
+ * Only fix captures below 20% mean opacity. Ordinary translucency is part
+ * of the artwork: water is about 50% opaque and must remain unchanged.
  */
-const MIN_MEAN_ALPHA = 242;
+const MIN_MEAN_ALPHA = 51;
 /**
  * Where a translucent fluid's colour is lifted to. The capture's hue is the
  * game's real tint - oxygen teal, hydrogen red - but it rides a dim noise
