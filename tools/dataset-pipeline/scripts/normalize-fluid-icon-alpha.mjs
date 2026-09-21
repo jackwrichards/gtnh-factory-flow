@@ -22,16 +22,20 @@ import { PNG } from "pngjs";
  *
  * - In-place (default), for a dataset BUILD. Nothing has shipped yet, and a
  *   new dataset version gets fresh texture URLs anyway, so the files can be
- *   rewritten under their own names. generate-dataset.mjs runs this after the
- *   indexes are built and before recipes.json is compressed.
+ *   rewritten under their own names. Use only for an unpublished version.
+ *   generate-dataset.mjs uses --rename even during builds, because a version
+ *   may be rebuilt and its URLs may already be cached.
  *
- * - `--rename`, for a dataset that is ALREADY PUBLISHED. Textures are served
+ * - `--rename`, for a dataset that may ALREADY BE PUBLISHED. Textures are served
  *   `immutable, max-age=1yr`, so a browser that has seen the ghost keeps it
  *   for a year no matter what the file says now. The fixed icon therefore
  *   gets a NEW name (content-hash suffix, same length as the old one), the
  *   old file stays behind for stale caches, and every reference in the
  *   compressed artifacts is patched byte-for-byte - same-length names make
  *   that safe without parsing half a gigabyte of JSON.
+ *   Already-opaque icons also get content-hashed names: an earlier in-place
+ *   repair may have fixed the local pixels while the old URL still serves a
+ *   faint capture from another server or a browser cache.
  *
  * Usage: normalize-fluid-icon-alpha.mjs <dataset-dir> [--rename]
  */
@@ -101,19 +105,21 @@ for (const basename of [...fluidIconBasenames].sort()) {
     continue;
   }
 
-  const png = PNG.sync.read(fs.readFileSync(filePath));
+  const originalBuffer = fs.readFileSync(filePath);
+  const png = PNG.sync.read(originalBuffer);
   const applied = normalizeFluidPng(png);
   if (!applied) {
     alreadyVisible += 1;
-    continue;
+    if (!rename) continue;
+  } else {
+    normalized += 1;
+    report.push(`${basename}: ${applied}`);
   }
 
-  const buffer = PNG.sync.write(png);
-  report.push(`${basename}: ${applied}`);
+  const buffer = applied ? PNG.sync.write(png) : originalBuffer;
 
   if (!rename) {
     fs.writeFileSync(filePath, buffer);
-    normalized += 1;
     continue;
   }
 
@@ -121,9 +127,10 @@ for (const basename of [...fluidIconBasenames].sort()) {
   if (!suffixMatch) {
     // Without the hash suffix there is no same-length name to swap in, so the
     // byte patch cannot carry it. Fix the pixels anyway for uncached readers.
-    console.warn(`No hash suffix on ${basename}; normalized in place instead of renaming.`);
-    fs.writeFileSync(filePath, buffer);
-    normalized += 1;
+    if (applied) {
+      console.warn(`No hash suffix on ${basename}; normalized in place instead of renaming.`);
+      fs.writeFileSync(filePath, buffer);
+    }
     continue;
   }
 
@@ -132,16 +139,16 @@ for (const basename of [...fluidIconBasenames].sort()) {
     .update(buffer)
     .digest("hex")
     .slice(0, 12)}.png`;
+  if (newBasename === basename) continue;
   // The ghost file stays: a browser holding a cached recipe response may still
   // ask for the old name, and a missing icon is worse than a faint one.
   fs.writeFileSync(path.join(renderedDir, newBasename), buffer);
   renames.set(basename, newBasename);
-  normalized += 1;
 }
 
 console.log(
   `Normalized ${normalized} fluid icons ` +
-    `(${alreadyVisible} already visible, ${missing} missing files).`,
+    `(${alreadyVisible} already visible, ${missing} missing files; ${renames.size} URLs refreshed).`,
 );
 for (const line of report) {
   console.log(`  ${line}`);

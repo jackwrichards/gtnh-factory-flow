@@ -106,9 +106,9 @@ console.log(`Building resource index for ${versionId}.`);
 await buildResourceIndex(recipeDatasetPath);
 console.log(`Building recipe index for ${versionId}.`);
 await buildRecipeIndex(recipeDatasetPath, outDir);
-// After the indexes so the pass can read fluid references from them, before
-// compression so nothing has to be patched. In-place is enough here: a new
-// dataset version has fresh texture URLs, so no browser holds a stale copy.
+// After the indexes so the pass can read fluid references from them. Content
+// hash the repaired icons and update every artifact, including recipes.json:
+// rebuilding an existing version must not reuse an immutable ghost-icon URL.
 console.log(`Normalizing fluid icon alpha for ${versionId}.`);
 await normalizeFluidIconAlpha(outDir);
 
@@ -332,7 +332,7 @@ async function normalizeFluidIconAlpha(datasetOutDir) {
   const exitCode = await new Promise((resolve) => {
     const child = spawn(
       "node",
-      ["tools/dataset-pipeline/scripts/normalize-fluid-icon-alpha.mjs", datasetOutDir],
+      ["tools/dataset-pipeline/scripts/normalize-fluid-icon-alpha.mjs", datasetOutDir, "--rename"],
       {
         stdio: "inherit",
         env: process.env,

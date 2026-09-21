@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
+import { computeDatasetChecksum } from "./dataset-checksum.mjs";
 import readline from "node:readline";
 import { createGunzip } from "node:zlib";
 
@@ -24,10 +24,7 @@ for (const entry of entries) {
 
   const { recipeIndexPath, recipeLookupIndexPath, recipesPath, resourceIndexPath } = datasetFiles;
   const dataset = await readRecipeDatasetMetadata(recipesPath);
-  const checksumSha256 = crypto
-    .createHash("sha256")
-    .update(await fs.readFile(recipeLookupIndexPath))
-    .digest("hex");
+  const checksumSha256 = await computeDatasetChecksum(path.dirname(recipesPath));
 
   discoveredVersions.push({
     id: dataset.datasetVersionId,
