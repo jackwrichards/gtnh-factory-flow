@@ -64,8 +64,10 @@ export function ProductionScopeHeader({
   inputs,
   outputs,
   renderResource,
+  overview,
 }: {
   group?: ProductionGroup;
+  overview?: ReactNode;
   collapsed?: boolean;
   hasContents?: boolean;
   onToggle?: () => void;
@@ -117,6 +119,9 @@ export function ProductionScopeHeader({
     >
       <tr>
         <td colSpan={8}>
+          <div className={overview ? "pool-scope-overview" : undefined}>
+            {overview}
+            <div className="pool-scope-content">
           <div className="pool-production-heading">
             {group ? (
               <>
@@ -231,8 +236,8 @@ export function ProductionScopeHeader({
                   const entries = visibleMaterials.filter(([, entry]) => direction(entry) === index);
                   if (!entries.length) return null;
                   return <table className="pool-material-table" key={label} aria-label={label + " for " + name}>
+                    <caption title={index === 2 ? "No net input or output, including inactive materials." : undefined}>{label}</caption>
                     <tbody><tr>
-                      <th scope="row" title={index === 2 ? "No net input or output, including inactive materials." : undefined}>{label}</th>
                       <td><div className="pool-material-columns">
                 {entries.map(([key, { resource, row, input, output }]) => {
                   const material = resource.displayName ?? resource.id;
@@ -265,6 +270,8 @@ export function ProductionScopeHeader({
               </div>
             </section>
           ) : null}
+            </div>
+          </div>
         </td>
       </tr>
     </tbody>

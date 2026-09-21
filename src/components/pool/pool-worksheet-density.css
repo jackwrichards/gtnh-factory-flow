@@ -159,7 +159,10 @@
 }
 .pool-worksheet--dense .pool-machine-count {
   flex-shrink: 0;
-  max-width: 65px;
+  flex-basis: 65px;
+  width: 65px;
+  display: flex;
+  justify-content: flex-end;
 }
 .pool-worksheet--dense .pool-machine-count [data-tooltip-root] > div {
   height: 20px;
@@ -525,8 +528,8 @@
 /* Overview and scope balances use the available width, with no empty summary rows. */
 .pool-worksheet--dense .pool-overview {
   display: grid;
-  grid-template-columns: minmax(360px, 560px) minmax(360px, 1fr) 260px;
-  grid-template-areas: "rates situation power";
+  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-areas: "rates power";
   gap: 12px;
   align-items: start;
   margin-bottom: 4px;
@@ -631,7 +634,7 @@
   width: 24px;
   transform: none;
 }
-@container (max-width: 650px) {
+@container (max-width: 800px) {
   .pool-worksheet--dense .pool-overview {
     grid-template-columns: minmax(0, 1fr);
     gap: 6px;
@@ -798,37 +801,47 @@
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr:first-child > .pool-actions-cell { grid-column: 3 / -1; grid-row: 2; }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] :is(.pool-status-cell, .pool-circuit-cell, .pool-takes-cell, .pool-makes-cell, .pool-actions-cell) { grid-row: calc(var(--pool-section-row) + 1); }
 }
-/* Target rules sit beside the saved amount; ignored goals remain editable. */
-.pool-worksheet--dense .pool-products-table th:nth-child(2) { width: 200px; }
-.pool-worksheet--dense .pool-products-table th:nth-child(3) { width: 120px; }
-.pool-target-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-right: 4px; }
+/* Rate rules and outcomes are separate, labeled columns. */
+.pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(2) { width: 70px; }
+.pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(3) { width: 100px; }
+.pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(4) { width: 90px; }
+.pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(5) { width: 95px; }
+.pool-worksheet--dense .pool-products-table .pool-rates-columns th:last-child { width: 24px; }
+.pool-rates-title-row { padding: 0 5px; border-bottom: 1px solid #ffffff18; background: #ffffff06; text-align: left; }
+.pool-rates-title-row .pool-overview-title { min-height: 20px; }
+.pool-rates-title-row .pool-add-product { margin-left: auto; }
+.pool-rates-title-row .pool-drop-hint { overflow: visible; flex-shrink: 0; }
+.pool-worksheet--dense .pool-products-table :is(.pool-product-rule, .pool-product-status),
+.pool-worksheet--dense .pool-products-table .pool-rates-columns :is(th:nth-child(2), th:nth-child(5)) { text-align: left; }
+.pool-product-status { font: 9px var(--app-font); }
+.pool-product-status[data-tone="muted"] { color: var(--mc-ink-muted); }
+.pool-product-status[data-tone="met"] { color: var(--flow-output); }
+.pool-product-status[data-tone="failed"] { color: var(--flow-input); }
+.pool-product-status button { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; }
+.pool-product-status button:hover .pool-status-why { text-decoration: underline; }
+.pool-status-why { font-size: 8px; opacity: .8; }
+.pool-target-controls { display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; }
 .pool-target-controls > [data-tooltip-root] { flex-shrink: 0; }
-.pool-target-rule { width: 64px; flex: 0 0 64px; padding: 1px 0; font: 10px var(--app-font); color: var(--mc-ink); background: transparent; border: 0; border-bottom: 1px dotted #ffffff40; cursor: pointer; }
+.pool-target-rule { width: 64px; padding: 0; font: 10px var(--app-font); color: var(--mc-ink); background: transparent; border: 0; border-bottom: 1px dotted #ffffff40; cursor: pointer; }
 .pool-target-rule option { background: var(--surface, #24272c); color: var(--mc-ink); }
 .pool-target-rule:focus-visible { outline: 1px solid #adc7ff; }
 .pool-product[data-target-ignored] .pool-product-target [aria-label="Required amount"] { opacity: .5; }
 .pool-product[data-target-ignored] .pool-target-rule { color: var(--mc-ink-muted); }
-@container (max-width: 440px) {
-  .pool-worksheet--dense .pool-products-table th:nth-child(2) { width: 112px; }
-  .pool-worksheet--dense .pool-products-table th:nth-child(3) { width: 120px; }
-  .pool-target-controls { flex-direction: column; gap: 2px; padding: 3px 0; }
-  .pool-target-rule { flex: none; height: 18px; }
-}
 
 /* Compact material tables keep direction, rate and supply rule on one line. */
 .pool-scope-materials { margin-bottom: 2px; }
 .pool-material-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 10px; min-height: 18px; margin-bottom: 2px; }
-.pool-material-strip { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 3px 8px; max-height: 120px; overflow: auto; overscroll-behavior: contain; }
-.pool-material-table { flex: 1 1 300px; width: auto; min-width: 0; max-width: 100%; table-layout: fixed; border-collapse: collapse; background: #6f9cff0d; }
-.pool-material-table th { width: 46px; padding: 3px 5px; vertical-align: top; text-align: left; font: 9px/16px var(--app-font); color: var(--mc-ink-muted); }
+.pool-material-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 8px; max-height: 140px; overflow: auto; overscroll-behavior: contain; }
+.pool-material-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: collapse; background: #6f9cff0d; }
+.pool-material-table caption { padding: 1px 4px; text-align: left; font: 9px/16px var(--app-font); color: var(--mc-ink-muted); background: #6f9cff0d; }
 .pool-material-table td { padding: 0 4px; }
-.pool-material-columns { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 112px), 112px)); column-gap: 4px; }
-.pool-scope-material { display: grid; grid-template-columns: 18px max-content max-content; justify-content: start; align-items: center; gap: 2px; min-width: 0; height: 22px; border-bottom: 1px solid #ffffff08; }
+.pool-material-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 8px; }
+.pool-scope-material { display: grid; grid-template-columns: 18px minmax(0, 1fr) 40px; justify-content: start; align-items: center; gap: 2px; min-width: 0; height: 22px; border-bottom: 1px solid #ffffff08; }
 .pool-scope-material .pool-resource-link { height: 18px; justify-content: center; }
-.pool-material-rate { white-space: nowrap; font: 9px/11px var(--app-font); font-variant-numeric: tabular-nums; }
+.pool-material-rate { text-align: right; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 9px/11px var(--app-font); font-variant-numeric: tabular-nums; }
 .pool-material-rate strong { font-weight: 600; }
 .pool-material-rate small { margin-left: 2px; font-size: 7px; color: color-mix(in srgb, currentColor 35%, #9ca3af); }
-.pool-material-columns:has(.pool-material-inherited) { grid-template-columns: repeat(auto-fill, minmax(min(100%, 164px), 164px)); }
+.pool-scope-material:has(.pool-material-inherited) { grid-template-columns: 18px minmax(0, 1fr) 76px; }
 .pool-material-rule-control { position: relative; display: inline-flex; align-items: center; width: 40px; height: 16px; margin-left: 2px; border-radius: 3px; background: #ffffff06; box-shadow: inset 0 0 0 1px #adc7ff0a; }
 .pool-material-rule-control > svg { position: absolute; right: 3px; top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--mc-ink-muted); }
 .pool-material-rule { appearance: none; display: block; width: 100%; height: 16px; padding: 0 11px 0 4px; border: 0; border-radius: inherit; background: transparent; color: var(--mc-ink-muted); font: 7px/16px var(--app-font); cursor: pointer; }
@@ -841,21 +854,15 @@
 .pool-rule-pages { display: flex; align-items: center; gap: 4px; font-size: 9px; color: var(--mc-ink-muted); white-space: nowrap; }
 .pool-rule-pages button:disabled { opacity: .3; cursor: default; }
 
-/* On narrow screens, keep the item name above its controls instead of crushing it. */
-@container (max-width: 440px) {
-  .pool-worksheet--dense .pool-products-table,
-  .pool-worksheet--dense .pool-products-table :is(thead, tbody) { display: block; width: 100%; }
-  .pool-worksheet--dense .pool-products-table tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 24px; }
-  .pool-worksheet--dense .pool-products-table :is(th, td):first-child { grid-column: 1 / -1; }
-  .pool-worksheet--dense .pool-products-table th:nth-child(n) { width: auto; }
-  .pool-worksheet--dense .pool-overview .pool-products-table td { display: flex; align-items: center; justify-content: flex-end; height: auto; min-height: 20px; }
-  .pool-worksheet--dense .pool-products-table td:first-child { justify-content: flex-start; }
-  .pool-target-controls { width: 100%; }
+/* Keep the full labeled table available on small screens without squeezing controls. */
+@container (max-width: 600px) {
+  .pool-worksheet--dense .pool-desired-products .pool-products-scroll { overflow-x: auto; }
+  .pool-worksheet--dense .pool-products-table { min-width: 560px; }
 }
 
 /* A bounded rate list, live context in the middle, and power at the far right. */
-.pool-worksheet--dense .pool-overview > .pool-desired-products { grid-area: rates; width: 100%; max-width: 560px; }
-.pool-worksheet--dense .pool-overview > .pool-situation { grid-area: situation; min-width: 0; position: relative; margin: 0; font: 10px/1.4 var(--app-font); padding: 3px 8px; color: var(--mc-ink-muted); background: color-mix(in srgb, #6f9cff 7%, var(--surface, #24272c)); border: 1px solid #adc7ff24; }
+.pool-worksheet--dense .pool-overview > .pool-desired-products { grid-area: rates; width: 100%; min-width: 0; }
+.pool-worksheet--dense .pool-situation { min-width: 0; position: relative; margin: 0; font: 10px/1.4 var(--app-font); padding: 3px 8px; color: var(--mc-ink-muted); background: color-mix(in srgb, #6f9cff 7%, var(--surface, #24272c)); border: 1px solid #adc7ff24; }
 .pool-worksheet--dense .pool-overview > .pool-sheet-power { grid-area: power; justify-self: end; max-width: 260px; }
 .pool-worksheet--dense .pool-overview .pool-power-table th:first-child { width: 94px; }
 .pool-situation:focus-visible { outline: 1px solid #adc7ff; outline-offset: 2px; }
@@ -879,11 +886,9 @@
 .pool-situation-help > button:hover { color: var(--mc-ink); }
 .pool-situation-help > button:focus-visible { outline: 1px solid #adc7ff; outline-offset: 2px; }
 .pool-situation-help > .pool-rule-guide { position: absolute; z-index: 60; top: calc(100% + 4px); right: 0; width: min(380px, 100%); max-height: min(480px, 65vh); overflow: auto; padding: 10px; background: var(--surface, #24272c); border: 1px solid #adc7ff50; box-shadow: 0 4px 12px #0006; font-size: 10px; }
-@container (max-width: 1120px) {
-  .pool-worksheet--dense .pool-overview { grid-template-columns: minmax(0, 560px) minmax(220px, 260px); grid-template-areas: "rates power" "situation situation"; justify-content: space-between; }
-}
+
 @container (max-width: 650px) {
-  .pool-worksheet--dense .pool-overview { grid-template-columns: minmax(0, 1fr); grid-template-areas: "rates" "situation" "power"; }
+  .pool-worksheet--dense .pool-overview { grid-template-columns: minmax(0, 1fr); grid-template-areas: "rates" "power"; }
   .pool-worksheet--dense .pool-overview > .pool-sheet-power { justify-self: end; }
 }
 
@@ -904,4 +909,14 @@
 @container (max-width: 440px) {
   .pool-situation-flow { font-size: 9px; gap: 3px 4px; }
   .pool-situation-flow strong { font-size: 10px; }
+}
+
+/* Status sits beside the root material summary, below the full-width rate table. */
+.pool-scope-overview { display: grid; grid-template-columns: 300px minmax(0, 1fr); align-items: start; gap: 10px; }
+.pool-scope-content { min-width: 0; container-type: inline-size; }
+@container (max-width: 1200px) {
+  .pool-scope-overview { grid-template-columns: 1fr; }
+}
+@container (max-width: 760px) {
+  .pool-material-strip { grid-template-columns: 1fr; }
 }

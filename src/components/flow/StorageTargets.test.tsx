@@ -204,8 +204,8 @@ it("keeps the actual rate visible alongside a compact unreachable warning", () =
   const p = project();p.poolMode = true;p.nodes = [];p.edges = [];p.storages![1].poolSide = "drain";
   useFactoryStore.getState().setProject(p);render(<PoolWorksheet />);
   expect(screen.queryByText("Unreachable")).toBeNull();
-  const warning=screen.getByLabelText("Target cannot be met");
-  expect(warning.closest("td")!.textContent).toContain("0/s");
+  const warning=screen.getByLabelText(/explain target for/);
+  expect(warning.closest("tr")!.children[3].textContent).toContain("0/s");
   const help = screen.getByRole("region", { name: "Production status" });
   expect(within(help).getByText("Targets not met")).toBeTruthy();
   fireEvent.click(warning);
@@ -226,14 +226,14 @@ it("explains the clicked target and updates its requested rate", () => {
     { ...p.storages![1], id: "second", resourceId: "plate", displayName: "Plate", targetPerSecond: 7, poolSide: "drain" },
   ];
   useFactoryStore.getState().setProject(p);render(<PoolWorksheet />);
-  fireEvent.click(screen.getAllByLabelText("Target cannot be met")[1]);
+  fireEvent.click(screen.getAllByLabelText(/explain target for/)[1]);
   const help = screen.getByRole("region", { name: "Production status" });
   expect(within(help).getByText("Plate")).toBeTruthy();
   expect(within(help).queryByText("Ingot")).toBeNull();
   expect(within(help).getByText("7/s")).toBeTruthy();
   act(() => useFactoryStore.getState().setStorageTarget("second", 9));
   expect(within(help).getByText("9/s")).toBeTruthy();
-  fireEvent.click(screen.getAllByLabelText("Target cannot be met")[0]);
+  fireEvent.click(screen.getAllByLabelText(/explain target for/)[0]);
   expect(within(help).getByText("Ingot")).toBeTruthy();
 });
 
@@ -266,8 +266,8 @@ it("shows stopped target residue as zero without changing the solved value", () 
     ...lastResult.storages, output: { ...lastResult.storages.output, producedPerSecond: 5.169878828456423e-26 },
   } } });
   render(<PoolWorksheet />);
-  const warning = screen.getByLabelText("Target cannot be met");
-  expect(warning.closest("td")!.textContent).toBe("0/s");
+  const warning = screen.getByLabelText(/explain target for/);
+  expect(warning.closest("tr")!.children[3].textContent).toBe("0/s");
   fireEvent.click(warning);
   expect(screen.getByText(/This target is stopped/)).toBeTruthy();
   expect(useFactoryStore.getState().lastResult.storages.output.producedPerSecond).toBe(5.169878828456423e-26);

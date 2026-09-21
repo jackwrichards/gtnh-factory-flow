@@ -1,4 +1,5 @@
 "use client";
+import { targetStatus } from "./target-status";
 import { PoolSituation } from "./PoolSituation";
 import { isInputRate, storageTargetMode } from "@/lib/model/storage-target";
 import { StorageTargetRule } from "../flow/StorageTargetRule";
@@ -248,6 +249,12 @@ export function PoolWorksheet() {
       <>
         <ProductionScopeHeader
           group={group}
+          overview={!group ? (
+            <section ref={targetHelp} tabIndex={-1} className="pool-situation pool-target-help" aria-label="Production status">
+              <PoolSituation project={project} result={result} products={products} roles={roles} resources={groupResources}
+                recipes={groups.flatMap(group => group.sections.map(section => section.result))} selectedTarget={helpTarget} />
+            </section>
+          ) : undefined}
           resources={scopeRows}
           readOnly={readOnly}
           collapsed={collapsed}
@@ -358,15 +365,17 @@ export function PoolWorksheet() {
                       className="pool-summary-table pool-products-table"
                       aria-label="Pool products"
                     >
+                      <caption className="pool-rates-title-row">
+                        <div className="pool-overview-title"><h3>Desired rates</h3>{!readOnly ? <><span className="pool-drop-hint">Drag items here</span><AddPoolProduct /></> : null}</div>
+                      </caption>
                       <thead>
-                        <tr>
-                          <th><div className="pool-overview-title"><h3>Desired rates</h3>{!readOnly ? <span className="pool-drop-hint">Drag items here</span> : null}</div></th>
-                          <th title="Positive amounts set output goals; negative amounts set input goals.">Target (±)</th>
-                          <th>Actual</th>
-                          <th>
-                            <span className="sr-only">Actions</span>
-                            {!readOnly ? <AddPoolProduct /> : null}
-                          </th>
+                        <tr className="pool-rates-columns">
+                          <th scope="col">Item</th>
+                          <th scope="col">Rule</th>
+                          <th scope="col" title="Positive amounts set output goals; negative amounts set input goals.">Target (±)</th>
+                          <th scope="col">Actual</th>
+                          <th scope="col">Status</th>
+                          <th scope="col"><span className="sr-only">Actions</span></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -378,10 +387,6 @@ export function PoolWorksheet() {
                   </div>
                 </ProductsPane>
               </div>
-              <section ref={targetHelp} tabIndex={-1} className="pool-situation pool-target-help" aria-label="Production status">
-                <PoolSituation project={project} result={result} products={products} roles={roles} resources={groupResources}
-                  recipes={groups.flatMap(group => group.sections.map(section => section.result))} selectedTarget={helpTarget} />
-              </section>
               <WorksheetPower
                 entries={groups.flatMap((entry) => (entry.machine ? [entry.machine] : []))}
                 title="Total power"
@@ -992,6 +997,9 @@ function Product({ storage, role, onExplain }: { storage: FactoryStorage; onExpl
   const orderTarget = useOrderTarget("products", storage.id);
   const ignored = storageTargetMode(storage, role) === "ignore";
   const inputGoal = isInputRate(storage, role);
+  const stale = useFactoryStore(state => state.lastResult.stale);
+  const held = useFactoryStore(state => state.lastResult.held);
+  const status = targetStatus(storage, role, result, stale, held);
   return (
     <tr {...orderTarget} className="pool-product" data-worksheet-product={storage.id} data-target-ignored={ignored || undefined}>
       <td>
@@ -1027,9 +1035,11 @@ function Product({ storage, role, onExplain }: { storage: FactoryStorage; onExpl
           </span>
         ) : null}
       </td>
+      <td className="pool-product-rule">
+        <StorageTargetRule storage={storage} input={inputGoal} className="pool-target-rule" />
+      </td>
       <td className="pool-product-target">
         <div className="pool-target-controls">
-          <StorageTargetRule storage={storage} input={inputGoal} className="pool-target-rule" />
         {readOnly ? (
           <span>
             {storage.targetPerSecond === undefined
@@ -1043,15 +1053,13 @@ function Product({ storage, role, onExplain }: { storage: FactoryStorage; onExpl
       </td>
       <td className={result?.targetUnreachable ? "pool-flow-input" : "pool-sheet-muted"}>
         <span className="inline-flex max-w-full items-center justify-end gap-1">
-          {result?.targetUnreachable ? (
-            <MinecraftTooltip content="Explain why this target cannot be met.">
-              <button type="button" onClick={onExplain} aria-label="Target cannot be met" className="inline-flex shrink-0 text-[var(--flow-input)]">
-                <AlertTriangle aria-hidden className="h-3 w-3" />
-              </button>
-            </MinecraftTooltip>
-          ) : null}
           <BalanceRate value={inputGoal ? (result?.consumedPerSecond ?? 0) : (result?.producedPerSecond ?? 0)} kind={storage.kind} sign={inputGoal ? -1 : 0} />
         </span>
+      </td>
+      <td className="pool-product-status" data-tone={status.tone}>
+        {status.explain ? <button type="button" onClick={onExplain} aria-label={status.label + ": explain target for " + (storage.displayName ?? storage.resourceId)}>
+          <AlertTriangle size={10} aria-hidden />{status.label}<span className="pool-status-why">Why?</span>
+        </button> : <span>{status.label}</span>}
       </td>
       <td>
         {!readOnly ? (
