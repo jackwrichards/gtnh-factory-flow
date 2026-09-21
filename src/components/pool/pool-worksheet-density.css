@@ -834,15 +834,15 @@
 
 /* Compact material tables keep direction, rate and supply rule on one line. */
 .pool-scope-materials { margin-bottom: 2px; }
-.pool-material-strip { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; overflow: visible; }
-.pool-material-table { flex: 1 1 auto; width: auto; min-width: min-content; table-layout: auto; border-collapse: collapse; background: #6f9cff0d; }
+.pool-material-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); align-items: start; gap: 8px; overflow: visible; }
+.pool-material-table { width: 100%; min-width: 0; table-layout: auto; border-collapse: collapse; background: #6f9cff0d; }
 .pool-material-table caption { padding: 1px 4px; text-align: left; font: 9px/16px var(--app-font); color: var(--mc-ink-muted); background: #6f9cff0d; }
 .pool-material-table td { padding: 0 4px; }
-.pool-material-columns { display: grid; grid-template-columns: repeat(auto-fit, 16px var(--pool-material-rate-width, 50px) var(--pool-material-rule-width, 18px)); column-gap: 1px; justify-content: start; font: 7.5px/11px var(--app-font); }
+.pool-material-columns { display: grid; grid-template-columns: repeat(auto-fit, 16px var(--pool-material-rate-width, 50px) var(--pool-material-rule-width, 22px)); column-gap: 3px; justify-content: start; font: 7.5px/11px var(--app-font); }
 .pool-scope-material { display: grid; grid-column: span 3; grid-template-columns: subgrid; align-items: center; min-width: 0; height: 20px; border-bottom: 1px solid #ffffff08; }
 .pool-scope-material .pool-resource-link { height: 18px; justify-content: center; }
 .pool-scope-material .pool-item-icon { width: 16px !important; height: 16px !important; }
-.pool-material-rate { text-align: right; white-space: nowrap; font: 9px/11px var(--app-font); font-variant-numeric: tabular-nums; }
+.pool-material-rate { text-align: left; white-space: nowrap; font: 9px/11px var(--app-font); font-variant-numeric: tabular-nums; }
 .pool-material-rate strong { font-weight: 600; }
 .pool-material-rate small { margin-left: 1px; font-size: 6px; color: color-mix(in srgb, currentColor 35%, #9ca3af); }
 
@@ -853,75 +853,20 @@
 .pool-material-ignore:disabled { cursor: default; opacity: .5; }
 .pool-material-inherited { display: block; height: 17px; font: 9px/17px var(--app-font); color: var(--mc-ink-muted); }
 
-/* A bounded rate list, live context in the middle, and power at the far right. */
+/* Desired rates and power share the top row; target help is only opened on demand. */
 .pool-worksheet--dense .pool-overview > .pool-desired-products { grid-area: rates; width: 100%; min-width: 0; container: pool-rates / inline-size; }
-.pool-worksheet--dense .pool-situation { min-width: 0; position: relative; margin: 0; font: 10px/1.4 var(--app-font); padding: 0 4px 4px; color: var(--mc-ink-muted); background: #6f9cff0d; border: 0; }
 .pool-worksheet--dense .pool-overview > .pool-sheet-power { grid-area: power; justify-self: end; max-width: 260px; }
 .pool-worksheet--dense .pool-overview .pool-power-table th:first-child { width: 94px; }
-.pool-situation:focus-visible { outline: 1px solid #adc7ff; outline-offset: 2px; }
-.pool-situation-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 10px; }
-.pool-situation-heading { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; margin: 0; color: var(--mc-ink); }
-.pool-situation-heading[data-state="blocked"] { color: var(--flow-input); }
-.pool-situation-heading[data-state="running"] { color: var(--flow-output); }
-.pool-situation p { margin: 3px 0; }
-.pool-situation-counts { font-size: 9px; white-space: nowrap; }
-.pool-situation-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; margin: 5px 0; }
-.pool-situation-flow > span { white-space: nowrap; }
-.pool-situation-flow > svg { flex-shrink: 0; opacity: .45; }
-.pool-situation-flow strong { font-size: 11px; }
-.pool-situation-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; font-size: 9px; }
-.pool-situation > .pool-target-explanation { padding: 3px 6px; margin: 4px 0; border-left: 2px solid var(--flow-input); background: color-mix(in srgb, var(--flow-input) 4%, transparent); }
-.pool-situation .pool-target-help-name { margin-bottom: 2px; }
-.pool-situation .pool-target-help-rates { margin-bottom: 2px; gap: 2px 10px; }
-.pool-situation-check { color: var(--mc-ink-muted); }
-.pool-situation-help { margin-left: 0; }
-.pool-situation-help > button { position: absolute; top: 3px; right: 8px; display: flex; align-items: center; gap: 3px; cursor: pointer; list-style: none; }
-.pool-situation-help > button:hover { color: var(--mc-ink); }
-.pool-situation-help > button:focus-visible { outline: 1px solid #adc7ff; outline-offset: 2px; }
-.pool-situation-help > .pool-rule-guide { position: absolute; z-index: 60; top: calc(100% + 4px); right: 0; width: min(380px, 100%); max-height: min(480px, 65vh); overflow: auto; padding: 10px; background: var(--surface, #24272c); border: 1px solid #adc7ff50; box-shadow: 0 4px 12px #0006; font-size: 10px; }
-
 @container (max-width: 650px) {
   .pool-worksheet--dense .pool-overview { grid-template-columns: minmax(0, 1fr); grid-template-areas: "rates" "power"; }
   .pool-worksheet--dense .pool-overview > .pool-sheet-power { justify-self: end; }
 }
 
-.pool-situation-scope { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-bottom: 3px; padding-right: 110px; font-size: 9px; color: var(--mc-ink); }
-.pool-situation-scope > span { color: var(--mc-ink-muted); }
-.pool-situation-rule-summary { display: flex; flex-wrap: wrap; gap: 2px 8px; }
-.pool-rule-scope-name { color: var(--mc-ink); }
-.pool-rule-guide > header { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--mc-ink); font-size: 11px; }
-.pool-rule-guide .pool-rule-intro { margin: 6px 0; font-size: 9px; }
-.pool-rule-example-tag { font-size: 9px; font-weight: 400; color: var(--mc-ink-muted); }
-.pool-rule-example-case { margin: 7px 0; padding: 3px 8px; background: color-mix(in srgb, #6f9cff 7%, var(--surface, #24272c)); border: 1px solid #adc7ff24; }
-.pool-rule-example-case .pool-situation-scope { padding-right: 0; }
-.pool-rule-example-case .pool-situation-heading { flex-wrap: wrap; gap: 3px 5px; }
-.pool-rule-example-case .pool-situation-heading > span { font-size: 9px; font-weight: 400; }
-.pool-rule-guide .pool-rule-group-note { margin: 6px 0 0; font-size: 9px; }
-.pool-rule-group-note strong { color: var(--mc-ink); }
-.pool-rule-guide .pool-rule-footnote { margin: 4px 0 0; font-size: 9px; }
-@container (max-width: 440px) {
-  .pool-situation-flow { font-size: 9px; gap: 3px 4px; }
-  .pool-situation-flow strong { font-size: 10px; }
-}
-
-/* All four sections share the available width, including the space below Status. */
-.pool-scope-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: start; gap: 8px; }
-.pool-scope-content { min-width: 0; container-type: inline-size; }
-.pool-scope-overview > .pool-scope-content,
-.pool-scope-overview .pool-scope-materials,
-.pool-scope-overview .pool-material-strip { display: contents; container-type: normal; }
-.pool-scope-overview .pool-material-table { width: 100%; min-width: 0; }
-@container (max-width: 980px) {
-  .pool-scope-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-@container (max-width: 580px) {
-  .pool-scope-overview { grid-template-columns: minmax(0, 1fr); }
-}
-
-/* One summary, with aligned section captions below the All production heading. */
-.pool-situation > .pool-situation-scope { min-height: 18px; margin-bottom: 0; padding: 1px 100px 1px 0; font: 9px/16px var(--app-font); color: var(--mc-ink-muted); }
-.pool-situation > .pool-situation-top { margin-top: 2px; }
-.pool-situation-help > button { top: 1px; right: 4px; font: 9px/16px var(--app-font); }
+.pool-scope-content { min-width: 0; }
+.pool-worksheet--dense .pool-desired-products { position: relative; }
+.pool-target-popover { position: absolute; z-index: 60; top: 100%; right: 0; width: min(360px, 100%); padding: 10px; background: var(--surface, #24272c); border: 1px solid #adc7ff50; box-shadow: 0 4px 12px #0006; color: var(--mc-ink-muted); }
+.pool-target-popover:focus-visible { outline: 1px solid #adc7ff; }
+.pool-calculation-issue { margin: 4px 0; color: var(--flow-input); font-size: 11px; }
 
 .pool-rate-label-compact { display: none; }
 /* Tighten the status and number columns before rearranging a rate row. */
@@ -961,3 +906,15 @@
   .pool-products-table .pool-product > td:last-child { grid-column: 4; grid-row: 1; }
   .pool-target-controls { padding-right: 0; }
 }
+
+/* Keep rate editing at worksheet scale rather than the larger board-drawer scale. */
+.pool-worksheet--dense .pool-product .storage-net-line,
+.pool-worksheet--dense .pool-product .pool-balance-rate { font-family: var(--app-font); font-size: 10px; font-weight: 500; line-height: 16px; }
+.pool-worksheet--dense .pool-product .pool-balance-rate > .inspector-unit { font-size: 8px; }
+/* Advertise the drop zone on pickup; strengthen it when the pointer arrives. */
+.pool-worksheet[data-resource-dragging] .pool-sheet-products,
+.pool-sheet-products[data-resource-ready],
+.pool-worksheet .pool-sheet-products[data-resource-drop] { --pool-drop-wash: color-mix(in srgb, #78a7bc 10%, var(--surface, #24272c)); outline: 1px solid #78a7bc90; outline-offset: -1px; box-shadow: 0 0 8px #78a7bc20; }
+.pool-worksheet .pool-sheet-products[data-resource-drop] { --pool-drop-wash: color-mix(in srgb, #78a7bc 20%, var(--surface, #24272c)); outline: 2px solid #78a7bc; }
+.pool-worksheet--dense[data-resource-dragging] .pool-overview .pool-sheet-products :is(caption, th, td),
+.pool-worksheet--dense .pool-overview .pool-sheet-products:is([data-resource-ready], [data-resource-drop]) :is(caption, th, td) { background-color: var(--pool-drop-wash); }

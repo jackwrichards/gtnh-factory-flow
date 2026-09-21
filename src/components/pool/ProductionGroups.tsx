@@ -64,10 +64,8 @@ export function ProductionScopeHeader({
   inputs,
   outputs,
   renderResource,
-  overview,
 }: {
   group?: ProductionGroup;
-  overview?: ReactNode;
   collapsed?: boolean;
   hasContents?: boolean;
   onToggle?: () => void;
@@ -217,8 +215,6 @@ export function ProductionScopeHeader({
               ) : null}
             </div>
           </div>
-          <div className={overview ? "pool-scope-overview" : undefined}>
-            {overview}
             <div className="pool-scope-content">
           {materials.size ? (
             <section className="pool-scope-materials" aria-label={"Materials for " + name}>
@@ -235,7 +231,7 @@ export function ProductionScopeHeader({
                   return <table className="pool-material-table" key={label} aria-label={label + " for " + name}>
                     <caption title={index === 2 ? "Made and used within this scope, with no net flow." : undefined}>{label}</caption>
                     <tbody><tr>
-                      <td><div className="pool-material-columns" style={{ "--pool-material-rate-width": `${Math.ceil(rateChars) + 1}ch`, "--pool-material-rule-width": entries.some(([, entry]) => !entry.row) ? "76px" : "18px" } as CSSProperties}>
+                      <td><div className="pool-material-columns" style={{ "--pool-material-rate-width": `${Math.ceil(rateChars) + 1}ch`, "--pool-material-rule-width": entries.some(([, entry]) => !entry.row) ? "80px" : "22px" } as CSSProperties}>
                 {entries.map(([key, { resource, row, input, output }]) => {
                   const material = resource.displayName ?? resource.id;
                   const net = output - input;
@@ -265,7 +261,6 @@ export function ProductionScopeHeader({
             </section>
           ) : null}
             </div>
-          </div>
         </td>
       </tr>
     </tbody>

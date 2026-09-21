@@ -1,6 +1,8 @@
 "use client";
 import { targetStatus } from "./target-status";
-import { PoolSituation } from "./PoolSituation";
+import { TargetRateHelp } from "./TargetRateHelp";
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+import { playBoardSound } from "@/lib/board-sounds";
 import { isInputRate, storageTargetMode } from "@/lib/model/storage-target";
 import { StorageTargetRule } from "../flow/StorageTargetRule";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
@@ -68,13 +70,17 @@ import "./pool-worksheet-density.css";
 export function PoolWorksheet() {
   const summaryId = useId();
   const targetHelp = useRef<HTMLElement>(null);
+  const targetHelpButton = useRef<HTMLButtonElement>(null);
   const [explainedTarget, setExplainedTarget] = useState<string>();
-  const explainTarget = (id: string) => {
+  const closeTargetHelp = () => {
+    playBoardSound("pageClose");
+    setExplainedTarget(undefined);
+  };
+  const explainTarget = (id: string, button: HTMLButtonElement) => {
+    targetHelpButton.current = button;
+    if (id === explainedTarget) { closeTargetHelp(); return; }
+    playBoardSound("pageOpen");
     setExplainedTarget(id);
-    const details = targetHelp.current;
-    if (!details) return;
-    details.scrollIntoView?.({ block: "nearest" });
-    details.focus({ preventScroll: true });
   };
   const rootRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -186,8 +192,13 @@ export function PoolWorksheet() {
     savedOrder("products"),
     (storage) => storage.id,
   );
-  const failedTargets = products.filter(storage => result.storages[storage.id]?.targetUnreachable);
-  const helpTarget = failedTargets.find(storage => storage.id === explainedTarget) ?? failedTargets[0];
+  const helpTarget = !result.stale ? products.find(storage => storage.id === explainedTarget && result.storages[storage.id]?.targetUnreachable) : undefined;
+  useDropdownDismiss(Boolean(helpTarget), { refs: [targetHelp, targetHelpButton], onClose: closeTargetHelp, fade: true });
+  useEffect(() => {
+    if (helpTarget) targetHelp.current?.focus({ preventScroll: true });
+    else setExplainedTarget(undefined);
+  }, [helpTarget]);
+  const calculationIssue = !result.stale ? result.bottlenecks.find(issue => issue.severity === "critical" && issue.kind === "missing-recipe") : undefined;
   const ids = {
     machines: orderedGroups.map((group) => group.owner.id),
     products: products.map((storage) => storage.id),
@@ -249,12 +260,6 @@ export function PoolWorksheet() {
       <>
         <ProductionScopeHeader
           group={group}
-          overview={!group ? (
-            <section ref={targetHelp} tabIndex={-1} className="pool-situation pool-target-help" aria-label="Production status">
-              <PoolSituation project={project} result={result} products={products} roles={roles} resources={groupResources}
-                recipes={groups.flatMap(group => group.sections.map(section => section.result))} selectedTarget={helpTarget} />
-            </section>
-          ) : undefined}
           resources={scopeRows}
           readOnly={readOnly}
           collapsed={collapsed}
@@ -366,7 +371,7 @@ export function PoolWorksheet() {
                       aria-label="Pool products"
                     >
                       <caption className="pool-rates-title-row">
-                        <div className="pool-overview-title"><h3>Desired rates</h3>{!readOnly ? <><span className="pool-drop-hint">Drag items here</span><AddPoolProduct /></> : null}</div>
+                        <div className="pool-overview-title"><h3>Desired rates</h3>{!readOnly ? <><span className="pool-drop-hint">(Drag items here)</span><AddPoolProduct /></> : null}</div>
                       </caption>
                       <thead>
                         <tr className="pool-rates-columns">
@@ -380,18 +385,22 @@ export function PoolWorksheet() {
                       </thead>
                       <tbody>
                         {products.map((storage) => (
-                          <Product key={storage.id} storage={storage} role={roles.get(storage.id)} onExplain={() => explainTarget(storage.id)} />
+                          <Product key={storage.id} storage={storage} role={roles.get(storage.id)} helpOpen={helpTarget?.id === storage.id} onExplain={(button) => explainTarget(storage.id, button)} />
                         ))}
                       </tbody>
                     </table>
                   </div>
                 </ProductsPane>
+                {helpTarget ? <section ref={targetHelp} tabIndex={-1} className="pool-target-popover pool-target-help" aria-label="Target explanation">
+                  <TargetRateHelp storage={helpTarget} input={isInputRate(helpTarget, roles.get(helpTarget.id))} result={result.storages[helpTarget.id]} project={project} />
+                </section> : null}
               </div>
               <WorksheetPower
                 entries={groups.flatMap((entry) => (entry.machine ? [entry.machine] : []))}
                 title="Total power"
               />
             </div>
+            {calculationIssue ? <p role="alert" className="pool-calculation-issue">{calculationIssue.message}</p> : null}
             {searchOpen ? (
               <div className="pool-machine-toolbar" role="search" aria-label="Find in worksheet">
                 <label className="pool-sheet-search"><Search className="h-3.5 w-3.5" />
@@ -429,13 +438,28 @@ export function PoolWorksheet() {
 
 function ProductsPane({ children, id }: { children: ReactNode; id: string }) {
   const [hover, setHover] = useState(false);
+  const [resourceDragging, setResourceDragging] = useState(false);
   const readOnly = useFactoryStore((state) => state.isReadOnly);
+  useEffect(() => {
+    if (readOnly) return;
+    const start = (event: DragEvent) => setResourceDragging(Boolean(event.dataTransfer?.types.includes(RESOURCE_DRAG_TYPE)));
+    const finish = () => { setResourceDragging(false); setHover(false); };
+    window.addEventListener("dragstart", start);
+    window.addEventListener("dragend", finish);
+    window.addEventListener("drop", finish);
+    return () => {
+      window.removeEventListener("dragstart", start);
+      window.removeEventListener("dragend", finish);
+      window.removeEventListener("drop", finish);
+    };
+  }, [readOnly]);
   return (
     <div
       className="pool-sheet-products"
       id={id}
       aria-label="Desired rates drop zone"
-      data-resource-drop={hover || undefined}
+      data-resource-drop={!readOnly && hover || undefined}
+      data-resource-ready={!readOnly && resourceDragging || undefined}
       onDragOver={(event) => {
         if (!readOnly && event.dataTransfer.types.includes(RESOURCE_DRAG_TYPE)) {
           event.preventDefault();
@@ -987,7 +1011,7 @@ function MachinePower({ entry }: { entry?: MachineListEntry }) {
   );
 }
 
-function Product({ storage, role, onExplain }: { storage: FactoryStorage; onExplain: () => void; role: StorageRole | undefined }) {
+function Product({ storage, role, onExplain, helpOpen }: { storage: FactoryStorage; onExplain: (button: HTMLButtonElement) => void; helpOpen: boolean; role: StorageRole | undefined }) {
   const scopeName = useFactoryStore(
     (state) =>
       state.project.productionGroups?.find((group) => group.id === storage.productionGroupId)?.name,
@@ -1057,7 +1081,7 @@ function Product({ storage, role, onExplain }: { storage: FactoryStorage; onExpl
         </span>
       </td>
       <td className="pool-product-status" data-tone={status.tone}>
-        {status.explain ? <button type="button" onClick={onExplain} aria-label={status.label + ": explain target for " + (storage.displayName ?? storage.resourceId)}>
+        {status.explain ? <button type="button" aria-expanded={helpOpen} onClick={(event) => onExplain(event.currentTarget)} aria-label={status.label + ": explain target for " + (storage.displayName ?? storage.resourceId)}>
           <span className="pool-state-dot" aria-hidden /><span className="pool-rate-label-full">{status.label}</span><span className="pool-rate-label-compact">{status.compact ?? status.label}</span><span className="pool-status-why">Why?</span>
         </button> : <span className="pool-rate-state"><span className="pool-state-dot" aria-hidden /><span className="pool-rate-label-full">{status.label}</span><span className="pool-rate-label-compact">{status.compact ?? status.label}</span></span>}
       </td>

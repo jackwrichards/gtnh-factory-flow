@@ -206,9 +206,9 @@ it("keeps the actual rate visible alongside a compact unreachable warning", () =
   expect(screen.queryByText("Unreachable")).toBeNull();
   const warning=screen.getByLabelText(/explain target for/);
   expect(warning.closest("tr")!.children[3].textContent).toContain("0/s");
-  const help = screen.getByRole("region", { name: "Production status" });
-  expect(within(help).getByText("Targets not met")).toBeTruthy();
+  expect(screen.queryByRole("region", { name: "Target explanation" })).toBeNull();
   fireEvent.click(warning);
+  const help = screen.getByRole("region", { name: "Target explanation" });
   expect(document.activeElement).toBe(help);
   expect(within(help).getByText("Ingot")).toBeTruthy();
   expect(within(help).getByText(/Make at least/)).toBeTruthy();
@@ -216,7 +216,7 @@ it("keeps the actual rate visible alongside a compact unreachable warning", () =
   expect(within(help).getByText(/Add or enable recipes/)).toBeTruthy();
   expect(useFactoryStore.getState().project.poolResourceRules).toBeUndefined();
   act(() => useFactoryStore.getState().setStorageTarget("output", undefined));
-  expect(screen.queryByText("Targets not met")).toBeNull();
+  expect(screen.queryByRole("region", { name: "Target explanation" })).toBeNull();
 });
 
 it("explains the clicked target and updates its requested rate", () => {
@@ -227,7 +227,7 @@ it("explains the clicked target and updates its requested rate", () => {
   ];
   useFactoryStore.getState().setProject(p);render(<PoolWorksheet />);
   fireEvent.click(screen.getAllByLabelText(/explain target for/)[1]);
-  const help = screen.getByRole("region", { name: "Production status" });
+  const help = screen.getByRole("region", { name: "Target explanation" });
   expect(within(help).getByText("Plate")).toBeTruthy();
   expect(within(help).queryByText("Ingot")).toBeNull();
   expect(within(help).getByText("7/s")).toBeTruthy();
@@ -235,6 +235,8 @@ it("explains the clicked target and updates its requested rate", () => {
   expect(within(help).getByText("9/s")).toBeTruthy();
   fireEvent.click(screen.getAllByLabelText(/explain target for/)[0]);
   expect(within(help).getByText("Ingot")).toBeTruthy();
+  fireEvent.keyDown(help, { key: "Escape" });
+  expect(screen.queryByRole("region", { name: "Target explanation" })).toBeNull();
 });
 
 it.each([false, true])("scrolls rate rules without scrolling the page (Pool: %s)", (pool) => {

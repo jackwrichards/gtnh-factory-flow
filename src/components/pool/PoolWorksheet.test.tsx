@@ -26,6 +26,7 @@ vi.mock("../ItemPickerPopover", () => ({
 }));
 
 function pointerDrop(source: HTMLElement, target: Element, cancel = false) {
+  const root = source.closest(".pool-worksheet");
   const original = Object.getOwnPropertyDescriptor(document, "elementFromPoint");
   Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => target });
   const box = vi.spyOn(target, "getBoundingClientRect").mockReturnValue({ top: 0, height: 100 } as DOMRect);
@@ -40,9 +41,11 @@ function pointerDrop(source: HTMLElement, target: Element, cancel = false) {
     pointer("pointermove", window, 32, 22);
     pointer("pointermove", window, 34, 24);
     expect(document.querySelector(".pool-drag-preview")).not.toBeNull();
+    expect(root?.hasAttribute("data-resource-dragging")).toBe(source.classList.contains("pool-resource-link"));
     if (cancel) fireEvent.keyDown(window, { key: "Escape" });
     pointer("pointerup", window, 30, 20);
     expect(document.querySelector(".pool-drag-preview")).toBeNull();
+    expect(root?.hasAttribute("data-resource-dragging")).toBe(false);
     fireEvent.click(source);
   } finally {
     box.mockRestore();
@@ -253,6 +256,21 @@ describe("Pool worksheet", () => {
     expect(useFactoryStore.getState().project.storages).toHaveLength(1);
   });
 
+  it("advertises Desired rates during native resource dragging and clears after cancellation", () => {
+    render(<PoolWorksheet />);
+    const zone = screen.getByLabelText("Desired rates drop zone");
+    expect(screen.getByText("(Drag items here)")).toBeTruthy();
+    fireEvent.dragStart(document.body, { dataTransfer: { types: ["application/x-gtnh-resource"] } });
+    expect(zone.hasAttribute("data-resource-ready")).toBe(true);
+    fireEvent.dragOver(zone, { dataTransfer: { types: ["application/x-gtnh-resource"] } });
+    expect(zone.hasAttribute("data-resource-drop")).toBe(true);
+    fireEvent.dragEnd(document.body);
+    expect(zone.hasAttribute("data-resource-ready")).toBe(false);
+    expect(zone.hasAttribute("data-resource-drop")).toBe(false);
+    fireEvent.dragStart(document.body, { dataTransfer: { types: ["text/plain"] } });
+    expect(zone.hasAttribute("data-resource-ready")).toBe(false);
+  });
+
   it("reorders machine rows without changing the plan, solve or canvas positions", () => {
     const project = fixture();
     project.nodes.push({ ...project.nodes[0], id: "second", position: { x: 800, y: 400 } });
@@ -432,7 +450,7 @@ describe("Pool worksheet", () => {
     render(<PoolWorksheet />);
     expect(screen.getByRole("table", { name: "Recipes running in the pool" })).toBeDefined();
     expect(screen.queryByRole("textbox", { name: "Filter worksheet" })).toBeNull();
-    expect(screen.getByText("Drag items here")).toBeTruthy();
+    expect(screen.getByText("(Drag items here)")).toBeTruthy();
     expect(screen.queryByText("Change machine: click its icon")).toBeNull();
     fireEvent.keyDown(document, { key: "f", ctrlKey: true });
     fireEvent.change(screen.getByRole("textbox", { name: "Filter worksheet" }), {
@@ -713,76 +731,20 @@ describe("production group controls", () => {
   });
 });
 
-describe("production status", () => {
-  it("explains a working setup and keeps the panel when a target is ignored", () => {
-    render(<PoolWorksheet />);
-    const status = screen.getByRole("region", { name: "Production status" });
-    expect(within(status).getByText("All targets met")).toBeTruthy();
-    expect(status.textContent).toContain("1 recipe running");
-    expect(status.textContent).toContain("1/1 rates met");
-    expect(status.textContent).toContain("1 input");
+describe("rate status without a setup dashboard", () => {
+  it("keeps outcomes on each desired rate, with no repeated setup status or examples", () => {
+    const { container } = render(<PoolWorksheet />);
+    expect(screen.queryByRole("region", { name: "Production status" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Rules example" })).toBeNull();
+    expect(container.querySelector(".pool-product-status")?.textContent).toContain("Requested rate met");
     act(() => useFactoryStore.getState().setStorageTargetMode("product", "ignore"));
-    expect(within(status).queryByText("All targets met")).toBeNull();
-    expect(within(status).getByText("No production requested")).toBeTruthy();
-    expect(status.textContent).toContain("1 ignored target");
+    expect(container.querySelector(".pool-product-status")?.textContent).toContain("Rate not enforced");
+    expect(screen.queryByRole("region", { name: "Target explanation" })).toBeNull();
   });
-  it("does not mistake a maximum-only rate for a production request", () => {
-    useFactoryStore.getState().setStorageTargetMode("product", "at-most");
-    render(<PoolWorksheet />);
-    const status = screen.getByRole("region", { name: "Production status" });
-    expect(within(status).getByText("No production requested")).toBeTruthy();
-    expect(status.textContent).toContain("1/1 rates met");
-  });
-  it("does not present stale results as a current success", () => {
-    const result = useFactoryStore.getState().lastResult;
-    useFactoryStore.setState({ lastResult: { ...result, stale: true, held: true } });
-    render(<PoolWorksheet />);
-    const status = screen.getByRole("region", { name: "Production status" });
-    expect(within(status).getByText("Waiting for Recalculate")).toBeTruthy();
-    expect(within(status).queryByText("All targets met")).toBeNull();
-    expect(status.textContent).toContain("previous calculation");
-  });
-  it("reports other solver failures even when target rates are met", () => {
+  it("keeps a missing-recipe error visible without a dashboard", () => {
     const result = useFactoryStore.getState().lastResult;
     useFactoryStore.setState({ lastResult: { ...result, bottlenecks: [{ id: "missing", kind: "missing-recipe", severity: "critical", message: "A machine is missing its recipe." }] } });
     render(<PoolWorksheet />);
-    const status = screen.getByRole("region", { name: "Production status" });
-    expect(within(status).getByText("Setup needs attention")).toBeTruthy();
-    expect(within(status).getByText("A machine is missing its recipe.")).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toBe("A machine is missing its recipe.");
   });
-});
-
-it("keeps root material-rule counts separate from child group rules", () => {
-  const p = fixture();
-  p.productionGroups = [{ id: "line", name: "Copper line", resourceRules: { "item:plate": "share" } }];
-  p.poolResourceRules = { "item:ore": "import" };
-  p.nodes[0].productionGroupId = "line";
-  p.recipes.push({ ...p.recipes[0], id: "copper-maker", inputs: [{ kind: "item", id: "ore", amount: 1 }], outputs: [{ kind: "item", id: "copper", amount: 1 }] });
-  p.nodes.push({ ...p.nodes[0], id: "maker", recipeId: "copper-maker" });
-  useFactoryStore.getState().setProject(p);render(<PoolWorksheet />);
-  const status = screen.getByRole("region", { name: "Production status" });
-  expect(within(status).getByText("Status")).toBeTruthy();
-  expect(status.textContent).toContain("including 1 group");
-  const root = within(status).getByLabelText("All production material rules");
-  expect(root.textContent).toContain("0 materials must balance");
-  expect(root.textContent).toContain("1 on Ignore");
-  const rulesButton = within(status).getByRole("button", { name: "Rules example" });
-  vi.mocked(playBoardSound).mockClear();
-  fireEvent.click(rulesButton);
-  expect(rulesButton.getAttribute("aria-expanded")).toBe("true");
-  expect(dragSounds()).toEqual(["pageOpen"]);
-  expect(within(status).getByText("(Example)")).toBeTruthy();
-  expect(within(status).getByRole("region", { name: "Match example" })).toBeTruthy();
-  expect(within(status).getByText("· 70 water missing")).toBeTruthy();
-  expect(within(status).getByText("· 70 water imported")).toBeTruthy();
-  expect(status.textContent).toContain("Ignore shares with the parent. Its rules still apply.");
-  expect(within(status).queryByRole("button", { name: "Close material rules" })).toBeNull();
-  fireEvent.keyDown(rulesButton, { key: "Escape" });
-  expect(rulesButton.getAttribute("aria-expanded")).toBe("false");
-  expect(within(status).queryByRole("region", { name: "Material rules example" })).toBeNull();
-  expect(dragSounds()).toEqual(["pageOpen", "pageClose"]);
-  fireEvent.click(rulesButton);
-  fireEvent.pointerDown(document.body);
-  expect(rulesButton.getAttribute("aria-expanded")).toBe("false");
-  expect(dragSounds()).toEqual(["pageOpen", "pageClose", "pageOpen", "pageClose"]);
 });

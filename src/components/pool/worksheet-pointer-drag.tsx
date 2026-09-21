@@ -134,6 +134,7 @@ export function WorksheetPointerDrag({ children }: { children: ReactNode }) {
         clearTarget();
         source.removeAttribute("data-pool-drag-source");
         document.body.removeAttribute("data-pool-dragging");
+        root.removeAttribute("data-resource-dragging");
         if (source.hasPointerCapture?.(pointerId)) source.releasePointerCapture(pointerId);
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
@@ -159,6 +160,7 @@ export function WorksheetPointerDrag({ children }: { children: ReactNode }) {
           source.setPointerCapture?.(pointerId);
           source.dataset.poolDragSource = "true";
           document.body.dataset.poolDragging = "true";
+          if ("resource" in payload) root.dataset.resourceDragging = "true";
           frame = requestAnimationFrame(tick);
         }
         next.preventDefault();

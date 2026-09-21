@@ -20,6 +20,6 @@ export function TargetRateHelp({ storage, input, result, project }: {
       <span>Currently {input ? "using" : "making"} <strong className="pool-help-actual">{formatPoolRate(Math.abs(actual ?? 0), storage.kind)}</strong></span>
     </div>
     {stopped ? <p className="pool-help-actual"><strong>No flow.</strong> This target is stopped.</p> : null}
-    {!hasRecipes ? <p>Add or enable recipes that {input ? "use" : "make"} this item.</p> : <p className="pool-situation-check">Check material rules, rate limits, and machine settings.</p>}
+    {!hasRecipes ? <p>Add or enable recipes that {input ? "use" : "make"} this item.</p> : <p>The solver could not identify which constraint blocks this rate.</p>}
   </div>;
 }
