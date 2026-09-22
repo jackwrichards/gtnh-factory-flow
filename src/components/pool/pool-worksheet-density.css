@@ -122,7 +122,7 @@
   min-width: 0;
 }
 .pool-worksheet--dense .pool-tier-editor { display: flex; justify-content: flex-end; }
-.pool-worksheet--dense .pool-column-headings .pool-tier-heading { text-align: right; }
+.pool-worksheet--dense .pool-column-headings .pool-tier-heading { text-align: left; }
 .pool-worksheet--dense .pool-editor-power {
   width: max-content;
   padding: 0;
@@ -979,8 +979,9 @@
 .pool-desired-products[data-empty] .pool-products-scroll { display: flex; }
 .pool-desired-products[data-empty] .pool-products-table { height: 100%; }
 .pool-desired-products[data-empty] .pool-products-table thead { height: 21px; }
+.pool-rates-empty { height: 54px; }
 .pool-worksheet--dense .pool-overview .pool-rates-empty > td { height: auto; padding: 8px 12px; vertical-align: middle; text-align: center; white-space: normal; color: var(--mc-ink-muted); font-size: 11px; }
-.pool-rates-empty p { margin: 0; text-wrap: balance; }
+.pool-rates-empty p { position: absolute; inset: 0; display: grid; place-content: center; margin: 0; padding: 24px 12px; text-wrap: balance; pointer-events: none; }
 @container pool-rates (max-width: 400px) {
   .pool-desired-products[data-empty] .pool-products-table { display: flex; flex-direction: column; }
   .pool-desired-products[data-empty] .pool-products-table tbody { flex: 1; display: grid; }
