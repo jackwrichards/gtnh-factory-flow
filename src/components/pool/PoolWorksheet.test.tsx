@@ -764,17 +764,6 @@ describe("production group controls", () => {
     expect(within(screen.getByRole("table", { name: "Inputs for " + scope })).getByText("dust")).toBeTruthy();
     expect(screen.getByLabelText("dust: net input 2/s")).toBeTruthy();
   });
-  it("explains group scope using its parent name, including empty subgroups", () => {
-    const project = fixture();
-    project.productionGroups = [{ id: "line", name: "Copper line" }, { id: "empty", name: "Finishing", parentId: "line" }];
-    project.nodes[0].productionGroupId = "line";
-    useFactoryStore.getState().setProject(project);
-    const { container } = render(<PoolWorksheet />);
-    expect(container.querySelector('[data-production-group="line"] .pool-balance-hint')?.textContent).toContain("A group is a smaller setup inside All production. Its Balance rules apply here.");
-    expect(container.querySelector('[data-production-group="empty"] .pool-balance-hint')?.textContent).toBe("A group is a smaller setup inside Copper line. Its Balance rules apply here.");
-    expect(screen.getByRole("button", { name: "Balance all materials in Finishing" }).hasAttribute("disabled")).toBe(true);
-  });
-
   it("collapses a production line and restores it when searching", () => {
     const p = fixture(); p.productionGroups = [{ id: "line", name: "Copper line" }]; p.nodes[0].productionGroupId = "line";
     useFactoryStore.getState().setProject(p);

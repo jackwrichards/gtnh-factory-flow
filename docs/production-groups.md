@@ -6,7 +6,7 @@ Pool follows the reference calculator's organization: a global **Desired rates**
 
 Choose **Add group** in All production or an existing group. Move a machine with its grip onto a group heading, including an empty or collapsed group. Drop it onto All production to move it back outside all subgroups. Empty groups have no collapse arrow until there is content to hide. A group has its own grip for moving the whole group; moving a parent into its descendants is rejected. The settings button at the right of each machine expands an inline Machine settings row when controls exist; otherwise the gear is disabled. The Inside selector appears only when a group has a different valid parent to choose.
 
-The scales button immediately before Add group toggles Balance for every material controlled by that scope, across Inputs, Outputs, and Internal. All on switches all off; mixed or all off switches all on. It is one undo step and never rewrites child-group rules. Each group heading explains that it is a smaller setup inside its named parent, with Balance rules applied locally.
+The scales button immediately before Add group toggles Balance for every material controlled by that scope, across Inputs, Outputs, and Internal. All on switches all off; mixed or all off switches all on. It is one undo step and never rewrites child-group rules.
 
 Group outlines show the hierarchy. Collapse hides the group's machines and nested groups while retaining its totals and material rules. Ctrl+F opens the normally hidden worksheet search, which temporarily reveals collapsed machines; Escape clears and closes it. Delete group (the trash icon) removes only the container; machines, products and child groups move to the parent. Edits support undo.
 
