@@ -284,7 +284,7 @@ export interface RecipeNodeData extends Record<string, unknown> {
 
 export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 
-function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEditor }: Pick<NodeProps<RecipeFlowNode>, "data" | "selected"> & { controlsOnly?: boolean; renderEditor?: (controls: ReactNode, picture: ReactNode, settings: ReactNode) => ReactNode }) {
+function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEditor }: Pick<NodeProps<RecipeFlowNode>, "data" | "selected"> & { controlsOnly?: boolean; renderEditor?: (controls: ReactNode, picture: ReactNode, settings: ReactNode, tier: ReactNode) => ReactNode }) {
   const { projectNode, recipe, result } = data;
   const editorLocked = useFactoryStore((state) => state.isReadOnly || state.checklistMode);
   const [isCompareOpen, setCompareOpenState] = useState(false);
@@ -1288,6 +1288,11 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
             </div> : null}
             <span className="pool-machine-title" title={machineDisplayName}>{machineDisplayName}</span>
           </div>
+        </div>
+      </fieldset>
+    );
+    const tier = (
+      <fieldset disabled={editorLocked} className="pool-tier-editor min-w-0 border-0 p-0 text-[var(--mc-ink)]">
           <div className="pool-editor-power">
           {powerInfo ? <PowerTierChip nodeId={projectNode.id} sourceId={powerInfo.sourceId} values={projectNode.machineConfigTiers} /> : null}
           {cropTierControl && !tierControl && !powerInfo ? <CropTierChip control={cropTierControl} onPick={(key) => updateMachineConfigTier(cropTierControl.id, key)} /> : null}
@@ -1296,7 +1301,6 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
               hatchVoltageTier, hatchAmps, powerInputMode, powerEuT: hatchAmps * getVoltageTierMaxEuT(hatchVoltageTier),
             })} /> : voltageTierControl}
           </div>
-        </div>
       </fieldset>
     );
     const settings = powerInfo || machineConfigPanel || passiveProductionPanel || (isCustomRateNode && customRateDial) ? (
@@ -1323,7 +1327,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
           figures={!isSharedMachine && !isCropProductionRecipe(recipe)} onAddRecipe={canShareMachine ? () => { setCompareOpen(false); browseMachineRecipes(projectNode.id); } : undefined} /> : null}
       </div>
     );
-    return renderEditor ? renderEditor(controls, picture, settings) : <>{picture}{controls}{settings}</>;
+    return renderEditor ? renderEditor(controls, picture, settings, tier) : <>{picture}{controls}{tier}{settings}</>;
   }
 
   // Outputs end in coupling chips at the node's right edge — inside the
@@ -2305,7 +2309,7 @@ function RenderedRecipeHandles({ nodeId, handleIds }: { nodeId: string; handleId
   return null;
 }
 
-export function RecipeNodeEditor({ data, render }: { data: RecipeNodeData; render?: (controls: ReactNode, picture: ReactNode, settings: ReactNode) => ReactNode }) {
+export function RecipeNodeEditor({ data, render }: { data: RecipeNodeData; render?: (controls: ReactNode, picture: ReactNode, settings: ReactNode, tier: ReactNode) => ReactNode }) {
   return <RecipeNodeComponent data={data} selected={false} controlsOnly renderEditor={render} />;
 }
 

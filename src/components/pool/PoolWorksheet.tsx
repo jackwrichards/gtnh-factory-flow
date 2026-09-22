@@ -166,6 +166,7 @@ export function PoolWorksheet() {
     const root = rootRef.current;
     if (!root) return;
     const columns = [
+      { variable: "--pool-tier-width", selector: ".pool-tier-cell .pool-editor-power", minimum: 48, padding: 8 },
       { variable: "--pool-count-width", selector: ".pool-machine-count [data-tooltip-root] > div", minimum: 28, padding: 0 },
       { variable: "--pool-status-width", selector: ".pool-status", minimum: 48, padding: 8 },
       { variable: "--pool-power-width", selector: ".pool-machine-power-value", minimum: 48, padding: 8 },
@@ -323,11 +324,13 @@ export function PoolWorksheet() {
     return group ? (
       <tbody key={group.id} className="pool-group-frame">
         <tr>
-          <td colSpan={8}>
+          <td colSpan={10}>
             <table className="pool-sheet-table" aria-label={"Recipes in " + group.name}>
               <colgroup>
                 <col className="pool-col-picture" />
                 <col className="pool-col-machine" />
+                <col className="pool-col-tier" />
+                <col className="pool-col-count" />
                 <col className="pool-col-status" />
                 <col className="pool-col-circuit" />
                 <col className="pool-col-power" />
@@ -432,6 +435,8 @@ export function PoolWorksheet() {
               <colgroup>
                 <col className="pool-col-picture" />
                 <col className="pool-col-machine" />
+                <col className="pool-col-tier" />
+                <col className="pool-col-count" />
                 <col className="pool-col-status" />
                 <col className="pool-col-circuit" />
                 <col className="pool-col-power" />
@@ -582,7 +587,7 @@ const MachineRows = memo(function MachineRows({
         0,
       ));
   const visibleSections = collapsed ? sections.slice(0, 1) : sections;
-  const renderRows = (controls: ReactNode, picture: ReactNode, settings: ReactNode) => (
+  const renderRows = (controls: ReactNode, picture: ReactNode, settings: ReactNode, tier: ReactNode = null) => (
     <tbody
       {...orderTarget}
       onPointerDownCapture={(event) => {
@@ -632,18 +637,21 @@ const MachineRows = memo(function MachineRows({
                       controls
                     )}
                   </div>
-                  <fieldset disabled={readOnly} className="pool-machine-count">
-                    {first.recipe && isCustomRateRecipe(first.recipe) ? null : (
-                      <SolvedMachinesStat
-                        inline
-                        label={isCrop ? "Seeds" : "Machines"}
-                        needed={countNeeded}
-                        pinned={owner.solvePin}
-                        onPin={(solvePin) => updateNode(owner.id, { solvePin })}
-                      />
-                    )}
-                  </fieldset>
                 </div>
+              </td>
+              <td rowSpan={visibleSections.length} className="pool-tier-cell">{tier}</td>
+              <td rowSpan={visibleSections.length} className="pool-count-cell">
+                <fieldset disabled={readOnly} className="pool-machine-count">
+                  {first.recipe && isCustomRateRecipe(first.recipe) ? null : (
+                    <SolvedMachinesStat
+                      inline
+                      label={isCrop ? "Seeds" : "Machines"}
+                      needed={countNeeded}
+                      pinned={owner.solvePin}
+                      onPin={(solvePin) => updateNode(owner.id, { solvePin })}
+                    />
+                  )}
+                </fieldset>
               </td>
             </>
           ) : null}
@@ -771,7 +779,7 @@ const MachineRows = memo(function MachineRows({
       ))}
       {settingsOpen && settings ? (
         <tr className="pool-settings-row">
-          <td colSpan={8}>
+          <td colSpan={10}>
             <div
               id={settingsId}
               className="pool-settings-section"
@@ -839,7 +847,9 @@ function CollapsedPorts({
 
 function ColumnHeadings() {
   return <tbody className="pool-column-headings"><tr>
-    <th colSpan={2} scope="col">Machine <span>· tier · count</span></th>
+    <th colSpan={2} scope="col">Machine</th>
+    <th scope="col" className="pool-tier-heading" title="Voltage tier and amperage">Tier</th>
+    <th scope="col">Count</th>
     <th scope="col"><span className="pool-status-heading">Status</span><span className="pool-status-heading-dot" aria-hidden="true">●</span></th><th scope="col">Circuit</th><th scope="col">Power</th>
     <th scope="col">Takes</th><th scope="col">Makes</th><th scope="col">Actions</th>
   </tr></tbody>;

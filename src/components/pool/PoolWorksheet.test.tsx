@@ -147,6 +147,11 @@ describe("Pool worksheet", () => {
     const { container } = render(<PoolWorksheet />);
     const machine = container.querySelector(".pool-machine-cell")!;
     expect(machine.getAttribute("rowspan")).toBe("2");
+    expect(screen.getByRole("columnheader", { name: "Tier" })).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "Count" })).toBeTruthy();
+    for (const column of [".pool-tier-cell", ".pool-count-cell"]) {
+      expect(container.querySelector(column)?.getAttribute("rowspan")).toBe("2");
+    }
     expect(machine.querySelector(".pool-status")).toBeNull();
     const statuses = container.querySelectorAll(".pool-status-cell");
     expect(statuses).toHaveLength(2);

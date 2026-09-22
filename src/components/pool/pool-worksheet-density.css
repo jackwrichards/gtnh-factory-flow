@@ -26,8 +26,10 @@
   width: 52px;
 }
 .pool-worksheet--dense .pool-col-machine {
-  width: clamp(280px, 32cqw, 390px);
+  width: clamp(180px, 22cqw, 300px);
 }
+.pool-worksheet--dense .pool-col-tier { width: var(--pool-tier-width, 80px); }
+.pool-worksheet--dense .pool-col-count { width: max(44px, calc(var(--pool-count-width, 40px) + 8px)); }
 .pool-worksheet--dense .pool-col-status {
   width: 20px;
 }
@@ -119,7 +121,10 @@
   flex: 1;
   min-width: 0;
 }
+.pool-worksheet--dense .pool-tier-editor { display: flex; justify-content: flex-end; }
+.pool-worksheet--dense .pool-column-headings .pool-tier-heading { text-align: right; }
 .pool-worksheet--dense .pool-editor-power {
+  width: max-content;
   padding: 0;
   gap: 2px;
   flex-shrink: 0;
@@ -706,7 +711,7 @@
 @container (max-width: 1050px) {
   .pool-worksheet--dense .pool-col-status { width: 24px; }
   .pool-worksheet--dense .pool-col-circuit { width: 36px; }
-  .pool-worksheet--dense .pool-col-machine { width: clamp(280px, 34cqw, 350px); }
+  .pool-worksheet--dense .pool-col-machine { width: clamp(180px, 24cqw, 260px); }
   .pool-worksheet--dense .pool-status { justify-content: center; min-width: 14px; min-height: 22px; }
   .pool-worksheet--dense .pool-status-text,
   .pool-worksheet--dense .pool-status-heading {
@@ -719,7 +724,7 @@
 }
 .pool-status-heading-dot { display: none; }
 @container (max-width: 850px) {
-  .pool-worksheet--dense .pool-col-machine { width: 280px; }
+  .pool-worksheet--dense .pool-col-machine { width: 180px; }
   .pool-worksheet--dense .pool-col-power { width: var(--pool-power-width, 64px); }
   .pool-worksheet--dense .pool-col-actions { width: 88px; }
   .pool-worksheet--dense .pool-sheet-table:has(> tbody[data-worksheet-node] .pool-collapse-machine) > colgroup > .pool-col-actions { width: 108px; }
@@ -727,7 +732,7 @@
   .pool-worksheet--dense .pool-column-headings th:first-child > span { display: none; }
 }
 @container (max-width: 650px) {
-  .pool-worksheet--dense .pool-col-machine { width: 280px; }
+  .pool-worksheet--dense .pool-col-machine { width: 180px; }
   .pool-worksheet--dense .pool-col-power { width: var(--pool-power-width, 64px); }
   .pool-worksheet--dense .pool-machine-layout { gap: 3px; }
 }
@@ -750,26 +755,35 @@
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-machine-cell {
     grid-column: 2 / 4; grid-row: 1; min-height: 0; padding: 1px 3px;
   }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-tier-cell {
+    grid-column: 1 / 3; grid-row: 2; display: flex; align-items: center; gap: 5px;
+  }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-count-cell {
+    grid-column: 3; grid-row: 2; display: flex; align-items: center; gap: 5px;
+  }
+  .pool-tier-cell::before, .pool-count-cell::before { color: var(--mc-ink-muted); font: 8px/12px var(--app-font); }
+  .pool-tier-cell::before { content: "Tier"; }
+  .pool-count-cell::before { content: "Count"; }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell {
     grid-column: 4; grid-row: 2; justify-self: end; align-self: center;
   }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-actions-cell {
-    grid-column: 4; grid-row: var(--pool-section-row); align-self: center;
+    grid-column: 4; grid-row: calc(var(--pool-section-row) + 1); align-self: center;
   }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr:first-child > .pool-actions-cell {
     grid-column: 4; grid-row: 1;
   }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-status-cell {
-    grid-column: 1; grid-row: var(--pool-section-row); justify-self: start; align-self: center;
+    grid-column: 1; grid-row: calc(var(--pool-section-row) + 1); justify-self: start; align-self: center;
   }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-circuit-cell {
-    grid-column: 1; grid-row: var(--pool-section-row); justify-self: end; align-self: center;
+    grid-column: 1; grid-row: calc(var(--pool-section-row) + 1); justify-self: end; align-self: center;
   }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-takes-cell {
-    grid-column: 2; grid-row: var(--pool-section-row);
+    grid-column: 2; grid-row: calc(var(--pool-section-row) + 1);
   }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-makes-cell {
-    grid-column: 3; grid-row: var(--pool-section-row);
+    grid-column: 3; grid-row: calc(var(--pool-section-row) + 1);
   }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > .pool-settings-row > td {
     grid-column: 1 / -1; grid-row: auto;
@@ -797,9 +811,10 @@
     grid-template-columns: 52px minmax(0, 1fr) minmax(0, 1fr) 24px;
   }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-machine-cell { grid-column: 2 / -1; }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell { grid-column: 1 / 3; grid-row: 2; justify-self: start; }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr:first-child > .pool-actions-cell { grid-column: 3 / -1; grid-row: 2; }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] :is(.pool-status-cell, .pool-circuit-cell, .pool-takes-cell, .pool-makes-cell, .pool-actions-cell) { grid-row: calc(var(--pool-section-row) + 1); }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-count-cell { grid-column: 3 / -1; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell { grid-column: 1 / 3; grid-row: 3; justify-self: start; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr:first-child > .pool-actions-cell { grid-column: 3 / -1; grid-row: 3; }
+  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] :is(.pool-status-cell, .pool-circuit-cell, .pool-takes-cell, .pool-makes-cell, .pool-actions-cell) { grid-row: calc(var(--pool-section-row) + 2); }
 }
 /* Rate rules and outcomes are separate, labeled columns. */
 .pool-worksheet--dense .pool-products-table .pool-rates-columns th:nth-child(2) { width: 74px; }

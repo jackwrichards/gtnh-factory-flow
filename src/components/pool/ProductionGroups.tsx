@@ -134,7 +134,7 @@ export function ProductionScopeHeader({
       data-pool-group-target={group?.id ?? ""}
     >
       <tr>
-        <td colSpan={8}>
+        <td colSpan={10}>
           <div className="pool-production-heading">
             {group ? (
               <>
