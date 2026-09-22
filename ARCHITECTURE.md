@@ -149,7 +149,7 @@ is no snap toggle any more.
    `normalizeLoadedProject` snaps whole plans on the way in, so old designs
    land on the grid the first time they are opened.
 2. **Card sizes are whole cells.** Recipe cards are a fixed 360 wide. Drawers
-   and tanks are 140×160, trash cans 120×140.
+   and tanks are 180×80, with artwork beside their name and rate.
 3. **Port rows are the vertical unit.** A port row is 40px (two cells) with no
    gaps between rows, and the head above the rails is one 40px title row
    (the machine tab strip that used to add rows above it is gone). Port

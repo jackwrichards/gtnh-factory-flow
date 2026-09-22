@@ -103,14 +103,10 @@ export const FOOTER_HEIGHT = cells(2); // 40
 export const CONFIG_PANEL_ROW_HEIGHT = cells(3); // 60
 
 /**
- * Drawers and tanks. Five cells by four: a drawer holds one thing, and with
- * buffers between machines everywhere now, a board full of them has to read
- * as small tiles rather than a second fleet of machine cards. Wider than
- * tall, because the tile's two lines of text - the role word up top, the net
- * rate below - need width, not height. The height stays an EVEN number of
- * cells so the side-centre dock points (height / 2) land on a grid line.
+ * Drawers and tanks: a low horizontal face, with artwork beside the name and
+ * rate. Nine cells by four; shared by placement, routing, and drag previews.
  */
-export const STORAGE_NODE_WIDTH = cells(5); // 100
+export const STORAGE_NODE_WIDTH = cells(9); // 180
 export const STORAGE_NODE_HEIGHT = cells(4); // 80
 
 /** Trash cans, same tile. */

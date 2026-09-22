@@ -39,6 +39,7 @@ import { openRatioEditor } from "./ratio-editor";
 import { RatioSetupOutput } from "./RatioWireLabel";
 import { ratioExportShare } from "@/lib/model/storage-ratios";
 import { getCategoryPresentation } from "@/lib/model/category-presentation";
+import { STORAGE_NODE_WIDTH, STORAGE_NODE_HEIGHT } from "@/lib/board-grid";
 import { resourceLabel } from "@/lib/model/resources";
 
 
@@ -163,7 +164,7 @@ const WELL_HANDLE: CSSProperties = {
  * spends a row on its mode) and stretching a sprite to a non-square hole
  * distorts it.
  */
-const CARD_ICON_PX = 36;
+const CARD_ICON_PX = 52;
 /**
  * Plain-fluid swatches draw edge to edge — no baked-in margin like item
  * sprites — so undiluted they brush right up against the header above and the
@@ -350,11 +351,11 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
         // still reads as a copper-coloured card.
         data-node-glance-root=""
         className={[
-          // Five cells by four, fixed. Wires dock on the card's perimeter, so
+          // Nine cells by four, fixed. Wires dock on the card's perimeter, so
           // an off-grid edge would mean off-grid endpoints. A drawer is a
-          // TILE: silhouette and colour for the role, the word to say it in
-          // letters, icon for the item, net rate for the news.
-          "storage-node-card relative flex h-[80px] w-[100px] flex-col p-1",
+          // TILE: silhouette and colour for the role, art and name for the
+          // resource, and a dedicated rate line. The shared geometry owns this footprint.
+          "storage-node-card relative flex h-[80px] w-[180px] flex-col p-1",
           // Search has no rim of its own, so the card itself brightens to say
           // "this one matched". The glow states deliberately do NOT: a filter
           // here also lifts the rim and the wash drawn inside this box, and
@@ -489,7 +490,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               because a border follows the element's box and only a path can
               follow the silhouette. It sits UNDER the header, the word and
               the numbers (z-0): the chrome reads on top, and the ring shows
-              wherever the tile is bare. The coordinates are the 100x80
+              wherever the tile is bare. The coordinates are the 180x80
               tile's hexagon inset by 1.5px - hugging the frame, so the
               stroke stays off the word and the net line - and they can be
               exact because STORAGE_NODE_WIDTH/HEIGHT are fixed. */}
@@ -497,12 +498,12 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             <svg
               aria-hidden
               className="pointer-events-none absolute inset-0 z-0"
-              viewBox="0 0 100 80"
+              viewBox={`0 0 ${STORAGE_NODE_WIDTH} ${STORAGE_NODE_HEIGHT}`}
               width="100%"
               height="100%"
             >
               <polygon
-                points="15.1,1.5 84.9,1.5 98.4,40 84.9,78.5 15.1,78.5 1.6,40"
+                points="15.1,1.5 164.9,1.5 178.4,40 164.9,78.5 15.1,78.5 1.6,40"
                 fill="none"
                 stroke={tint}
                 strokeWidth={3}
@@ -512,14 +513,13 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               />
             </svg>
           ) : null}
-          <StorageHeader storage={storage} isTank={isTank} tint={tint} role={role} />
+          <StorageHeader storage={storage} isTank={isTank} role={role} />
           {role === "buffer" && storage.bufferMode === "ratio" ? (
-            <svg aria-hidden data-ratio-rim className="pointer-events-none absolute inset-0 z-0" viewBox="0 0 100 80" width="100%" height="100%">
-              <polygon points="18,5 82,5 94,40 82,75 18,75 6,40" fill="none" stroke={tint} strokeWidth={1.5} />
+            <svg aria-hidden data-ratio-rim className="pointer-events-none absolute inset-0 z-0" viewBox={`0 0 ${STORAGE_NODE_WIDTH} ${STORAGE_NODE_HEIGHT}`} width="100%" height="100%">
+              <polygon points="18,5 162,5 174,40 162,75 18,75 6,40" fill="none" stroke={tint} strokeWidth={1.5} />
             </svg>
           ) : null}
-          {/* Everything under the header is the wire zone: drag from the
-              left or right half to pull a wire. The header is plain card,
+          {/* The well is the wire zone. The floating header is plain card,
               so grabbing it (or the frame) moves the node. The handles
               carry inline styles pinned to this box; stylesheet !important
               wars once let them blanket the whole card and swallow the
@@ -528,7 +528,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               the flow, not the card around it. Wiring is a mode; a held
               wire must not also be lighting up cards. */}
           <div
-            className="relative mx-auto flex min-h-0 w-full flex-1 flex-col"
+            className="storage-face-layout relative min-h-0 w-full flex-1"
             onMouseEnter={() =>
               isWiringConnection() ? undefined : setHoveredFlowScope(buildStorageFlowScope(useFactoryStore.getState().project, storage))
             }
@@ -561,9 +561,9 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             />
             {/* No wood face, no glass box: the dark tinted card IS the
                 surface, and the item fills nearly the whole well. */}
-            <div className="relative flex min-h-0 w-full flex-1 items-center justify-center gap-1">
+            <div className={`storage-icon-well relative flex min-h-0 w-full flex-1 items-center justify-center gap-1 ${role === "buffer" && storage.bufferMode === "ratio" ? "flex-col" : ""}`}>
               {solveMode && (role === "source" || role === "product") ? (
-                <StorageTargetRule storage={storage} input={isInputRate(storage, role)} compact className="!absolute right-1 top-1 z-40" />
+                <StorageTargetRule storage={storage} input={isInputRate(storage, role)} compact className="!absolute left-0 bottom-0 z-40" />
               ) : null}
               <ResourceIcon
                 resource={{ ...storage, id: storage.resourceId, amount: 1, alternatives: category?.alternatives }}
@@ -573,10 +573,11 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
                   role === "buffer" && storage.bufferMode === "ratio" ? 20 : isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
                   storage,
                 )}
-                className={role === "buffer" && storage.bufferMode === "ratio" ? "!h-[20px] !w-[20px] shrink-0" : "!h-[36px] !w-[36px]"}
+                className={role === "buffer" && storage.bufferMode === "ratio" ? "!h-[20px] !w-[20px] shrink-0" : "!h-[52px] !w-[52px]"}
               />
               {role === "buffer" && storage.bufferMode === "ratio" ? <RatioSetupOutput storageId={storage.id} percentage={ratioExportShare(storage) * 100} /> : null}
             </div>
+            <StorageResourceName title={title} />
             {role === "buffer" && storage.bufferMode === "ratio" ? (
               <div className="relative mx-auto mb-0.5 grid w-[72px] grid-cols-[52px_16px] items-center gap-1">
                 <NetLine net={net} kind={storage.kind} role={role} width={52} />
@@ -623,7 +624,7 @@ export function StorageTileFace({
   const tint = storageTint(storage, role);
   const borderColor = `color-mix(in srgb, ${tint} 55%, #262b34)`;
   return (
-    <div className="storage-node-card relative flex h-[80px] w-[100px] flex-col p-1 text-[#e8e9ee]">
+    <div className="storage-node-card relative flex h-[80px] w-[180px] flex-col p-1 text-[#e8e9ee]">
       <span
         aria-hidden
         data-storage-shape={role}
@@ -642,9 +643,9 @@ export function StorageTileFace({
         data-storage-shape={role}
         className="storage-shape-content relative z-10 flex min-h-0 flex-1 flex-col"
       >
-        <StorageHeader storage={storage} isTank={isTank} tint={tint} role={role} />
-        <div className="relative mx-auto flex min-h-0 w-full flex-1 flex-col">
-          <div className="grid min-h-0 w-full flex-1 place-items-center">
+        <StorageHeader storage={storage} isTank={isTank} role={role} />
+        <div className="storage-face-layout relative min-h-0 w-full flex-1">
+          <div className="storage-icon-well grid min-h-0 w-full flex-1 place-items-center">
             <ResourceIcon
               resource={{ ...storage, id: storage.resourceId, amount: 1, alternatives: category?.alternatives }}
               showAmount={false}
@@ -653,12 +654,22 @@ export function StorageTileFace({
                 isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
                 storage,
               )}
-              className="!h-[36px] !w-[36px]"
+              className="!h-[52px] !w-[52px]"
             />
           </div>
+          <StorageResourceName title={resourceLabel(category ?? { id: storage.resourceId, displayName: storage.displayName })} />
           <NetLine net={net} kind={storage.kind} role={role} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The material and rate share a column beside the artwork. */
+function StorageResourceName({ title }: { title: string }) {
+  return (
+    <div className={`storage-resource-name pointer-events-none relative z-10 flex min-w-0 items-end font-bold leading-[13px] text-[#e8e9ee] ${title.length > 23 ? "text-[10px]" : "text-[12px]"}`}>
+      <span className="line-clamp-2 break-words">{title}</span>
     </div>
   );
 }
@@ -677,22 +688,20 @@ export const StorageNode = memo(
  * clipping it printed a confident wrong one. Stepped by string length rather
  * than measured, so the board never reads the DOM for it.
  *
- * The room it has depends on the SILHOUETTE, not the box: the tile's
- * clip-path cuts its children too, and the shield's tapered base and the
- * hexagon's points bite exactly the row this line sits on. Each role's width
- * is the shape's clearance at the line's own height, worked from the
- * polygons in globals.css over the fixed 100x80 tile.
+ * The room is the text column beside the artwork, less the clearance each
+ * silhouette needs at the bottom right. Fit by string length rather than
+ * measuring the DOM on a board full of cards.
  */
 const NET_LINE_WIDTH_BY_ROLE: Record<StorageRole, number> = {
-  product: 92,
-  idle: 92,
-  source: 84,
-  buffer: 70,
+  product: 100,
+  idle: 100,
+  source: 96,
+  buffer: 86,
   // The shield's base taper is the deepest bite of the set, and it takes it
   // exactly across this line's lowest pixels.
-  byproduct: 66,
+  byproduct: 82,
   // The bin's straight taper reaches ~13px a side at the line's depth.
-  trash: 72,
+  trash: 82,
 };
 /**
  * Advance per character at each step. Measured against the rendered bold
@@ -701,6 +710,7 @@ const NET_LINE_WIDTH_BY_ROLE: Record<StorageRole, number> = {
  * tail to the shield.
  */
 const NET_LINE_FIT_STEPS = [
+  { className: "text-[14px]", perChar: 9.3 },
   { className: "text-[12px]", perChar: 8 },
   { className: "text-[10px]", perChar: 6.6 },
   { className: "text-[8px]", perChar: 5.3 },
@@ -962,12 +972,10 @@ function RatioSplitButton({ storageId }: { storageId: string }) {
 function StorageHeader({
   storage,
   isTank,
-  tint,
   role,
 }: {
   storage: FactoryStorage;
   isTank: boolean;
-  tint: string;
   role: StorageRole;
 }) {
   const solveMode = useFactoryStore((state) => state.project.solveMode === true);
@@ -981,14 +989,10 @@ function StorageHeader({
 
   return (
     <div
-      // relative z-40: the invisible wire handles (z-30) blanket the card,
+      // z-40: the invisible wire handles (z-30) blanket the card,
       // and without a higher stacking position they swallow every click
-      // aimed at the delete/clone buttons underneath.
-      className="storage-node-header relative z-40 flex h-5 items-center gap-1 border-b-2 px-1 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]"
-      style={{
-        borderColor: `color-mix(in srgb, ${tint} 55%, #262b34)`,
-        background: `color-mix(in srgb, ${tint} 32%, #0a0c10)`,
-      }}
+      // aimed at the delete/switch buttons underneath.
+      className="storage-node-header absolute inset-x-0 top-0 z-40 flex h-4 items-center justify-end gap-1 px-1"
     >
       <button
         type="button"
@@ -1004,22 +1008,9 @@ function StorageHeader({
             baseline-align the hyphen low instead of centring it. */}
         <span aria-hidden className="block h-[2px] w-[8px] bg-white" />
       </button>
-      {/* The role, in letters, centred between the two buttons. Colour and
-          silhouette say it too, but a word is the one channel nobody has to
-          learn. The tile is five cells wide precisely so the longest word
-          (BYPRODUCT) clears the buttons; truncate is the safety net, not the
-          plan. No title here: the card-wide tooltip already explains it.
-          The tapered shapes narrow their own header, so their word steps
-          down a point to keep clear of the slopes.
-          storage-node-word: calm mode leans on this hook too. */}
-      <div
-        className={[
-          "storage-node-word pointer-events-none absolute inset-x-0 truncate text-center font-black tracking-[0.4px] text-[#e8e9ee] [text-shadow:1px_1px_0_rgba(0,0,0,0.65)]",
-          role === "buffer" || role === "byproduct" ? "text-[7px]" : "text-[8px]",
-        ].join(" ")}
-      >
-        {word}
-      </div>
+      {/* Colour and silhouette carry the role; the tooltip explains it.
+          Keep the word available to assistive technology. */}
+      <span className="storage-node-word sr-only">{word}</span>
       {isDrainRole(role) ? (
         <DrainModeSwap storageId={storageId} role={role} kind={storage.kind} />
       ) : null}

@@ -47,6 +47,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.5.0",
+    date: "2026-09-21",
+    headline: "Your materials, front and centre",
+    notes: [
+      "Drawers have a wider face with larger artwork beside the material name and rate, plus compact delete and switch controls.",
+    ],
+  },
+  {
     version: "3.4.0",
     date: "2026-09-21",
     headline: "Clearer Pool planning and screenshots",
