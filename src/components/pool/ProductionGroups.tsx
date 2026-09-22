@@ -3,7 +3,7 @@
 import { materialRuleHelp } from "./material-rule-help";
 
 import { useLayoutEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { ChevronDown, FolderPlus, GripVertical, Trash2 } from "lucide-react";
+import { ChevronDown, FolderPlus, GripVertical, Scale, Trash2 } from "lucide-react";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
 import type { ProductionGroup, ResourceAmount } from "@/lib/model/types";
@@ -188,7 +188,15 @@ export function ProductionScopeHeader({
             )}
             {materials.size > 0 && !collapsed ? (
               <span className="pool-balance-hint">
-                Balance on: materials made and used here must match. Off: {group ? "share with the parent group." : "allow outside supply and surplus."}
+                <span className="pool-balance-hint-part">
+                  <span className="pool-balance-legend" data-on><Scale aria-hidden /><strong>On:</strong></span>{" "}
+                  If recipes here both make and use a material, the amounts must match.
+                </span>{" "}
+                <span className="pool-balance-hint-part">
+                  <span className="pool-balance-legend"><Scale aria-hidden /><strong>Off:</strong></span>{" "}
+                  {group ? "Share that material with the parent group." : "Allow outside supply for shortages and let surplus leave."}
+                </span>{" "}
+                <span className="pool-balance-hint-part">Materials only made here can leave; materials only used here can come in.</span>
               </span>
             ) : null}
             {group && !hasContents ? (
@@ -248,7 +256,7 @@ export function ProductionScopeHeader({
                   return <table className="pool-material-table" key={label} aria-label={label + " for " + name}>
                     <caption title={index === 2 ? "Made and used within this scope, with no net flow." : undefined}>{label}</caption>
                     <tbody><tr>
-                      <td><div className="pool-material-columns" style={{ "--pool-material-rule-width": entries.some(([, entry]) => !entry.row) ? "80px" : "36px" } as CSSProperties}>
+                      <td><div className="pool-material-columns" style={{ "--pool-material-rule-width": entries.some(([, entry]) => !entry.row) ? "80px" : "22px" } as CSSProperties}>
                 {entries.map(([key, { resource, row, input, output }]) => {
                   const material = resource.displayName ?? resource.id;
                   const net = output - input;
@@ -272,7 +280,7 @@ export function ProductionScopeHeader({
                       aria-label={"Balance " + material + " in " + name} aria-pressed={!row.rule}
                       title={materialRuleHelp(row.rule, Boolean(group))} disabled={readOnly}
                       onClick={() => useFactoryStore.getState().setPoolResourceRule(group?.id, row.key, row.rule ? undefined : group ? "share" : "import")}>
-                      Balance
+                      <Scale aria-hidden />
                     </button> : <span className="pool-material-inherited" title="This total includes a child group's local material. Change its rule in that group.">Within groups</span>}
                   </div>;
                 })}
