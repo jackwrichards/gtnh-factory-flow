@@ -709,9 +709,11 @@
 
 /* Compact columns first. Keep the worksheet a table down to phone widths. */
 @container (max-width: 1050px) {
-  .pool-worksheet--dense .pool-col-status { width: 24px; }
-  .pool-worksheet--dense .pool-col-circuit { width: 36px; }
   .pool-worksheet--dense .pool-col-machine { width: clamp(180px, 24cqw, 260px); }
+}
+/* Keep readable statuses in the table; dots are only for the compact phone layout. */
+@container (max-width: 700px) {
+  .pool-worksheet--dense .pool-col-status { width: 24px; }
   .pool-worksheet--dense .pool-status { justify-content: center; min-width: 14px; min-height: 22px; }
   .pool-worksheet--dense .pool-status-text,
   .pool-worksheet--dense .pool-status-heading {
@@ -987,3 +989,8 @@
   .pool-desired-products[data-empty] .pool-products-table tbody { flex: 1; display: grid; }
   .pool-rates-empty { display: grid; align-items: center; min-height: 54px; }
 }
+
+.pool-balance-all[aria-pressed="true"] { color: #adc7ff; background: #6f9cff20; }
+.pool-balance-all[aria-pressed="mixed"] { color: #adc7ff; }
+.pool-balance-all:disabled { cursor: default; opacity: .4; }
+.pool-balance-all:focus-visible { outline: 1px solid #adc7ff; outline-offset: 1px; }

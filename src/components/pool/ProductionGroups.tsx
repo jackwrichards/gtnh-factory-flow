@@ -97,6 +97,9 @@ export function ProductionScopeHeader({
     return () => observer?.disconnect();
   }, [resources, inputs, outputs]);
   const name = group?.name ?? "All production";
+  const parentName = groups?.find((entry) => entry.id === group?.parentId)?.name ?? "All production";
+  const allBalanced = resources.length > 0 && resources.every((row) => !row.rule);
+  const someBalanced = resources.some((row) => !row.rule);
   const excluded = group ? productionGroupDescendants(groups ?? [], group.id) : new Set<string>();
   const canMove =
     group && (group.parentId || (groups ?? []).some((entry) => !excluded.has(entry.id)));
@@ -186,17 +189,20 @@ export function ProductionScopeHeader({
             ) : (
               <strong>{name}</strong>
             )}
-            {materials.size > 0 && !collapsed ? (
+            {(group || materials.size > 0) && !collapsed ? (
               <span className="pool-balance-hint">
-                <span className="pool-balance-hint-part">
-                  <span className="pool-balance-legend" data-on><Scale aria-hidden /><strong>On:</strong></span>{" "}
-                  If recipes here both make and use a material, the amounts must match.
-                </span>{" "}
-                <span className="pool-balance-hint-part">
-                  <span className="pool-balance-legend"><Scale aria-hidden /><strong>Off:</strong></span>{" "}
-                  {group ? "Share that material with the parent group." : "Allow outside supply for shortages and let surplus leave."}
-                </span>{" "}
-                <span className="pool-balance-hint-part">Materials only made here can leave; materials only used here can come in.</span>
+                {group ? <span className="pool-balance-hint-part">A group is a smaller setup inside <strong>{parentName}</strong>. Its Balance rules apply here.</span> : null}
+                {materials.size > 0 ? <>
+                  <span className="pool-balance-hint-part">
+                    <span className="pool-balance-legend" data-on><Scale aria-hidden /><strong>On:</strong></span>{" "}
+                    If recipes here both make and use a material, the amounts must match.
+                  </span>{" "}
+                  <span className="pool-balance-hint-part">
+                    <span className="pool-balance-legend"><Scale aria-hidden /><strong>Off:</strong></span>{" "}
+                    {group ? "Share that material with the parent group." : "Allow outside supply for shortages and let surplus leave."}
+                  </span>{" "}
+                  <span className="pool-balance-hint-part">Materials only made here can leave; materials only used here can come in.</span>
+                  </> : null}
               </span>
             ) : null}
             {group && !hasContents ? (
@@ -216,6 +222,19 @@ export function ProductionScopeHeader({
                       }
                     />
                   ) : null}
+                  <button
+                    type="button"
+                    className="pool-production-key pool-balance-all"
+                    aria-label={"Balance all materials in " + name}
+                    aria-pressed={allBalanced ? true : someBalanced ? "mixed" : false}
+                    disabled={!resources.length}
+                    title={"Turn Balance " + (allBalanced ? "off" : "on") + " for every material in " + name + "."}
+                    onClick={() => useFactoryStore.getState().setPoolResourceRules(
+                      group?.id, resources.map((row) => row.key), allBalanced ? (group ? "share" : "import") : undefined,
+                    )}
+                  >
+                    <Scale size={14} aria-hidden />
+                  </button>
                   <button
                     type="button"
                     className="pool-production-key"

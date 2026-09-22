@@ -469,6 +469,7 @@ interface FactoryStore {
   dissolveProductionGroup: (id: string) => void;
   moveToProductionGroup: (ids: string[], groupId?: string) => void;
   setPoolResourceRule: (groupId: string | undefined, key: string, rule?: PoolResourceRule) => void;
+  setPoolResourceRules: (groupId: string | undefined, keys: string[], rule?: PoolResourceRule) => void;
   /**
    * Pool mode's cell-to-fluid ratios, merged in as the board fetches them
    * from the Canner (litres per filled cell, by cell id). Not an undo step:
@@ -2588,15 +2589,19 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       return withProjectHistory(state, { project, lastResult: solveBooks(project) });
     });
   },
-  setPoolResourceRule: (groupId, key, rule) => {
+  setPoolResourceRule: (groupId, key, rule) => get().setPoolResourceRules(groupId, [key], rule),
+  setPoolResourceRules: (groupId, keys, rule) => {
     set((state) => {
-      if (state.isReadOnly || !/^(item|fluid):.+/.test(key)) return state;
+      if (state.isReadOnly) return state;
       const group = state.project.productionGroups?.find((entry) => entry.id === groupId);
       if (groupId && !group) return state;
       const current = (group ? group.resourceRules : state.project.poolResourceRules) ?? {};
-      if (current[key] === rule) return state;
+      const changed = [...new Set(keys)].filter((key) => /^(item|fluid):.+/.test(key) && current[key] !== rule);
+      if (!changed.length) return state;
       const rules = { ...current };
-      if (rule) rules[key] = rule; else delete rules[key];
+      for (const key of changed) {
+        if (rule) rules[key] = rule; else delete rules[key];
+      }
       const project = touchProject(group ? { ...state.project,
         productionGroups: state.project.productionGroups!.map((entry) => entry.id === groupId ? { ...entry, resourceRules: rules } : entry),
       } : { ...state.project, poolResourceRules: rules });

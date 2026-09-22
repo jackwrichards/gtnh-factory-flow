@@ -627,6 +627,7 @@ describe("Pool worksheet", () => {
     expect(screen.queryByRole("button", { name: "Required amount" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Remove machine" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add rate" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Balance all materials/ })).toBeNull();
 
     expect((container.querySelector("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
     expect(useFactoryStore.getState().project).toBe(project);
@@ -684,6 +685,38 @@ describe("production group controls", () => {
     expect(useFactoryStore.getState().project.productionGroups![0].resourceRules?.["item:copper"]).toBeUndefined();
     expect(screen.getByRole("button", { name: "Balance Copper Ingot in Copper line" }).getAttribute("aria-pressed")).toBe("true");
   });
+  it.each([false, true])("toggles every material in one undo step, limited to its scope (group: %s)", (nested) => {
+    const project = fixture();
+    project.recipes[0].inputs.push({ kind: "item", id: "recycled", amount: 1 });
+    project.recipes[0].outputs.push({ kind: "item", id: "recycled", amount: 1 });
+    project.productionGroups = [{ id: "other", name: "Other", resourceRules: { "item:copper": "import" } }];
+    if (nested) {
+      project.productionGroups.push({ id: "line", name: "Copper line" });
+      project.nodes[0].productionGroupId = "line";
+      project.storages![0].productionGroupId = "line";
+    }
+    useFactoryStore.getState().setProject(project);
+    render(<PoolWorksheet />);
+    const name = nested ? "Copper line" : "All production";
+    const button = () => screen.getByRole("button", { name: "Balance all materials in " + name });
+    const rules = () => nested ? useFactoryStore.getState().project.productionGroups!.find(g => g.id === "line")!.resourceRules : useFactoryStore.getState().project.poolResourceRules;
+    expect(button().getAttribute("aria-pressed")).toBe("true");
+    const before = useFactoryStore.getState();
+    fireEvent.click(button());
+    expect(rules()).toEqual(Object.fromEntries(["copper", "plate", "recycled"].map(id => ["item:" + id, nested ? "share" : "import"])));
+    expect(button().getAttribute("aria-pressed")).toBe("false");
+    expect(useFactoryStore.getState().undoHistory.length).toBe(before.undoHistory.length + 1);
+    expect(useFactoryStore.getState().project.productionGroups!.find(g => g.id === "other")!.resourceRules).toEqual({ "item:copper": "import" });
+    act(() => useFactoryStore.getState().undo());
+    expect(rules()).toBeUndefined();
+    expect(button().getAttribute("aria-pressed")).toBe("true");
+    act(() => useFactoryStore.getState().setPoolResourceRule(nested ? "line" : undefined, "item:copper", "import"));
+    expect(button().getAttribute("aria-pressed")).toBe("mixed");
+    fireEvent.click(button());
+    expect(rules()).toEqual({});
+    expect(button().getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("combines both boundary directions without offering a parent override for child-local totals", () => {
     const resource = { kind: "item" as const, id: "copper", displayName: "Copper Ingot", amount: 1 };
     render(<table><ProductionScopeHeader resources={[]} readOnly={false} power={null}
@@ -731,6 +764,17 @@ describe("production group controls", () => {
     expect(within(screen.getByRole("table", { name: "Inputs for " + scope })).getByText("dust")).toBeTruthy();
     expect(screen.getByLabelText("dust: net input 2/s")).toBeTruthy();
   });
+  it("explains group scope using its parent name, including empty subgroups", () => {
+    const project = fixture();
+    project.productionGroups = [{ id: "line", name: "Copper line" }, { id: "empty", name: "Finishing", parentId: "line" }];
+    project.nodes[0].productionGroupId = "line";
+    useFactoryStore.getState().setProject(project);
+    const { container } = render(<PoolWorksheet />);
+    expect(container.querySelector('[data-production-group="line"] .pool-balance-hint')?.textContent).toContain("A group is a smaller setup inside All production. Its Balance rules apply here.");
+    expect(container.querySelector('[data-production-group="empty"] .pool-balance-hint')?.textContent).toBe("A group is a smaller setup inside Copper line. Its Balance rules apply here.");
+    expect(screen.getByRole("button", { name: "Balance all materials in Finishing" }).hasAttribute("disabled")).toBe(true);
+  });
+
   it("collapses a production line and restores it when searching", () => {
     const p = fixture(); p.productionGroups = [{ id: "line", name: "Copper line" }]; p.nodes[0].productionGroupId = "line";
     useFactoryStore.getState().setProject(p);

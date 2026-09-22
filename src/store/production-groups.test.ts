@@ -40,6 +40,19 @@ beforeEach(() => {
   useFactoryStore.getState().setProject(empty());
 });
 describe("production group mutations", () => {
+  it("rejects invalid, empty, unchanged, and read-only bulk rule updates", () => {
+    const store = useFactoryStore.getState();
+    const before = useFactoryStore.getState();
+    store.setPoolResourceRules(undefined, [], "import");
+    store.setPoolResourceRules(undefined, ["invalid"], "import");
+    store.setPoolResourceRules("missing", ["item:x"], "share");
+    store.setPoolResourceRules(undefined, ["item:x"]);
+    expect(useFactoryStore.getState().project).toBe(before.project);
+    expect(useFactoryStore.getState().undoHistory).toBe(before.undoHistory);
+    useFactoryStore.setState({ isReadOnly: true });
+    store.setPoolResourceRules(undefined, ["item:x"], "import");
+    expect(useFactoryStore.getState().project).toBe(before.project);
+  });
   it("rejects cyclic parents and dissolves a group into its parent in one undo step", () => {
     const store = useFactoryStore.getState();
     const parent = store.createProductionGroup("Parent")!;
