@@ -972,3 +972,17 @@
 .pool-balance-legend[data-on] { color: #adc7ff; }
 .pool-balance-legend svg { width: 12px; height: 12px; }
 .pool-balance-legend strong { font-weight: 600; }
+
+/* The empty drop target shares power's height without stretching populated rows. */
+.pool-worksheet--dense .pool-overview > .pool-desired-products[data-empty] { align-self: stretch; display: flex; flex-direction: column; }
+.pool-desired-products[data-empty] .pool-sheet-products { flex: 1; }
+.pool-desired-products[data-empty] .pool-products-scroll { display: flex; }
+.pool-desired-products[data-empty] .pool-products-table { height: 100%; }
+.pool-desired-products[data-empty] .pool-products-table thead { height: 21px; }
+.pool-worksheet--dense .pool-overview .pool-rates-empty > td { height: auto; padding: 8px 12px; text-align: center; white-space: normal; color: var(--mc-ink-muted); font-size: 10px; }
+.pool-rates-empty p { margin: 0; text-wrap: balance; }
+@container pool-rates (max-width: 400px) {
+  .pool-desired-products[data-empty] .pool-products-table { display: flex; flex-direction: column; }
+  .pool-desired-products[data-empty] .pool-products-table tbody { flex: 1; display: grid; }
+  .pool-rates-empty { display: grid; align-items: center; min-height: 54px; }
+}

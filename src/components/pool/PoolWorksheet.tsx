@@ -388,7 +388,7 @@ export function PoolWorksheet() {
         <WorksheetPointerDrag>
           <div className="pool-sheet-scroll">
             <div className="pool-overview">
-              <div className="pool-desired-products">
+              <div className="pool-desired-products" data-empty={products.length === 0 || undefined}>
                 <ProductsPane id={`${summaryId}-products`}>
                   <div className="pool-products-scroll">
                     <table
@@ -406,6 +406,11 @@ export function PoolWorksheet() {
                         </tr>
                       </thead>
                       <tbody>
+                        {products.length === 0 ? (
+                          <tr className="pool-rates-empty"><td colSpan={6}>
+                            <p>{readOnly ? "No desired rates set." : "Drag items here to set a rate."} <span className="pool-flow-output">Positive = output</span>; <span className="pool-flow-input">negative = input</span>.</p>
+                          </td></tr>
+                        ) : null}
                         {products.map((storage) => (
                           <Product key={storage.id} storage={storage} role={roles.get(storage.id)} helpOpen={helpTarget?.id === storage.id} onExplain={(button) => explainTarget(storage.id, button)} />
                         ))}

@@ -335,6 +335,20 @@ describe("Pool worksheet", () => {
     },
   );
 
+  it("replaces the empty rates hint when an item is added and restores it on undo", () => {
+    const project = fixture();
+    project.storages = [];
+    useFactoryStore.getState().setProject(project);
+    const { container } = render(<PoolWorksheet />);
+    expect(screen.getByText(/Drag items here to set a rate/)).toBeTruthy();
+    const material = container.querySelector<HTMLElement>('.pool-scope-material[data-material-key="item:copper"] .pool-material-rate')!;
+    pointerDrop(material, screen.getByLabelText("Desired rates drop zone"));
+    expect(screen.queryByText(/Drag items here to set a rate/)).toBeNull();
+    expect(useFactoryStore.getState().project.storages).toHaveLength(1);
+    act(() => useFactoryStore.getState().undo());
+    expect(screen.getByText(/Drag items here to set a rate/)).toBeTruthy();
+  });
+
   it("adds a product directly from the Products plus button", () => {
     render(<PoolWorksheet />);
     fireEvent.click(screen.getByRole("button", { name: "Add rate" }));
