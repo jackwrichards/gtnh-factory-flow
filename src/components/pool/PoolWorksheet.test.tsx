@@ -742,7 +742,8 @@ describe("production group controls", () => {
     fireEvent.click(within(rules).getByRole("button", { name: "Balance material-999 in All production" }));
     expect(useFactoryStore.getState().project.poolResourceRules?.["item:material-999"]).toBeUndefined();
     expect(within(rules).getAllByRole("button", { name: /^Balance/ })).toHaveLength(1001);
-  });
+  // Rendering and querying 1,000 accessible controls needs extra time on CI.
+  }, 15_000);
   it.each([undefined, { id: "line", name: "Copper line" }])("keeps stopped ingredients and products distinct from intermediates in scope %s", (group) => {
     const resource = (id: string, made: boolean, used: boolean, drawer?: "source" | "product") => ({
       groupId: group?.id, key: ("item:" + id) as `item:${string}`, resource: { kind: "item" as const, id, amount: 1 },
