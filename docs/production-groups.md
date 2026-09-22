@@ -57,4 +57,4 @@ The solver expands shared machines first, then resource scopes deepest-first. In
 
 Regression coverage includes the solver/store production-groups.test.ts files, PoolWorksheet.test.tsx, and worksheet-model.test.ts. Browser checks cover real pointer moves into empty/collapsed groups, moving groups, Ignore persistence, and desktop/phone layouts.
 
-Machine-column width follows the displayed names and yields space before Takes/Makes wrap. The two item columns divide their space by their actual item counts rather than equally. Compact medium-width rows put identity, tier, count, power, and actions together, with items on a second line. Phones use three short lines; shared recipes retain their own item rows and actions.
+Machine-column width follows the displayed names and yields space before Takes/Makes wrap. The two item columns divide their space by their actual item counts rather than equally. Medium widths retain the table, shortening names and packing action buttons before switching layouts. Takes and Makes remain adjacent table columns. Only phone-sized widths use three short lines; shared recipes retain their own item rows and actions.

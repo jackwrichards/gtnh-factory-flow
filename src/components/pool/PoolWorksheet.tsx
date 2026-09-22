@@ -169,7 +169,7 @@ export function PoolWorksheet() {
       { variable: "--pool-tier-width", selector: ".pool-tier-cell .pool-editor-power", minimum: 48, padding: 8 },
       { variable: "--pool-count-width", selector: ".pool-machine-count [data-tooltip-root] > div", minimum: 28, padding: 0 },
       { variable: "--pool-status-width", selector: ".pool-status", minimum: 48, padding: 8 },
-      { variable: "--pool-power-width", selector: ".pool-machine-power-value", minimum: 48, padding: 8 },
+      { variable: "--pool-power-width", selector: ".pool-machine-power-value", minimum: 52, padding: 12 },
     ].map(column => ({ ...column, elements: [...root.querySelectorAll<HTMLElement>(column.selector)] }));
     const measure = () => {
       for (const column of columns) {
@@ -201,8 +201,8 @@ export function PoolWorksheet() {
         const takes = portWidth("takes"), makes = portWidth("makes");
         const fixed = [...table.querySelectorAll<HTMLElement>(":scope > colgroup > col:not(.pool-col-machine):not(.pool-col-io)")]
           .reduce((sum, col) => sum + (parseFloat(getComputedStyle(col).width) || 0), 0);
-        const room = Math.max(160, available - fixed);
-        const machine = Math.max(96, Math.min(nameWidth, 300, room - takes - makes));
+        const room = Math.max(136, available - fixed);
+        const machine = Math.max(72, Math.min(nameWidth, 300, room - takes - makes));
         const itemRoom = Math.max(64, room - machine);
         const takeWidth = itemRoom >= takes + makes ? takes + (itemRoom - takes - makes) / 2 : itemRoom * takes / (takes + makes);
         table.style.setProperty("--pool-machine-width", machine + "px");

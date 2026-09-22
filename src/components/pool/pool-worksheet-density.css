@@ -732,8 +732,8 @@
   .pool-worksheet--dense .pool-col-power { width: var(--pool-power-width, 64px); }
   .pool-worksheet--dense .pool-machine-layout { gap: 3px; }
 }
-/* Small worksheets: controls on one line, materials on the next. */
-@container (max-width: 700px) {
+/* Only phone-sized worksheets leave the table layout. */
+@container (max-width: 560px) {
   .pool-worksheet--dense .pool-sheet-table { display: block; }
   .pool-worksheet--dense .pool-sheet-table > colgroup,
   .pool-worksheet--dense .pool-sheet-table > .pool-column-headings { display: none; }
@@ -981,23 +981,8 @@
 
 .pool-worksheet--dense .pool-col-takes { width: var(--pool-takes-width); }
 .pool-worksheet--dense .pool-col-makes { width: var(--pool-makes-width); }
-/* Medium widths need only two compact lines, not a full-width controls shelf. */
-@container (min-width: 441px) and (max-width: 700px) {
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] { grid-template-columns: 52px minmax(0, 1fr) auto auto auto 88px; }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-machine-cell { grid-column: 2; }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-tier-cell { grid-column: 3; grid-row: 1; }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-count-cell { grid-column: 4; grid-row: 1; }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell { grid-column: 5; grid-row: 1; }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr:first-child > .pool-actions-cell { grid-column: 6; grid-row: 1; }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-actions-cell { grid-column: 6; grid-row: var(--pool-section-row); }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] :is(.pool-status-cell, .pool-circuit-cell) { grid-row: var(--pool-section-row); }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-takes-cell { grid-column: 2 / 4; grid-row: var(--pool-section-row); display: flex; align-items: center; gap: 6px; }
-  .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-makes-cell { grid-column: 4 / 6; grid-row: var(--pool-section-row); display: flex; align-items: center; gap: 6px; }
-  .pool-tier-cell::before, .pool-count-cell::before { content: none; }
-}
-
 /* Phones keep the same hierarchy in three short lines. */
-@container (max-width: 440px) {
+@container (max-width: 560px) {
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] { grid-template-columns: 24px 28px minmax(0, 1fr) auto auto 20px; }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-picture-cell { grid-column: 1 / 3; }
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-machine-cell { grid-column: 3; }
@@ -1013,3 +998,15 @@
   .pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] > tr:first-child > .pool-makes-cell { grid-column: 4 / 7; }
   .pool-tier-cell::before, .pool-count-cell::before { content: none; }
 }
+
+/* Narrow tables keep every value in its column, tightening controls before stacking. */
+@container (min-width: 561px) and (max-width: 700px) {
+  .pool-worksheet--dense .pool-col-picture { width: 40px; }
+  .pool-worksheet--dense .pool-machine-row-tools { width: 14px; }
+  .pool-worksheet--dense .pool-machine-row-tools .pool-order-handle { width: 14px; flex-basis: 14px; }
+  .pool-worksheet--dense .pool-machine-picture { left: 14px; }
+  .pool-worksheet--dense .pool-col-actions,
+  .pool-worksheet--dense .pool-sheet-table:has(> tbody[data-worksheet-node] .pool-collapse-machine) > colgroup > .pool-col-actions { width: 50px; }
+  .pool-worksheet--dense .pool-row-actions { display: grid; grid-template-columns: repeat(2, 19px); justify-content: end; gap: 1px 2px; padding: 2px 0 2px 4px; }
+}
+.pool-worksheet--dense .pool-sheet-table > tbody[data-worksheet-node] .pool-power-cell { padding-right: 8px; }
