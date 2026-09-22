@@ -173,7 +173,7 @@ describe("MinecraftTooltip", () => {
     // click's result is readable without re-hovering.
     render(
       <MinecraftTooltip label="Power story">
-        <button type="button">Raise tier</button>
+        <button type="button">Raise tier<svg data-testid="tier-icon"><path d="M0 0h10" /></svg></button>
       </MinecraftTooltip>,
     );
 
@@ -184,7 +184,7 @@ describe("MinecraftTooltip", () => {
     // pointerType matters: the pointer-kind singleton reads it, and an
     // unlabelled pointerdown registers as a finger and mutes hover for the
     // rest of the suite.
-    fireEvent.pointerDown(target, { pointerType: "mouse" });
+    fireEvent.pointerDown(screen.getByTestId("tier-icon").firstElementChild!, { pointerType: "mouse" });
     expect(screen.getByText("Power story")).toBeTruthy();
 
     // The click's own micro-drag: a mousemove with the button still down on

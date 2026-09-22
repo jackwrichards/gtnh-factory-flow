@@ -14,8 +14,8 @@ import { TOOLTIP_PANEL_CLASS } from "./tooltip-style";
  * `[title]`, MOVES the text into `data-tip-title` (so the native popup can
  * never render - an attribute that is gone cannot be shown), and paints the
  * same words in the Minecraft panel every other tooltip here uses. React
- * putting the attribute back on a re-render is fine: the next hover strips
- * it again before the browser's ~1s delay elapses.
+ * changing a hovered control's title updates the panel immediately, without
+ * requiring the pointer to leave and re-enter.
  *
  * Precedence with the rich tooltips (MinecraftTooltip):
  * - An element that IS a rich root keeps its rich panel; its `title` was a
@@ -35,7 +35,25 @@ export function GlobalTitleTooltip() {
   const pointerRef = useRef<{ x: number; y: number } | undefined>(undefined);
 
   useEffect(() => {
+    let hovered: Element | null = null;
+    let buttons = 0;
+    let pressedAt: { x: number; y: number } | undefined;
+    let settleFrame: number | undefined;
+    const observer = new MutationObserver((records) => {
+      // A removed title means the help was removed, not that the cached old
+      // title should live forever. Our own title conversion is unobserved.
+      if (records.some(record => record.attributeName === "title") && !hovered?.hasAttribute("title")) {
+        hovered?.removeAttribute(STORED);
+      }
+      recheckAtPointer();
+    });
     const hide = () => {
+      observer.disconnect();
+      hovered = null;
+      if (settleFrame !== undefined) {
+        window.cancelAnimationFrame(settleFrame);
+        settleFrame = undefined;
+      }
       pendingRef.current = undefined;
       if (frameRef.current !== undefined) {
         window.cancelAnimationFrame(frameRef.current);
@@ -74,12 +92,15 @@ export function GlobalTitleTooltip() {
       // Strip the native attribute the moment it is seen. Do this even for
       // rich roots: their panel already says it, and the browser's box on
       // top of ours is exactly the doubling this component exists to end.
+      observer.disconnect();
       const native = titled.getAttribute("title");
       if (native !== null) {
         titled.removeAttribute("title");
         if (native.trim() && !titled.hasAttribute("data-tooltip-root")) {
           titled.setAttribute(STORED, native);
           titled.setAttribute("data-tooltip-stop", "");
+        } else {
+          titled.removeAttribute(STORED);
         }
       }
       if (titled.hasAttribute("data-tooltip-root")) {
@@ -87,11 +108,14 @@ export function GlobalTitleTooltip() {
         return;
       }
       const text = titled.getAttribute(STORED);
-      if (!text || buttons !== 0) {
+      const holdingOwnControl = hovered === titled && pressedAt && Math.hypot(clientX - pressedAt.x, clientY - pressedAt.y) < 6;
+      if (!text || (buttons !== 0 && !holdingOwnControl)) {
         hide();
         return;
       }
 
+      hovered = titled;
+      observer.observe(titled, { attributes: true, attributeFilter: ["title", STORED] });
       const lines = text.split("\n");
       const panelWidth = panelRef.current?.offsetWidth ?? 260;
       const panelHeight = panelRef.current?.offsetHeight ?? 60;
@@ -110,6 +134,7 @@ export function GlobalTitleTooltip() {
     };
     const onMove = (event: globalThis.MouseEvent) => {
       pointerRef.current = { x: event.clientX, y: event.clientY };
+      buttons = event.buttons;
       resolveAt(event.target as Element | null, event.clientX, event.clientY, event.buttons);
     };
     // A wheel or scroll never hides a tip by itself (Jack, 2026-09-07): a
@@ -117,41 +142,68 @@ export function GlobalTitleTooltip() {
     // whatever is under the pointer - the same thing keeps it, something
     // else scrolled in re-targets it, and where the document cannot say
     // (no elementFromPoint) the tip stays.
-    let settleFrame: number | undefined;
-    const recheckAfterScroll = () => {
+    const recheckAtPointer = () => {
       if (settleFrame !== undefined) {
         return;
       }
       settleFrame = window.requestAnimationFrame(() => {
         settleFrame = undefined;
         const pointer = pointerRef.current;
-        if (!pointer || typeof document.elementFromPoint !== "function") {
+        if (!pointer) {
           return;
         }
-        resolveAt(document.elementFromPoint(pointer.x, pointer.y), pointer.x, pointer.y, 0);
+        const under = typeof document.elementFromPoint === "function"
+          ? document.elementFromPoint(pointer.x, pointer.y)
+          : hovered?.isConnected ? hovered : null;
+        resolveAt(under, pointer.x, pointer.y, buttons);
       });
     };
 
+    const onPointerDown = (event: PointerEvent) => {
+      pointerRef.current = { x: event.clientX, y: event.clientY };
+      buttons = event.buttons;
+      const target = event.target instanceof Element ? event.target : null;
+      const control = target?.closest("button, input, select, textarea, [role=button]");
+      if (event.pointerType === "mouse" && hovered && target && hovered.contains(target) && control) {
+        pressedAt = { x: event.clientX, y: event.clientY };
+        return;
+      }
+      pressedAt = undefined;
+      hide();
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      buttons = event.buttons;
+      pressedAt = undefined;
+      recheckAtPointer();
+    };
+    const onWindowBlur = (event: Event) => {
+      if (!(event.target instanceof Element)) hide();
+    };
     const options = { capture: true, passive: true } as const;
     document.addEventListener("mousemove", onMove, options);
-    window.addEventListener("wheel", recheckAfterScroll, options);
-    window.addEventListener("scroll", recheckAfterScroll, options);
-    window.addEventListener("pointerdown", hide, options);
+    window.addEventListener("wheel", recheckAtPointer, options);
+    window.addEventListener("scroll", recheckAtPointer, options);
+    window.addEventListener("pointerdown", onPointerDown, options);
+    window.addEventListener("pointerup", onPointerUp, options);
+    window.addEventListener("click", recheckAtPointer, options);
     window.addEventListener("pointercancel", hide, options);
     window.addEventListener("resize", hide, options);
-    window.addEventListener("blur", hide, options);
+    window.addEventListener("blur", onWindowBlur, options);
     document.documentElement.addEventListener("mouseleave", hide);
     return () => {
+      observer.disconnect();
       document.removeEventListener("mousemove", onMove, options);
-      window.removeEventListener("wheel", recheckAfterScroll, options);
-      window.removeEventListener("scroll", recheckAfterScroll, options);
+      window.removeEventListener("wheel", recheckAtPointer, options);
+      window.removeEventListener("scroll", recheckAtPointer, options);
       if (settleFrame !== undefined) {
         window.cancelAnimationFrame(settleFrame);
       }
-      window.removeEventListener("pointerdown", hide, options);
+      window.removeEventListener("pointerdown", onPointerDown, options);
+      window.removeEventListener("pointerup", onPointerUp, options);
+      window.removeEventListener("click", recheckAtPointer, options);
       window.removeEventListener("pointercancel", hide, options);
       window.removeEventListener("resize", hide, options);
-      window.removeEventListener("blur", hide, options);
+      window.removeEventListener("blur", onWindowBlur, options);
       document.documentElement.removeEventListener("mouseleave", hide);
       if (frameRef.current !== undefined) {
         window.cancelAnimationFrame(frameRef.current);

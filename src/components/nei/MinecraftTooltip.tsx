@@ -92,7 +92,7 @@ export function MinecraftTooltip({
   // panning, dragging, other cards — still clear.
   const pressKeepsTooltip = useCallback(
     (target: EventTarget | null) =>
-      target instanceof HTMLElement &&
+      target instanceof Element &&
       rootRef.current?.contains(target) === true &&
       target.closest("button, input, select, textarea") !== null,
     [],
