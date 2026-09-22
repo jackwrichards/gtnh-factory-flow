@@ -89,6 +89,17 @@ describe("post-follow", () => {
     expect(fields.plan).toMatchObject({ name: "Cobble" });
   });
 
+  it.each(["build", "solve", "pool"] as const)("publishes the saved %s mode", async (mode) => {
+    const record = design(true);
+    Object.assign(record.project, { solveMode: mode !== "build" || undefined, poolMode: mode === "pool" || undefined });
+    readDesign.mockResolvedValue(record);
+    schedulePostFollow("d1", true);
+    await vi.advanceTimersByTimeAsync(10_000);
+    const plan = patchCommunityPlan.mock.calls[0][1].plan;
+    expect(Boolean(plan.solveMode)).toBe(mode !== "build");
+    expect(Boolean(plan.poolMode)).toBe(mode === "pool");
+  });
+
   it("does nothing for a design with no post", async () => {
     schedulePostFollow("d1", false);
     await vi.advanceTimersByTimeAsync(10_000);

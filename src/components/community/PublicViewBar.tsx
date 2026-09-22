@@ -1,5 +1,6 @@
 "use client";
 
+import { ScreenshotButton } from "@/components/export/ScreenshotButton";
 import { Copy, LockKeyhole } from "lucide-react";
 import { useState } from "react";
 import { copyViewedPost } from "@/lib/community/open-post";
@@ -46,8 +47,9 @@ export function PublicViewBar() {
           className="plan-summary-action inline-flex h-6 shrink-0 items-center gap-1.5 rounded border border-line bg-transparent px-2 py-0 text-fg hover:bg-surface-raised hover:border-line-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-500 disabled:opacity-50"
         >
           <Copy className="h-3.5 w-3.5" aria-hidden />
-          {busy ? "Opening…" : "Open a copy"}
+          {busy ? "Opening…" : "Make a copy"}
         </button>
+        <ScreenshotButton />
       </div>
       {descriptionOpen && view.project.description ? (
         <p className="mb-1 max-h-24 overflow-auto whitespace-pre-wrap text-xs text-fg-muted">

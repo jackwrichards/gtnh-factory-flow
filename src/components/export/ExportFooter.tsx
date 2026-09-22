@@ -105,7 +105,6 @@ export interface ExportFooterProps {
   planName: string;
   icon?: EntryIcon;
   stats: CommunityPlanStats;
-  gameVersion?: string;
   tone: ExportTone;
   width: number;
   showTitle: boolean;
@@ -120,7 +119,6 @@ export function ExportFooter({
   planName,
   icon,
   stats,
-  gameVersion,
   tone,
   width,
   showTitle,
@@ -138,7 +136,7 @@ export function ExportFooter({
         borderTop: `2px solid ${palette.edge}`,
         color: palette.text,
       }}
-      className="px-6 py-5"
+      className="px-4 py-3"
     >
       {showTitle ? (
         // The name owns the whole top line: setups are christened things
@@ -147,13 +145,13 @@ export function ExportFooter({
         // the right.
         <div
           className={[
-            "flex items-start justify-between gap-8",
-            showIo ? "mb-4" : "",
+            "flex items-start justify-between gap-4",
+            showIo ? "mb-2" : "",
           ].join(" ")}
         >
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             {icon ? (
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden">
                 <ResourceIcon
                   resource={{
                     id: icon.resourceId,
@@ -171,7 +169,7 @@ export function ExportFooter({
                 />
               </span>
             ) : null}
-            <div className="min-w-0 break-words text-[22px] font-bold leading-7">{planName}</div>
+            <div className="min-w-0 break-words text-[18px] font-bold leading-6">{planName}</div>
           </div>
           <div className="shrink-0 pt-0.5 text-right">
             <div
@@ -183,13 +181,10 @@ export function ExportFooter({
               <span>{stats.nodeCount} cards</span>
               {stats.highestTier ? <TierBadge tier={stats.highestTier} /> : null}
             </div>
-            <div className="mt-1.5 text-[13px]">
+            <div className="mt-0.5 text-[12px]">
               <span style={{ color: palette.brand }} className="font-semibold">
                 gtnhplanner.com
               </span>
-              {gameVersion ? (
-                <span style={{ color: palette.muted }}> · GTNH {gameVersion}</span>
-              ) : null}
             </div>
           </div>
         </div>
@@ -197,7 +192,7 @@ export function ExportFooter({
       {/* "Inputs" and "Outputs", the same words the panel on the right of
           the app uses for the same numbers. */}
       {showIo ? (
-        <div className="flex items-start gap-5">
+        <div className="flex items-start gap-3">
         <IoColumn
           label="Inputs"
           accent={palette.needs}
@@ -242,7 +237,7 @@ function IoColumn({
 }) {
   return (
     <div
-      className="min-w-0 flex-1 rounded-md px-3.5 py-3"
+      className="min-w-0 flex-1 rounded px-2.5 py-2"
       style={{ backgroundColor: panel, border: `1px solid ${panelEdge}` }}
     >
       <div style={{ color: accent }} className="text-[12px] font-bold uppercase tracking-[0.14em]">
@@ -254,7 +249,7 @@ function IoColumn({
         </div>
       ) : (
         <div
-          className="mt-1.5 grid gap-x-5"
+          className="mt-1 grid gap-x-3"
           // A plan can have hundreds of boundary resources; the grid packs
           // them into as many columns as the panel affords and the bar
           // simply grows downward.
@@ -263,7 +258,7 @@ function IoColumn({
           {stats.map((stat) => (
             <div
               key={`${stat.kind}:${stat.resourceId}`}
-              className="flex items-center gap-2 py-[3px]"
+              className="flex items-center gap-1.5 py-px"
             >
               <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden">
                 <ResourceIcon

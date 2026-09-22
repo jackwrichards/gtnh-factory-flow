@@ -459,6 +459,8 @@ interface FactoryStore {
    * (solveMode), pool (solveMode plus poolMode). One undo step.
    */
   setBoardMode: (mode: "build" | "solve" | "pool") => void;
+  /** Screenshot mode changes are transient when viewing someone else's setup. */
+  setScreenshotMode: (mode: "build" | "solve" | "pool") => void;
   /** Plan mode counts machines and reports flows; solve mode takes the
    * product drawers' typed amounts and reports machine counts. */
   setSolveMode: (solveMode: boolean) => void;
@@ -4578,6 +4580,20 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       });
     });
   },
+  setScreenshotMode: (mode) => {
+    if (!get().isReadOnly) {
+      get().setBoardMode(mode);
+      return;
+    }
+    setPresentation((state) => {
+      const solveMode = mode !== "build" ? true : undefined;
+      const poolMode = mode === "pool" ? true : undefined;
+      if (Boolean(state.project.solveMode) === Boolean(solveMode) &&
+          Boolean(state.project.poolMode) === Boolean(poolMode)) return state;
+      const project = { ...state.project, solveMode, poolMode };
+      return { project, lastResult: solveBooks(project) };
+    });
+  },
   setBoardMode: (mode) => {
     set((state) => {
       const solveMode = mode === "solve" || mode === "pool" ? true : undefined;
@@ -5465,6 +5481,36 @@ function isFactoryEdgeStillValid(project: FactoryProject, edge: FactoryEdge): bo
     return false;
   }
 
+  // A conversion wire is valid in the forms at its two ends, including a
+  // tank or drawer at either end. Check it before the same-kind storage
+  // branches: any node edit runs this sweep over the entire board.
+  if (edge.crossForm) {
+    const target = parseResourceHandleId(edge.targetHandle);
+    if (
+      !Number.isFinite(edge.crossForm.litresPerCell) ||
+      edge.crossForm.litresPerCell <= 0 ||
+      target?.side !== "input" ||
+      !((edge.resourceKind === "fluid" && target.kind === "item") ||
+        (edge.resourceKind === "item" && target.kind === "fluid"))
+    ) {
+      return false;
+    }
+    const sourceMatches = sourceStorage
+      ? sourceStorage.kind === edge.resourceKind && sourceStorage.resourceId === edge.resourceId
+      : sourceNode && sourceRecipe &&
+        applyRecipeInputOverrides(sourceRecipe, sourceNode).outputs.some((output) =>
+          resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, output),
+        );
+    const targetMatches = targetStorage
+      ? targetStorage.kind === target.kind && targetStorage.resourceId === target.resourceId
+      : targetNode && targetRecipe &&
+        applyRecipeInputOverrides(targetRecipe, targetNode).inputs.some((input) =>
+          isRecipeInputConsumed(input) &&
+          resourceMatchesInput({ kind: target.kind, id: target.resourceId }, input),
+        );
+    return Boolean(sourceMatches && targetMatches);
+  }
+
   // Trash cans have no recipe slots to match: a line into one stays valid as
   // long as the far end still produces the wired resource.
   if (targetRecipe && isTrashRecipe(targetRecipe)) {
@@ -5527,32 +5573,6 @@ function isFactoryEdgeStillValid(project: FactoryProject, edge: FactoryEdge): bo
 
   const effectiveSourceRecipe = applyRecipeInputOverrides(sourceRecipe, sourceNode);
   const effectiveTargetRecipe = applyRecipeInputOverrides(targetRecipe, targetNode);
-
-  // A LOOSE CELL WIRE's two ends are honest in different forms: the source
-  // must still make the wire's own resource, the target must still take the
-  // far form the wire's own target handle names - the fluid under a cell
-  // wire, the cell under a fluid wire.
-  if (edge.crossForm) {
-    const handleParts = (edge.targetHandle ?? "").split(":");
-    const farKind =
-      handleParts[1] === "fluid" || handleParts[1] === "item" ? handleParts[1] : undefined;
-    const farId =
-      handleParts[0] === "input" && farKind && handleParts[2]
-        ? decodeURIComponent(handleParts[2])
-        : undefined;
-    return Boolean(
-      farKind &&
-        farId &&
-        effectiveSourceRecipe.outputs.some((output) =>
-          resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, output),
-        ) &&
-        effectiveTargetRecipe.inputs.some(
-          (input) =>
-            isRecipeInputConsumed(input) &&
-            resourceMatchesInput({ kind: farKind, id: farId }, input),
-        ),
-    );
-  }
 
   return (
     effectiveSourceRecipe.outputs.some((output) =>

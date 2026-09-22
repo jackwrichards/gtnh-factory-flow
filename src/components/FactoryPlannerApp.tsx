@@ -28,6 +28,7 @@ import { WelcomePage } from "./welcome/WelcomePage";
 import { PlanIdentityDrawer } from "./PlanIdentityDrawer";
 import { SharedAddressSync } from "./SharedAddressSync";
 import { PublicViewBar } from "./community/PublicViewBar";
+import { ViewOnlyNotice } from "./community/ViewOnlyNotice";
 import { BlueprintSaveDialog } from "./BlueprintSaveDialog";
 import { PowerSourceOverlay } from "./PowerSourceOverlay";
 import { FactoryFlow } from "./flow/FactoryFlow";
@@ -569,11 +570,6 @@ function ViewerAwareBrowser({ onLoadDatasetVersion }: Pick<WorkspaceProps, "onLo
   if (!readOnly) return <RecipeBrowser onLoadDatasetVersion={onLoadDatasetVersion} />;
   return <div className="relative h-full min-h-0 overflow-hidden">
     <div inert className="h-full opacity-30 grayscale"><RecipeBrowser onLoadDatasetVersion={onLoadDatasetVersion} /></div>
-    <div className="absolute inset-x-2 top-2 border border-line bg-surface p-3 text-sm shadow-lg">
-      <div className="flex items-center justify-between gap-2"><strong>View only</strong>
-        <button type="button" aria-label="Hide the items column" onClick={() => writeWorkspaceView({ leftPanelOpen: false })} className="px-2">‹</button>
-      </div>
-      <p className="mt-1 text-xs text-fg-muted">Open a copy to add items and edit this setup.</p>
-    </div>
+    <ViewOnlyNotice />
   </div>;
 }

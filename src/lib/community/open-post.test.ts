@@ -71,3 +71,15 @@ describe("opening public posts", () => {
     );
   });
 });
+
+
+it.each(["build", "solve", "pool"] as const)("opens a posted %s setup in its saved mode", async (mode) => {
+  mocks.download.mockResolvedValue({
+    name: "Saved mode",
+    plan: { ...createEmptyProject(), solveMode: mode !== "build" || undefined, poolMode: mode === "pool" || undefined },
+  });
+  await openCommunityPost({ id: "mode-post", isMine: false, authorName: "Author" });
+  const project = mocks.viewPublicProject.mock.calls[0][1];
+  expect(Boolean(project.solveMode)).toBe(mode !== "build");
+  expect(Boolean(project.poolMode)).toBe(mode === "pool");
+});

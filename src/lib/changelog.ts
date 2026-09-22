@@ -47,6 +47,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.4.0",
+    date: "2026-09-21",
+    headline: "Clearer Pool planning and screenshots",
+    notes: [
+      "Pool has clearer rates, roomier material totals, separate Tier/Count columns, easier dragging, and Balance controls for individual materials or whole groups.",
+      "Use the camera on any plan to capture Build, Solve, or the full Pool worksheet, with detailed cards and a smaller summary.",
+      "Shared setups explain view-only mode and offer Make a copy; tooltips stay readable while you adjust controls.",
+      "Tank and cell wires stay connected when you change machine tiers or settings.",
+    ],
+  },
+  {
     version: "3.3.2",
     date: "2026-09-20",
     headline: "Clearer interchangeable ingredients",

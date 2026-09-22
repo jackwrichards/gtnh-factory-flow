@@ -105,3 +105,24 @@ describe("public viewing edit boundary", () => {
     expect(useFactoryStore.getState().undoHistory).toEqual([]);
   });
 });
+
+
+it("allows screenshot mode previews without changing the author's plan or unlocking edits", () => {
+  const store = useFactoryStore.getState();
+  const original = createEmptyProject();
+  store.loadViewedProject(original);
+  const before = useFactoryStore.getState();
+  for (const mode of ["pool", "solve", "build"] as const) {
+    store.setScreenshotMode(mode);
+    const next = useFactoryStore.getState();
+    expect(Boolean(next.project.poolMode)).toBe(mode === "pool");
+    expect(Boolean(next.project.solveMode)).toBe(mode !== "build");
+    expect(next.isReadOnly).toBe(true);
+    expect(next.project.nodes).toBe(before.project.nodes);
+    expect(next.undoHistory).toEqual([]);
+    store.renameProject("Not allowed");
+    expect(useFactoryStore.getState().project).toBe(next.project);
+  }
+  expect(original.solveMode).toBeUndefined();
+  expect(original.poolMode).toBeUndefined();
+});

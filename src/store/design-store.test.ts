@@ -321,3 +321,55 @@ describe("public viewing sessions", () => {
     expect(useFactoryStore.getState().isReadOnly).toBe(false);
   });
 });
+
+
+describe("each tab's calculation mode", () => {
+  it("flushes immediate mode changes into only the outgoing design and restores each mode", async () => {
+    useFactoryStore.getState().markHydratedProject(createEmptyProject());
+    useDesignStore.setState({ publicView: undefined, publicViews: [] });
+    library(summary("a"), summary("b"), summary("c"));
+    const records = new Map<string, DesignRecord>([
+      ["a", { ...summary("a"), project: createEmptyProject() }],
+      ["b", { ...summary("b"), project: { ...createEmptyProject(), solveMode: true } }],
+      ["c", { ...summary("c"), project: createEmptyProject() }],
+    ]);
+    storage.readDesign.mockImplementation(async (id) => records.get(id));
+    storage.writeDesign.mockImplementation(async (record) => { records.set(record.id, record); });
+    storage.readActiveDesignId.mockReturnValue("a");
+    await useDesignStore.getState().hydrate();
+    const mode = () => {
+      const project = useFactoryStore.getState().project;
+      return project.poolMode ? "pool" : project.solveMode ? "solve" : "build";
+    };
+    expect(mode()).toBe("build");
+    useFactoryStore.getState().setScreenshotMode("pool");
+    await useDesignStore.getState().switchToDesign("b");
+    expect(mode()).toBe("solve");
+    await useDesignStore.getState().switchToDesign("c");
+    expect(mode()).toBe("build");
+    await useDesignStore.getState().switchToDesign("a");
+    expect(mode()).toBe("pool");
+    await useDesignStore.getState().reloadActiveDesign();
+    expect(mode()).toBe("pool");
+    expect(records.get("a")?.project.poolMode).toBe(true);
+    expect(records.get("b")?.project.poolMode).toBeUndefined();
+    expect(records.get("b")?.project.solveMode).toBe(true);
+    expect(records.get("c")?.project.solveMode).toBeUndefined();
+  });
+
+  it("keeps screenshot modes per public tab without writing personal designs", async () => {
+    useDesignStore.setState({ activeDesignId: undefined, publicView: undefined, publicViews: [], designs: [] });
+    const store = useDesignStore.getState();
+    const original = { ...createEmptyProject(), solveMode: true, poolMode: true };
+    await store.viewPublicProject({ id: "pool-post", name: "Pool" }, original);
+    useFactoryStore.getState().setScreenshotMode("solve");
+    await store.viewPublicProject({ id: "build-post", name: "Build" }, createEmptyProject());
+    expect(useFactoryStore.getState().project.poolMode).toBeUndefined();
+    expect(useFactoryStore.getState().project.solveMode).toBeUndefined();
+    await store.switchToPublicView("pool-post");
+    expect(useFactoryStore.getState().project.solveMode).toBe(true);
+    expect(useFactoryStore.getState().project.poolMode).toBeUndefined();
+    expect(original.poolMode).toBe(true);
+    expect(storage.writeDesign).not.toHaveBeenCalled();
+  });
+});

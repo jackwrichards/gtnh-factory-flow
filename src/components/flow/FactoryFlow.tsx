@@ -8,6 +8,7 @@ import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { useViewerLock } from "./use-viewer-lock";
 import { StorageRatioEditor } from "./StorageRatioEditor";
 import { PoolWorksheet } from "../pool/PoolWorksheet";
+import { capturePoolWorksheet } from "../export/capture-pool-worksheet";
 import { formatRatioShare, getProjectRatioBranches } from "@/lib/model/storage-ratios";
 import { labelRatioArrows, layoutRatioLabels, type RatioWireLabel } from "./ratio-label-layout";
 import { RatioWireLabel as RatioWireLabelControl } from "./RatioWireLabel";
@@ -4788,6 +4789,26 @@ export function FactoryFlow() {
   const performFlowImageExport = useCallback(
     async (request: FlowExportRequest) => {
       const { format, requestId, fileName, projectJson } = request;
+      const worksheetElement = boardRef.current?.querySelector<HTMLElement>("[data-pool-worksheet]");
+      if (worksheetElement) {
+        let capture: FlowExportCapture | undefined;
+        let failure: string | undefined;
+        try {
+          capture = await capturePoolWorksheet(worksheetElement, request);
+          if (!request.capture && fileName && projectJson) {
+            if (capture.svgText) {
+              downloadBlob(new Blob([embedProjectJsonInSvg(capture.svgText, projectJson)], { type: "image/svg+xml" }), `${fileName}.svg`);
+            } else if (capture.blob) {
+              downloadBlob(await embedProjectJsonInPng(capture.blob, projectJson, capture.background), `${fileName}.png`);
+            }
+          }
+        } catch (error) {
+          failure = error instanceof Error ? error.message : "Worksheet image export failed.";
+        } finally {
+          dispatchImageExportComplete(requestId, capture, failure);
+        }
+        return;
+      }
       const viewportElement = boardRef.current?.querySelector<HTMLElement>(".react-flow__viewport");
 
       if (!viewportElement) {
@@ -4827,12 +4848,11 @@ export function FactoryFlow() {
       setNodeDetailLevel(isStatLook ? NODE_DETAIL_GLANCE : NODE_DETAIL_FULL);
       applyCardDetail(cardDetail === "full" ? NODE_DETAIL_FULL : NODE_DETAIL_GLANCE);
       // The dashes exist for the GIF whether or not the live board shows
-      // them, and the calm (presentation) colours follow the dialog's choice
-      // rather than the board's switch. The smart view follows the dialog's
+      // them. Captures keep the ordinary board colours. The smart view follows the dialog's
       // card look, not whatever the live board is switched to. All restored
       // after.
       writeBoardView({
-        calmMode: request.presentation === true,
+        calmMode: false,
         glanceMode: isStatLook ? cardDetail : "identity",
       });
       // Motion pauses for the photograph. Values tween for a second and
@@ -4998,7 +5018,6 @@ export function FactoryFlow() {
             background?: unknown;
             cardDetail?: unknown;
             hideAnnotations?: unknown;
-            presentation?: unknown;
           }
         | undefined;
 
@@ -5024,7 +5043,6 @@ export function FactoryFlow() {
             ? detail.cardDetail
             : "full",
         hideAnnotations: detail.hideAnnotations === true,
-        presentation: detail.presentation === true,
       });
     };
 

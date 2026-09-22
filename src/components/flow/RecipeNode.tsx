@@ -3801,6 +3801,7 @@ export function PortChip({
   // port shows its name and its rate, the calm presentation.
   const solveMode = useFactoryStore((state) => state.project.solveMode === true);
   const calmMode = calmView || solveMode;
+  const readOnly = useFactoryStore((state) => state.isReadOnly);
   const browseResource = useFactoryStore((state) => state.browseResource);
   const setHoveredFlowScope = useFactoryStore((state) => state.setHoveredFlowScope);
   const isFlowScopeLit = useFactoryStore((state) =>
@@ -4080,11 +4081,11 @@ export function PortChip({
           data-resource-handle-id={port.handleId}
           // No native title: GlobalTitleTooltip would stamp the handle as a
           // tooltip STOP and the rich port panel would yield to it.
-          aria-label={`${isInput ? "Input" : "Output"}: ${port.displayName}. Left click or R for recipes, right click or U for uses, drag to connect`}
+          aria-label={`${isInput ? "Input" : "Output"}: ${port.displayName}${readOnly ? "" : ". Left click or R for recipes, right click or U for uses, drag to connect"}`}
           className={[
             "resource-slot-handle nodrag !absolute !left-0 !right-auto !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0",
             "!rounded-none !border-0 !bg-transparent !opacity-0",
-            "cursor-crosshair",
+            readOnly ? "cursor-default" : "cursor-crosshair",
           ].join(" ")}
         />
       </MinecraftTooltip>

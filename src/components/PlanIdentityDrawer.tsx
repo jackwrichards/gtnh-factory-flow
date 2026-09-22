@@ -18,6 +18,7 @@ import { useCommunityAuthStore } from "@/store/community-auth-store";
 import { useDesignStore } from "@/store/design-store";
 import { useFactoryStore } from "@/store/factory-store";
 import { SharePlanDialog } from "@/components/community/SharePlanDialog";
+import { ScreenshotButton } from "@/components/export/ScreenshotButton";
 import { EntryIconSlot, IconPicker, iconSuggestionsFromStats } from "@/components/IconPicker";
 import { formatRelativeDate } from "@/components/shelf-cards";
 
@@ -147,6 +148,7 @@ export function PlanIdentityDrawer() {
             <span>Share</span>
           </button>
         )}
+        <ScreenshotButton />
       </div>
       {isSharing ? <SharePlanDialog onClose={() => setSharing(false)} /> : null}
 

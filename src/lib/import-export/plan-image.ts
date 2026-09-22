@@ -37,11 +37,6 @@ export interface FlowExportRequest {
    * hidden backdrop does not leave its empty acreage behind.
    */
   hideAnnotations?: boolean;
-  /**
-   * Photograph with the board's presentation (calm) colours, whatever the
-   * live board is set to. Forced for the capture and restored after.
-   */
-  presentation?: boolean;
 }
 
 /** One line's marching dashes, as replayable data for the GIF export. */
