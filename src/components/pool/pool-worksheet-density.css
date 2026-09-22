@@ -979,7 +979,7 @@
 .pool-desired-products[data-empty] .pool-products-scroll { display: flex; }
 .pool-desired-products[data-empty] .pool-products-table { height: 100%; }
 .pool-desired-products[data-empty] .pool-products-table thead { height: 21px; }
-.pool-worksheet--dense .pool-overview .pool-rates-empty > td { height: auto; padding: 8px 12px; text-align: center; white-space: normal; color: var(--mc-ink-muted); font-size: 10px; }
+.pool-worksheet--dense .pool-overview .pool-rates-empty > td { height: auto; padding: 8px 12px; vertical-align: middle; text-align: center; white-space: normal; color: var(--mc-ink-muted); font-size: 11px; }
 .pool-rates-empty p { margin: 0; text-wrap: balance; }
 @container pool-rates (max-width: 400px) {
   .pool-desired-products[data-empty] .pool-products-table { display: flex; flex-direction: column; }

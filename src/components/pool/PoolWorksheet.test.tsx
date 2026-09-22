@@ -340,13 +340,13 @@ describe("Pool worksheet", () => {
     project.storages = [];
     useFactoryStore.getState().setProject(project);
     const { container } = render(<PoolWorksheet />);
-    expect(screen.getByText(/Drag items here to set a rate/)).toBeTruthy();
+    expect(screen.getByText("Drag items here or press +")).toBeTruthy();
     const material = container.querySelector<HTMLElement>('.pool-scope-material[data-material-key="item:copper"] .pool-material-rate')!;
     pointerDrop(material, screen.getByLabelText("Desired rates drop zone"));
-    expect(screen.queryByText(/Drag items here to set a rate/)).toBeNull();
+    expect(screen.queryByText("Drag items here or press +")).toBeNull();
     expect(useFactoryStore.getState().project.storages).toHaveLength(1);
     act(() => useFactoryStore.getState().undo());
-    expect(screen.getByText(/Drag items here to set a rate/)).toBeTruthy();
+    expect(screen.getByText("Drag items here or press +")).toBeTruthy();
   });
 
   it("adds a product directly from the Products plus button", () => {

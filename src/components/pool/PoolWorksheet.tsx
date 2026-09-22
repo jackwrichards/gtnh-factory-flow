@@ -408,7 +408,7 @@ export function PoolWorksheet() {
                       <tbody>
                         {products.length === 0 ? (
                           <tr className="pool-rates-empty"><td colSpan={6}>
-                            <p>{readOnly ? "No desired rates set." : "Drag items here to set a rate."} <span className="pool-flow-output">Positive = output</span>; <span className="pool-flow-input">negative = input</span>.</p>
+                            <p>{readOnly ? "No desired rates set" : "Drag items here or press +"}</p>
                           </td></tr>
                         ) : null}
                         {products.map((storage) => (
