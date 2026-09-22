@@ -176,10 +176,45 @@ export function PoolWorksheet() {
         const width = Math.max(column.minimum, ...column.elements.map(element => element.offsetWidth + column.padding));
         root.style.setProperty(column.variable, width + "px");
       }
+      for (const table of root.querySelectorAll<HTMLTableElement>(".pool-sheet-table")) {
+        if (getComputedStyle(table).display !== "table") continue;
+        const parent = table.parentElement!;
+        const parentStyle = getComputedStyle(parent);
+        const available = parent.clientWidth - parseFloat(parentStyle.paddingLeft) - parseFloat(parentStyle.paddingRight);
+        const rows = [...table.querySelectorAll<HTMLElement>(":scope > tbody[data-worksheet-node]")];
+        const nameWidth = Math.max(96, ...rows.map(row => {
+          const name = row.querySelector(".pool-machine-title, .pool-collapsed-name");
+          if (!name) return 96;
+          const range = document.createRange();
+          range.selectNodeContents(name);
+          // Range measures the full name even when its cell currently clips it.
+          const zoom = row.getBoundingClientRect().width / row.offsetWidth || 1;
+          const crop = row.querySelector<HTMLElement>(".pool-crop-picker");
+          return (typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect().width / zoom : name.scrollWidth) + 12 + (crop?.offsetWidth ?? 0);
+        }));
+        // Include cell padding, borders, and a little fractional-zoom rounding room.
+        const portWidth = (side: string) => Math.max(32, ...rows.flatMap(row =>
+          [...row.querySelectorAll<HTMLElement>(".pool-" + side + "-cell")].map(cell =>
+            [...cell.querySelectorAll<HTMLElement>(".pool-port")].reduce((sum, port) => sum + port.offsetWidth + 2, 12),
+          ),
+        ));
+        const takes = portWidth("takes"), makes = portWidth("makes");
+        const fixed = [...table.querySelectorAll<HTMLElement>(":scope > colgroup > col:not(.pool-col-machine):not(.pool-col-io)")]
+          .reduce((sum, col) => sum + (parseFloat(getComputedStyle(col).width) || 0), 0);
+        const room = Math.max(160, available - fixed);
+        const machine = Math.max(96, Math.min(nameWidth, 300, room - takes - makes));
+        const itemRoom = Math.max(64, room - machine);
+        const takeWidth = itemRoom >= takes + makes ? takes + (itemRoom - takes - makes) / 2 : itemRoom * takes / (takes + makes);
+        table.style.setProperty("--pool-machine-width", machine + "px");
+        table.style.setProperty("--pool-takes-width", takeWidth + "px");
+        table.style.setProperty("--pool-makes-width", (itemRoom - takeWidth) + "px");
+      }
     };
     measure();
     const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
     for (const column of columns) for (const element of column.elements) observer?.observe(element);
+    const scroller = root.querySelector(".pool-sheet-scroll");
+    if (scroller) observer?.observe(scroller);
     return () => observer?.disconnect();
   }, [groups, workspace, query]);
   const orderedGroups = orderWorksheetEntries(
@@ -334,8 +369,8 @@ export function PoolWorksheet() {
                 <col className="pool-col-status" />
                 <col className="pool-col-circuit" />
                 <col className="pool-col-power" />
-                <col className="pool-col-io" />
-                <col className="pool-col-io" />
+                <col className="pool-col-io pool-col-takes" />
+                <col className="pool-col-io pool-col-makes" />
                 <col className="pool-col-actions" />
               </colgroup>
               {content}
@@ -445,8 +480,8 @@ export function PoolWorksheet() {
                 <col className="pool-col-status" />
                 <col className="pool-col-circuit" />
                 <col className="pool-col-power" />
-                <col className="pool-col-io" />
-                <col className="pool-col-io" />
+                <col className="pool-col-io pool-col-takes" />
+                <col className="pool-col-io pool-col-makes" />
                 <col className="pool-col-actions" />
               </colgroup>
               {renderScope()}
