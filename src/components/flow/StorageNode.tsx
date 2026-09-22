@@ -716,8 +716,12 @@ function rateFitClass(label: string, role: StorageRole, width = NET_LINE_WIDTH_B
   return NET_LINE_FIT_STEPS[NET_LINE_FIT_STEPS.length - 1].className;
 }
 
+function netRateColor(net: number): string {
+  return net > 0.005 ? "var(--flow-output)" : net < -0.005 ? "var(--flow-input)" : "#a8afbb";
+}
+
 /** The tile's one line of news: the net rate, sized to fit its silhouette. */
-function NetLine({ net, kind, role, width, formatRate = formatCompactRate, unsigned = false }: { net: number; kind: string; role: StorageRole; width?: number; formatRate?: (value: number, kind: string) => string; unsigned?: boolean }) {
+function NetLine({ net, kind, role, width, formatRate = formatCompactRate, unsigned = false, color = netRateColor(net) }: { net: number; kind: string; role: StorageRole; width?: number; formatRate?: (value: number, kind: string) => string; unsigned?: boolean; color?: string }) {
   // The fit class and the colour read the TARGET value: the size and tone
   // land immediately, and only the digits ease their way there.
   const label = unsigned ? formatRate(Math.abs(net), kind) : `${net >= 0 ? "+" : ""}${formatRate(net, kind)}`;
@@ -728,8 +732,8 @@ function NetLine({ net, kind, role, width, formatRate = formatCompactRate, unsig
         // the number is the thing worth reading.
         "storage-net-line relative z-10 h-4 whitespace-nowrap text-center font-bold leading-4 tabular-nums",
         rateFitClass(label, role, width),
-        net > 0.005 ? "text-[var(--flow-output)]" : net < -0.005 ? "text-[var(--flow-input)]" : "text-[#a8afbb]",
       ].join(" ")}
+      style={{ color }}
     >
       <MotionNumberText
         values={[net]}
@@ -806,6 +810,10 @@ export function TargetLine({
   const mode = storageTargetMode(storage, input ? "source" : "product");
   const showZero = target === 0;
   const unreachable = result?.targetUnreachable === true;
+  const color = unreachable ? "var(--flow-input)"
+    : target === undefined ? "var(--flow-output)"
+    : netRateColor(input ? -Math.abs(target) : target);
+  const rateStyle = { color, "--target-rate-color": color } as CSSProperties;
   // While the solver has NOTHING to solve for - no amount, no pin, anywhere -
   // every empty rate line blinks the ask, in step with the board's notice.
   const askBlink = useFactoryStore((state) => !hasAnySolveNumbers(state.project) && mode !== "ignore");
@@ -848,8 +856,8 @@ export function TargetLine({
     return (
       // The resting face IS the net line - the same component every other
       // tile draws, wrapped only to be clickable (z-40, over the wire
-      // handles that blanket the well at z-30). Unreachable overrides the
-      // line's own green with red from outside.
+      // handles that blanket the well at z-30). The value, edit marks and
+      // active input share one rate color, including unreachable targets.
       <MinecraftTooltip content={() => <RecipeTooltip view={buildTargetTooltip(storage, result, signed, input)} />}>
       <div
         role="button"
@@ -869,10 +877,8 @@ export function TargetLine({
         onMouseDown={(event) => { event.stopPropagation(); if (event.button === 1) event.preventDefault(); }}
         onAuxClick={clearRate}
         aria-label="Required amount"
-        className={[
-          "nodrag group/target relative z-40 flex cursor-pointer justify-center text-[var(--flow-output)] hover:brightness-125",
-          unreachable ? "[&_div]:!text-[var(--flow-input)]" : "",
-        ].join(" ")}
+        style={rateStyle}
+        className="nodrag group/target relative z-40 flex cursor-pointer justify-center hover:brightness-125"
       >
         {/* Two marks say "this line takes typing", both attached to the
             NUMBER rather than parked at the tile's edge: a dotted
@@ -882,12 +888,12 @@ export function TargetLine({
             tile's bottom edge instead of merging with it. */}
         <div className={`relative underline decoration-dotted decoration-[1.5px] underline-offset-[3px] ${inlinePencil ? "inline-flex items-center gap-[3px]" : "-translate-y-[2px]"}`}>
           {target !== undefined && (target > 0 || (signed && target < 0) || showZero) ? (
-            <NetLine net={input ? -Math.abs(target) : target} unsigned={input && !signed} kind={storage.kind} role={input ? "source" : "product"} formatRate={formatDisplayRate} />
+            <NetLine net={input ? -Math.abs(target) : target} unsigned={input && !signed} kind={storage.kind} role={input ? "source" : "product"} formatRate={formatDisplayRate} color={color} />
           ) : (
             <div
               className={[
                 "storage-net-line relative h-4 whitespace-nowrap text-center text-[12px] font-bold leading-4 tabular-nums",
-                askBlink ? "animate-pulse text-[var(--flow-output)]" : "text-[var(--flow-output)] opacity-60",
+                askBlink ? "animate-pulse" : "opacity-60",
               ].join(" ")}
             >
               rate?
@@ -906,7 +912,7 @@ export function TargetLine({
   }
 
   return (
-    <div className="storage-net-line relative z-40 flex h-4 items-center justify-center whitespace-nowrap text-center leading-none">
+    <div className="storage-net-line relative z-40 flex h-4 items-center justify-center whitespace-nowrap text-center leading-none" style={rateStyle}>
       <input
         autoFocus
         value={draft}
@@ -934,8 +940,8 @@ export function TargetLine({
           "nodrag h-4 w-[60px] border px-[3px] text-center text-[9px] font-bold tabular-nums outline-none",
           "bg-[#14171d] shadow-[inset_1px_1px_0_rgba(255,255,255,0.08),inset_-1px_-1px_0_rgba(0,0,0,0.5)]",
           "placeholder:font-normal placeholder:text-[#6b7280]",
-          "focus:bg-[#1a1e26] focus:ring-1 focus:ring-[var(--flow-output)]",
-          "border-[var(--flow-output)]/40 text-[var(--flow-output)] focus:border-[var(--flow-output)]",
+          "focus:bg-[#1a1e26] focus:ring-1 focus:ring-[var(--target-rate-color)]",
+          "border-current text-inherit",
         ].join(" ")}
       />
     </div>
