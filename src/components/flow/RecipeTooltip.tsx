@@ -7,12 +7,14 @@ const GESTURE_NAME: Record<TooltipAction["gesture"], string> = {
   right: "Right click",
   wheel: "Mouse wheel",
   drag: "Drag",
+  middle: "Middle click",
 };
 
 /**
  * One mouse, drawn at text height so the button it lights is legible at
  * the size the panel is actually read at. Left and right fill their half
- * of the top; wheel fills the wheel; drag adds the arrow under it.
+ * of the top; wheel fills the wheel; middle fills the wheel and presses it
+ * (the arrow under it points down); drag adds a sideways arrow under it.
  */
 export function MouseIcon({ gesture }: { gesture: TooltipAction["gesture"] }) {
   return (
@@ -21,7 +23,8 @@ export function MouseIcon({ gesture }: { gesture: TooltipAction["gesture"] }) {
       <path d="M10 1v7.5M3 8.5h14" stroke="currentColor" strokeWidth="1.4" />
       {gesture === "left" && <path d="M4.2 7.7V6.6c0-2.4 1.8-4.1 4.6-4.5V7.7Z" fill="currentColor" />}
       {gesture === "right" && <path d="M15.8 7.7V6.6c0-2.4-1.8-4.1-4.6-4.5V7.7Z" fill="currentColor" />}
-      {gesture === "wheel" && <rect x="8.5" y="3" width="3" height="4.5" rx="1.5" fill="currentColor" />}
+      {(gesture === "wheel" || gesture === "middle") && <rect x="8.5" y="3" width="3" height="4.5" rx="1.5" fill="currentColor" />}
+      {gesture === "middle" && <path d="M7 19.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />}
       {gesture === "drag" && <path d="M3 21h14m-3-2.5 3 2.5-3 2.5" stroke="currentColor" strokeWidth="1.4" />}
     </svg>
   );

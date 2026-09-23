@@ -9,7 +9,7 @@ import { formatPct, formatSlotRate } from "./flow-explainers";
 export type TooltipMode = "build" | "solve" | "pool";
 export type TooltipTone = "neutral" | "good" | "warning";
 export interface TooltipAction {
-  gesture: "left" | "right" | "drag" | "wheel";
+  gesture: "left" | "right" | "drag" | "wheel" | "middle";
   label: string;
 }
 export interface RecipeTooltipView {

@@ -195,10 +195,11 @@ export function buildRatePlateTooltip(
     status: figures?.targetUnreachable ? { label: "Can't be met", tone: "warning" } : undefined,
     reason: rule ? targetModeHelp(rule, input) : input ? ANY_HELP_INPUT : ANY_HELP_OUTPUT,
     rows,
-    bullets: ["Scroll the rule button to step through the rules.", "Middle-click the box to clear your rate."],
+    bullets: ["The ▾ button beside it picks Any, At least, Exactly or At most."],
     actions: [
-      { gesture: "left", label: "Rule button: choose a rule" },
-      { gesture: "left", label: "Box: type your rate" },
+      { gesture: "left", label: "Type a rate" },
+      { gesture: "wheel", label: "Step by 1 (Ctrl 10, Shift 100)" },
+      { gesture: "middle", label: "Clear the rate" },
     ],
   };
 }

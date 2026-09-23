@@ -104,6 +104,13 @@ it("a middle-click on the box clears the rate", () => {
   expect(screen.getByRole("button", { name: /Your rate: none/ })).toBeTruthy();
 });
 
+it("a middle-click on the rule button clears the rate too", () => {
+  render(<Row id="output" role="product" />);
+  fireEvent(screen.getByRole("button", { name: /Rule: At least/ }), new MouseEvent("auxclick", { button: 1, bubbles: true }));
+  expect(stored("output").targetPerSecond).toBeUndefined();
+  expect(screen.getByRole("button", { name: /Rule: Any/ })).toBeTruthy();
+});
+
 it("is read-only for viewers", () => {
   useFactoryStore.setState({ isReadOnly: true });
   render(<Row id="output" role="product" />);

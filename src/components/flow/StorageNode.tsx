@@ -1322,10 +1322,13 @@ export function RuleInput({
     // Scrolling down on an empty box asks for nothing: no zero rule appears.
     if (any && next === 0) return;
     const perSecond = next / unitScale;
-    if (any) setStorageRule(storage.id, input ? "exact" : "at-least", perSecond);
-    else setStorageTarget(storage.id, perSecond);
+    // The tick and the hush go FIRST: the write below is a project change,
+    // and the board's sound watcher answers it with its own adjust tap the
+    // moment it lands - one step, two sounds, if the hush comes after.
     playBoardSound("dialRate", { step: Math.min(6, Math.log10(Math.max(1, next)) * 2) });
     suppressBoardSound("adjust", 150);
+    if (any) setStorageRule(storage.id, input ? "exact" : "at-least", perSecond);
+    else setStorageTarget(storage.id, perSecond);
   };
   const stepRateRef = useRef(stepRate);
   stepRateRef.current = stepRate;
@@ -1399,6 +1402,9 @@ export function RuleInput({
           event.stopPropagation();
           setOpen((value) => !value);
         }}
+        // Middle click clears the rate from anywhere on the rule row.
+        onMouseDown={(event) => { if (event.button === 1) event.preventDefault(); }}
+        onAuxClick={clear}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation();
