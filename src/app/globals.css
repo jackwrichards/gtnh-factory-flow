@@ -1866,6 +1866,34 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   cursor: crosshair;
 }
 
+/* Solve's ruled chip: the rule row pinned to the top, the reading well
+   filling the rest. */
+.storage-port-chip:not(.storage-port-chip--centered) {
+  padding-top: 3px;
+}
+
+.storage-port-chip:not(.storage-port-chip--centered) > .storage-chip-text {
+  align-self: stretch;
+  justify-content: flex-start;
+}
+
+/* The reading well: what flows and its bar, sunk into a small panel of its
+   own like a machine's port chip, under the rule row you set (Jack,
+   2026-09-22). */
+.storage-chip-reading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-height: 0;
+  padding: 2px 4px 4px;
+  border: 1px solid rgba(0,0,0,0.45);
+  background: rgba(0,0,0,0.26);
+  box-shadow: inset 0 1px 1px rgba(0,0,0,0.3), 0 1px 0 rgba(255,255,255,0.05);
+  pointer-events: none;
+}
+
 /* Build, and every drawer without a rule: the picture and the rate as one
    centred group. */
 .storage-port-chip--centered {

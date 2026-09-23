@@ -599,8 +599,11 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               {ruled ? (
                 <>
                   <RuleInput storage={storage} role={role} result={result} net={net} />
-                  <ChipRate net={net} kind={storage.kind} role={role} size="small" />
-                  <RuleBar storage={storage} role={role} result={result} net={net} />
+                  {/* What flows, in a well of its own under what you set. */}
+                  <div className="storage-chip-reading">
+                    <ChipRate net={net} kind={storage.kind} role={role} size="small" />
+                    <RuleBar storage={storage} role={role} result={result} net={net} />
+                  </div>
                 </>
               ) : (
                 <>
@@ -1172,7 +1175,8 @@ const CHIP_RATE_STEPS = {
 function ChipRate({ net, kind, role, size }: { net: number; kind: string; role: StorageRole; size: "large" | "small" }) {
   const label = `${net >= 0 ? "+" : ""}${formatCompactRate(net, kind)}`;
   const steps = CHIP_RATE_STEPS[size];
-  const room = CHIP_RATE_ROOM[role];
+  // Small sits in the reading well: its padding and border come off the room.
+  const room = CHIP_RATE_ROOM[role] - (size === "small" ? 10 : 0);
   const fit = steps.find((step) => label.length * step.perChar <= room) ?? steps[steps.length - 1];
   return (
     <div
