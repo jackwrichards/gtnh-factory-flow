@@ -1866,31 +1866,31 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   cursor: crosshair;
 }
 
-/* Solve's ruled chip: the rule row pinned to the top, the reading well
-   filling the rest. */
+/* Solve's ruled chip: the rule row and the reading well as one group,
+   centred, so the space above the rule row equals the space below the
+   well (Jack, 2026-09-22). */
 .storage-port-chip:not(.storage-port-chip--centered) {
   padding-top: 3px;
+  padding-bottom: 3px;
 }
 
 .storage-port-chip:not(.storage-port-chip--centered) > .storage-chip-text {
   align-self: stretch;
-  justify-content: flex-start;
+  justify-content: center;
 }
 
-/* The reading well: what flows and its bar, sunk into a small panel of its
-   own like a machine's port chip, under the rule row you set (Jack,
-   2026-09-22). */
+/* The reading well: what flows and its bar in a quiet panel of its own,
+   sized to them, under the rule row you set. Kept faint: it groups the
+   reading, it does not compete with it. */
 .storage-chip-reading {
   display: flex;
-  flex: 1;
+  flex: none;
   flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-  min-height: 0;
-  padding: 2px 4px 4px;
-  border: 1px solid rgba(0,0,0,0.45);
-  background: rgba(0,0,0,0.26);
-  box-shadow: inset 0 1px 1px rgba(0,0,0,0.3), 0 1px 0 rgba(255,255,255,0.05);
+  gap: 2px;
+  padding: 2px 4px 3px;
+  border: 1px solid rgba(0,0,0,0.26);
+  background: rgba(0,0,0,0.12);
+  box-shadow: inset 0 1px 0 rgba(0,0,0,0.16);
   pointer-events: none;
 }
 
