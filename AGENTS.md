@@ -1132,6 +1132,50 @@ Working notes for future agents on GTNH Factory Flow.
   `FactoryFlow.tsx`, plus `nodesDraggable={!isCompact}`). Apply it where the
   selection changes, never per drag frame.
 
+## Drawers (A1, Jack 2026-09-22)
+
+- A drawer is a ONE-PORT MACHINE CARD, 6x4 cells (120x80): a one-cell
+  TITLE BAR (delete left, the name CENTRED on the card between two equal
+  side columns, the one switch right) and a three-cell PORT CHIP drawn like
+  a machine's port chip, 32px picture. Designed over six mockup
+  passes (artifact "Pinned or Solved"); do not redesign it by feel.
+- The title bar is the MOVE grip and nothing on it starts a wire; its right
+  click is the board menu. The wire handle (WELL_HANDLE) covers the PORT
+  CHIP only, and the chip ANSWERS LIKE A PORT ROW: click for recipes, right
+  click for uses, R/U, a long press for a finger, a drag to wire - the same
+  `usePortRowBrowse` hook (use-port-row-browse.ts) the machine rows use.
+  Controls on the chip (rule row, ratio share) stop click and contextmenu so
+  they never browse. A pass that dropped the
+  title bar and let the handle blanket the face left only the 2px frame to
+  move by, and Jack called it "really bad". Keep the two zones separate.
+- Solve, source and product only: the chip's first line is the RULE ROW
+  (`RuleInput`): a rule BUTTON with a ▾ opening Any / At least / Exactly /
+  At most in words, and YOUR RATE in a sunken box with the unit inside
+  ("rate?" when empty, pulsing while the board has no numbers). Below it the
+  REAL RATE, always what flows, and a port-bar-style bar: real against yours,
+  green met, red can't be met, steel on At most. Jack asked for the real
+  rate to be visible and for the box and the switchable rule to be obvious.
+- Any is stored as `targetMode: "ignore"` (a number can wait there) or no
+  number at all. Picking a rule on an Any drawer with no number pins what
+  flows now; typing into an Any box uses the role default (source Exactly,
+  product At least). Both go through `setStorageRule`, one undo step.
+  Middle-click on the box clears; the wheel on the rule button steps rules.
+- Traps: the rule button must be `nowheel` or the board camera eats the
+  wheel; `.storage-chip-text` must NOT set a z-index or the rule row sinks
+  under the wire handle; the drawer content is NOT clipped so the list can
+  open past the edge (the title bar clips itself via `--band-clip`, the
+  chip is inset by `--storage-cm`); the open list and row carry
+  `data-tooltip-stop` so no hover tooltip covers them.
+- Build, and every drawer without a rule: picture and rate as one centred
+  group. Trash reads its rate in steel. The role switch wears cycle arrows;
+  left-right arrows belong to the strict buffer alone. The ratio pencil sits
+  in the title bar beside the mode key.
+- Sources have NO switch: a source is read off its wires, and turning a
+  wired source into a product would drop every wire. Jack asked; the answer
+  stands unless he picks the "switch only while unwired" option.
+- `StorageRuleInput.test.tsx` is the exam; `drawer-a1-check.local.mjs`
+  drives it in the real app.
+
 ## The Board Grid
 
 - `src/lib/board-grid.ts` owns `BOARD_GRID = 20` and every card size derived

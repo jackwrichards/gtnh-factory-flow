@@ -1623,13 +1623,14 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
  * button that jumps sideways under the click would punish the very flip the
  * button exists for.
  *
- * The card's BOX never changes by role: 9x4 cells, whatever is painted inside it.
+ * The card's BOX never changes by role: 6x4 cells, whatever is painted inside it.
  * Wires dock on the box perimeter and the router is centre-biased, so the
  * corners these shapes cut away were already the least likely dock points.
  */
-/* The frame, its fill, and the CONTENT stack all take the same silhouette.
-   The content has to be in the list or the header paints its own square
-   background straight through the cut corners. */
+/* The frame and its fill take the silhouette. The CONTENT is not clipped -
+   the rule list has to open past the drawer's edge - so the title bar clips
+   itself to the silhouette's top (--band-radius / --band-clip), and the port
+   chip is inset clear of the cuts (--storage-cm). */
 .storage-shape,
 .storage-shape-fill,
 .storage-shape-content {
@@ -1639,88 +1640,55 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   border-radius: 0;
 }
 
-/* SOURCE: heavily rounded. Soft, open, the thing everything flows OUT of.
+/* SOURCE: rounded. Soft, open, the thing everything flows OUT of.
    `clip-path: inset(round)` rather than `border-radius`, because a radius
-   alone does NOT clip children - it only rounds the element's own background.
-   The header paints its own band edge to edge, so under a plain radius it
-   squared off the very corner the shape had just rounded. The other
-   silhouettes never showed this: a clip-path clips its descendants. */
+   alone does NOT clip children - it only rounds the element's own
+   background, and the fill is a child of the frame. */
 .storage-shape[data-storage-shape="source"],
-.storage-shape[data-storage-shape="source"] .storage-shape-fill,
-.storage-shape-content[data-storage-shape="source"] {
-  clip-path: inset(0 round 14px);
+.storage-shape[data-storage-shape="source"] .storage-shape-fill {
+  clip-path: inset(0 round 12px);
 }
 
 /* BYPRODUCT: the shield - square shoulders, tapered base. It catches what
-   falls and holds what nobody asked for, so it wears the catch-all
-   silhouette; its square top row is what lets the product/byproduct swap
-   keep its buttons still. */
+   falls and holds what nobody asked for; its square top keeps the title
+   bar, and the switch on it, still through the product/byproduct swap. */
 .storage-shape[data-storage-shape="byproduct"],
-.storage-shape[data-storage-shape="byproduct"] .storage-shape-fill,
-.storage-shape-content[data-storage-shape="byproduct"] {
+.storage-shape[data-storage-shape="byproduct"] .storage-shape-fill {
   clip-path: polygon(
     0 0,
     100% 0,
-    100% calc(100% - 20px),
-    calc(100% - 20px) 100%,
-    20px 100%,
-    0 calc(100% - 20px)
+    100% calc(100% - 14px),
+    calc(100% - 14px) 100%,
+    14px 100%,
+    0 calc(100% - 14px)
   );
 }
 
 /* TRASH: the bin - square shoulders, sides tapering straight down to a
-   narrower base. Same square top row as the shield, so the pill's buttons
-   stay planted through the three-way swap. */
+   narrower base. */
 .storage-shape[data-storage-shape="trash"],
-.storage-shape[data-storage-shape="trash"] .storage-shape-fill,
-.storage-shape-content[data-storage-shape="trash"] {
-  clip-path: polygon(0 0, 100% 0, calc(100% - 16px) 100%, 16px 100%);
+.storage-shape[data-storage-shape="trash"] .storage-shape-fill {
+  clip-path: polygon(0 0, 100% 0, calc(100% - 9px) 100%, 9px 100%);
 }
 
 /* BUFFER: the hexagon, points left and right - a pipe joint the flow passes
    through, in one side and out the other. Strict buffers share the shape;
-   the border treatment (see .storage-buffer-inlay) and the header button
-   say which of the two it is running. */
+   the inlay rings and the mode key say which one it is running. */
 .storage-shape[data-storage-shape="buffer"],
-.storage-shape[data-storage-shape="buffer"] .storage-shape-fill,
-.storage-shape-content[data-storage-shape="buffer"] {
+.storage-shape[data-storage-shape="buffer"] .storage-shape-fill {
   clip-path: polygon(
-    14px 0,
-    calc(100% - 14px) 0,
+    10px 0,
+    calc(100% - 10px) 0,
     100% 50%,
-    calc(100% - 14px) 100%,
-    14px 100%,
+    calc(100% - 10px) 100%,
+    10px 100%,
     0 50%
   );
 }
 
-/* The header sits in the top row, which is exactly the material a rounded or
-   pointed corner takes away - so its delete and swap buttons were being
-   sliced by the clip. Pull that row in by the corner's own inset on the two
-   shapes that cut up there. The shield tapers at the BOTTOM and the square
-   has no cut at all, so product and byproduct need nothing - which is what
-   keeps their buttons planted through the swap.
-
-   Each shape needs a DIFFERENT inset, because they eat the top row at
-   different rates. The hexagon's point gives its material back linearly, so
-   2px down it is still ~13px deep. A radius falls away much faster: 2px into
-   a 14px round the horizontal bite is only ~7px. */
-.storage-shape-content[data-storage-shape="buffer"] .storage-node-header {
-  padding-left: 12px;
-  padding-right: 12px;
-}
-
-.storage-shape-content[data-storage-shape="source"] .storage-node-header {
-  padding-left: 8px;
-  padding-right: 8px;
-}
-
-/* Horizontal drawer face: artwork in its own inset, name and rate together.
-   Dimensions match board-grid.ts; nothing is measured during board gestures. */
 .storage-shape[data-storage-shape="product"],
-.storage-shape[data-storage-shape="product"] .storage-shape-fill,
-.storage-shape-content[data-storage-shape="product"] {
-  border-radius: 8px;
+.storage-shape[data-storage-shape="product"] .storage-shape-fill {
+  border-radius: 4px;
 }
 
 .storage-node-card .storage-shape-fill::after {
@@ -1731,64 +1699,390 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   background: linear-gradient(155deg, rgba(255,255,255,0.06), transparent 48%, rgba(0,0,0,0.12));
 }
 
-.storage-face-layout {
+/* Per silhouette: the title bar's own clip and side padding, and the port
+   chip's side margin, each measured against the frame (cut + 2px border +
+   the buffer's inlay ring). */
+.storage-shape-content {
+  --storage-hp: 3px;
+  --storage-cm: 4px;
+  --storage-side: 13px;
+  --band-radius: 0;
+  --band-clip: none;
+}
+
+.storage-shape-content[data-storage-shape="product"],
+.storage-shape-content[data-storage-shape="idle"] {
+  --band-radius: 2px 2px 0 0;
+}
+
+.storage-shape-content[data-storage-shape="source"] {
+  --storage-hp: 6px;
+  --storage-cm: 5px;
+  --band-radius: 10px 10px 0 0;
+}
+
+.storage-shape-content[data-storage-shape="byproduct"] {
+  --storage-cm: 11px;
+}
+
+.storage-shape-content[data-storage-shape="trash"] {
+  --storage-cm: 11px;
+  --band-clip: polygon(0.3px 0, calc(100% - 0.3px) 0, calc(100% - 2.3px) 100%, 2.3px 100%);
+}
+
+.storage-shape-content[data-storage-shape="buffer"] {
+  --storage-hp: 12px;
+  --storage-cm: 12px;
+  --band-clip: polygon(9.6px 0, calc(100% - 9.6px) 0, calc(100% - 5.1px) 100%, 5.1px 100%);
+}
+
+/* The TITLE BAR: the move grip, like a machine card's title row. One cell
+   tall with the frame's 2px above it; darker than the face, in the role's
+   own tint. The name is centred on the card: its two side columns are the
+   same width whatever sits in them. */
+.storage-title-bar {
   display: grid;
-  grid-template-columns: 60px minmax(0, 1fr);
-  grid-template-rows: 44px 24px;
-  column-gap: 8px;
-  padding-right: 4px;
+  grid-template-columns: var(--storage-side) minmax(0, 1fr) var(--storage-side);
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  margin: 2px 2px 0;
+  padding: 0 calc(var(--storage-hp) - 2px);
+  border-radius: var(--band-radius);
+  clip-path: var(--band-clip);
+  border-bottom: 1px solid rgba(0,0,0,0.5);
+  background: color-mix(in srgb, var(--storage-tint) 30%, #0b0d10);
+  cursor: grab;
 }
 
-.storage-face-layout > .storage-icon-well {
-  grid-column: 1;
-  grid-row: 1 / 3;
-  align-self: center;
-  height: 60px;
-  border-radius: 10px;
-  background: rgba(0,0,0,0.15);
-  box-shadow: inset 0 1px 2px rgba(0,0,0,0.2), 0 1px 0 rgba(255,255,255,0.06);
+/* A ratio drawer carries two keys on the right, so both sides widen. */
+.storage-title-bar--wide {
+  --storage-side: 30px;
 }
 
-.storage-resource-name {
-  grid-column: 2;
-  grid-row: 1;
-  padding-bottom: 3px;
-  text-align: left;
+.storage-title-side {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.storage-title-side--end {
+  justify-content: flex-end;
+}
+
+.storage-title-name {
+  min-width: 0;
+  overflow: hidden;
+  color: #e8e9ee;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 11px;
+  text-align: center;
+  white-space: nowrap;
   text-shadow: 0 1px 1px rgba(0,0,0,0.45);
+  /* Names fade where they run out, never an ellipsis. A centred name that
+     fits never reaches the fade. */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 10px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 10px), transparent);
+  pointer-events: none;
 }
 
-.storage-face-layout > .storage-net-line,
-.storage-face-layout > .storage-target-controls {
-  grid-column: 2;
-  grid-row: 2;
-  align-self: center;
-  align-items: flex-start;
-  text-align: left;
+/* The machine card's own button: square, bevelled, dark. */
+.storage-title-key {
+  position: relative;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  border: 1.5px solid #111317;
+  background: #34373e;
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.2), inset -1px -1px 0 rgba(0,0,0,0.45);
+  color: #e8e9ee;
+  cursor: pointer;
 }
 
-.storage-node-card .storage-node-header {
-  padding-left: 68px;
-  padding-right: 4px;
+.storage-title-key svg {
+  width: 8px;
+  height: 8px;
+  stroke-width: 2.6;
 }
 
-.storage-node-header .board-edit-chrome {
-  margin-left: 0;
-  width: 14px;
-  height: 14px;
-  border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 4px;
-  background: rgba(0,0,0,0.2);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
-  color: #d3d9de;
+.storage-title-key:hover {
+  background: #454952;
 }
 
-.storage-node-header .board-edit-chrome:hover {
-  background: rgba(255,255,255,0.16);
-  border-color: rgba(255,255,255,0.4);
+.storage-title-key--delete::before {
+  content: "";
+  width: 6px;
+  height: 1.5px;
+  background: #fff;
 }
 
-.storage-node-header > .board-edit-chrome:hover {
+.storage-title-key--delete:hover {
   background: #9c3543;
+}
+
+/* The PORT CHIP: the wire zone, drawn like a machine card's port chip, and
+   answering like one - click for recipes, right click for uses, drag to
+   wire. */
+.storage-port-chip {
+  position: relative;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  margin: 4px var(--storage-cm) 5px;
+  padding: 0 5px 0 4px;
+  border: 1px solid rgba(0,0,0,0.4);
+  background: rgba(0,0,0,0.25);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  cursor: crosshair;
+}
+
+.storage-port-chip:hover {
+  border-color: rgba(255,255,255,0.14);
+}
+
+/* Build, and every drawer without a rule: the picture and the rate as one
+   centred group. */
+.storage-port-chip--centered {
+  justify-content: center;
+}
+
+.storage-port-chip--centered > .storage-chip-text {
+  flex: 0 1 auto;
+  align-items: flex-start;
+}
+
+.storage-chip-icon {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  pointer-events: none;
+}
+
+/* No z-index here: a stacking context would pin the rule row under the
+   face's wire handle (z-30). Its children compete with the handle directly. */
+.storage-chip-text {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.storage-chip-text > [data-ratio-setup-output] {
+  z-index: 40;
+}
+
+.storage-chip-rate {
+  pointer-events: none;
+}
+
+/* Solve's rule row: a rule BUTTON with a ▾, and your rate in a sunken BOX. */
+.storage-rule-row {
+  position: relative;
+  z-index: 40;
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 14px;
+  min-width: 0;
+}
+
+.storage-rule-button {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 1px;
+  padding: 0 2px 0 3px;
+  border: 1px solid #111317;
+  background: #34373e;
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.18), inset -1px -1px 0 rgba(0,0,0,0.45);
+  color: #ffd257;
+  font-size: 10.5px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.storage-rule-button svg {
+  width: 7px;
+  height: 7px;
+  stroke-width: 3.5;
+  opacity: 0.85;
+}
+
+.storage-rule-button--any {
+  color: #9a9ca4;
+}
+
+.storage-rule-button:hover,
+.storage-rule-button--open {
+  background: #454952;
+}
+
+.storage-rule-button--open {
+  box-shadow: 0 0 0 1px rgba(255,210,87,0.45), inset 1px 1px 0 rgba(255,255,255,0.18);
+}
+
+.storage-rate-field {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 1px;
+  min-width: 0;
+  padding: 0 3px;
+  border: 1px solid #5a5e68;
+  background: #0f1114;
+  box-shadow: inset 1px 1px 0 rgba(0,0,0,0.7);
+  color: #ffd257;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  cursor: text;
+}
+
+.storage-rate-field:hover {
+  border-color: #7c808a;
+}
+
+.storage-rate-field-number {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.storage-rate-field-unit {
+  flex: none;
+  margin-left: auto;
+  padding-left: 2px;
+  color: #8a8e97;
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.storage-rate-field--empty .storage-rate-field-number {
+  color: #6f737c;
+  font-style: italic;
+  font-weight: 600;
+}
+
+.storage-rate-field--ask .storage-rate-field-number {
+  color: #ffd257;
+}
+
+.storage-rate-field--bad {
+  border-color: rgba(248,113,113,0.75);
+  color: #f87171;
+}
+
+.storage-rate-field--editing {
+  border-color: #ffd257;
+  outline: none;
+  background: #15171c;
+  box-shadow: 0 0 0 1px rgba(255,210,87,0.35), inset 1px 1px 0 rgba(0,0,0,0.7);
+  cursor: text;
+}
+
+.storage-rate-field--editing::placeholder {
+  color: #6b7280;
+  font-weight: 600;
+}
+
+/* The rule list: the app's dropdown, dark and bevelled, opening past the
+   drawer's edge (the content is not clipped for this). */
+.storage-rule-list {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  z-index: 140;
+  display: flex;
+  flex-direction: column;
+  min-width: 80px;
+  padding: 2px;
+  border: 1.5px solid #111317;
+  background: #2b2d33;
+  box-shadow: inset 1px 1px 0 rgba(255,255,255,0.12), 3px 3px 0 rgba(0,0,0,0.5);
+}
+
+.storage-rule-option {
+  display: grid;
+  grid-template-columns: 11px minmax(0, 1fr);
+  gap: 4px;
+  align-items: center;
+  padding: 3px 6px 3px 3px;
+  border: 0;
+  background: transparent;
+  color: #e8e9ee;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.storage-rule-option b {
+  color: #ffd257;
+  font-size: 10.5px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.storage-rule-option--any b {
+  color: #9a9ca4;
+}
+
+.storage-rule-option:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+.storage-rule-option--on {
+  background: rgba(255,210,87,0.16);
+  box-shadow: inset 0 0 0 1px rgba(255,210,87,0.4);
+}
+
+/* The real rate against your rate, in the port bars' colours. */
+.storage-rate-bar {
+  position: relative;
+  display: block;
+  height: 3px;
+  background: var(--rail-bar-track);
+  box-shadow: inset 0 1px 0 rgba(0,0,0,0.35);
+  pointer-events: none;
+}
+
+.storage-rate-bar > i {
+  --fill: var(--rail-bar-ok);
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--fill) 70%, #fff), var(--fill) 70%);
+}
+
+.storage-rate-bar > i[data-tone="bad"] {
+  --fill: var(--rail-bar-bad);
+}
+
+.storage-rate-bar > i[data-tone="calm"] {
+  --fill: var(--rail-bar-calm);
+}
+
+.factory-flow-board--value-motion .storage-rate-bar > i {
+  transition: width 1000ms cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 /* Chalk. The state channel feeds the port marks, so every bare slot picks

@@ -49,9 +49,11 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "3.5.0",
     date: "2026-09-21",
-    headline: "Your materials, front and centre",
+    headline: "Drawers you can read and set",
     notes: [
-      "Drawers have a wider face with larger artwork beside the material name and rate, plus compact delete and switch controls.",
+      "Drawers are built like small machine cards: drag the title bar to move one, and drag from its port to start a wire. Click the port for recipes, right click for uses.",
+      "In Solve, every source and product drawer shows its real rate again, with your rate in a box you can type into.",
+      "Pick Any, At least, Exactly or At most from the drawer's rule button. Any lets the planner decide.",
     ],
   },
   {

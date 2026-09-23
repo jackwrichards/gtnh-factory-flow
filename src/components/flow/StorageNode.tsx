@@ -1,10 +1,12 @@
 "use client";
-import { isInputRate, storageTargetMode } from "@/lib/model/storage-target";
-import { StorageTargetRule } from "./StorageTargetRule";
+import { isInputRate, storageTargetMode, type TargetMode } from "@/lib/model/storage-target";
+import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+import { usePortRowBrowse } from "./use-port-row-browse";
+import type { BrowseMode as PortBrowseMode } from "@/components/browse-menu";
 
-import { Handle, Position, useStoreApi, type Node, type NodeProps } from "@xyflow/react";
-import { memo, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowDownToLine, ArrowLeftRight, Pencil, Split } from "lucide-react";
+import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import { memo, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { ArrowDownToLine, ArrowLeftRight, ChevronDown, Pencil, Repeat, Split } from "lucide-react";
 import type {
   FactoryStorage,
   StorageBufferMode,
@@ -24,7 +26,7 @@ import { NodeGlanceIcon } from "./NodeGlance";
 import { isWiringConnection } from "./connection-drag";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { RecipeTooltip } from "./RecipeTooltip";
-import { buildBufferKeyTooltip, buildDrainKeyTooltip, buildStorageTooltip, buildTargetTooltip } from "./storage-tooltip-data";
+import { buildBufferKeyTooltip, buildDrainKeyTooltip, buildRatePlateTooltip, buildStorageTooltip, buildTargetTooltip } from "./storage-tooltip-data";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { useBoardView } from "./board-view";
 import { MotionNumberText } from "./board-motion";
@@ -164,17 +166,19 @@ const WELL_HANDLE: CSSProperties = {
  * spends a row on its mode) and stretching a sprite to a non-square hole
  * distorts it.
  */
-const CARD_ICON_PX = 52;
+const CARD_ICON_PX = 32;
+/** The port chip's picture. */
+const CHIP_ICON_PX = 32;
 /**
  * Plain-fluid swatches draw edge to edge — no baked-in margin like item
  * sprites — so undiluted they brush right up against the header above and the
  * net line below. Shrink only them; items keep the full box.
  */
-const FLUID_BREATHE_PX = 6;
+const FLUID_BREATHE_PX = 4;
 /** Oversized glance icon (zoomed out) — a shade larger than the card FACE so
     it reads as the node's identity, but well inside the 100px card: at 128
     and even 112 the art swamped the card instead of riding it. */
-const GLANCE_ICON_PX = 88;
+const GLANCE_ICON_PX = 84;
 
 /**
  * Rendered and atlas item sprites carry a big baked-in transparent margin —
@@ -212,13 +216,6 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   const category = useFactoryStore((state) =>
     getCategoryPresentation(state.project.recipes, storage.kind, storage.resourceId),
   );
-  const reactFlowStore = useStoreApi();
-  // The invisible wire handles blanket the card body, and React Flow does not
-  // select a node for clicks that land on a handle - so a plain click (no
-  // drag) selects explicitly, keeping Delete-to-remove reachable for tanks.
-  const selectOnHandleClick = () => {
-    reactFlowStore.getState().addSelectedNodes([storage.id]);
-  };
   const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   // The rails print rates, so the drawer follows the rate and power dials.
   useRateDisplayUnits();
@@ -291,6 +288,10 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   const title = resourceLabel(category ?? { id: storage.resourceId, displayName: storage.displayName });
   const isTank = storage.kind === "fluid";
   const isPlainFluid = isTank && !storage.iconPath && !storage.iconAtlas;
+  const ratio = role === "buffer" && storage.bufferMode === "ratio";
+  const word = ratio ? "RATIO" : role === "buffer" && isStrictBuffer(storage, solveMode) ? "STRICT" : ROLE_PRESENTATION[role].word;
+  // Solve's rule row sits on source and product drawers only.
+  const ruled = solveMode && (role === "source" || role === "product");
   // The card wears its JOB's colour, the same dialect the side panel already
   // speaks: red is what the plan imports, mint green is what it exports
   // (products and byproducts), and steel is internal
@@ -312,6 +313,24 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   // React Flow keeps the old handle bounds and silently drops the rewired
   // edge from the screen until the next reload.
   useRenderedHandles(storage.id, [inputHandleId, outputHandleId]);
+  const readOnly = useFactoryStore((state) => state.isReadOnly);
+  const browseResource = useFactoryStore((state) => state.browseResource);
+  // POWER has no recipe book, exactly as on a machine's port row.
+  const browse = (mode: PortBrowseMode) => {
+    if (storage.kind === "power") return;
+    browseResource(
+      {
+        kind: storage.kind,
+        id: storage.resourceId,
+        displayName: title,
+        iconPath: storage.iconPath,
+        iconAtlas: storage.iconAtlas,
+        dominantColor: storage.dominantColor ?? storage.iconAtlas?.dominantColor,
+      },
+      mode,
+    );
+  };
+  const chipBrowse = usePortRowBrowse({ nodeId: storage.id, port: { displayName: title, handleId: outputHandleId }, browse });
 
   return (
     <div
@@ -351,11 +370,11 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
         // still reads as a copper-coloured card.
         data-node-glance-root=""
         className={[
-          // Nine cells by four, fixed. Wires dock on the card's perimeter, so
+          // Six cells by four, fixed. Wires dock on the card's perimeter, so
           // an off-grid edge would mean off-grid endpoints. A drawer is a
-          // TILE: silhouette and colour for the role, art and name for the
-          // resource, and a dedicated rate line. The shared geometry owns this footprint.
-          "storage-node-card relative flex h-[80px] w-[180px] flex-col p-1",
+          // one-port machine card: a title bar to move it by, a port chip to
+          // wire from. The shared geometry owns this footprint.
+          "storage-node-card relative flex h-[80px] w-[120px] flex-col",
           // Search has no rim of its own, so the card itself brightens to say
           // "this one matched". The glow states deliberately do NOT: a filter
           // here also lifts the rim and the wash drawn inside this box, and
@@ -434,7 +453,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             showAmount={false}
             bare
             iconPixelSize={storageIconPixelSize(GLANCE_ICON_PX, storage)}
-            className="!h-[88px] !w-[88px]"
+            className="!h-[84px] !w-[84px]"
           />
           {glanceMode === "identity" ? (
             // The hover reveal, same machinery as the recipe cards' (see
@@ -467,78 +486,85 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
             </span>
           ) : null}
         </NodeGlanceIcon>
-        {/* The content carries the SAME silhouette as the frame. Without it
-            the header and the mode button paint their own square backgrounds
-            straight through the cut corners, and the card reads as a rectangle
-            wearing an octagon. The glance icon stays outside this wrapper on
-            purpose: it is deliberately bigger than the card and spills past
-            the frame, which a clip would eat. */}
-        {/* The hover tooltip covers the WHOLE card, header and buttons
-            included: it is the drawer's one explanation, and it should not
-            matter which pixel of a small tile the pointer found. The span is
-            display:contents, so the flex column underneath lays out as if it
-            were not there. */}
+        {/* Which kind of buffer this is, readable without the hover: a
+            catching buffer wears a thick dashed ring TRACING its hexagon
+            tight inside the frame; a ratio buffer a thin second rim hugging
+            the frame, a double border; a STRICT one is solid border and
+            nothing else. SVG rather than a CSS border, because a border
+            follows the element's box and only a path can follow the
+            silhouette. Drawn over the face (z-20, pointer-events off): the
+            title bar and the chip are inset clear of it. */}
+        {role === "buffer" && !isStrictBuffer(storage, solveMode) ? (
+          <svg
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-20"
+            viewBox={`0 0 ${STORAGE_NODE_WIDTH} ${STORAGE_NODE_HEIGHT}`}
+            width="100%"
+            height="100%"
+          >
+            <polygon
+              points="11.1,1.5 108.9,1.5 118.4,40 108.9,78.5 11.1,78.5 1.6,40"
+              fill="none"
+              stroke={tint}
+              strokeWidth={3}
+              strokeDasharray="7 5.5"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          </svg>
+        ) : null}
+        {ratio ? (
+          <svg aria-hidden data-ratio-rim className="pointer-events-none absolute inset-0 z-20" viewBox={`0 0 ${STORAGE_NODE_WIDTH} ${STORAGE_NODE_HEIGHT}`} width="100%" height="100%">
+            <polygon points="11.9,3.75 108.1,3.75 116.1,40 108.1,76.25 11.9,76.25 3.9,40" fill="none" stroke={tint} strokeWidth={1.5} />
+          </svg>
+        ) : null}
+        {/* The hover tooltip covers the WHOLE card: it is the drawer's one
+            explanation, and it should not matter which pixel of a small tile
+            the pointer found. The rule row carries its own. */}
         <MinecraftTooltip content={() => renderStorageHoverContent(storage, role)}>
         <div
           data-storage-shape={role}
           className="storage-shape-content relative z-10 flex min-h-0 flex-1 flex-col"
+          style={{ "--storage-tint": tint } as CSSProperties}
         >
-          {/* Which of the two buffers this is, readable at a glance without
-              the hover: a catching buffer wears a thick dashed ring TRACING
-              its hexagon tight inside the frame, while a STRICT one is solid
-              border and nothing else. An SVG rather than a CSS border,
-              because a border follows the element's box and only a path can
-              follow the silhouette. It sits UNDER the header, the word and
-              the numbers (z-0): the chrome reads on top, and the ring shows
-              wherever the tile is bare. The coordinates are the 180x80
-              tile's hexagon inset by 1.5px - hugging the frame, so the
-              stroke stays off the word and the net line - and they can be
-              exact because STORAGE_NODE_WIDTH/HEIGHT are fixed. */}
-          {role === "buffer" && !isStrictBuffer(storage, solveMode) ? (
-            <svg
-              aria-hidden
-              className="pointer-events-none absolute inset-0 z-0"
-              viewBox={`0 0 ${STORAGE_NODE_WIDTH} ${STORAGE_NODE_HEIGHT}`}
-              width="100%"
-              height="100%"
-            >
-              <polygon
-                points="15.1,1.5 164.9,1.5 178.4,40 164.9,78.5 15.1,78.5 1.6,40"
-                fill="none"
-                stroke={tint}
-                strokeWidth={3}
-                strokeDasharray="7 5.5"
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-            </svg>
-          ) : null}
-          <StorageHeader storage={storage} isTank={isTank} role={role} />
-          {role === "buffer" && storage.bufferMode === "ratio" ? (
-            <svg aria-hidden data-ratio-rim className="pointer-events-none absolute inset-0 z-0" viewBox={`0 0 ${STORAGE_NODE_WIDTH} ${STORAGE_NODE_HEIGHT}`} width="100%" height="100%">
-              <polygon points="18,5 162,5 174,40 162,75 18,75 6,40" fill="none" stroke={tint} strokeWidth={1.5} />
-            </svg>
-          ) : null}
-          {/* The well is the wire zone. The floating header is plain card,
-              so grabbing it (or the frame) moves the node. The handles
-              carry inline styles pinned to this box; stylesheet !important
-              wars once let them blanket the whole card and swallow the
-              header buttons.
-              The zone is also the resource-hover trigger — the ITEM lights
-              the flow, not the card around it. Wiring is a mode; a held
-              wire must not also be lighting up cards. */}
+          {/* Colour and silhouette carry the role; the tooltip explains it.
+              Keep the word available to assistive technology. */}
+          <span className="storage-node-word sr-only">{word}</span>
+          {/* The TITLE BAR is what you move the drawer by, the way a machine
+              card moves by its title row (Jack, 2026-09-22). Nothing on it
+              starts a wire. */}
+          <StorageTitleBar storage={storage} role={role} isTank={isTank} title={title} solveMode={solveMode} />
+          {/* The PORT CHIP answers like a machine's port row: click for the
+              recipes that make the item, right click for the ones that use
+              it, R and U for the same, a long press for a finger, and a drag
+              to wire. One handle blankets it (z-30); what you press on it
+              sits above (z-40). It is also the resource-hover trigger - the
+              ITEM lights the flow, not the card around it. Wiring is a mode;
+              a held wire must not also be lighting up cards. */}
           <div
-            className="storage-face-layout relative min-h-0 w-full flex-1"
-            onMouseEnter={() =>
-              isWiringConnection() ? undefined : setHoveredFlowScope(buildStorageFlowScope(useFactoryStore.getState().project, storage))
-            }
-            onMouseLeave={() => setHoveredFlowScope(undefined)}
+            className={`storage-port-chip ${ruled ? "" : "storage-port-chip--centered"}`}
+            onPointerEnter={() => {
+              chipBrowse.handlers.onPointerEnter();
+              if (!isWiringConnection()) {
+                setHoveredFlowScope(buildStorageFlowScope(useFactoryStore.getState().project, storage));
+              }
+            }}
+            onPointerLeave={() => {
+              chipBrowse.handlers.onPointerLeave();
+              setHoveredFlowScope(undefined);
+            }}
+            onPointerDown={chipBrowse.handlers.onPointerDown}
+            onPointerMove={chipBrowse.handlers.onPointerMove}
+            onPointerUp={chipBrowse.handlers.onPointerUp}
+            onPointerCancel={chipBrowse.handlers.onPointerCancel}
+            onClick={chipBrowse.handlers.onClick}
+            onContextMenu={chipBrowse.handlers.onContextMenu}
           >
-            {/* The whole well, one grab point. Typed as a source so a drag can
-                START anywhere on it; the board runs in ConnectionMode.Loose,
-                so a wire coming the other way still lands here, and the drop
-                resolves a drawer by direction rather than by which element the
-                pointer happened to be over (getStorageHandleAtPosition). */}
+            {/* One grab point. Typed as a source so a drag can START anywhere
+                on it; the board runs in ConnectionMode.Loose, so a wire coming
+                the other way still lands here, and the drop resolves a drawer
+                by direction rather than by which element the pointer happened
+                to be over (getStorageHandleAtPosition). */}
             <Handle
               id={outputHandleId}
               type="source"
@@ -546,7 +572,7 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               data-resource-handle="true"
               data-resource-node-id={storage.id}
               data-resource-handle-id={outputHandleId}
-              onClick={selectOnHandleClick}
+              aria-label={`${title}${readOnly ? "" : ". Left click or R for recipes, right click or U for uses, drag to connect"}`}
               className="nodrag"
               style={WELL_HANDLE}
             />
@@ -559,37 +585,35 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
               position={Position.Left}
               className="nodrag !pointer-events-none !h-0 !w-0 !min-h-0 !min-w-0 !border-0 !bg-transparent !opacity-0"
             />
-            {/* No wood face, no glass box: the dark tinted card IS the
-                surface, and the item fills nearly the whole well. */}
-            <div className={`storage-icon-well relative flex min-h-0 w-full flex-1 items-center justify-center gap-1 ${role === "buffer" && storage.bufferMode === "ratio" ? "flex-col" : ""}`}>
-              {solveMode && (role === "source" || role === "product") ? (
-                <StorageTargetRule storage={storage} input={isInputRate(storage, role)} compact className="!absolute left-0 bottom-0 z-40" />
-              ) : null}
+            <span className="storage-chip-icon">
               <ResourceIcon
                 resource={{ ...storage, id: storage.resourceId, amount: 1, alternatives: category?.alternatives }}
                 showAmount={false}
                 bare
-                iconPixelSize={storageIconPixelSize(
-                  role === "buffer" && storage.bufferMode === "ratio" ? 20 : isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
-                  storage,
-                )}
-                className={role === "buffer" && storage.bufferMode === "ratio" ? "!h-[20px] !w-[20px] shrink-0" : "!h-[52px] !w-[52px]"}
+                iconPixelSize={storageIconPixelSize(isPlainFluid ? CHIP_ICON_PX - FLUID_BREATHE_PX : CHIP_ICON_PX, storage)}
+                className="!h-[32px] !w-[32px]"
               />
-              {role === "buffer" && storage.bufferMode === "ratio" ? <RatioSetupOutput storageId={storage.id} percentage={ratioExportShare(storage) * 100} /> : null}
+            </span>
+            <div className="storage-chip-text">
+              {ruled ? (
+                <>
+                  <RuleInput storage={storage} role={role} result={result} net={net} />
+                  <ChipRate net={net} kind={storage.kind} role={role} size="small" />
+                  <RuleBar storage={storage} role={role} result={result} net={net} />
+                </>
+              ) : (
+                <>
+                  <ChipRate net={net} kind={storage.kind} role={role} size="large" />
+                  {ratio ? (
+                    // Its own control: a click or right click here is not a browse.
+                    <span className="contents" onClick={(event) => event.stopPropagation()} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}>
+                      <RatioSetupOutput storageId={storage.id} percentage={ratioExportShare(storage) * 100} />
+                    </span>
+                  ) : null}
+                </>
+              )}
             </div>
-            <StorageResourceName title={title} />
-            {role === "buffer" && storage.bufferMode === "ratio" ? (
-              <div className="relative mx-auto mb-0.5 grid w-[72px] grid-cols-[52px_16px] items-center gap-1">
-                <NetLine net={net} kind={storage.kind} role={role} width={52} />
-                <RatioSplitButton storageId={storage.id} />
-              </div>
-            ) : solveMode && (role === "product" || role === "source") ? (
-              <div className="storage-target-controls nodrag nopan relative z-30 flex flex-col items-center gap-0.5" onPointerDown={event => event.stopPropagation()}>
-                <TargetLine storage={storage} result={result} input={isInputRate(storage, role)} />
-              </div>
-            ) : (
-              <NetLine net={net} kind={storage.kind} role={role} />
-            )}
+            {chipBrowse.menu}
           </div>
         </div>
         </MinecraftTooltip>
@@ -598,14 +622,15 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   );
 }
 
+
 /**
- * The tile's LOOK alone - silhouette, role tint, header, icon, net line -
- * for anything that must show a drawer that is not (yet) a node: the
- * void-drop ghost previews the exact drawer a release would spawn with it.
- * Built from the same parts as the real card (StorageHeader, NetLine,
- * ResourceIcon, the storage-shape layers), so the preview can never drift
- * from the thing it predicts. No handles, no glance, no tooltip, no washes:
- * those belong to the node.
+ * The tile's LOOK alone - silhouette, role tint, title bar, port chip - for
+ * anything that must show a drawer that is not (yet) a node: the void-drop
+ * ghost previews the exact drawer a release would spawn with it. Built from
+ * the same parts as the real card (the title bar's name, the chip, ChipRate),
+ * so the preview can never drift from the thing it predicts. Its keys are
+ * drawn, not wired: a ghost is never pressed. No handles, no glance, no
+ * tooltip, no washes: those belong to the node.
  */
 export function StorageTileFace({
   storage,
@@ -624,7 +649,7 @@ export function StorageTileFace({
   const tint = storageTint(storage, role);
   const borderColor = `color-mix(in srgb, ${tint} 55%, #262b34)`;
   return (
-    <div className="storage-node-card relative flex h-[80px] w-[180px] flex-col p-1 text-[#e8e9ee]">
+    <div className="storage-node-card relative flex h-[80px] w-[120px] flex-col text-[#e8e9ee]">
       <span
         aria-hidden
         data-storage-shape={role}
@@ -642,35 +667,46 @@ export function StorageTileFace({
       <div
         data-storage-shape={role}
         className="storage-shape-content relative z-10 flex min-h-0 flex-1 flex-col"
+        style={{ "--storage-tint": tint } as CSSProperties}
       >
-        <StorageHeader storage={storage} isTank={isTank} role={role} />
-        <div className="storage-face-layout relative min-h-0 w-full flex-1">
-          <div className="storage-icon-well grid min-h-0 w-full flex-1 place-items-center">
+        <div className="storage-title-bar">
+          <span className="storage-title-side">
+            <span aria-hidden className="storage-title-key storage-title-key--delete" />
+          </span>
+          <StorageTitleName title={resourceLabel(category ?? { id: storage.resourceId, displayName: storage.displayName })} />
+          <span className="storage-title-side storage-title-side--end">
+            {isDrainRole(role) || role === "buffer" ? (
+              <span aria-hidden className="storage-title-key">
+                {role === "buffer" ? <ArrowDownToLine /> : <Repeat />}
+              </span>
+            ) : null}
+          </span>
+        </div>
+        <div className="storage-port-chip storage-port-chip--centered">
+          <span className="storage-chip-icon">
             <ResourceIcon
               resource={{ ...storage, id: storage.resourceId, amount: 1, alternatives: category?.alternatives }}
               showAmount={false}
               bare
-              iconPixelSize={storageIconPixelSize(
-                isPlainFluid ? CARD_ICON_PX - FLUID_BREATHE_PX : CARD_ICON_PX,
-                storage,
-              )}
-              className="!h-[52px] !w-[52px]"
+              iconPixelSize={storageIconPixelSize(isPlainFluid ? CHIP_ICON_PX - FLUID_BREATHE_PX : CHIP_ICON_PX, storage)}
+              className="!h-[32px] !w-[32px]"
             />
+          </span>
+          <div className="storage-chip-text">
+            <ChipRate net={net} kind={storage.kind} role={role} size="large" />
           </div>
-          <StorageResourceName title={resourceLabel(category ?? { id: storage.resourceId, displayName: storage.displayName })} />
-          <NetLine net={net} kind={storage.kind} role={role} />
         </div>
       </div>
     </div>
   );
 }
 
-/** The material and rate share a column beside the artwork. */
-function StorageResourceName({ title }: { title: string }) {
+/** The material's name, one line in the title bar, fading where it runs out. */
+function StorageTitleName({ title }: { title: string }) {
   return (
-    <div className={`storage-resource-name pointer-events-none relative z-10 flex min-w-0 items-end font-bold leading-[13px] text-[#e8e9ee] ${title.length > 23 ? "text-[10px]" : "text-[12px]"}`}>
-      <span className="line-clamp-2 break-words">{title}</span>
-    </div>
+    <span className="storage-title-name">
+      {title}
+    </span>
   );
 }
 
@@ -688,20 +724,20 @@ export const StorageNode = memo(
  * clipping it printed a confident wrong one. Stepped by string length rather
  * than measured, so the board never reads the DOM for it.
  *
- * The room is the text column beside the artwork, less the clearance each
- * silhouette needs at the bottom right. Fit by string length rather than
+ * The rate uses the full bottom row, less the clearance each silhouette
+ * needs near its corners. Fit by string length rather than
  * measuring the DOM on a board full of cards.
  */
 const NET_LINE_WIDTH_BY_ROLE: Record<StorageRole, number> = {
-  product: 100,
-  idle: 100,
-  source: 96,
-  buffer: 86,
+  product: 92,
+  idle: 92,
+  source: 84,
+  buffer: 70,
   // The shield's base taper is the deepest bite of the set, and it takes it
   // exactly across this line's lowest pixels.
-  byproduct: 82,
+  byproduct: 66,
   // The bin's straight taper reaches ~13px a side at the line's depth.
-  trash: 82,
+  trash: 72,
 };
 /**
  * Advance per character at each step. Measured against the rendered bold
@@ -710,7 +746,6 @@ const NET_LINE_WIDTH_BY_ROLE: Record<StorageRole, number> = {
  * tail to the shield.
  */
 const NET_LINE_FIT_STEPS = [
-  { className: "text-[14px]", perChar: 9.3 },
   { className: "text-[12px]", perChar: 8 },
   { className: "text-[10px]", perChar: 6.6 },
   { className: "text-[8px]", perChar: 5.3 },
@@ -958,63 +993,63 @@ export function TargetLine({
   );
 }
 
+/** The ratio editor's pencil, a key in the title bar beside the mode key. */
 function RatioSplitButton({ storageId }: { storageId: string }) {
   return (
     <button type="button" data-tooltip-stop aria-label="Edit drawer ratios" title="Edit split"
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => { event.stopPropagation(); openRatioEditor(storageId); }}
-      className="board-edit-chrome nodrag nopan relative z-40 mb-0.5 flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+      className="storage-title-key board-edit-chrome nodrag nopan"
     >
-      <Pencil aria-hidden className="h-2.5 w-2.5" />
+      <Pencil aria-hidden />
     </button>
   );
 }
-function StorageHeader({
+
+/**
+ * The drawer's title bar: delete, the name, and the one thing you choose.
+ * It is the drawer's MOVE grip, like a machine card's title row: nothing on
+ * it starts a wire, so a drag that begins here always carries the drawer.
+ */
+function StorageTitleBar({
   storage,
-  isTank,
   role,
+  isTank,
+  title,
+  solveMode,
 }: {
   storage: FactoryStorage;
-  isTank: boolean;
   role: StorageRole;
+  isTank: boolean;
+  title: string;
+  solveMode: boolean;
 }) {
-  const solveMode = useFactoryStore((state) => state.project.solveMode === true);
-  const storageId = storage.id;
   const deleteStorage = useFactoryStore((state) => state.deleteStorage);
   const noun = isTank ? "tank" : "drawer";
-  const presentation = ROLE_PRESENTATION[role];
-  const strict = role === "buffer" && isStrictBuffer(storage, solveMode);
   const ratio = role === "buffer" && storage.bufferMode === "ratio";
-  const word = ratio ? "RATIO" : strict ? "STRICT" : presentation.word;
-
   return (
-    <div
-      // z-40: the invisible wire handles (z-30) blanket the card,
-      // and without a higher stacking position they swallow every click
-      // aimed at the delete/switch buttons underneath.
-      className="storage-node-header absolute inset-x-0 top-0 z-40 flex h-4 items-center justify-end gap-1 px-1"
-    >
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          deleteStorage(storageId);
-        }}
-        className="board-edit-chrome nodrag flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-red-700"
-        title={`Delete ${noun}`}
-        aria-label={`Delete ${noun}`}
-      >
-        {/* Drawn rather than a "-" glyph: at this size Monocraft's metrics
-            baseline-align the hyphen low instead of centring it. */}
-        <span aria-hidden className="block h-[2px] w-[8px] bg-white" />
-      </button>
-      {/* Colour and silhouette carry the role; the tooltip explains it.
-          Keep the word available to assistive technology. */}
-      <span className="storage-node-word sr-only">{word}</span>
-      {isDrainRole(role) ? (
-        <DrainModeSwap storageId={storageId} role={role} kind={storage.kind} />
-      ) : null}
-      {role === "buffer" ? <BufferModeSwap storageId={storageId} mode={effectiveBufferMode(storage, solveMode)} /> : null}
+    <div className={`storage-title-bar ${ratio ? "storage-title-bar--wide" : ""}`}>
+      <span className="storage-title-side">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            deleteStorage(storage.id);
+          }}
+          className="storage-title-key storage-title-key--delete board-edit-chrome nodrag"
+          title={`Delete ${noun}`}
+          aria-label={`Delete ${noun}`}
+        />
+      </span>
+      <StorageTitleName title={title} />
+      <span className="storage-title-side storage-title-side--end">
+        {ratio ? <RatioSplitButton storageId={storage.id} /> : null}
+        {isDrainRole(role) ? (
+          <DrainModeSwap storageId={storage.id} role={role} kind={storage.kind} />
+        ) : role === "buffer" ? (
+          <BufferModeSwap storageId={storage.id} mode={effectiveBufferMode(storage, solveMode)} />
+        ) : null}
+      </span>
     </div>
   );
 }
@@ -1023,7 +1058,7 @@ function StorageHeader({
  * The one thing about a BUFFER you choose, worn as its own icon so the tile
  * SAYS which one it is: an arrow dropping into a tray while the tank catches
  * overflow, left-right arrows for strict pass-through, a fork for ratios.
- * Clicking cycles all three; ratio's separate pencil opens its editor.
+ * Clicking cycles all three; ratio's pencil beside it opens its editor.
  */
 function BufferModeSwap({ storageId, mode }: { storageId: string; mode: StorageBufferMode }) {
   const updateStorage = useFactoryStore((state) => state.updateStorage);
@@ -1039,9 +1074,9 @@ function BufferModeSwap({ storageId, mode }: { storageId: string; mode: StorageB
         updateStorage(storageId, { bufferMode: next });
       }}
       aria-label={`Switch to ${next}`}
-      className="board-edit-chrome nodrag relative z-40 ml-auto flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+      className="storage-title-key board-edit-chrome nodrag"
     >
-      <Icon aria-hidden className="h-2.5 w-2.5" />
+      <Icon aria-hidden />
     </button>
     </MinecraftTooltip>
   );
@@ -1053,7 +1088,8 @@ function BufferModeSwap({ storageId, mode }: { storageId: string; mode: StorageB
  * read off anything, so it gets a control.
  *
  * A three-way cycle since 2026-08-23: product, byproduct, trash. The trash
- * step is what replaced the toolbar's separate trash can node.
+ * step is what replaced the toolbar's separate trash can node. Cycle arrows,
+ * so the strict buffer's left-right arrows mean one thing only.
  */
 function DrainModeSwap({
   storageId,
@@ -1069,8 +1105,6 @@ function DrainModeSwap({
   // are inert there (the pool banks every surplus by itself), so there is
   // nothing to cycle to and the control is not shown.
   const poolMode = useFactoryStore((state) => state.project.poolMode === true);
-  // Always the cycle arrows: the button is the CONTROL, and the tile's word
-  // and silhouette already say which state it is in.
   // POWER cannot be trashed - there is no bin for electricity - so its
   // cycle is two states: product and byproduct.
   const next: StorageDrainMode =
@@ -1094,14 +1128,341 @@ function DrainModeSwap({
         setStorageDrainMode(storageId, next);
       }}
       aria-label={`Switch to ${next}`}
-      className="board-edit-chrome nodrag relative z-40 ml-auto flex h-4 w-4 shrink-0 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_1px_1px_0_var(--mc-85),inset_-1px_-1px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
+      className="storage-title-key board-edit-chrome nodrag"
     >
-      <ArrowLeftRight aria-hidden className="h-2.5 w-2.5" />
+      <Repeat aria-hidden />
     </button>
     </MinecraftTooltip>
   );
 }
 
+/**
+ * The chip's rate: what flows, in the drawer's red or green (steel on trash,
+ * whose intake is voided, neither shipped nor spare). Large in Build, a step
+ * smaller under the rule row in Solve. It gives up SIZE, never digits, when a
+ * figure will not fit, fitted by string length so nothing is measured.
+ */
+const CHIP_RATE_ROOM: Record<StorageRole, number> = {
+  product: 63,
+  idle: 63,
+  source: 61,
+  byproduct: 49,
+  trash: 49,
+  buffer: 47,
+};
+const CHIP_RATE_STEPS = {
+  large: [
+    { className: "text-[13px] leading-[15px]", perChar: 8.6 },
+    { className: "text-[11px] leading-[13px]", perChar: 7.3 },
+    { className: "text-[9.5px] leading-[11px]", perChar: 6.3 },
+    { className: "text-[8px] leading-[10px]", perChar: 5.3 },
+  ],
+  small: [
+    { className: "text-[12px] leading-[13px]", perChar: 7.9 },
+    { className: "text-[10px] leading-[11px]", perChar: 6.6 },
+    { className: "text-[8.5px] leading-[10px]", perChar: 5.6 },
+    { className: "text-[7px] leading-[9px]", perChar: 4.7 },
+  ],
+} as const;
+
+function ChipRate({ net, kind, role, size }: { net: number; kind: string; role: StorageRole; size: "large" | "small" }) {
+  const label = `${net >= 0 ? "+" : ""}${formatCompactRate(net, kind)}`;
+  const steps = CHIP_RATE_STEPS[size];
+  const room = CHIP_RATE_ROOM[role];
+  const fit = steps.find((step) => label.length * step.perChar <= room) ?? steps[steps.length - 1];
+  return (
+    <div
+      className={`storage-net-line storage-chip-rate whitespace-nowrap font-extrabold tabular-nums ${fit.className}`}
+      style={{ color: role === "trash" ? "#b9c0cd" : netRateColor(net) }}
+    >
+      <MotionNumberText
+        values={[net]}
+        render={(shown) => {
+          const value = shown[0] ?? net;
+          return `${value >= 0 ? "+" : ""}${formatCompactRate(value, kind)}`;
+        }}
+      />
+    </div>
+  );
+}
+
+/** The rule list, in the order the rule button's wheel steps through it. Any
+ * is stored as "ignore": a number can wait there without applying. */
+const RULE_STEPS: TargetMode[] = ["ignore", "at-least", "exact", "at-most"];
+const RULE_MARK: Record<TargetMode, string> = { ignore: "~", "at-least": "≥", exact: "=", "at-most": "≤" };
+const RULE_NAME: Record<TargetMode, string> = { ignore: "Any", "at-least": "At least", exact: "Exactly", "at-most": "At most" };
+
+/** A field value in the board's rate unit and the typed shorthand. */
+function draftFor(perSecond: number, kind: string): string {
+  const shown = Math.abs(perSecond * rateMultiplierForKind(kind));
+  return shown < 1
+    ? shown.toLocaleString("en-US", { useGrouping: false, maximumSignificantDigits: 6 })
+    : formatAmountWithSuffix(shown);
+}
+
+/** Your number in the field: the drawer's compact form, without the unit. */
+function formatFieldNumber(perSecond: number, kind: string): string {
+  const scaled = Math.abs(perSecond * rateMultiplierForKind(kind));
+  if (kind === "power") return formatPowerValue(scaled);
+  if (scaled >= 1_000_000) return `${trimFlow(scaled / 1_000_000)}M`;
+  if (scaled >= 1_000) return `${trimFlow(scaled / 1_000)}k`;
+  return scaled >= 1 ? trimFlow(scaled) : formatCompact(scaled);
+}
+
+/** Where a source or product drawer's typed rate stands: its rule, and
+ * whether it applies. Any covers both no number and a number kept waiting. */
+function useDrawerRule(storage: FactoryStorage, role: StorageRole) {
+  const mode = storageTargetMode(storage, role);
+  const target = storage.targetPerSecond;
+  return { mode, target, any: target === undefined || mode === "ignore", input: isInputRate(storage, role) };
+}
+
+/**
+ * Solve's input row on a source or product drawer (Jack, 2026-09-22): a rule
+ * BUTTON with a ▾ that opens the four rules in words, and your rate in a
+ * sunken BOX you click and type into. The box and the arrow are the two cues
+ * everyone reads without being told: type here, and there are choices.
+ */
+export function RuleInput({
+  storage,
+  role,
+  result,
+  net,
+}: {
+  storage: FactoryStorage;
+  role: StorageRole;
+  result: StorageThroughputResult | undefined;
+  net: number;
+}) {
+  const setStorageTarget = useFactoryStore((state) => state.setStorageTarget);
+  const setStorageTargetMode = useFactoryStore((state) => state.setStorageTargetMode);
+  const setStorageRule = useFactoryStore((state) => state.setStorageRule);
+  const locked = useFactoryStore((state) => state.isReadOnly || state.checklistMode);
+  const { mode, target, any, input } = useDrawerRule(storage, role);
+  // While the solver has NOTHING to solve for - no amount, no pin, anywhere -
+  // every empty box pulses the ask, in step with the board's notice.
+  const ask = useFactoryStore((state) => target === undefined && mode !== "ignore" && !hasAnySolveNumbers(state.project));
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  // A rule picked on an empty drawer with nothing flowing yet waits here for
+  // the number the box is about to ask for.
+  const [pendingMode, setPendingMode] = useState<TargetMode | undefined>(undefined);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [button, setButton] = useState<HTMLButtonElement | null>(null);
+  useDropdownDismiss(open, { refs: [rootRef], onClose: () => setOpen(false), fade: true });
+  const kind = storage.kind;
+  const flowing = Math.abs(net);
+  const unreachable = result?.targetUnreachable === true;
+  const shownMode: TargetMode = any ? "ignore" : mode;
+
+  const beginEdit = (perSecond: number | undefined, nextMode?: TargetMode) => {
+    if (locked) return;
+    setOpen(false);
+    setPendingMode(nextMode);
+    setDraft(perSecond === undefined ? "" : draftFor(perSecond, kind));
+    setEditing(true);
+  };
+  // Picking a rule. From Any with no number yet, the rule starts from what
+  // flows now; with nothing flowing, the box asks for the number.
+  const choose = (next: TargetMode) => {
+    const state = useFactoryStore.getState();
+    setOpen(false);
+    if (state.isReadOnly || state.checklistMode || next === shownMode) return;
+    if (next === "ignore") {
+      if (target !== undefined) setStorageTargetMode(storage.id, "ignore");
+      return;
+    }
+    if (target === undefined) {
+      const pinned = Number(flowing.toPrecision(4));
+      if (pinned > 0) setStorageRule(storage.id, next, pinned);
+      else beginEdit(undefined, next);
+      return;
+    }
+    setStorageTargetMode(storage.id, next);
+  };
+  const chooseRef = useRef(choose);
+  chooseRef.current = choose;
+  const shownRef = useRef(shownMode);
+  shownRef.current = shownMode;
+  useEffect(() => {
+    if (!button) return;
+    // Native listener: React wheel events are passive and cannot stop the
+    // board from zooming (and the button is nowheel so the board camera
+    // leaves it alone). Scrolling steps through the rules, clamped.
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey || event.deltaY === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const index = RULE_STEPS.indexOf(shownRef.current);
+      const next = RULE_STEPS[Math.min(RULE_STEPS.length - 1, Math.max(0, index + (event.deltaY > 0 ? 1 : -1)))]!;
+      chooseRef.current(next);
+    };
+    button.addEventListener("wheel", onWheel, { passive: false });
+    return () => button.removeEventListener("wheel", onWheel);
+  }, [button]);
+
+  const commit = () => {
+    setEditing(false);
+    const rule = pendingMode ?? (any ? (input ? "exact" : "at-least") : mode);
+    const wasPending = pendingMode !== undefined;
+    setPendingMode(undefined);
+    const text = draft.trim();
+    if (text === "") {
+      if (target !== undefined) setStorageTarget(storage.id, undefined);
+      return;
+    }
+    const value = parseAmountWithSuffix(text);
+    // Not a number, or a number this rule cannot mean: the box keeps what it
+    // held. The board shows magnitudes; the direction is the drawer's.
+    if (value === undefined || !Number.isFinite(value) || value < 0) return;
+    if (value === 0 && rule !== "exact" && rule !== "at-most") return;
+    const perSecond = value / rateMultiplierForKind(kind);
+    if (any || wasPending) setStorageRule(storage.id, rule, perSecond);
+    else setStorageTarget(storage.id, perSecond);
+  };
+  const clear = (event: { button: number; preventDefault: () => void; stopPropagation: () => void }) => {
+    if (event.button !== 1) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (locked) return;
+    setEditing(false);
+    setPendingMode(undefined);
+    if (target !== undefined) setStorageTarget(storage.id, undefined);
+  };
+  const unit = rateSuffixForKind(kind).trim();
+
+  return (
+    <div
+      ref={rootRef}
+      // While the list is open no hover tooltip may cover it.
+      data-tooltip-stop={open ? "" : undefined}
+      className="storage-rule-row nodrag nopan"
+      onPointerDown={(event) => event.stopPropagation()}
+      // Its own controls: a click or right click here is not a browse.
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}
+    >
+      <button
+        ref={setButton}
+        type="button"
+        // No tooltip over the rule button at all: the ▾ explains it, and a
+        // tip that is already up when the list opens would sit on the list.
+        data-tooltip-stop
+        className={`storage-rule-button nowheel ${any ? "storage-rule-button--any" : ""} ${open ? "storage-rule-button--open" : ""}`}
+        disabled={locked}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Rule: ${RULE_NAME[shownMode]}. Click to choose.`}
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen((value) => !value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            setOpen(false);
+          }
+        }}
+      >
+        {RULE_MARK[shownMode]}
+        <ChevronDown aria-hidden />
+      </button>
+      {editing ? (
+        <input
+          autoFocus
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commit}
+          onFocus={(event) => event.currentTarget.select()}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Escape") {
+              setPendingMode(undefined);
+              setEditing(false);
+            }
+            event.stopPropagation();
+          }}
+          onClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => { if (event.button === 1) event.preventDefault(); }}
+          onAuxClick={clear}
+          inputMode="decimal"
+          placeholder={flowing > 0 ? draftFor(flowing, kind) : "rate"}
+          aria-label="Your rate"
+          className="storage-rate-field storage-rate-field--editing nodrag"
+        />
+      ) : (
+        <MinecraftTooltip content={() => <RecipeTooltip view={buildRatePlateTooltip(storage, result, input, net, any ? undefined : mode)} />}>
+        <button
+          type="button"
+          className={[
+            "storage-rate-field",
+            any ? "storage-rate-field--empty" : "",
+            any && ask ? "storage-rate-field--ask animate-pulse" : "",
+            !any && unreachable ? "storage-rate-field--bad" : "",
+          ].join(" ")}
+          disabled={locked}
+          onClick={(event) => {
+            event.stopPropagation();
+            beginEdit(any ? undefined : target);
+          }}
+          onMouseDown={(event) => { if (event.button === 1) event.preventDefault(); }}
+          onAuxClick={clear}
+          aria-label={any ? "Your rate: none. Click to type one." : `Your rate: ${formatFieldNumber(target!, kind)} ${unit}. Click to change it.`}
+        >
+          <span className="storage-rate-field-number">{any ? "rate?" : formatFieldNumber(target!, kind)}</span>
+          <span className="storage-rate-field-unit">{unit}</span>
+        </button>
+        </MinecraftTooltip>
+      )}
+      {open ? (
+        <div role="listbox" aria-label="Rule" data-tooltip-stop className="storage-rule-list nodrag nowheel" onPointerDown={(event) => event.stopPropagation()}>
+          {RULE_STEPS.map((rule) => (
+            <button
+              key={rule}
+              type="button"
+              role="option"
+              aria-selected={rule === shownMode}
+              className={`storage-rule-option ${rule === shownMode ? "storage-rule-option--on" : ""} ${rule === "ignore" ? "storage-rule-option--any" : ""}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                choose(rule);
+              }}
+            >
+              <b>{RULE_MARK[rule]}</b>
+              {RULE_NAME[rule]}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** How far the real rate has got toward your rate, drawn like the machine
+ * card's port bars: green once met, red when it can't be, steel on an At
+ * most limit (the share of the allowance in use). No bar on Any. */
+function RuleBar({
+  storage,
+  role,
+  result,
+  net,
+}: {
+  storage: FactoryStorage;
+  role: StorageRole;
+  result: StorageThroughputResult | undefined;
+  net: number;
+}) {
+  const { mode, target, any } = useDrawerRule(storage, role);
+  if (any || target === undefined || Math.abs(target) === 0) return null;
+  const share = Math.min(1, Math.abs(net) / Math.abs(target));
+  const tone = result?.targetUnreachable ? "bad" : mode === "at-most" ? "calm" : "ok";
+  return (
+    <span className="storage-rate-bar" aria-hidden>
+      <i data-tone={tone} style={{ width: `${share * 100}%` }} />
+    </span>
+  );
+}
 
 /**
  * The drawer hover: which of the four jobs this card is doing, why it is that

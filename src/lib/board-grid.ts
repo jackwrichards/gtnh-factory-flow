@@ -103,10 +103,11 @@ export const FOOTER_HEIGHT = cells(2); // 40
 export const CONFIG_PANEL_ROW_HEIGHT = cells(3); // 60
 
 /**
- * Drawers and tanks: a low horizontal face, with artwork beside the name and
- * rate. Nine cells by four; shared by placement, routing, and drag previews.
+ * Drawers and tanks: six cells by four, a one-port machine card (Jack,
+ * 2026-09-22). A one-cell title bar to move it by, and a three-cell port chip
+ * to wire from. Shared by placement, routing, and drag previews.
  */
-export const STORAGE_NODE_WIDTH = cells(9); // 180
+export const STORAGE_NODE_WIDTH = cells(6); // 120
 export const STORAGE_NODE_HEIGHT = cells(4); // 80
 
 /** Trash cans, same tile. */

@@ -1,5 +1,5 @@
 import { effectiveBufferMode } from "@/lib/model/storage-role";
-import { isInputRate, storageTargetMode, targetModeHelp, TARGET_MODE_LABELS } from "@/lib/model/storage-target";
+import { isInputRate, storageTargetMode, targetModeHelp, TARGET_MODE_LABELS, type TargetMode } from "@/lib/model/storage-target";
 import type {
   FactoryProject,
   FactoryStorage,
@@ -68,7 +68,13 @@ export function buildStorageTooltip(
     rows: [],
     // A drawer is a port with no rows to browse: dragging is its one gesture,
     // and in pool mode a drag lands nothing.
-    actions: mode === "pool" ? [] : [{ gesture: "drag", label: "Drag to connect" }],
+    // Its port chip answers like a machine's port row (power has no book).
+    actions: mode === "pool"
+      ? []
+      : [
+          ...(storage.kind === "power" ? [] : ([{ gesture: "left", label: "Recipes" }, { gesture: "right", label: "Uses" }] as const)),
+          { gesture: "drag", label: "Drag to connect" },
+        ],
   };
 
   if (role === "idle") {
@@ -156,6 +162,45 @@ export function buildTargetTooltip(storage: FactoryStorage, figures: StorageThro
     rows.push({ label: "Reachable", value: rate(input ? figures.consumedPerSecond : figures.producedPerSecond) });
   }
   return { title: ignored ? "Ignored target" : input ? "Input goal" : exact ? "Exact output goal" : "Required amount", reason: targetModeHelp(rule, input), rows, bullets: ["Middle-click to clear the rate."], actions: [{ gesture: "left", label: "Edit amount" }] };
+}
+
+const ANY_HELP_INPUT = "Supplies whatever the chain needs.";
+const ANY_HELP_OUTPUT = "Takes whatever the chain makes.";
+
+/**
+ * A drawer's rule row in Solve: your rule (or Any), your rate, the real
+ * rate, and how far the real rate has got toward yours. `rule` is undefined
+ * on Any, including an Any that keeps a number waiting.
+ */
+export function buildRatePlateTooltip(
+  storage: FactoryStorage,
+  figures: StorageThroughputResult | undefined,
+  input: boolean,
+  net: number,
+  rule: TargetMode | undefined,
+): RecipeTooltipView {
+  const rate = (value: number) => formatSlotRate(Math.abs(value), storage.kind);
+  const target = storage.targetPerSecond;
+  const rows: Array<{ label: string; value: string }> = [
+    { label: "Your rule", value: rule && target !== undefined ? `${TARGET_MODE_LABELS[rule]} ${rate(target)}` : "Any amount" },
+    { label: "Real rate", value: rate(net) },
+  ];
+  if (rule && target !== undefined && Math.abs(target) > 0) {
+    rows.push({ label: "Reached", value: `${Math.round(Math.min(1, Math.abs(net) / Math.abs(target)) * 100)}%` });
+  } else if (!rule && target !== undefined) {
+    rows.push({ label: "Kept", value: `${rate(target)}, not applied` });
+  }
+  return {
+    title: rule ? (input ? "Input rule" : "Output rule") : "Any amount",
+    status: figures?.targetUnreachable ? { label: "Can't be met", tone: "warning" } : undefined,
+    reason: rule ? targetModeHelp(rule, input) : input ? ANY_HELP_INPUT : ANY_HELP_OUTPUT,
+    rows,
+    bullets: ["Scroll the rule button to step through the rules.", "Middle-click the box to clear your rate."],
+    actions: [
+      { gesture: "left", label: "Rule button: choose a rule" },
+      { gesture: "left", label: "Box: type your rate" },
+    ],
+  };
 }
 
 const NEXT_ACTION = (next: string): TooltipAction[] => [{ gesture: "left", label: `Switch to ${next}` }];

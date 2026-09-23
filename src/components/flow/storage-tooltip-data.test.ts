@@ -97,7 +97,11 @@ describe("drawer tooltips are words and figures", () => {
     expect(tip(pool, "src")).toMatchObject({ subtitle: "Source", rows: [{ label: "Supplied", value: "100 L/s" }], actions: [] });
     expect(tip(pool, "out").subtitle).toBe("Product");
     expect(tip(pool, "out").actions).toEqual([]);
-    expect(tip(plan(), "out").actions).toEqual([{ gesture: "drag", label: "Drag to connect" }]);
+    expect(tip(plan(), "out").actions).toEqual([
+      { gesture: "left", label: "Recipes" },
+      { gesture: "right", label: "Uses" },
+      { gesture: "drag", label: "Drag to connect" },
+    ]);
   });
   it("keeps every drawer panel free of explanatory sentences", () => {
     const p = plan();
