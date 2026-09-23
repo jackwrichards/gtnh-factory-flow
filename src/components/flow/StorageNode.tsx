@@ -1,6 +1,7 @@
 "use client";
 import { isInputRate, storageTargetMode, type TargetMode } from "@/lib/model/storage-target";
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
+import { playBoardSound, suppressBoardSound } from "@/lib/board-sounds";
 import { usePortRowBrowse } from "./use-port-row-browse";
 import type { BrowseMode as PortBrowseMode } from "@/components/browse-menu";
 
@@ -1253,6 +1254,7 @@ export function RuleInput({
   const [pendingMode, setPendingMode] = useState<TargetMode | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
   const [button, setButton] = useState<HTMLButtonElement | null>(null);
+  const [box, setBox] = useState<HTMLButtonElement | null>(null);
   useDropdownDismiss(open, { refs: [rootRef], onClose: () => setOpen(false), fade: true });
   const kind = storage.kind;
   const flowing = Math.abs(net);
@@ -1304,6 +1306,42 @@ export function RuleInput({
     button.addEventListener("wheel", onWheel, { passive: false });
     return () => button.removeEventListener("wheel", onWheel);
   }, [button]);
+
+  // Scrolling the box walks your rate, like the machine count: by 1 in the
+  // board's rate unit, Ctrl (or Cmd) by 10, Shift by 100, landing on whole
+  // steps. From Any it starts at what flows now, under the role's default
+  // rule. Never below zero.
+  const stepRate = (direction: 1 | -1, modifiers: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => {
+    const state = useFactoryStore.getState();
+    if (state.isReadOnly || state.checklistMode) return;
+    const step = modifiers.shiftKey ? 100 : modifiers.ctrlKey || modifiers.metaKey ? 10 : 1;
+    const unitScale = rateMultiplierForKind(kind);
+    const shown = (any ? flowing : Math.abs(target!)) * unitScale;
+    const next = Math.max(0, direction > 0 ? Math.floor(shown / step + 1e-9) * step + step : Math.ceil(shown / step - 1e-9) * step - step);
+    if (!any && Math.abs(next - shown) < 1e-9) return;
+    // Scrolling down on an empty box asks for nothing: no zero rule appears.
+    if (any && next === 0) return;
+    const perSecond = next / unitScale;
+    if (any) setStorageRule(storage.id, input ? "exact" : "at-least", perSecond);
+    else setStorageTarget(storage.id, perSecond);
+    playBoardSound("dialRate", { step: Math.min(6, Math.log10(Math.max(1, next)) * 2) });
+    suppressBoardSound("adjust", 150);
+  };
+  const stepRateRef = useRef(stepRate);
+  stepRateRef.current = stepRate;
+  useEffect(() => {
+    if (!box) return;
+    // Native and non-passive, so Ctrl-scroll steps the rate instead of
+    // zooming the page; the box is nowheel so the board camera leaves it.
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      stepRateRef.current(event.deltaY < 0 ? 1 : -1, event);
+    };
+    box.addEventListener("wheel", onWheel, { passive: false });
+    return () => box.removeEventListener("wheel", onWheel);
+  }, [box]);
 
   const commit = () => {
     setEditing(false);
@@ -1397,9 +1435,10 @@ export function RuleInput({
       ) : (
         <MinecraftTooltip content={() => <RecipeTooltip view={buildRatePlateTooltip(storage, result, input, net, any ? undefined : mode)} />}>
         <button
+          ref={setBox}
           type="button"
           className={[
-            "storage-rate-field",
+            "storage-rate-field nowheel",
             any ? "storage-rate-field--empty" : "",
             any && ask ? "storage-rate-field--ask animate-pulse" : "",
             !any && unreachable ? "storage-rate-field--bad" : "",
@@ -1414,7 +1453,7 @@ export function RuleInput({
           aria-label={any ? "Your rate: none. Click to type one." : `Your rate: ${formatFieldNumber(target!, kind)} ${unit}. Click to change it.`}
         >
           <span className="storage-rate-field-number">{any ? "rate?" : formatFieldNumber(target!, kind)}</span>
-          <span className="storage-rate-field-unit">{unit}</span>
+          {any ? null : <span className="storage-rate-field-unit">{unit}</span>}
         </button>
         </MinecraftTooltip>
       )}
@@ -1457,7 +1496,11 @@ function RuleBar({
   net: number;
 }) {
   const { mode, target, any } = useDrawerRule(storage, role);
-  if (any || target === undefined || Math.abs(target) === 0) return null;
+  // No rule, no bar - but its room stays, so the rows never jump when a
+  // rule comes or goes.
+  if (any || target === undefined || Math.abs(target) === 0) {
+    return <span className="storage-rate-bar storage-rate-bar--empty" aria-hidden />;
+  }
   const share = Math.min(1, Math.abs(net) / Math.abs(target));
   const tone = result?.targetUnreachable ? "bad" : mode === "at-most" ? "calm" : "ok";
   return (

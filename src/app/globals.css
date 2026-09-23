@@ -1699,6 +1699,21 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   background: linear-gradient(155deg, rgba(255,255,255,0.06), transparent 48%, rgba(0,0,0,0.12));
 }
 
+/* The body under the title bar wears the darker accent the port chip used to
+   carry in a box of its own. Painted here, on the silhouette's clipped fill,
+   it fills edge to edge and follows every cut (Jack, 2026-09-22). */
+.storage-node-card .storage-shape-fill::before {
+  content: "";
+  position: absolute;
+  inset: 18px 0 0;
+  background: rgba(0,0,0,0.24);
+  box-shadow: inset 0 1px 0 rgba(0,0,0,0.35);
+}
+
+.factory-flow-board[data-detail-level="glance"] .storage-shape-fill::before {
+  display: none;
+}
+
 /* Per silhouette: the title bar's own clip and side padding, and the port
    chip's side margin, each measured against the frame (cut + 2px border +
    the buffer's inlay ring). */
@@ -1747,7 +1762,7 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   display: grid;
   grid-template-columns: minmax(var(--side-l), 1fr) minmax(0, auto) minmax(var(--side-r), 1fr);
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   height: 18px;
   margin: 2px 2px 0;
   padding: 0 calc(var(--storage-hp) - 2px);
@@ -1780,7 +1795,7 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 .storage-title-name {
   min-width: 0;
   /* The fade lands on this padding while the name fits. */
-  padding: 0 6px;
+  padding: 0 4px;
   overflow: hidden;
   color: #e8e9ee;
   font-size: 9.5px;
@@ -1791,8 +1806,8 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   text-shadow: 0 1px 1px rgba(0,0,0,0.45);
   /* Names fade where they run out, never an ellipsis. A centred name that
      fits never reaches the fade. */
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 6px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 6px), transparent);
   pointer-events: none;
 }
 
@@ -1834,9 +1849,10 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   background: #9c3543;
 }
 
-/* The PORT CHIP: the wire zone, drawn like a machine card's port chip, and
-   answering like one - click for recipes, right click for uses, drag to
-   wire. */
+/* The PORT CHIP: the whole body under the title bar, the wire zone, and it
+   answers like a machine's port row - click for recipes, right click for
+   uses, drag to wire. Its dark ground is the fill's ::before above; the
+   content is padded clear of the silhouette's cuts. */
 .storage-port-chip {
   position: relative;
   display: flex;
@@ -1845,16 +1861,9 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   gap: 6px;
   min-width: 0;
   min-height: 0;
-  margin: 4px var(--storage-cm) 5px;
-  padding: 0 5px 0 4px;
-  border: 1px solid rgba(0,0,0,0.4);
-  background: rgba(0,0,0,0.25);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+  margin: 0 2px 2px;
+  padding: 4px calc(var(--storage-cm) + 3px) 3px calc(var(--storage-cm) + 2px);
   cursor: crosshair;
-}
-
-.storage-port-chip:hover {
-  border-color: rgba(255,255,255,0.14);
 }
 
 /* Build, and every drawer without a rule: the picture and the rate as one
@@ -1971,6 +1980,8 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 
 .storage-rate-field-number {
   min-width: 0;
+  /* Room for an italic's overhang, so "rate?" keeps its question mark. */
+  padding-right: 1px;
   overflow: hidden;
   white-space: nowrap;
 }
@@ -2073,6 +2084,10 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   background: var(--rail-bar-track);
   box-shadow: inset 0 1px 0 rgba(0,0,0,0.35);
   pointer-events: none;
+}
+
+.storage-rate-bar--empty {
+  visibility: hidden;
 }
 
 .storage-rate-bar > i {
