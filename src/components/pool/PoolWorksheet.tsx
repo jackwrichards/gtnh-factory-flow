@@ -4,7 +4,6 @@ import { TargetRateHelp } from "./TargetRateHelp";
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 import { playBoardSound } from "@/lib/board-sounds";
 import { isInputRate, storageTargetMode } from "@/lib/model/storage-target";
-import { StorageTargetRule } from "../flow/StorageTargetRule";
 import { productionGroupDescendants, productionGroupTree } from "@/lib/model/production-groups";
 import { getPoolGroupResources } from "@/lib/solver/pool-mode";
 import { ProductionScopeHeader } from "./ProductionGroups";
@@ -35,6 +34,7 @@ import { MinecraftTooltip } from "../nei/MinecraftTooltip";
 import { CircuitChip, RecipeNodeEditor, SolvedMachinesStat } from "../flow/RecipeNode";
 import { ItemPickerPopover } from "../ItemPickerPopover";
 import { TargetLine } from "../flow/StorageNode";
+import { RuleButton, useTableRule } from "../flow/rate-rule";
 import { RecipeTooltip } from "../flow/RecipeTooltip";
 import { formatPoolPowerValue as formatPowerValue, formatPoolRate as formatSlotRate, formatPoolRateBare as formatSlotRateBare, formatPoolSignedRate as formatSignedRate } from "./worksheet-format";
 import { WorksheetPower } from "./WorksheetPower";
@@ -1111,6 +1111,7 @@ function Product({ storage, role, onExplain, helpOpen }: { storage: FactoryStora
   const stale = useFactoryStore(state => state.lastResult.stale);
   const held = useFactoryStore(state => state.lastResult.held);
   const status = targetStatus(storage, role, result, stale, held);
+  const rule = useTableRule({ storage, role, name: storage.displayName ?? storage.resourceId });
   return (
     <tr {...orderTarget} className="pool-product" data-worksheet-product={storage.id} data-target-ignored={ignored || undefined}>
       <td>
@@ -1146,8 +1147,9 @@ function Product({ storage, role, onExplain, helpOpen }: { storage: FactoryStora
           </span>
         ) : null}
       </td>
+      {/* The drawer's rule button and marks, dressed as Pool's old select. */}
       <td className="pool-product-rule">
-        <StorageTargetRule storage={storage} input={inputGoal} className="pool-target-rule" />
+        <RuleButton rule={rule} variant="table" />
       </td>
       <td className="pool-product-target">
         <div className="pool-target-controls">

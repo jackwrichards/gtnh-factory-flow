@@ -99,7 +99,7 @@ it("edits a positive source amount on the board and carries its signed rate and 
   const pool = render(<PoolWorksheet />);
   expect(screen.getByRole("heading", { name: "Desired rates" })).toBeTruthy();
   const row = pool.container.querySelector('[data-worksheet-product="input"]')! as HTMLElement;
-  expect((within(row).getByRole("combobox") as HTMLSelectElement).value).toBe("at-most");
+  expect(within(row).getByRole("button", { name: /^Rule for Ore:/ }).getAttribute("aria-label")).toBe("Rule for Ore: At most. Click to choose.");
   fireEvent.click(within(row).getByRole("button", { name: "Required amount" }));
   const field = within(row).getByRole("textbox", { name: "Required amount" }) as HTMLInputElement;
   expect(field.value).toBe("-10");
@@ -117,7 +117,11 @@ it("shows existing sources with no rate in Pool and keeps zero-input limits thro
   const pool = render(<PoolWorksheet />);
   const row = pool.container.querySelector('[data-worksheet-product="input"]')! as HTMLElement;
   expect(within(row).getByText("rate?")).toBeTruthy();
-  fireEvent.change(within(row).getByRole("combobox"), { target: { value: "at-most" } });
+  // A source with no rate still shows its rule, as Pool always did.
+  expect(within(row).getByRole("button", { name: /^Rule for Ore:/ }).textContent).toBe("=Exactly");
+  fireEvent.click(within(row).getByRole("button", { name: /^Rule for Ore:/ }));
+  fireEvent.click(within(row).getByRole("option", { name: /At most/ }));
+  expect(useFactoryStore.getState().project.storages![0].targetPerSecond).toBeUndefined();
   fireEvent.click(within(row).getByRole("button", { name: "Required amount" }));
   const field = within(row).getByRole("textbox");
   fireEvent.change(field, { target: { value: "0" } });
@@ -239,9 +243,31 @@ it("explains the clicked target and updates its requested rate", () => {
   expect(screen.queryByRole("region", { name: "Target explanation" })).toBeNull();
 });
 
-it.each([false, true])("scrolls rate rules without scrolling the page (Pool: %s)", (pool) => {
-  act(() => useFactoryStore.getState().setPoolMode(pool));
-  render(pool ? <PoolWorksheet /> : <BoardSource />);
+it("scrolls Pool rate rules without scrolling the page", () => {
+  act(() => useFactoryStore.getState().setPoolMode(true));
+  render(<PoolWorksheet />);
+  const rule = () => screen.getByRole("button", { name: /^Rule for Ore:/ });
+  const initial = useFactoryStore.getState().project;
+  const wheel = (deltaY: number) => fireEvent(rule(), new WheelEvent("wheel", { deltaY, bubbles: true, cancelable: true }));
+  const shown = () => rule().getAttribute("aria-label");
+  expect(shown()).toBe("Rule for Ore: Exactly. Click to choose.");
+  expect(wheel(100)).toBe(false);
+  expect(shown()).toBe("Rule for Ore: At most. Click to choose.");
+  wheel(100);
+  expect(shown()).toBe("Rule for Ore: At most. Click to choose.");
+  wheel(-100);
+  wheel(-100);
+  wheel(-100);
+  expect(shown()).toBe("Rule for Ore: Any. Click to choose.");
+  wheel(-100);
+  expect(shown()).toBe("Rule for Ore: Any. Click to choose.");
+  expect(useFactoryStore.getState().project.edges).toEqual(initial.edges);
+  expect(useFactoryStore.getState().project.storages![0].targetPerSecond).toBe(initial.storages![0].targetPerSecond);
+  act(() => useFactoryStore.getState().undo());
+  expect(shown()).toBe("Rule for Ore: At least. Click to choose.");
+});
+it("scrolls board rate rules without scrolling the page", () => {
+  render(<BoardSource />);
   const select = screen.getByRole("combobox", { name: "Target rule for Ore" });
   const initial = useFactoryStore.getState().project;
   const wheel = () => fireEvent(select, new WheelEvent("wheel", { deltaY: 100, bubbles: true, cancelable: true }));

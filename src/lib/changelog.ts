@@ -53,7 +53,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     notes: [
       "Drawers are built like small machine cards: drag the title bar to move one, and drag from its port to start a wire. Click the port for recipes, right click for uses.",
       "In Solve, every source and product drawer shows its real rate again, with your rate in a box you can type into.",
-      "Pick Any, At least, Exactly or At most from the drawer's rule button, and scroll the rate box to change it (Ctrl 10, Shift 100). Any lets the planner decide.",
+      "Pick Any, At least, Exactly or At most from the rule button, and scroll the rate box to change it (Ctrl 10, Shift 100). Any lets the planner decide. Pool's Desired rates use the same rule list.",
       "Drag an item from the item list onto the board to set down a drawer of it.",
     ],
   },

@@ -575,7 +575,6 @@
 .pool-worksheet--dense .pool-overview .pool-resource-link { height: 16px; line-height: 16px; }
 .pool-worksheet--dense .pool-overview .pool-item-icon { height: 14px !important; width: 14px !important; }
 .pool-worksheet--dense .pool-overview .pool-resource-link > span { font-size: 11px; }
-.pool-worksheet--dense .pool-overview .pool-target-rule { height: 16px; padding-block: 0; line-height: 14px; }
 .pool-drop-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; font-weight: 400; color: var(--mc-ink-muted); }
 .pool-overview-title h3 { flex-shrink: 0; max-width: 100%; }
 @container (max-width: 440px) {
@@ -825,11 +824,7 @@
 .pool-status-why { font-size: 8px; opacity: .8; }
 .pool-target-controls { display: flex; align-items: center; justify-content: flex-end; padding-right: 4px; }
 .pool-target-controls > [data-tooltip-root] { flex-shrink: 0; }
-.pool-target-rule { width: 64px; padding: 0; font: 10px var(--app-font); color: var(--mc-ink); background: transparent; border: 0; border-bottom: 1px dotted #ffffff40; cursor: pointer; }
-.pool-target-rule option { background: var(--surface, #24272c); color: var(--mc-ink); }
-.pool-target-rule:focus-visible { outline: 1px solid #adc7ff; }
 .pool-product[data-target-ignored] .pool-product-target [aria-label="Required amount"] { opacity: .5; }
-.pool-product[data-target-ignored] .pool-target-rule { color: var(--mc-ink-muted); }
 
 /* Compact material tables keep direction, rate and supply rule on one line. */
 .pool-scope-materials { margin-bottom: 2px; }

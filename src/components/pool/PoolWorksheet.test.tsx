@@ -549,19 +549,26 @@ describe("Pool worksheet", () => {
 
   it("switches target rules without losing the saved rate and supports undo", () => {
     render(<PoolWorksheet />);
-    const rule = screen.getByRole("combobox", { name: "Target rule for Copper Plate" });
-    fireEvent.change(rule, { target: { value: "ignore" } });
+    const rule = () => screen.getByRole("button", { name: /^Rule for Copper Plate:/ });
+    expect(rule().textContent).toBe("≥At least");
+    fireEvent.click(rule());
+    // The drawer's marks and words; Any is the old Ignore.
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["~Any", "≥At least", "=Exactly", "≤At most"]);
+    fireEvent.click(screen.getByRole("option", { name: /Any/ }));
+    expect(screen.queryByRole("listbox")).toBeNull();
     expect(useFactoryStore.getState().project.storages?.[0]).toMatchObject({ targetPerSecond: 0.5, targetMode: "ignore" });
     expect(useFactoryStore.getState().lastResult.nodes.machine.theoreticalMachinesRequired).toBe(0);
-    fireEvent.change(rule, { target: { value: "exact" } });
+    fireEvent.click(rule());
+    fireEvent.click(screen.getByRole("option", { name: /Exactly/ }));
     expect(useFactoryStore.getState().lastResult.nodes.machine.theoreticalMachinesRequired).toBeCloseTo(0.5);
     act(() => useFactoryStore.getState().undo());
-    expect((screen.getByRole("combobox", { name: "Target rule for Copper Plate" }) as HTMLSelectElement).value).toBe("ignore");
+    expect(rule().getAttribute("aria-label")).toBe("Rule for Copper Plate: Any. Click to choose.");
   });
 
   it("accepts zero only as an exact output target", () => {
     render(<PoolWorksheet />);
-    fireEvent.change(screen.getByRole("combobox", { name: "Target rule for Copper Plate" }), { target: { value: "exact" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Rule for Copper Plate:/ }));
+    fireEvent.click(screen.getByRole("option", { name: /Exactly/ }));
     fireEvent.click(screen.getByRole("button", { name: "Required amount" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Required amount" }), { target: { value: "0" } });
     fireEvent.blur(screen.getByRole("textbox", { name: "Required amount" }));
@@ -625,6 +632,7 @@ describe("Pool worksheet", () => {
     const { project } = useFactoryStore.getState();
     const { container } = render(<PoolWorksheet />);
     expect(screen.queryByRole("button", { name: "Required amount" })).toBeNull();
+    expect((screen.getByRole("button", { name: /^Rule for Copper Plate:/ }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("button", { name: "Remove machine" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add rate" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Balance all materials/ })).toBeNull();

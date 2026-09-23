@@ -1983,6 +1983,33 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   box-shadow: 0 0 0 1px rgba(255,210,87,0.45), inset 1px 1px 0 rgba(255,255,255,0.18);
 }
 
+/* The button and the list it opens: the list hangs from here. */
+.storage-rule-anchor {
+  position: relative;
+  display: flex;
+  flex: none;
+}
+
+.storage-rule-mark {
+  font-weight: 800;
+}
+
+.storage-rule-button:disabled,
+.storage-rate-field:disabled {
+  cursor: default;
+}
+
+/* A viewer cannot choose, so there is nothing to open. */
+.storage-rule-button:disabled svg {
+  display: none;
+}
+
+.storage-rule-button:focus-visible,
+.storage-rate-field:focus-visible {
+  outline: 1px solid #ffd257;
+  outline-offset: 1px;
+}
+
 .storage-rate-field {
   display: flex;
   flex: 1;
@@ -2102,6 +2129,71 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 .storage-rule-option--on {
   background: rgba(255,210,87,0.16);
   box-shadow: inset 0 0 0 1px rgba(255,210,87,0.4);
+}
+
+/* Pool's Desired rates borrow the rule button: plain text on a dotted
+   underline, as Pool's rule always was, the drawer's mark before the word. */
+.storage-rule-anchor--table {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.storage-rule-button--table {
+  width: 64px;
+  height: 16px;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px dotted #ffffff40;
+  background: transparent;
+  box-shadow: none;
+  color: #ffd257;
+  font-family: var(--app-font);
+  font-size: 10.5px;
+}
+
+.storage-rule-button--table:hover,
+.storage-rule-button--table.storage-rule-button--open {
+  background: transparent;
+  border-bottom-color: #ffffff80;
+  box-shadow: none;
+}
+
+.storage-rule-button--any.storage-rule-button--table {
+  color: #9a9ca4;
+}
+
+.storage-rule-word {
+  color: var(--mc-ink, #e8e9ee);
+  font-size: 10px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.storage-rule-button--any .storage-rule-word {
+  color: var(--mc-ink-muted, #9a9ca4);
+}
+
+.storage-rule-button--table svg {
+  width: 9px;
+  height: 9px;
+  margin-left: auto;
+  color: var(--mc-ink, #e8e9ee);
+  stroke-width: 2.5;
+}
+
+.storage-rule-list--table {
+  min-width: 100%;
+}
+
+.storage-rule-list--table .storage-rule-option {
+  grid-template-columns: 12px minmax(0, 1fr);
+  padding: 4px 8px 4px 4px;
+  font-size: 10px;
+}
+
+.storage-rule-list--table .storage-rule-option b {
+  font-size: 11px;
 }
 
 /* The real rate against your rate, in the port bars' colours. */

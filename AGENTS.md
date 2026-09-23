@@ -1182,6 +1182,16 @@ Working notes for future agents on GTNH Factory Flow.
   items drag in every mode now, not only Pool.
 - `StorageRuleInput.test.tsx` is the exam; `drawer-a1-check.local.mjs`
   drives it in the real app.
+- POOL'S DESIRED RATES borrow the RULE BUTTON only (Jack, 2026-09-22):
+  `RuleButton` variant "table" with `useTableRule` (`rate-rule.tsx`), the
+  same marks and list (~ Any, ≥ At least, = Exactly, ≤ At most), dressed as
+  Pool's old select: plain text on a dotted underline, no bevel. It keeps
+  Pool's behaviour - a pick only switches the rule, the rule shows even with
+  no rate, Any is the old Ignore. The TARGET column stays the original
+  `TargetLine` pencil line: a sunken box was tried there and Jack asked for
+  the old one back. The drawer itself uses `useRateRule` + `RuleButton` +
+  `RateBox`. The inspector's product rows still use the old
+  `StorageTargetRule` select.
 
 ## The Board Grid
 

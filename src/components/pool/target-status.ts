@@ -8,7 +8,7 @@ type RateStatus = { label: string; compact?: string; tone: "muted" | "met" | "fa
 export function targetStatus(storage: FactoryStorage, role: StorageRole | undefined,
   result: StorageThroughputResult | undefined, stale = false, held = false): RateStatus {
   const mode = storageTargetMode(storage, role);
-  if (mode === "ignore") return { label: "Rate not enforced", compact: "Ignored", tone: "muted" };
+  if (mode === "ignore") return { label: "Rate not enforced", compact: "Not enforced", tone: "muted" };
   if (!hasStorageTarget(storage, role)) return { label: "No rate set", compact: "No rate set", tone: "muted" };
   if (stale || !result) return { label: held ? "Waiting to recalculate" : "Calculating…", tone: "muted" };
   const target = Math.abs(storage.targetPerSecond!);
