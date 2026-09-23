@@ -1043,7 +1043,8 @@ function ResourcePager({
 function useResourceBrowseMenu(
   browse: (resource: IndexedResource, mode: "recipes" | "uses") => void,
 ) {
-  const canDrag = useFactoryStore((state) => state.project.poolMode && !state.isReadOnly);
+  // Drag an item onto the board for a drawer, or onto Pool's Desired rates.
+  const canDrag = useFactoryStore((state) => !state.isReadOnly);
   const pressedRef = useRef<IndexedResource | undefined>(undefined);
   const [pressedName, setPressedName] = useState("");
   const menu = useBrowseMenu({

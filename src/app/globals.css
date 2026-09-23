@@ -1705,7 +1705,6 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 .storage-shape-content {
   --storage-hp: 3px;
   --storage-cm: 4px;
-  --storage-side: 13px;
   --band-radius: 0;
   --band-clip: none;
 }
@@ -1738,11 +1737,15 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 
 /* The TITLE BAR: the move grip, like a machine card's title row. One cell
    tall with the frame's 2px above it; darker than the face, in the role's
-   own tint. The name is centred on the card: its two side columns are the
-   same width whatever sits in them. */
+   own tint. The name is centred on the card while it fits: the two side
+   columns share the leftover room equally, but each only insists on the
+   keys it holds (--side-l / --side-r), so a long name on a drawer with no
+   switch takes the empty right side instead of fading early. */
 .storage-title-bar {
+  --side-l: 13px;
+  --side-r: 13px;
   display: grid;
-  grid-template-columns: var(--storage-side) minmax(0, 1fr) var(--storage-side);
+  grid-template-columns: minmax(var(--side-l), 1fr) minmax(0, auto) minmax(var(--side-r), 1fr);
   align-items: center;
   gap: 4px;
   height: 18px;
@@ -1755,9 +1758,13 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   cursor: grab;
 }
 
-/* A ratio drawer carries two keys on the right, so both sides widen. */
+/* A ratio drawer carries two keys on the right; a source none. */
 .storage-title-bar--wide {
-  --storage-side: 30px;
+  --side-r: 30px;
+}
+
+.storage-title-bar--no-end {
+  --side-r: 0px;
 }
 
 .storage-title-side {
@@ -1772,6 +1779,8 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 
 .storage-title-name {
   min-width: 0;
+  /* The fade lands on this padding while the name fits. */
+  padding: 0 6px;
   overflow: hidden;
   color: #e8e9ee;
   font-size: 9.5px;
@@ -1782,8 +1791,8 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   text-shadow: 0 1px 1px rgba(0,0,0,0.45);
   /* Names fade where they run out, never an ellipsis. A centred name that
      fits never reaches the fade. */
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 10px), transparent);
-  mask-image: linear-gradient(to right, #000 calc(100% - 10px), transparent);
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 8px), transparent);
   pointer-events: none;
 }
 

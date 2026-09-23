@@ -1171,8 +1171,15 @@ Working notes for future agents on GTNH Factory Flow.
   left-right arrows belong to the strict buffer alone. The ratio pencil sits
   in the title bar beside the mode key.
 - Sources have NO switch: a source is read off its wires, and turning a
-  wired source into a product would drop every wire. Jack asked; the answer
-  stands unless he picks the "switch only while unwired" option.
+  wired source into a product would drop every wire. Jack asked, weighed
+  destructive and unwired-only swaps, and scrapped the idea (2026-09-22).
+- The title bar's side columns are `minmax(keys, 1fr)` around an auto name:
+  a name that fits is centred on the card, a longer one takes whatever side
+  has no keys (a source's empty right) before it fades.
+- Dragging an item from the items column onto the board drops a drawer of it
+  there (`addPoolStorage(resource, "drain", point)`, the board menu's "New
+  product drawer"); wiring it into an input makes it a source. The column's
+  items drag in every mode now, not only Pool.
 - `StorageRuleInput.test.tsx` is the exam; `drawer-a1-check.local.mjs`
   drives it in the real app.
 

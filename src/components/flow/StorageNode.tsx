@@ -669,7 +669,7 @@ export function StorageTileFace({
         className="storage-shape-content relative z-10 flex min-h-0 flex-1 flex-col"
         style={{ "--storage-tint": tint } as CSSProperties}
       >
-        <div className="storage-title-bar">
+        <div className={`storage-title-bar ${isDrainRole(role) || role === "buffer" ? "" : "storage-title-bar--no-end"}`}>
           <span className="storage-title-side">
             <span aria-hidden className="storage-title-key storage-title-key--delete" />
           </span>
@@ -1027,8 +1027,11 @@ function StorageTitleBar({
   const deleteStorage = useFactoryStore((state) => state.deleteStorage);
   const noun = isTank ? "tank" : "drawer";
   const ratio = role === "buffer" && storage.bufferMode === "ratio";
+  // Pool has one drain kind, so DrainModeSwap shows nothing there.
+  const poolMode = useFactoryStore((state) => state.project.poolMode === true);
+  const hasEnd = ratio || role === "buffer" || (isDrainRole(role) && !poolMode);
   return (
-    <div className={`storage-title-bar ${ratio ? "storage-title-bar--wide" : ""}`}>
+    <div className={`storage-title-bar ${ratio ? "storage-title-bar--wide" : hasEnd ? "" : "storage-title-bar--no-end"}`}>
       <span className="storage-title-side">
         <button
           type="button"

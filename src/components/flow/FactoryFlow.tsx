@@ -406,6 +406,7 @@ import { BOARD_PAPER_IDS } from "@/lib/model/board-paper";
 import { getSetupRules } from "@/lib/model/setup-rules";
 import { nearestFreeSpot, type PlacementRect, type PlacementRegion } from "./board-placement";
 import { registerBoardResize, type BoardResizeDraft } from "./board-resize";
+import { RESOURCE_DRAG_TYPE, readResourceDrag } from "@/lib/resource-drag";
 
 /** How long after the last camera step the settled camera work runs. */
 const MOVE_END_SETTLE_MS = 120;
@@ -6559,15 +6560,26 @@ export function FactoryFlow() {
       onKeyDownCapture={(event) => { if (!checklistCapture(event)) viewerCapture(event); }}
       onWheelCapture={checklistCapture}
       // Dragging a picture file straight onto the board drops it where it
-      // lands, as an image annotation.
+      // lands, as an image annotation. Dragging an item from the items column
+      // drops a drawer of it there, the same drawer the board menu's "New
+      // product drawer" makes; wiring it into a machine's input turns it into
+      // a source.
       onDragOver={(event) => {
-        if (event.dataTransfer.types.includes("Files")) {
+        const types = event.dataTransfer.types;
+        if (types.includes("Files") || (!isReadOnly && types.includes(RESOURCE_DRAG_TYPE))) {
           event.preventDefault();
           event.dataTransfer.dropEffect = "copy";
         }
       }}
       onDrop={(event) => {
         if (isReadOnly) { event.preventDefault(); return; }
+        if (event.dataTransfer.types.includes(RESOURCE_DRAG_TYPE)) {
+          event.preventDefault();
+          const resource = readResourceDrag(event.dataTransfer);
+          const point = flowInstanceRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+          if (resource && point) useFactoryStore.getState().addPoolStorage(resource, "drain", point);
+          return;
+        }
         const file = Array.from(event.dataTransfer.files).find((candidate) =>
           candidate.type.startsWith("image/"),
         );
