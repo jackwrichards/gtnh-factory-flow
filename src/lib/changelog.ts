@@ -48,13 +48,13 @@ export interface ChangelogEntry {
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "3.5.0",
-    date: "2026-09-21",
+    date: "2026-09-23",
     headline: "Drawers you can read and set",
     notes: [
-      "Drawers are built like small machine cards: drag the title bar to move one, and drag from its port to start a wire. Click the port for recipes, right click for uses.",
-      "In Solve, every source and product drawer shows its real rate again, with your rate in a box you can type into.",
-      "Pick Any, At least, Exactly or At most from the rule button, and scroll the rate box to change it (Ctrl 10, Shift 100). Any lets the planner decide. Pool's Desired rates use the same rule list.",
-      "Drag an item from the item list onto the board to set down a drawer of it.",
+      "Drawers are now small cards: drag the title bar to move one, drag the item to start a wire. Click the item for recipes, right click for uses.",
+      "In Solve, source and product drawers show their real rate again. Type your rate in the box and pick Any, At least, Exactly or At most.",
+      "Pool's Desired rates use the same rules. Ignore is now called Any.",
+      "Drag an item from the item list onto the board to make a drawer of it.",
     ],
   },
   {
