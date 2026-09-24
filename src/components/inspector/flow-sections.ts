@@ -26,7 +26,10 @@ export interface FlowSection {
 }
 
 export type FlowRow =
-  | { type: "product"; key: string; section: FlowSection; storage: FactoryStorage; index: number }
+  // One of SEVERAL source or product drawers behind an Inputs or Outputs
+  // row, hung under it with its own rule and rate. A lone drawer's controls
+  // ride its resource row instead.
+  | { type: "drawer"; key: string; section: FlowSection; storage: FactoryStorage; last: boolean }
   | { type: "header"; key: string; section: FlowSection; collapsed: boolean }
   | { type: "item"; key: string; section: FlowSection; balance: ResourceBalance }
   // A starred resource carries its chart in the row directly beneath it, so a
@@ -161,18 +164,32 @@ export function applyResourceMarks(
   return starred.length === 0 ? rest : [...starred, ...rest];
 }
 
+/** The drawers whose rates the panel sets: sources behind Inputs rows,
+ * products behind Outputs rows, by resource key. */
+export interface BoundaryDrawers {
+  need: ReadonlyMap<string, FactoryStorage[]>;
+  output: ReadonlyMap<string, FactoryStorage[]>;
+}
+
+export function drawersBehindRow(
+  drawers: BoundaryDrawers | undefined,
+  section: FlowSectionId,
+  key: string,
+): FactoryStorage[] | undefined {
+  return section === "internal" ? undefined : drawers?.[section].get(key);
+}
+
 /**
  * Flattens the sections into the row list the virtualiser walks.
  *
  * A collapsed section contributes only its header, so folding a 200-row group
- * costs nothing to render.
+ * costs nothing to render. `drawers` is given only while rates can be set.
  */
 export function buildFlowRows(
   sections: FlowSection[],
   collapsed: Record<FlowSectionId, boolean>,
   favourites: ReadonlySet<string> = new Set(),
-  products: ReadonlyMap<string, FactoryStorage[]> = new Map(),
-  expandedProducts: ReadonlySet<string> = new Set(),
+  drawers?: BoundaryDrawers,
 ): FlowRow[] {
   const rows: FlowRow[] = [];
   for (const section of sections) {
@@ -195,9 +212,16 @@ export function buildFlowRows(
 
     for (const balance of section.items) {
       rows.push({ type: "item", key: `${section.id}:${balance.key}`, section, balance });
-      if (section.id === "output" && expandedProducts.has(balance.key)) {
-        (products.get(balance.key) ?? []).forEach((storage, index) => {
-          rows.push({ type: "product", key: `product:${storage.id}`, section, storage, index });
+      const behind = drawersBehindRow(drawers, section.id, balance.key) ?? [];
+      if (behind.length > 1) {
+        behind.forEach((storage, index) => {
+          rows.push({
+            type: "drawer",
+            key: `drawer:${storage.id}`,
+            section,
+            storage,
+            last: index === behind.length - 1,
+          });
         });
       }
       if (favourites.has(balance.key)) {
@@ -220,7 +244,7 @@ export function buildFlowRows(
  */
 export function measureFlowRows(
   rows: FlowRow[],
-  heights: { header: number; item: number; empty: number; chart: number; product?: number },
+  heights: { header: number; item: number; empty: number; chart: number; drawer?: number },
   /**
    * Per-row height scale, for rows mid-arrival or mid-departure (the panel's
    * presence animation). The windowing math reads the ANIMATED height, so

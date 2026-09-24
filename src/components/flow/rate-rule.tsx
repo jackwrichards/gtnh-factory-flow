@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import type { FactoryStorage, StorageThroughputResult } from "@/lib/model/types";
 import type { StorageRole } from "@/lib/model/storage-role";
@@ -20,6 +20,7 @@ import { buildRatePlateTooltip } from "./storage-tooltip-data";
  * in words, and your rate in a sunken BOX you click and type into. Pool's
  * Desired rates borrow the rule button (`useTableRule`), with the word
  * spelled out beside its mark; their Target column keeps its own editor.
+ * The resources panel's drawer rows wear the same dress, mark alone.
  */
 
 /** The rule list, in the order the rule button's wheel steps through it. Any
@@ -28,7 +29,9 @@ export const RULE_STEPS: TargetMode[] = ["ignore", "at-least", "exact", "at-most
 export const RULE_MARK: Record<TargetMode, string> = { ignore: "~", "at-least": "≥", exact: "=", "at-most": "≤" };
 export const RULE_NAME: Record<TargetMode, string> = { ignore: "Any", "at-least": "At least", exact: "Exactly", "at-most": "At most" };
 
-export type RateRuleVariant = "drawer" | "table";
+/** "mark" is the table's dress without the word, for the resources panel's
+ * rows, where a word would crowd the name out of its line. */
+export type RateRuleVariant = "drawer" | "table" | "mark";
 
 /**
  * "2.5k" is a number: metric shorthand for the rate field, k / m / g for
@@ -285,12 +288,40 @@ const middleDownKeepsFocus = (event: { button: number; preventDefault: () => voi
   if (event.button === 1) event.preventDefault();
 };
 
+/** The box a list hanging from `element` is cut off by: its nearest
+ * scrolling or clipping ancestor, else the window. Real pixels. */
+function clippingBox(element: HTMLElement): { top: number; bottom: number } {
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    const overflow = getComputedStyle(parent).overflowY;
+    if (overflow !== "visible") {
+      const box = parent.getBoundingClientRect();
+      return { top: box.top, bottom: box.bottom };
+    }
+  }
+  return { top: 0, bottom: window.innerHeight };
+}
+
 /** The rule button and, while open, its list of four. */
 export function RuleButton({ rule, variant = "drawer" }: { rule: RuleControl; variant?: RateRuleVariant }) {
   const rootRef = useRef<HTMLSpanElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [button, setButton] = useState<HTMLButtonElement | null>(null);
+  // A list in a scrolling table opens UPWARD when the room below would cut
+  // it off and there is more above: the last row of a list sits on its floor.
+  // The drawer's list opens past the card's edge and always hangs down.
+  const [up, setUp] = useState(false);
   const { open, setOpen, shownMode, any, locked } = rule;
   useDropdownDismiss(open, { refs: [rootRef], onClose: () => setOpen(false), fade: true });
+  useLayoutEffect(() => {
+    const anchor = rootRef.current;
+    const list = listRef.current;
+    if (!open || variant === "drawer" || !anchor || !list) return;
+    const clip = clippingBox(anchor);
+    const box = anchor.getBoundingClientRect();
+    const below = clip.bottom - box.bottom;
+    const above = box.top - clip.top;
+    setUp(below < list.getBoundingClientRect().height + 4 && above > below);
+  }, [open, variant]);
   // Scrolling steps through the rules, clamped. The button is nowheel, so the
   // board camera leaves it to this.
   useNativeWheel(button, (event) => {
@@ -299,7 +330,7 @@ export function RuleButton({ rule, variant = "drawer" }: { rule: RuleControl; va
     event.stopPropagation();
     rule.stepRule(event.deltaY > 0 ? 1 : -1);
   });
-  const table = variant === "table";
+  const table = variant !== "drawer";
   return (
     <span ref={rootRef} className={`storage-rule-anchor ${table ? "storage-rule-anchor--table" : ""}`}>
       <button
@@ -311,6 +342,7 @@ export function RuleButton({ rule, variant = "drawer" }: { rule: RuleControl; va
         className={[
           "storage-rule-button nowheel",
           table ? "storage-rule-button--table" : "",
+          variant === "mark" ? "storage-rule-button--mark" : "",
           any ? "storage-rule-button--any" : "",
           open ? "storage-rule-button--open" : "",
         ].join(" ")}
@@ -337,15 +369,16 @@ export function RuleButton({ rule, variant = "drawer" }: { rule: RuleControl; va
         }}
       >
         <b className="storage-rule-mark">{RULE_MARK[shownMode]}</b>
-        {table ? <span className="storage-rule-word">{RULE_NAME[shownMode]}</span> : null}
+        {variant === "table" ? <span className="storage-rule-word">{RULE_NAME[shownMode]}</span> : null}
         <ChevronDown aria-hidden />
       </button>
       {open ? (
         <div
+          ref={listRef}
           role="listbox"
           aria-label="Rule"
           data-tooltip-stop
-          className={`storage-rule-list nodrag nowheel ${table ? "storage-rule-list--table" : ""}`}
+          className={`storage-rule-list nodrag nowheel ${table ? "storage-rule-list--table" : ""} ${up ? "storage-rule-list--up" : ""}`}
           onPointerDown={(event) => event.stopPropagation()}
         >
           {RULE_STEPS.map((step) => (

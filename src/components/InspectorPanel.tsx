@@ -14,7 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import { getUiScale } from "@/lib/ui-scale";
 import "./inspector/panel.css";
-import { ProductTargetRow } from "./inspector/ProductTargetRow";
+import { DrawerRateControls, DrawerTargetRow } from "./inspector/DrawerTargetRow";
 import { MachineShoppingList } from "./MachineShoppingList";
 import { makeResourceKey, resourceLabel } from "@/lib/model/resources";
 import { getCategoryPresentation } from "@/lib/model/category-presentation";
@@ -48,11 +48,13 @@ import {
   applyNetFlow,
   applyResourceMarks,
   buildFlowRows,
+  drawersBehindRow,
   filterFlowBalances,
   findResourceCardIds,
   findRowIndexAtOffset,
   getFlowRowValue,
   measureFlowRows,
+  type BoundaryDrawers,
   type FlowRow,
   type FlowSection,
   type FlowSectionId,
@@ -68,7 +70,7 @@ const SELECTION_DEBOUNCE_MS = 100;
 
 // One ledger row: icon, resource, Raw and Net. Keep the virtual list
 // height in sync with inspector/panel.css.
-const ROW_HEIGHTS = { header: 22, item: 24, empty: 22, chart: 60, product: 28 };
+const ROW_HEIGHTS = { header: 22, item: 24, empty: 22, chart: 60, drawer: 28 };
 const ICON_COLUMN = "20px";
 const ROW_OVERSCAN = 6;
 /** Stable identity so the row memo holds when charts are switched off. */
@@ -516,22 +518,26 @@ function FlowIOPanel() {
     [marks.hidden, scope.resources],
   );
 
-  const canEditProducts = useFactoryStore((state) => !state.isReadOnly && (state.project.solveMode === true || state.project.poolMode === true));
-  const products = useMemo(() => {
+  // Rates are set here in Solve: sources behind Inputs rows, products
+  // behind Outputs rows. Build and viewers only mark the products.
+  const canEditRates = useFactoryStore((state) => !state.isReadOnly && (state.project.solveMode === true || state.project.poolMode === true));
+  const drawers = useMemo<BoundaryDrawers>(() => {
     const roles = getStorageRoles(project);
     const selected = selection ? new Set(debouncedSelectionKey.split("\0")) : undefined;
-    const result = new Map<string, FactoryStorage[]>();
+    const need = new Map<string, FactoryStorage[]>();
+    const output = new Map<string, FactoryStorage[]>();
     for (const storage of project.storages ?? []) {
-      if (roles.get(storage.id) !== "product" || (selected && !selected.has(storage.id))) continue;
+      const role = roles.get(storage.id);
+      const list = role === "source" ? need : role === "product" ? output : undefined;
+      if (!list || (selected && !selected.has(storage.id))) continue;
       const key = makeResourceKey(storage.kind, storage.resourceId);
-      result.set(key, [...(result.get(key) ?? []), storage]);
+      list.set(key, [...(list.get(key) ?? []), storage]);
     }
-    return result;
+    return { need, output };
   }, [project, selection, debouncedSelectionKey]);
-  const visibleProducts = useMemo(() => canEditProducts ? new Set(products.keys()) : EMPTY_KEYS, [canEditProducts, products]);
 
   const contentHeight = 78 + (selection ? 28 : 0) + measureFlowRows(
-    buildFlowRows(sections, collapsed, workspace.trendsOpen && !selection ? marks.favourites : EMPTY_KEYS, products, visibleProducts),
+    buildFlowRows(sections, collapsed, workspace.trendsOpen && !selection ? marks.favourites : EMPTY_KEYS, canEditRates ? drawers : undefined),
     ROW_HEIGHTS,
   ).totalHeight;
 
@@ -655,8 +661,8 @@ function FlowIOPanel() {
       <FlowVirtualList
         rateColumn={rateColumn}
         onRateColumnChange={setRateColumn}
-        products={products}
-        expandedProducts={visibleProducts}
+        drawers={drawers}
+        editRates={canEditRates}
         sections={sections}
         collapsed={collapsed}
         isFiltered={isFiltered}
@@ -783,8 +789,8 @@ function ScopeStrip({
 function FlowVirtualList({
   rateColumn,
   onRateColumnChange,
-  products,
-  expandedProducts,
+  drawers,
+  editRates,
   sections,
   collapsed,
   isFiltered,
@@ -801,8 +807,9 @@ function FlowVirtualList({
 }: {
   rateColumn: "raw" | "net";
   onRateColumnChange: (value: "raw" | "net") => void;
-  products: ReadonlyMap<string, FactoryStorage[]>;
-  expandedProducts: ReadonlySet<string>;
+  drawers: BoundaryDrawers;
+  /** Solve, not a viewer: the drawers' rules and rates can be set here. */
+  editRates: boolean;
   sections: FlowSection[];
   collapsed: Record<FlowSectionId, boolean>;
   isFiltered: boolean;
@@ -825,8 +832,8 @@ function FlowVirtualList({
   // No chart rows at all when charts are off, so the list closes up rather
   // than leaving gaps where they were.
   const targetRows = useMemo(
-    () => buildFlowRows(sections, collapsed, showCharts ? favourites : EMPTY_KEYS, products, expandedProducts),
-    [collapsed, favourites, sections, showCharts, products, expandedProducts],
+    () => buildFlowRows(sections, collapsed, showCharts ? favourites : EMPTY_KEYS, editRates ? drawers : undefined),
+    [collapsed, favourites, sections, showCharts, drawers, editRates],
   );
   // Membership rides the value-motion clock: rows grow in and fold out, and
   // `rows` below may briefly hold departed rows mid-fold.
@@ -858,6 +865,12 @@ function FlowVirtualList({
    * a different button - unstar, and the pointer was suddenly over Hide.
    */
   const dismissExpanded = useCallback(() => setExpandedState(undefined), []);
+  // A resource with ONE source or product drawer carries that drawer's rule
+  // and rate on its own row; several get a branch row each (buildFlowRows).
+  const loneDrawer = (section: FlowSectionId, key: string) => {
+    const behind = editRates ? drawersBehindRow(drawers, section, key) : undefined;
+    return behind?.length === 1 ? behind[0] : undefined;
+  };
   const overlayRef = useRef<HTMLDivElement | null>(null);
   const expandedRow = useMemo(() => {
     if (!expanded) {
@@ -1154,8 +1167,8 @@ function FlowVirtualList({
           );
         }
 
-        if (row.type === "product") {
-          return shell(<ProductTargetRow storage={row.storage} isLast={row.index === (products.get(makeResourceKey(row.storage.kind, row.storage.resourceId))?.length ?? 0) - 1} />);
+        if (row.type === "drawer") {
+          return shell(<DrawerTargetRow storage={row.storage} input={row.section.id === "need"} isLast={row.last} />);
         }
 
         if (row.type === "chart") {
@@ -1177,7 +1190,9 @@ function FlowVirtualList({
         return shell(
           <FlowResourceRow
             rateColumn={rateColumn}
-            productMarker={row.section.id === "output" && products.has(row.balance.key) && !expandedProducts.has(row.balance.key)}
+            productMarker={!editRates && row.section.id === "output" && drawers.output.has(row.balance.key)}
+            drawer={loneDrawer(row.section.id, row.balance.key)}
+            onDismissExpand={dismissExpanded}
             balance={row.balance}
             sectionId={row.section.id}
             tone={row.section.tone}
@@ -1242,7 +1257,8 @@ function FlowVirtualList({
         >
           <FlowResourceRow
             rateColumn={rateColumn}
-            productMarker={expandedRow.section.id === "output" && products.has(expandedRow.balance.key) && !expandedProducts.has(expandedRow.balance.key)}
+            productMarker={!editRates && expandedRow.section.id === "output" && drawers.output.has(expandedRow.balance.key)}
+            drawer={loneDrawer(expandedRow.section.id, expandedRow.balance.key)}
             balance={expandedRow.balance}
             sectionId={expandedRow.section.id}
             tone={expandedRow.section.tone}
@@ -1406,13 +1422,18 @@ const FlowResourceRow = memo(function FlowResourceRow({
   manageMode,
   energyEuT,
   expanded = false,
+  drawer,
   onHover,
   onExpand,
   onMarkChanged,
+  onDismissExpand,
   onFocusBoard,
 }: {
   rateColumn: "raw" | "net";
   productMarker?: boolean;
+  /** The resource's one source or product drawer, whose rule and rate this
+   * row carries while Solve lets them be set. */
+  drawer?: FactoryStorage;
   balance: ResourceBalance;
   sectionId: FlowSectionId;
   tone: FlowSectionTone;
@@ -1434,6 +1455,9 @@ const FlowResourceRow = memo(function FlowResourceRow({
   onExpand: (resourceKey: string, top: number, right: number, startWidth: number) => void;
   /** Raised after a star or hide, so the wide copy can stand down. */
   onMarkChanged?: () => void;
+  /** Raised when the drawer controls are pressed: they open and edit on the
+   * real row, which the wide copy would sit on top of. */
+  onDismissExpand?: () => void;
   onFocusBoard: (resourceKey: string) => void;
 }) {
   // Memoized rows keep the same balance when only a display dial changes.
@@ -1479,6 +1503,13 @@ const FlowResourceRow = memo(function FlowResourceRow({
       ].join(" ")}
       onMouseEnter={(event) => {
         onHover(balance.key);
+        // A row whose drawer controls are in use - the rule list open, a rate
+        // being typed - keeps its own face: the copy would cover them.
+        const row = event.currentTarget;
+        const active = document.activeElement;
+        if (drawer && (row.querySelector(".storage-rule-list") || (active instanceof HTMLInputElement && row.contains(active)))) {
+          return;
+        }
         // The pointed-at row is re-drawn wider, out over the board, so a long
         // name can be read in full without the column being sized for the
         // worst case at all times. It has to be a separate fixed-position
@@ -1496,19 +1527,10 @@ const FlowResourceRow = memo(function FlowResourceRow({
       }}
       onMouseLeave={expanded ? undefined : () => onHover(undefined)}
     >
-      <button
-        type="button"
-        onFocus={() => onHover(balance.key)}
-        onBlur={() => onHover(undefined)}
-        // No click-to-lock. Pointing at a row lights its machines and looking
-        // away puts them out; a single click used to leave the board blinking
-        // at you until you found the row again to switch it off.
-        onDoubleClick={() => onFocusBoard(balance.key)}
-        // No `title`. The browser's own tooltip fired on every row the pointer
-        // crossed, which on a list this dense meant a yellow box trailing the
-        // cursor the whole way down. The row already widens on hover to show
-        // the full name, which is what the tooltip was carrying.
-        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) 89px auto` }}
+      <div
+        // A drawer's row gives the rate only the room it needs: the rule and
+        // rate take the rest of the fixed column, so the name keeps its line.
+        style={{ gridTemplateColumns: `${ICON_COLUMN} minmax(0,1fr) ${drawer ? "auto" : "89px"} auto` }}
         className={[
           // The highlight is a ring rather than a border: a border would take a
           // pixel off the top and bottom of the content box, leaving the icon
@@ -1518,7 +1540,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
           // the rate and the collapsed columns after it, so every ordinary row
           // paid for two gaps it could not use and the rates sat well short of
           // the panel edge.
-          "inspector-resource-button grid h-full w-full items-center rounded pr-1 text-left",
+          "inspector-resource-button relative grid h-full w-full items-center rounded pr-1 text-left",
           // The wide copy carries no highlight of its own: its wrapper rings
           // the row and the chart together as one block.
           expanded
@@ -1528,10 +1550,31 @@ const FlowResourceRow = memo(function FlowResourceRow({
               : "hover:bg-cyan-500/10 hover:ring-1 hover:ring-cyan-500/60",
         ].join(" ")}
       >
+        {/*
+          The row's own control, a layer under the readings rather than their
+          parent: a drawer's rule and rate sit on the row, and a button cannot
+          hold buttons. It covers the whole row, so the icon, the name and the
+          rate all answer through it.
+        */}
+        <button
+          type="button"
+          aria-label={name}
+          className="absolute inset-0 rounded"
+          onFocus={() => onHover(balance.key)}
+          onBlur={() => onHover(undefined)}
+          // No click-to-lock. Pointing at a row lights its machines and looking
+          // away puts them out; a single click used to leave the board blinking
+          // at you until you found the row again to switch it off.
+          onDoubleClick={() => onFocusBoard(balance.key)}
+          // No `title`. The browser's own tooltip fired on every row the pointer
+          // crossed, which on a list this dense meant a yellow box trailing the
+          // cursor the whole way down. The row already widens on hover to show
+          // the full name, which is what the tooltip was carrying.
+        />
         {/* The icon spans the name and rate lines without growing with the row. */}
         <span
           style={{ height: 20, width: 20 }}
-          className="relative flex shrink-0 items-center justify-center"
+          className="pointer-events-none relative flex shrink-0 items-center justify-center"
         >
           <ResourceIcon
             resource={{
@@ -1559,6 +1602,13 @@ const FlowResourceRow = memo(function FlowResourceRow({
             end in an ellipsis rather than run under the rate. */}
         <span className="inspector-resource-name ml-2 flex min-w-0 items-center gap-1.5">
           <span className="min-w-0 truncate text-base font-medium text-neutral-100">{name}</span>
+          {drawer ? (
+            // Pressed through the wide copy, which is pointer-transparent: the
+            // copy stands down so the list or the typing shows on this row.
+            <span className="ml-auto mr-1.5 flex shrink-0" onPointerDownCapture={expanded ? undefined : onDismissExpand}>
+              <DrawerRateControls bare storage={drawer} input={sectionId === "need"} />
+            </span>
+          ) : null}
         </span>
 
         {rateColumn === "raw" && <span
@@ -1656,7 +1706,7 @@ const FlowResourceRow = memo(function FlowResourceRow({
                 : "w-0 group-focus-within:w-11 group-hover:w-11",
           ].join(" ")}
         />
-      </button>
+      </div>
 
       {/*
         The buttons themselves. Absolute so they never affect the row's height,

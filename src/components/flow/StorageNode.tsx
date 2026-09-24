@@ -806,12 +806,17 @@ export function TargetLine({
   result,
   formatDisplayRate,
   inlinePencil = false,
+  bare = false,
   input = isInputRate(storage),
 }: {
   storage: FactoryStorage;
   result: StorageThroughputResult | undefined;
   formatDisplayRate?: (value: number, kind: string) => string;
   inlinePencil?: boolean;
+  /** The resources panel's reading: no pencil and no sign, beside a rule
+   * mark and the row's own rate, which say those. The dotted underline
+   * still says it takes typing. */
+  bare?: boolean;
   input?: boolean;
 }) {
   const setStorageTarget = useFactoryStore((state) => state.setStorageTarget);
@@ -824,7 +829,7 @@ export function TargetLine({
   const showZero = target === 0;
   const unreachable = result?.targetUnreachable === true;
   const color = unreachable ? "var(--flow-input)"
-    : target === undefined ? "var(--flow-output)"
+    : target === undefined ? (input ? "var(--flow-input)" : "var(--flow-output)")
     : netRateColor(input ? -Math.abs(target) : target);
   const rateStyle = { color, "--target-rate-color": color } as CSSProperties;
   // While the solver has NOTHING to solve for - no amount, no pin, anywhere -
@@ -901,7 +906,7 @@ export function TargetLine({
             tile's bottom edge instead of merging with it. */}
         <div className={`relative underline decoration-dotted decoration-[1.5px] underline-offset-[3px] ${inlinePencil ? "inline-flex items-center gap-[3px]" : "-translate-y-[2px]"}`}>
           {target !== undefined && (target > 0 || (signed && target < 0) || showZero) ? (
-            <NetLine net={input ? -Math.abs(target) : target} unsigned={input && !signed} kind={storage.kind} role={input ? "source" : "product"} formatRate={formatDisplayRate} color={color} />
+            <NetLine net={input ? -Math.abs(target) : target} unsigned={bare || (input && !signed)} kind={storage.kind} role={input ? "source" : "product"} formatRate={formatDisplayRate} color={color} />
           ) : (
             <div
               className={[
@@ -912,12 +917,14 @@ export function TargetLine({
               rate?
             </div>
           )}
-          <Pencil
-            aria-hidden
-            // Centred on the ink-and-underline block, not the line's box:
-            // the glyphs sit low in it, so dead-centre floated the pencil.
-            className={`h-[11px] w-[11px] fill-current opacity-70 group-hover/target:opacity-100 ${inlinePencil ? "shrink-0" : "absolute left-full top-[calc(50%+2px)] ml-[2px] -translate-y-1/2"}`}
-          />
+          {bare ? null : (
+            <Pencil
+              aria-hidden
+              // Centred on the ink-and-underline block, not the line's box:
+              // the glyphs sit low in it, so dead-centre floated the pencil.
+              className={`h-[11px] w-[11px] fill-current opacity-70 group-hover/target:opacity-100 ${inlinePencil ? "shrink-0" : "absolute left-full top-[calc(50%+2px)] ml-[2px] -translate-y-1/2"}`}
+            />
+          )}
         </div>
       </div>
       </MinecraftTooltip>
@@ -950,7 +957,8 @@ export function TargetLine({
         placeholder="rate"
         aria-label="Required amount"
         className={[
-          "nodrag h-4 w-[60px] border px-[3px] text-center text-[9px] font-bold tabular-nums outline-none",
+          "nodrag h-4 border px-[3px] text-center text-[9px] font-bold tabular-nums outline-none",
+          bare ? "w-[48px]" : "w-[60px]",
           "bg-[#14171d] shadow-[inset_1px_1px_0_rgba(255,255,255,0.08),inset_-1px_-1px_0_rgba(0,0,0,0.5)]",
           "placeholder:font-normal placeholder:text-[#6b7280]",
           "focus:bg-[#1a1e26] focus:ring-1 focus:ring-[var(--target-rate-color)]",

@@ -317,9 +317,95 @@ describe("InspectorPanel", () => {
     seedResult({ externalInputs: [makeBalance(1, { deficitPerSecond: 240 })] });
 
     render(<InspectorPanel />);
-    fireEvent.click(screen.getByText("Resource 1").closest("button")!);
+    fireEvent.click(screen.getByRole("button", { name: "Resource 1" }));
 
     expect(useFactoryStore.getState().selectedFlowResourceKey).toBeUndefined();
+  });
+
+  describe("drawer rates in Solve", () => {
+    /** Ore into ingots, a source drawer feeding the ore and `products`
+     * product drawers taking the ingots. */
+    function seedDrawers({ products = 1, solve = true }: { products?: number; solve?: boolean } = {}) {
+      const productIds = Array.from({ length: products }, (_, index) => `ingots-${index}`);
+      const project: FactoryProject = {
+        schemaVersion: PROJECT_SCHEMA_VERSION,
+        id: "panel-drawers",
+        name: "Panel drawers",
+        solveMode: solve,
+        recipes: [
+          {
+            id: "smelt",
+            name: "Smelt",
+            machineType: "Furnace",
+            minimumTier: "LV",
+            durationTicks: 20,
+            eut: 30,
+            inputs: [{ kind: "item", id: "ore", amount: 1, displayName: "Ore" }],
+            outputs: [{ kind: "item", id: "ingot", amount: 1, displayName: "Ingot" }],
+          },
+        ],
+        nodes: [
+          { id: "smelter", recipeId: "smelt", machineCount: 1, parallel: 1, overclockTier: "LV", enabled: true, position: { x: 0, y: 0 } },
+        ],
+        storages: [
+          { id: "ore-in", kind: "item", resourceId: "ore", displayName: "Ore", position: { x: -200, y: 0 } },
+          ...productIds.map((id, index) => ({ id, kind: "item" as const, resourceId: "ingot", displayName: "Ingot", position: { x: 200, y: index * 100 } })),
+        ],
+        edges: [
+          { id: "ore-edge", source: "ore-in", target: "smelter", resourceKind: "item", resourceId: "ore" },
+          ...productIds.map((id) => ({ id: `edge-${id}`, source: "smelter", target: id, resourceKind: "item" as const, resourceId: "ingot" })),
+        ],
+        fuelProfiles: gtnhFuelProfiles,
+        selectedFuelProfileId: "biodiesel",
+      };
+      useFactoryStore.setState({
+        project,
+        isReadOnly: false,
+        lastResult: calculateThroughput(project, { generatedAt: "fixed" }),
+        selectedBoardIds: [],
+      });
+    }
+    const rowOf = (container: HTMLElement, key: string) =>
+      container.querySelector<HTMLElement>(`[data-resource-row="${key}"]`)!;
+
+    it("puts a lone drawer's rule and rate on its resource row, Inputs and Outputs alike", () => {
+      seedDrawers();
+      const { container } = render(<InspectorPanel />);
+      const ore = within(rowOf(container, "item:ore"));
+      const ingot = within(rowOf(container, "item:ingot"));
+      expect(ore.getByRole("button", { name: /^Rule for Ore: Exactly/ }).textContent).toBe("=");
+      expect(ore.getByRole("button", { name: "Required amount" })).toBeDefined();
+      expect(ingot.getByRole("button", { name: /^Rule for Ingot: At least/ }).textContent).toBe("≥");
+      expect(ingot.getByRole("button", { name: "Required amount" })).toBeDefined();
+      // One thing, one line: no branch row under either.
+      expect(screen.queryByRole("button", { name: /^Locate/ })).toBeNull();
+    });
+
+    it("types a source's rate on its row", () => {
+      seedDrawers();
+      const { container } = render(<InspectorPanel />);
+      fireEvent.click(within(rowOf(container, "item:ore")).getByRole("button", { name: "Required amount" }));
+      const input = within(rowOf(container, "item:ore")).getByRole("textbox", { name: "Required amount" });
+      fireEvent.change(input, { target: { value: "4" } });
+      fireEvent.blur(input);
+      expect(useFactoryStore.getState().project.storages!.find((s) => s.id === "ore-in")!.targetPerSecond).toBe(-4);
+    });
+
+    it("hangs a branch row under the resource for each of several drawers", () => {
+      seedDrawers({ products: 2 });
+      const { container } = render(<InspectorPanel />);
+      expect(within(rowOf(container, "item:ingot")).queryByRole("button", { name: /^Rule for/ })).toBeNull();
+      expect(screen.getAllByRole("button", { name: "Locate product drawer" })).toHaveLength(2);
+      expect(screen.getAllByRole("button", { name: /^Rule for Ingot/ })).toHaveLength(2);
+    });
+
+    it("sets nothing from the panel in Build", () => {
+      seedDrawers({ solve: false });
+      render(<InspectorPanel />);
+      expect(screen.queryByRole("button", { name: /^Rule for/ })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Required amount" })).toBeNull();
+      expect(screen.getByRole("img", { name: "Product" })).toBeDefined();
+    });
   });
 
   describe("scoped to a board selection", () => {
