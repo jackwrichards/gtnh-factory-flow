@@ -15,6 +15,7 @@ import {
   sortFolders,
   stampDesignOrder,
   toDesignSummary,
+  makeUniqueDesignName,
   touchDesignMeta,
   updateDesignProject,
   type DesignFolder,
@@ -28,11 +29,20 @@ import {
   listDesignSummaries,
   readActiveDesignId,
   readDesign,
+  readDesignSummary,
   writeActiveDesignId,
   writeDesign as storeDesignRecord,
   writeDesignFolder,
+  writeDesignIfUnchanged,
   writeDesignSummary,
 } from "@/lib/designs/design-storage";
+import {
+  announceDesignSaved,
+  isEditingInThisTab,
+  subscribeDesignSaved,
+} from "@/lib/designs/design-tab-sync";
+import { subscribeBoardView } from "@/components/flow/board-view";
+import { subscribeWorkspaceView } from "@/lib/workspace-view";
 import { flushPostFollow, schedulePostFollow } from "@/lib/community/post-follow";
 
 /**
@@ -141,6 +151,13 @@ interface DesignStore {
    * over it. Naming the pair lets a stale save be dropped instead.
    */
   saveActiveProject: (designId: string | undefined, project: FactoryProject) => Promise<void>;
+  /**
+   * Set when this browser tab held edits to a design another tab had saved a
+   * newer version of: the newer version stayed, and these edits went to a
+   * copy (`copyName`). Shown until dismissed.
+   */
+  tabConflict?: { name: string; copyName: string };
+  dismissTabConflict: () => void;
 }
 
 /**
@@ -159,9 +176,58 @@ interface DesignStore {
  * scrolling back to the corner you were working in every single time.
  */
 function showProject(project: FactoryProject, designId?: string) {
-  useFactoryStore.getState().markHydratedProject(project);
-  applyPlanView(project.view, "board", designId ? readDesignCamera(designId) : undefined);
+  landingCanvas = true;
+  try {
+    useFactoryStore.getState().markHydratedProject(project);
+    applyPlanView(project.view, "board", designId ? readDesignCamera(designId) : undefined);
+  } finally {
+    landingCanvas = false;
+  }
+  canvasPlanEdited = false;
+  canvasViewEdited = false;
 }
+
+/*
+ * WHICH VERSION THIS TAB IS HOLDING (Jack, 2026-09-23: a player lost hours to
+ * a second browser tab). Every browser tab keeps its open design in memory,
+ * and they all share one library. A tab left open on this morning's copy used
+ * to write that copy back over a whole afternoon's work saved from another
+ * tab, the next time it saved anything at all.
+ *
+ * So each tab remembers the stored version its canvas was loaded from (the
+ * record's `updatedAt`), and a save only lands if the stored plan is still
+ * that version (`writeDesignIfUnchanged`: the check and the write are one
+ * transaction). A tab also only writes what it was EDITED into: a change
+ * counts only if it happened while this tab had focus, because a tab in the
+ * background changes its plan by itself (the recipe refresh after loading
+ * another tab's save) and must never echo that back. When a stale tab truly
+ * holds edits of its own, they are kept as a copy rather than lost either
+ * way. The other tabs hear about every save (design-tab-sync.ts) and reload
+ * when they have nothing of their own to keep, and a tab coming back into
+ * view checks too.
+ */
+
+/** The stored version of the active design this tab's canvas started from. */
+let canvasBase: { designId: string; updatedAt: string } | undefined;
+/** The plan was edited in this tab since it last matched storage. */
+let canvasPlanEdited = false;
+/** Only the dressing (paper, ruling, worksheet layout) was changed here. */
+let canvasViewEdited = false;
+/** A plan is being put up: the changes that makes are not edits. */
+let landingCanvas = false;
+
+useFactoryStore.subscribe((state, previous) => {
+  if (state.project !== previous.project && !landingCanvas && isEditingInThisTab()) {
+    canvasPlanEdited = true;
+  }
+});
+function noteViewEdit() {
+  if (!landingCanvas && isEditingInThisTab()) {
+    canvasViewEdited = true;
+  }
+}
+subscribeBoardView(noteViewEdit);
+subscribeWorkspaceView(noteViewEdit);
 
 /**
  * Hand the canvas to another design: the store points at it, and its plan goes
@@ -173,14 +239,14 @@ function showProject(project: FactoryProject, designId?: string) {
  */
 function landOnDesign(
   set: (partial: Partial<DesignStore>) => void,
-  designId: string,
-  project: FactoryProject,
+  record: Pick<DesignRecord, "id" | "project" | "updatedAt">,
   rest?: Partial<DesignStore>,
 ) {
   beginDesignCameraHandover();
-  writeActiveDesignId(designId);
-  set({ ...rest, activeDesignId: designId, publicView: undefined });
-  showProject(project, designId);
+  writeActiveDesignId(record.id);
+  set({ ...rest, activeDesignId: record.id, publicView: undefined });
+  showProject(record.project, record.id);
+  canvasBase = { designId: record.id, updatedAt: record.updatedAt };
 }
 
 /**
@@ -210,12 +276,66 @@ function withCurrentView(project: FactoryProject): FactoryProject {
   return { ...project, view: capturePlanView() };
 }
 
+type PersistOutcome =
+  | { outcome: "clean" | "written" | "stale" }
+  | { outcome: "copied"; copy: DesignRecord };
+
+/**
+ * Save the canvas into `summary`'s record, if this tab has anything of its
+ * own to save and the stored plan is still the version it started from.
+ *
+ * - "clean": nothing was edited here; nothing is written.
+ * - "written": saved, and the other tabs told.
+ * - "copied": another tab saved a newer version first. That version stays,
+ *   and this tab's edits are written as a new design, `copy`.
+ * - "stale": another tab saved a newer version and this tab had only changed
+ *   the dressing; nothing is written.
+ */
+async function persistCanvas(summary: DesignSummary, canvas: FactoryProject): Promise<PersistOutcome> {
+  if (!canvasPlanEdited && !canvasViewEdited) {
+    return { outcome: "clean" };
+  }
+  const project = withCurrentView(canvas);
+  const record = withStats(updateDesignProject({ ...summary, project }, project));
+  const expected = canvasBase?.designId === summary.id ? canvasBase.updatedAt : undefined;
+  const outcome = await writeDesignIfUnchanged(record, expected);
+  if (outcome === "written") {
+    schedulePostFollow(record.id, Boolean(record.project.metadata?.communityPlanId));
+    canvasBase = { designId: summary.id, updatedAt: record.updatedAt };
+    if (currentProject() === canvas) {
+      canvasPlanEdited = false;
+      canvasViewEdited = false;
+    }
+    announceDesignSaved(summary.id, record.updatedAt);
+    return { outcome: "written" };
+  }
+  if (!canvasPlanEdited) {
+    canvasViewEdited = false;
+    return { outcome: "stale" };
+  }
+  const { designs } = useDesignStore.getState();
+  const copy: DesignRecord = {
+    ...createDesignRecord(
+      duplicateDesignRecord(record, []).project,
+      makeUniqueDesignName(
+        `${summary.name} (conflict copy)`,
+        designs.map((design) => design.name),
+      ),
+    ),
+    folderId: summary.folderId,
+  };
+  await writeDesign(copy);
+  useDesignStore.setState({ tabConflict: { name: summary.name, copyName: copy.name } });
+  return { outcome: "copied", copy };
+}
+
 /**
  * Writes whatever is on the canvas into `summary`'s record.
  *
  * Runs before every switch, copy and close: autosave is debounced, and those
  * actions land inside that window often enough that skipping this would quietly
- * drop the last few edits of the design being left behind.
+ * drop the last few edits of the design being left behind. Guarded like every
+ * save (persistCanvas): a tab holding an old copy never writes it back.
  */
 async function flushCanvasInto(summary: DesignSummary | undefined): Promise<void> {
   const viewing = useDesignStore.getState().publicView;
@@ -227,11 +347,12 @@ async function flushCanvasInto(summary: DesignSummary | undefined): Promise<void
     return;
   }
 
-  const project = withCurrentView(currentProject());
-  await writeDesign(withStats(updateDesignProject({ ...summary, project }, project)));
-  // The design is leaving the canvas: no autosave will follow, so the post
-  // takes this version now rather than after the debounce.
-  flushPostFollow(summary.id);
+  const { outcome } = await persistCanvas(summary, currentProject());
+  if (outcome === "written") {
+    // The design is leaving the canvas: no autosave will follow, so the post
+    // takes this version now rather than after the debounce.
+    flushPostFollow(summary.id);
+  }
 }
 
 /**
@@ -361,7 +482,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     try {
       const active = await readDesign(activeId);
       if (active) {
-        landOnDesign(set, activeId, active.project, {
+        landOnDesign(set, active, {
           designs: summaries,
           folders,
           isHydrated: true,
@@ -409,7 +530,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     // Autosave keys off the two together, so a canvas holding the new plan while
     // the store still names the old design is exactly the pairing that would
     // save one design's work into another.
-    landOnDesign(set, id, target.project);
+    landOnDesign(set, target);
     leaveLibrary();
     set(await listLibrary());
   },
@@ -420,7 +541,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
 
     const record = createDesignRecord(createEmptyProject(), UNTITLED_DESIGN_NAME);
     await writeDesign(record);
-    landOnDesign(set, record.id, record.project);
+    landOnDesign(set, record);
     leaveLibrary();
     set(await listLibrary());
   },
@@ -431,7 +552,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
 
     const record = createDesignRecord(project, name || UNTITLED_DESIGN_NAME);
     await writeDesign(record);
-    landOnDesign(set, record.id, record.project);
+    landOnDesign(set, record);
     // A plan that arrives is a plan meant to be LOOKED at, whichever door it
     // came through: a shared link, the setup shelf beside the board, a lesson.
     // Leaving the greeting up would put it over the board it just landed on,
@@ -462,7 +583,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
       folderId: source.folderId,
     };
     await writeDesign(copy);
-    landOnDesign(set, copy.id, copy.project);
+    landOnDesign(set, copy);
     leaveLibrary();
     set(await listLibrary());
   },
@@ -547,7 +668,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
 
     const next = await readDesign(nextOpen.id);
     if (next) {
-      landOnDesign(set, nextOpen.id, next.project, library);
+      landOnDesign(set, next, library);
     } else {
       // Unreadable: listed, never made active over an empty canvas.
       set({ ...library, activeDesignId: undefined });
@@ -572,7 +693,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
       const seeded = createDesignRecord(createEmptyProject(), UNTITLED_DESIGN_NAME);
       await writeDesign(seeded);
       library = { ...library, designs: [seeded] };
-      landOnDesign(set, seeded.id, seeded.project, library);
+      landOnDesign(set, seeded, library);
       return;
     }
 
@@ -588,7 +709,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
 
     const next = await readDesign(nextActiveId);
     if (next) {
-      landOnDesign(set, nextActiveId, next.project, library);
+      landOnDesign(set, next, library);
     } else {
       // Unreadable: listed, never made active over an empty canvas.
       set({ ...library, activeDesignId: undefined });
@@ -695,7 +816,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     if (record) {
       // Same landing as a switch, so the camera and the dressing come back
       // as they were; the plan underneath is the account's newer one.
-      landOnDesign(set, activeDesignId, record.project);
+      landOnDesign(set, record);
     }
   },
 
@@ -755,8 +876,16 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
 
     set({ saveState: "saving" });
     try {
-      const saved = withCurrentView(project);
-      await writeDesign(withStats(updateDesignProject({ ...summary, project: saved }, saved)));
+      const result = await persistCanvas(summary, project);
+      if (result.outcome === "copied" && get().activeDesignId === designId) {
+        // This tab's work carries on, under the copy's name: the canvas is
+        // already the copy, so it stays exactly as it is, camera and all.
+        writeActiveDesignId(result.copy.id);
+        canvasBase = { designId: result.copy.id, updatedAt: result.copy.updatedAt };
+        canvasPlanEdited = currentProject() !== project;
+        set({ activeDesignId: result.copy.id });
+        useFactoryStore.getState().renameProject(result.copy.name);
+      }
       set({ saveState: "saved", designs: sortDesigns(await listDesignSummaries()) });
     } catch (error) {
       set({
@@ -765,7 +894,66 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
       });
     }
   },
+
+  dismissTabConflict: () => set({ tabConflict: undefined }),
 }));
+
+/**
+ * Keeps this browser tab's open design current with the other tabs (see the
+ * note on canvasBase). When the stored plan has moved past the version on
+ * this canvas and this tab has no edits of its own, the stored one is loaded.
+ *
+ * Checked when another tab announces a save, but only while this tab is
+ * VISIBLE (two windows side by side): a hidden tab would otherwise reload and
+ * re-solve the whole plan on every autosave the other tab makes. A hidden tab
+ * checks the moment it comes back into view instead, which also covers a
+ * save it never heard (the account sync, a frozen tab). Returns the teardown.
+ */
+export function startDesignTabSync(): () => void {
+  let checking = false;
+  const checkActive = async () => {
+    const { activeDesignId, publicView, isHydrated } = useDesignStore.getState();
+    if (checking || !activeDesignId || publicView || !isHydrated) {
+      return;
+    }
+    checking = true;
+    try {
+      const stored = await readDesignSummary(activeDesignId);
+      const store = useDesignStore.getState();
+      if (
+        stored &&
+        store.activeDesignId === activeDesignId &&
+        canvasBase?.designId === activeDesignId &&
+        stored.updatedAt !== canvasBase.updatedAt &&
+        !canvasPlanEdited
+      ) {
+        await store.reloadActiveDesign();
+      }
+      // Names, order and closed tabs may have moved too.
+      useDesignStore.setState({ designs: sortDesigns(await listDesignSummaries()) });
+    } finally {
+      checking = false;
+    }
+  };
+  const isVisible = () => document.visibilityState === "visible";
+  const unsubscribe = subscribeDesignSaved(() => {
+    if (isVisible()) {
+      void checkActive();
+    }
+  });
+  const onVisible = () => {
+    if (isVisible()) {
+      void checkActive();
+    }
+  };
+  document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("focus", onVisible);
+  return () => {
+    unsubscribe();
+    document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("focus", onVisible);
+  };
+}
 
 /**
  * Summaries written before they carried an icon never get one until their plan

@@ -53,8 +53,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     notes: [
       "Copy plan, beside the screenshot button, copies a link anyone can open, no account needed; paste one back from the plan menu.",
       "In Solve, each source and product drawer sits under its resource in the resources panel, with its own rule and rate box.",
-      "Wires hop cleanly over crossings at bends, and non-strict drawers say (surplus) under their rate.",
-      "The drawer split editor, a board's paper picker and a note's style panel all work again.",
+      "Two tabs of the planner no longer undo each other: each picks up the other's saves, and neither writes an old copy over newer work.",
+      "Wires hop cleanly over crossings at bends, non-strict drawers say (surplus), and the split editor, board paper picker and note style panel work again.",
     ],
   },
   {

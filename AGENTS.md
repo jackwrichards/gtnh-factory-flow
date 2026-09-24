@@ -550,6 +550,29 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Tabs, Cameras And Where A Plan Lands
 
+- TWO BROWSER TABS SHARE ONE LIBRARY (a player lost hours, 2026-09-23: a
+  tab left open on the morning's copy wrote it back over an afternoon's work
+  saved from another tab). Every save of a design goes through
+  `persistCanvas` in design-store.ts, and three rules hold:
+  - A tab remembers the stored version (`updatedAt`) its canvas was loaded
+    from (`canvasBase`, set in `landOnDesign`). A save lands only if storage
+    still holds that version: `writeDesignIfUnchanged` checks and writes in
+    ONE IndexedDB transaction.
+  - A tab writes only what it was EDITED into: a plan change counts only if
+    this tab had focus (`isEditingInThisTab`), because a background tab
+    changes its plan by itself (the recipe refresh after loading another
+    tab's save) and must never echo that back. View-only changes (paper,
+    worksheet layout) count as edits, but never as grounds for a copy.
+    Changes made while a plan is being put up (`showProject`) never count.
+  - A stale tab that DOES hold its own edits keeps them as a new design,
+    "<name> (conflict copy)", switches to it without touching the canvas,
+    and says so (`TabConflictNotice`). Nothing is lost either way.
+  Tabs announce saves over a BroadcastChannel (`design-tab-sync.ts`); a
+  VISIBLE tab with no edits reloads on the spot, and a hidden one checks when
+  it comes back into view (it would otherwise re-solve the plan on every
+  autosave of the other tab). `startDesignTabSync` is mounted by
+  FactoryPlannerApp. `two-tabs-probe.local.mjs` drives two real tabs; the
+  "two browser tabs" block of design-store.test.ts is the exam.
 - The guided tours were REMOVED (Jack, 2026-09-02) to make room for a new
   tutorial; nothing under `src/lib/tour` or `src/components/tour`
   survives. The board's "?" help corner stays, built from

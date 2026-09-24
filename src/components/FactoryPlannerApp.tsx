@@ -21,6 +21,7 @@ import { retryPendingPostFollows } from "@/lib/community/post-follow";
 import { forgetSharedPlanId, readSharedPlanId, syncSharedPlanAddress } from "@/lib/community/shared-link";
 import { useIsCompactViewport } from "@/lib/compact-view";
 import { startLibrarySync } from "@/lib/library/library-sync";
+import { startDesignTabSync } from "@/store/design-store";
 import { useLibraryTab } from "@/lib/library/library-tab";
 import { useWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { AppHeader } from "./AppHeader";
@@ -30,6 +31,7 @@ import { PlanIdentityDrawer } from "./PlanIdentityDrawer";
 import { SharedAddressSync } from "./SharedAddressSync";
 import { PublicViewBar } from "./community/PublicViewBar";
 import { ViewOnlyNotice } from "./community/ViewOnlyNotice";
+import { TabConflictNotice } from "./TabConflictNotice";
 import { BlueprintSaveDialog } from "./BlueprintSaveDialog";
 import { PowerSourceOverlay } from "./PowerSourceOverlay";
 import { FactoryFlow } from "./flow/FactoryFlow";
@@ -181,6 +183,10 @@ export function FactoryPlannerApp() {
   // The library follows the account: sign-in starts the sync, sign-out stops
   // it, and every change here reaches the other devices a few seconds later.
   useEffect(() => startLibrarySync(), []);
+
+  // Other browser tabs of the planner share this library: keep the open
+  // design current with their saves (design-store.ts, canvasBase).
+  useEffect(() => startDesignTabSync(), []);
 
   // Recorded here rather than in the resource panel: the charts must not lose
   // their history because the right column happened to be closed, and every
@@ -371,6 +377,7 @@ function BoardColumn() {
     <div className="grid h-full min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)]">
       <div className="min-w-0">
         {covering ? null : publicView ? <PublicViewBar key={publicView.id} /> : <PlanIdentityDrawer />}
+        {covering ? null : <TabConflictNotice />}
       </div>
       {/*
         Welcome COVERS the board rather than replacing it. Unmounting the board

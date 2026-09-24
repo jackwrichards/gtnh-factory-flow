@@ -155,7 +155,7 @@ function readBoardView(): BoardView {
   }
 }
 
-function subscribe(listener: () => void) {
+export function subscribeBoardView(listener: () => void) {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -198,7 +198,7 @@ export function writeBoardView(patch: Partial<BoardView>) {
 }
 
 export function useBoardView(): BoardView {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return useSyncExternalStore(subscribeBoardView, getSnapshot, getServerSnapshot);
 }
 
 /** The same value the hook returns, for callers outside React. */

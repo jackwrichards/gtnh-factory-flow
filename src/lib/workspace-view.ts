@@ -143,7 +143,7 @@ function readWorkspaceView(): WorkspaceView {
   }
 }
 
-function subscribe(listener: () => void) {
+export function subscribeWorkspaceView(listener: () => void) {
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
@@ -180,7 +180,7 @@ export function writeWorkspaceView(patch: Partial<WorkspaceView>) {
 }
 
 export function useWorkspaceView(): WorkspaceView {
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return useSyncExternalStore(subscribeWorkspaceView, getSnapshot, getServerSnapshot);
 }
 
 /** The same value the hook returns, for callers outside React. */

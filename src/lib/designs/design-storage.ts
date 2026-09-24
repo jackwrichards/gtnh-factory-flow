@@ -100,6 +100,65 @@ export async function writeDesign(record: DesignRecord): Promise<void> {
   }
 }
 
+/** One design's metadata alone: cheap, for asking "has it moved?". */
+export async function readDesignSummary(id: string): Promise<DesignSummary | undefined> {
+  if (!isDesignStorageAvailable()) {
+    return undefined;
+  }
+
+  const db = await openDesignDb();
+  try {
+    return await requestToPromise<DesignSummary | undefined>(
+      db.transaction(META_STORE, "readonly").objectStore(META_STORE).get(id),
+    );
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Writes the design only if its stored plan is still the version the writer
+ * started from (`expectedUpdatedAt`, the stored `updatedAt` it loaded or last
+ * wrote). The check and the write are one transaction, so two browser tabs
+ * saving at once cannot both pass it. `expectedUpdatedAt` undefined writes
+ * unconditionally, and so does a design not stored yet.
+ *
+ * This is what stops a tab left open on an old copy of a plan from writing
+ * that copy over hours of work saved from another tab (design-tab-sync.ts).
+ */
+export async function writeDesignIfUnchanged(
+  record: DesignRecord,
+  expectedUpdatedAt: string | undefined,
+): Promise<"written" | "conflict"> {
+  if (!isDesignStorageAvailable()) {
+    return "written";
+  }
+
+  const db = await openDesignDb();
+  try {
+    const transaction = db.transaction([META_STORE, PLAN_STORE], "readwrite");
+    const meta = transaction.objectStore(META_STORE);
+    const outcome = await new Promise<"written" | "conflict">((resolve, reject) => {
+      const current = meta.get(record.id);
+      current.onerror = () => reject(current.error);
+      current.onsuccess = () => {
+        const stored = current.result as DesignSummary | undefined;
+        if (stored && expectedUpdatedAt !== undefined && stored.updatedAt !== expectedUpdatedAt) {
+          resolve("conflict");
+          return;
+        }
+        meta.put(toDesignSummary(record));
+        transaction.objectStore(PLAN_STORE).put({ id: record.id, project: record.project });
+        resolve("written");
+      };
+    });
+    await transactionToPromise(transaction);
+    return outcome;
+  } finally {
+    db.close();
+  }
+}
+
 /**
  * Writes only the metadata.
  *
