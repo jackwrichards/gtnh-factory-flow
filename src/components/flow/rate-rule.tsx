@@ -20,7 +20,8 @@ import { buildRatePlateTooltip } from "./storage-tooltip-data";
  * in words, and your rate in a sunken BOX you click and type into. Pool's
  * Desired rates borrow the rule button (`useTableRule`), with the word
  * spelled out beside its mark; their Target column keeps its own editor.
- * The resources panel's drawer rows wear the same dress, mark alone.
+ * The resources panel's drawer rows use the drawer's own pair, the rule
+ * button wearing its word as in Pool.
  */
 
 /** The rule list, in the order the rule button's wheel steps through it. Any
@@ -29,9 +30,7 @@ export const RULE_STEPS: TargetMode[] = ["ignore", "at-least", "exact", "at-most
 export const RULE_MARK: Record<TargetMode, string> = { ignore: "~", "at-least": "≥", exact: "=", "at-most": "≤" };
 export const RULE_NAME: Record<TargetMode, string> = { ignore: "Any", "at-least": "At least", exact: "Exactly", "at-most": "At most" };
 
-/** "mark" is the table's dress without the word, for the resources panel's
- * rows, where a word would crowd the name out of its line. */
-export type RateRuleVariant = "drawer" | "table" | "mark";
+export type RateRuleVariant = "drawer" | "table";
 
 /**
  * "2.5k" is a number: metric shorthand for the rate field, k / m / g for
@@ -330,7 +329,7 @@ export function RuleButton({ rule, variant = "drawer" }: { rule: RuleControl; va
     event.stopPropagation();
     rule.stepRule(event.deltaY > 0 ? 1 : -1);
   });
-  const table = variant !== "drawer";
+  const table = variant === "table";
   return (
     <span ref={rootRef} className={`storage-rule-anchor ${table ? "storage-rule-anchor--table" : ""}`}>
       <button
@@ -342,7 +341,6 @@ export function RuleButton({ rule, variant = "drawer" }: { rule: RuleControl; va
         className={[
           "storage-rule-button nowheel",
           table ? "storage-rule-button--table" : "",
-          variant === "mark" ? "storage-rule-button--mark" : "",
           any ? "storage-rule-button--any" : "",
           open ? "storage-rule-button--open" : "",
         ].join(" ")}
@@ -369,7 +367,7 @@ export function RuleButton({ rule, variant = "drawer" }: { rule: RuleControl; va
         }}
       >
         <b className="storage-rule-mark">{RULE_MARK[shownMode]}</b>
-        {variant === "table" ? <span className="storage-rule-word">{RULE_NAME[shownMode]}</span> : null}
+        {table ? <span className="storage-rule-word">{RULE_NAME[shownMode]}</span> : null}
         <ChevronDown aria-hidden />
       </button>
       {open ? (

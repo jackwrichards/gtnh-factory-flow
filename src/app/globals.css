@@ -2220,17 +2220,6 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   stroke-width: 2.5;
 }
 
-/* The resources panel's rows: the table's dress, the mark alone. */
-.storage-rule-button--mark {
-  width: auto;
-  gap: 2px;
-  font-size: 12px;
-}
-
-.storage-rule-button--mark svg {
-  margin-left: 0;
-}
-
 /* As wide as its words: the button it hangs from can be narrower. */
 .storage-rule-list--table {
   width: max-content;

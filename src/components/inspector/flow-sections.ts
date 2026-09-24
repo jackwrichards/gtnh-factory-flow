@@ -26,9 +26,8 @@ export interface FlowSection {
 }
 
 export type FlowRow =
-  // One of SEVERAL source or product drawers behind an Inputs or Outputs
-  // row, hung under it with its own rule and rate. A lone drawer's controls
-  // ride its resource row instead.
+  // A source or product drawer behind an Inputs or Outputs row, hung under
+  // it like a file in a folder, with its own rule and rate.
   | { type: "drawer"; key: string; section: FlowSection; storage: FactoryStorage; last: boolean }
   | { type: "header"; key: string; section: FlowSection; collapsed: boolean }
   | { type: "item"; key: string; section: FlowSection; balance: ResourceBalance }
@@ -213,17 +212,15 @@ export function buildFlowRows(
     for (const balance of section.items) {
       rows.push({ type: "item", key: `${section.id}:${balance.key}`, section, balance });
       const behind = drawersBehindRow(drawers, section.id, balance.key) ?? [];
-      if (behind.length > 1) {
-        behind.forEach((storage, index) => {
-          rows.push({
-            type: "drawer",
-            key: `drawer:${storage.id}`,
-            section,
-            storage,
-            last: index === behind.length - 1,
-          });
+      behind.forEach((storage, index) => {
+        rows.push({
+          type: "drawer",
+          key: `drawer:${storage.id}`,
+          section,
+          storage,
+          last: index === behind.length - 1,
         });
-      }
+      });
       if (favourites.has(balance.key)) {
         rows.push({
           type: "chart",

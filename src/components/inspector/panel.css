@@ -79,17 +79,22 @@
 .inspector-drawer-target { font-size: 12px; background: color-mix(in srgb, var(--flow-output) 2.5%, transparent); }
 .inspector-drawer-target[data-tone="need"] { background: color-mix(in srgb, var(--flow-input) 2.5%, transparent); }
 .inspector-drawer-target input { font-size: 12px; }
-/* A drawer's rule and rate: over the row's own button, under the sticky
-   section headers (z 10) - except while the rule list is open over them. */
+/* A drawer's rule and rate: under the sticky section headers (z 10), except
+   while the rule list is open over them. The drawer's pair at the panel's
+   type size: the rule button in Pool's dress, the rate in its sunken box. */
 .inspector-drawer-rate {
   position: relative; z-index: 1;
-  display: flex; align-items: center; gap: 4px;
+  display: flex; align-items: center; gap: 8px;
 }
 .inspector-drawer-rate:has(.storage-rule-list) { z-index: 20; }
-/* While a row's rule or rate is being set, its star and eye stand aside:
-   sliding in, they took the name's room at the moment it mattered most. */
-[data-resource-row]:has(.inspector-drawer-rate :is(input, .storage-rule-list)) .resource-row-marks-gap { width: 0; }
-[data-resource-row]:has(.inspector-drawer-rate :is(input, .storage-rule-list)) .resource-row-marks { visibility: hidden; }
+.inspector-drawer-rate .storage-rule-button--table { width: 74px; height: 20px; font-size: 12px; }
+.inspector-drawer-rate .storage-rule-word { font-size: 11px; }
+.inspector-drawer-rate .storage-rate-field {
+  flex: none; width: 84px; height: 20px; padding: 0 4px; font-size: 12px;
+}
+.inspector-drawer-rate .storage-rate-field-number,
+.inspector-drawer-rate .storage-rate-field-unit { height: 18px; line-height: 18px; }
+.inspector-drawer-rate .storage-rate-field-unit { font-size: 9px; }
 
 /* Keep each reading together and align its unit's end to the right edge. */
 .inspector-resource-rate > span > span:last-child,

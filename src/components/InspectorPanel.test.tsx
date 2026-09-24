@@ -317,7 +317,7 @@ describe("InspectorPanel", () => {
     seedResult({ externalInputs: [makeBalance(1, { deficitPerSecond: 240 })] });
 
     render(<InspectorPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "Resource 1" }));
+    fireEvent.click(screen.getByText("Resource 1").closest("button")!);
 
     expect(useFactoryStore.getState().selectedFlowResourceKey).toBeUndefined();
   });
@@ -365,36 +365,40 @@ describe("InspectorPanel", () => {
         selectedBoardIds: [],
       });
     }
-    const rowOf = (container: HTMLElement, key: string) =>
-      container.querySelector<HTMLElement>(`[data-resource-row="${key}"]`)!;
+    const branchOf = (label: string) =>
+      screen.getByRole("button", { name: label }).closest<HTMLElement>(".inspector-drawer-target")!;
 
-    it("puts a lone drawer's rule and rate on its resource row, Inputs and Outputs alike", () => {
+    it("hangs each source and product drawer under its resource with the drawer's rule and box", () => {
       seedDrawers();
       const { container } = render(<InspectorPanel />);
-      const ore = within(rowOf(container, "item:ore"));
-      const ingot = within(rowOf(container, "item:ingot"));
-      expect(ore.getByRole("button", { name: /^Rule for Ore: Exactly/ }).textContent).toBe("=");
-      expect(ore.getByRole("button", { name: "Required amount" })).toBeDefined();
-      expect(ingot.getByRole("button", { name: /^Rule for Ingot: At least/ }).textContent).toBe("≥");
-      expect(ingot.getByRole("button", { name: "Required amount" })).toBeDefined();
-      // One thing, one line: no branch row under either.
-      expect(screen.queryByRole("button", { name: /^Locate/ })).toBeNull();
+      // The resource rows themselves stay plain readings.
+      for (const key of ["item:ore", "item:ingot"]) {
+        expect(within(container.querySelector<HTMLElement>(`[data-resource-row="${key}"]`)!).queryByRole("button", { name: /^Rule for/ })).toBeNull();
+      }
+      const ore = within(branchOf("Locate source drawer"));
+      const ingot = within(branchOf("Locate product drawer"));
+      expect(ore.getByRole("button", { name: /^Rule for Ore: Any/ }).textContent).toBe("~Any");
+      expect(ore.getByRole("button", { name: /^Your rate: none/ })).toBeDefined();
+      expect(ingot.getByRole("button", { name: /^Rule for Ingot: Any/ })).toBeDefined();
+      expect(ingot.getByRole("button", { name: /^Your rate: none/ })).toBeDefined();
     });
 
-    it("types a source's rate on its row", () => {
+    it("types a source's rate in its box, which brings the source's rule", () => {
       seedDrawers();
-      const { container } = render(<InspectorPanel />);
-      fireEvent.click(within(rowOf(container, "item:ore")).getByRole("button", { name: "Required amount" }));
-      const input = within(rowOf(container, "item:ore")).getByRole("textbox", { name: "Required amount" });
+      render(<InspectorPanel />);
+      const ore = within(branchOf("Locate source drawer"));
+      fireEvent.click(ore.getByRole("button", { name: /^Your rate/ }));
+      const input = ore.getByRole("textbox", { name: "Your rate" });
       fireEvent.change(input, { target: { value: "4" } });
       fireEvent.blur(input);
-      expect(useFactoryStore.getState().project.storages!.find((s) => s.id === "ore-in")!.targetPerSecond).toBe(-4);
+      const stored = useFactoryStore.getState().project.storages!.find((s) => s.id === "ore-in")!;
+      expect(stored.targetPerSecond).toBe(-4);
+      expect(stored.targetMode).toBe("exact");
     });
 
-    it("hangs a branch row under the resource for each of several drawers", () => {
+    it("hangs one branch per drawer when a resource has several", () => {
       seedDrawers({ products: 2 });
-      const { container } = render(<InspectorPanel />);
-      expect(within(rowOf(container, "item:ingot")).queryByRole("button", { name: /^Rule for/ })).toBeNull();
+      render(<InspectorPanel />);
       expect(screen.getAllByRole("button", { name: "Locate product drawer" })).toHaveLength(2);
       expect(screen.getAllByRole("button", { name: /^Rule for Ingot/ })).toHaveLength(2);
     });
@@ -403,7 +407,7 @@ describe("InspectorPanel", () => {
       seedDrawers({ solve: false });
       render(<InspectorPanel />);
       expect(screen.queryByRole("button", { name: /^Rule for/ })).toBeNull();
-      expect(screen.queryByRole("button", { name: "Required amount" })).toBeNull();
+      expect(screen.queryByRole("button", { name: /^Your rate/ })).toBeNull();
       expect(screen.getByRole("img", { name: "Product" })).toBeDefined();
     });
   });

@@ -997,23 +997,22 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Interface Size (100% Is The Baseline)
 
-- In Solve the resources panel SETS DRAWER RATES (Jack, 2026-09-23: "one
-  thing should not be two lines"): products behind Outputs rows, SOURCES
-  behind Inputs rows (`BoundaryDrawers` in flow-sections.ts). A resource
-  with ONE such drawer carries its rule and rate ON ITS OWN ROW
-  (`DrawerRateControls` bare: Pool's rule button as a mark alone, variant
-  "mark", then a `TargetLine` with no pencil, sign or unit - the row's rate
-  beside it says those). Several drawers keep one branch row each (locate,
-  rule, full pencil line; rows of type "drawer"). The row's own `<button>`
-  is a full-row layer UNDER the readings, because a button cannot hold the
-  controls. The wide hover copy mirrors the controls; pressing them dismisses
-  it (the list and the typing live on the real row), a row with its list
-  open or its rate being typed does not re-expand, and its star/eye stand
-  aside meanwhile (panel.css). Byproducts have no target controls; Build and
-  read-only views show the product marker instead. Target editing keeps the
-  shared-target behaviour for matching product drawers. Drawer rows count in
-  the virtual-list heights. `DrawerTargetRow.test.tsx` and the "drawer rates
-  in Solve" block of InspectorPanel.test.tsx are the exam.
+- In Solve the resources panel SETS DRAWER RATES, on both sides: products
+  under Outputs rows, SOURCES under Inputs rows (`BoundaryDrawers` in
+  flow-sections.ts). Every such drawer hangs under its resource row like a
+  file in a folder (tree lines, rows of type "drawer", even when there is
+  only one): locate, then the DRAWER'S OWN pair from `useRateRule` - the
+  rule button in Pool's dress with its word, and the sunken `RateBox` -
+  so a pick or a typed rate behaves exactly as on the drawer card (a rule
+  picked on Any pins what flows now). Jack, 2026-09-23: one line with the
+  rule mark and a bare rate beside the resource was tried the same day and
+  read as awkward; the branch fits the rule's word and a real input box.
+  The resource row itself stays a plain reading. Byproducts have no target
+  controls; Build and read-only views show the product marker instead.
+  Target editing keeps the shared-target behaviour for matching product
+  drawers. Drawer rows count in the virtual-list heights.
+  `DrawerTargetRow.test.tsx` and the "drawer rates in Solve" block of
+  InspectorPanel.test.tsx are the exam.
 
 - The right inspector is 280 shell pixels wide on desktop and as a drawer.
   Resources and Machines share the dark styling in `inspector/panel.css`.
@@ -1219,9 +1218,9 @@ Working notes for future agents on GTNH Factory Flow.
   no rate, Any is the old Ignore. The TARGET column stays the original
   `TargetLine` pencil line: a sunken box was tried there and Jack asked for
   the old one back. The drawer itself uses `useRateRule` + `RuleButton` +
-  `RateBox`. The resources panel's drawer rows use variant "mark" (see
-  Interface Size). A table list opens upward when the scroll box it sits in
-  would cut it off. `StorageTargetRule` (the old select) is no longer used
+  `RateBox`, and so do the resources panel's drawer rows (see Interface
+  Size), with the rule button in the table dress. A table list is as wide as
+  its words and opens upward when the scroll box it sits in would cut it off. `StorageTargetRule` (the old select) is no longer used
   by the app; only StorageTargets.test.tsx still drives it.
 
 ## The Board Grid

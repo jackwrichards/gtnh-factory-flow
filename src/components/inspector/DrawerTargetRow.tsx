@@ -3,47 +3,24 @@
 import { LocateFixed } from "lucide-react";
 import type { FactoryStorage } from "@/lib/model/types";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
-import { RuleButton, useTableRule } from "../flow/rate-rule";
-import { TargetLine } from "../flow/StorageNode";
-import { formatSignedRate } from "./flow-rate";
-
-/** Your rate as the row's own rate reads, less its sign and unit: the rule
- * mark stands in front of it and the row's rate, unit and all, beside it. */
-const bareRate = (perSecond: number, kind: string) => formatSignedRate(perSecond, kind, 0);
+import { RateBox, RuleButton, useRateRule } from "../flow/rate-rule";
 
 /**
- * A source or product drawer's rule and rate, set from the resources panel in
- * Solve (Jack, 2026-09-23): Pool's rule button wearing its mark alone, then
- * the rate line. A resource with ONE such drawer carries these on its own
- * row, so one thing reads on one line - `bare` there, so the name keeps its
- * room; several drawers get a branch row each, with room for the full line.
+ * A source or product drawer, hung under its resource's row like a file in a
+ * folder (Jack, 2026-09-23): locate, then the drawer's own rule and rate - the
+ * rule button wearing its word as in Pool, and your rate in the drawer's
+ * sunken box. They behave exactly as on the drawer: the same hook sets them.
  */
-export function DrawerRateControls({ storage, input, bare = false }: { storage: FactoryStorage; input: boolean; bare?: boolean }) {
+export function DrawerTargetRow({ storage, input, isLast }: { storage: FactoryStorage; input: boolean; isLast: boolean }) {
   useRateDisplayUnits();
+  const locked = useFactoryStore((s) => s.isReadOnly || !(s.project.solveMode || s.project.poolMode));
   const result = useFactoryStore((s) => s.lastResult.storages[storage.id]);
-  const rule = useTableRule({
+  const rule = useRateRule({
     storage,
     role: input ? "source" : "product",
-    name: storage.displayName ?? storage.resourceId,
+    result,
+    flowing: Math.abs(result?.netPerSecond ?? 0),
   });
-  return (
-    <span className="inspector-drawer-rate">
-      <RuleButton rule={rule} variant="mark" />
-      <TargetLine
-        inlinePencil
-        bare={bare}
-        storage={storage}
-        result={result}
-        input={input}
-        formatDisplayRate={bare ? bareRate : undefined}
-      />
-    </span>
-  );
-}
-
-/** One of several drawers behind a resource row, hung under it as a branch. */
-export function DrawerTargetRow({ storage, input, isLast }: { storage: FactoryStorage; input: boolean; isLast: boolean }) {
-  const locked = useFactoryStore((s) => s.isReadOnly || !(s.project.solveMode || s.project.poolMode));
   if (locked) return null;
   return (
     <div
@@ -56,15 +33,16 @@ export function DrawerTargetRow({ storage, input, isLast }: { storage: FactorySt
       </span>
       <button
         type="button"
-        className="flex h-5 w-5 items-center justify-center text-neutral-500 hover:text-neutral-100"
+        className="flex h-5 w-5 shrink-0 items-center justify-center text-neutral-500 hover:text-neutral-100"
         title="Locate this drawer on the board"
         aria-label={input ? "Locate source drawer" : "Locate product drawer"}
         onClick={() => useFactoryStore.getState().focusBoardNode(storage.id)}
       >
         <LocateFixed className="h-3 w-3" />
       </button>
-      <span className="ml-auto flex">
-        <DrawerRateControls storage={storage} input={input} />
+      <span className="inspector-drawer-rate ml-auto">
+        <RuleButton rule={{ ...rule, name: storage.displayName ?? storage.resourceId }} variant="table" />
+        <RateBox rule={rule} />
       </span>
     </div>
   );
