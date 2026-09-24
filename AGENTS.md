@@ -1410,9 +1410,18 @@ Working notes for future agents on GTNH Factory Flow.
   fixed-port resolver branch and the dock-flip warning are GONE; old plans
   carrying the key parse (unknown keys strip). Ports remain where wires
   START (drag from a chip) and where the numbers live.
-- Crossing hops (`pointsToHoppedSvgPath`) bump over any pair of
+- Crossing hops (`buildHoppedPath` in `wire-hops.ts`) bump over any pair of
   non-parallel segments, diagonals included: a run bumps toward the upper
-  side of its own line (a vertical run toward the right).
+  side of its own line (a vertical run toward the right). A hop is measured
+  ALONG THE WHOLE WIRE (Jack, 2026-09-23: "this is looking broken"): its
+  feet sit where the wire is one hop radius off the crossed line, whichever
+  runs those are on, so a crossing beside a bend (or exactly on one, which
+  used to get no hop) is one half-ellipse spanning the corner, bulging
+  round its OUTSIDE. Per-run hops squeezed the bump onto the short run and
+  kinked at the corner. Bumps closer together than a hop is tall merge into
+  one, and direction arrows slide off hop spans (`hopSpans` on the routed
+  path). `wire-hops.test.ts` is the exam;
+  `wire-hops-visual.local.test.ts` (OUT=file.html) draws old vs new.
 - Routing must stay deterministic for the same graph state, independent of
   zoom and render order.
 - Boards past `ASYNC_ROUTE_EDGE_LIMIT` wires solve in a Web Worker

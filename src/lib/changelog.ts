@@ -47,6 +47,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.6.0",
+    date: "2026-09-23",
+    headline: "Drawer rates in the resources panel, cleaner wire hops",
+    notes: [
+      "In Solve, each source and product drawer sits under its resource in the resources panel, with its own rule and rate box.",
+      "A wire crossing another right at a bend now hops over it cleanly. It used to kink, or not hop at all.",
+      "A wire crossing two wires close together hops both in one bump.",
+      "Direction arrows keep clear of hops.",
+    ],
+  },
+  {
     version: "3.5.1",
     date: "2026-09-23",
     headline: "Machine power starts where you expect",

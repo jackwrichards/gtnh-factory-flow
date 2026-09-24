@@ -325,6 +325,7 @@ import {
   reuseObjectIdentity,
 } from "./edge-detail";
 import { compareEdgeDepth, edgeCasingWidth } from "./edge-geometry";
+import { EDGE_HOP_MAX_RADIUS, buildHoppedPath, type HopSpan } from "./wire-hops";
 import { describeDeathSpiral, findDeathSpirals } from "./death-spiral";
 import { describeClogLock, findClogLocks } from "./clog-lock";
 import { findUnwiredNodeIds } from "./node-verdict";
@@ -881,6 +882,8 @@ type RoutedEdgePath = {
    * be seen ANIMATING out of one (see the morph gate in the edge).
    */
   solved?: boolean;
+  /** Where hop bumps replace the wire, as arc lengths along `points`. */
+  hopSpans?: HopSpan[];
 };
 
 const directRouteCache = new Map<
@@ -2809,9 +2812,9 @@ export function FactoryFlow() {
       publishedEdgeLaneScale = nextLaneScale;
       publishedDirectEdgeNodeClearance = nextClearances.node;
       publishedEdgeLinkClearance = nextClearances.link;
-      // Hop size follows the stroke widths now (see hopRadiusFor), and those
-      // are republished on every pass — the routes just have to be rebuilt so
-      // the new bumps are drawn.
+      // Hop size follows the stroke widths now (see hopRadiusFor in
+      // wire-hops.ts), and those are republished on every pass — the routes
+      // just have to be rebuilt so the new bumps are drawn.
       clearDirectRoutes();
     }
     // Members of an open board carry frame-RELATIVE positions (that is what
@@ -9681,7 +9684,15 @@ function ResourceEdgeComponent({
     [isPowerEdge, liveRoute.points],
   );
   const drawnPath = lightningPath ?? liveRoute.path;
-  const routeArrows = showArrowHead ? getRouteArrows(liveRoute.points, coreStrokeWidth, isGlobalView) : [];
+  // Mid-morph the line is a plain polyline with no bumps, so nothing to avoid.
+  const routeArrows = showArrowHead
+    ? getRouteArrows(
+        liveRoute.points,
+        coreStrokeWidth,
+        isGlobalView,
+        liveRoute.morphing ? undefined : routedEdge.hopSpans,
+      )
+    : [];
   const ratioLabels = data?.ratio && hasEdgeDetail(detailLevel, EDGE_DETAIL_LABELS) ? labelRatioArrows(routeArrows, getRatioLabelsForEdge(id).flatMap((label) => {
     const point = getPointAtPolylineRatio(liveRoute.points, label.ratio);
     return point ? [{ ...label, point }] : [];
@@ -10862,13 +10873,20 @@ function getDirectEdgePath({
     y: (sourceY + targetY) / 2,
   };
 
+  const inkPoints = inkPointsFor(points, sourceNodeId, targetNodeId);
+  const hopped = buildHoppedPath(
+    inkPoints,
+    collectHoppedRouteSegments(edgeId, routeIndex, points),
+    width,
+  );
+  // The ink runs on into a drawer at either end; spans are measured along the
+  // route itself, so take off whatever the ink added before the start.
+  const inkLead =
+    inkPoints[0] && points[0] ? Math.hypot(inkPoints[0].x - points[0].x, inkPoints[0].y - points[0].y) : 0;
   const result: RoutedEdgePath = {
     solved,
-    path: pointsToHoppedSvgPath(
-      inkPointsFor(points, sourceNodeId, targetNodeId),
-      collectHoppedRouteSegments(edgeId, routeIndex, points),
-      width,
-    ),
+    path: hopped.path,
+    hopSpans: hopped.spans.map((span) => ({ from: span.from - inkLead, to: span.to - inkLead })),
     labelX: labelPoint.x,
     labelY: labelPoint.y,
     // A pill with no room is a pill not shown: anchored over (or hard
@@ -11167,17 +11185,6 @@ function trimPolylineEnds(
 }
 
 /**
- * Hop size for normal wires. A 5px bump clears a 3px line with room to spare,
- * and vanishes completely under a 34px pipe — the crossing reads as a flat X
- * again, which is the exact thing hops exist to prevent. Thickness mode scales
- * the bump so it still clears whatever it is hopping over.
- */
-/** Air between the two strokes at the top of a hop. Snug, not floating. */
-const EDGE_HOP_GAP = 3;
-/** Nothing sensible needs a bump taller than this, whatever the widths say. */
-const EDGE_HOP_MAX_RADIUS = 44;
-
-/**
  * Every line's current stroke width, by edge id, published by the board.
  *
  * Hops are built at ROUTE time, where the only thing known about the line
@@ -11187,17 +11194,6 @@ const EDGE_HOP_MAX_RADIUS = 44;
  */
 const publishedEdgeStrokeWidths = new Map<string, number>();
 const DEFAULT_EDGE_STROKE_WIDTH = 6;
-
-
-/**
- * How far a line must lift to clear the one it crosses: half of each stroke,
- * plus a little air. Two 3px wires give ~6px, near the old fixed 5; two 34px
- * pipes give ~37px, which is what "snug over each other" actually costs at
- * that size.
- */
-function hopRadiusFor(ownWidth: number, otherWidth: number): number {
-  return Math.min(ownWidth / 2 + otherWidth / 2 + EDGE_HOP_GAP, EDGE_HOP_MAX_RADIUS);
-}
 
 function ownStrokeWidth(edgeId: string | undefined): number {
   return (
@@ -11272,117 +11268,6 @@ function collectHoppedRouteSegments(
     });
   }
   return segments;
-}
-
-/**
- * Like pointsToSvgPath, but wherever a segment properly crosses one of the
- * given (earlier-routed) segments, the line lifts over it in a small
- * semicircular bump - the classic schematic hop that makes crossings
- * legible instead of a flat X. Any two straight runs that are not parallel
- * can cross, diagonals included. A run bumps toward the upper side of its
- * own line (a vertical run toward the right), so the same crossing always
- * reads the same way.
- */
-function pointsToHoppedSvgPath(
-  points: Array<{ x: number; y: number }>,
-  otherSegments: Array<{
-    start: { x: number; y: number };
-    end: { x: number; y: number };
-    width: number;
-  }>,
-  ownWidth = DEFAULT_EDGE_STROKE_WIDTH,
-) {
-  if (points.length < 2 || otherSegments.length === 0) {
-    return pointsToSvgPath(points);
-  }
-
-  const first = points[0]!;
-  let path = `M ${first.x},${first.y}`;
-  // The other line must properly OVERSHOOT this one on both sides: a
-  // segment that merely ends a pixel or two past the line (T-junctions at
-  // docks, lane-adjacent turns) reads as a touch, not a crossing, and a
-  // hump there looks like it sits over nothing.
-  const OVERSHOOT = 4;
-  for (let index = 1; index < points.length; index += 1) {
-    const from = points[index - 1]!;
-    const to = points[index]!;
-    const length = Math.hypot(to.x - from.x, to.y - from.y);
-    if (length < 2) {
-      path += ` L ${to.x},${to.y}`;
-      continue;
-    }
-    const ux = (to.x - from.x) / length;
-    const uy = (to.y - from.y) / length;
-
-    // Crossings as distances along this run from its start. A crossing
-    // near a bend still gets its bump: the arc is CLAMPED into the run
-    // (asymmetric if it must be) rather than shrunk away.
-    const crossings: Array<{ at: number; radius: number }> = [];
-    for (const segment of otherSegments) {
-      const vx = segment.end.x - segment.start.x;
-      const vy = segment.end.y - segment.start.y;
-      const otherLength = Math.hypot(vx, vy);
-      if (otherLength < 1) {
-        continue;
-      }
-      const denominator = ux * vy - uy * vx;
-      if (Math.abs(denominator) < 1e-6) {
-        continue;
-      }
-      const wx = segment.start.x - from.x;
-      const wy = segment.start.y - from.y;
-      // t is pixels along this run (u is unit); the fraction along the
-      // other segment (v is its whole vector) is scaled to pixels too.
-      const t = (wx * vy - wy * vx) / denominator;
-      const s = ((wx * uy - wy * ux) / denominator) * otherLength;
-      if (t > 1 && t < length - 1 && s > OVERSHOOT && s < otherLength - OVERSHOOT) {
-        crossings.push({ at: t, radius: hopRadiusFor(ownWidth, segment.width) });
-      }
-    }
-
-    if (crossings.length === 0) {
-      path += ` L ${to.x},${to.y}`;
-      continue;
-    }
-
-    crossings.sort((left, right) => left.at - right.at);
-    const merged: Array<{ at: number; radius: number }> = [];
-    for (const crossing of crossings) {
-      const previous = merged[merged.length - 1];
-      if (!previous || crossing.at - previous.at > previous.radius + crossing.radius + 2) {
-        merged.push(crossing);
-      }
-    }
-
-    // The side the bump rises to: the upper normal of the line, or the
-    // right-hand one when the line is vertical.
-    let nx = -uy;
-    let ny = ux;
-    if (ny > 1e-6 || (Math.abs(ny) <= 1e-6 && nx < 0)) {
-      nx = -nx;
-      ny = -ny;
-    }
-    // SVG sweep=1 is clockwise on screen; the arc bulges toward the normal
-    // when the chord's cross product with it is negative.
-    const sweep = ux * ny - uy * nx < 0 ? 1 : 0;
-    for (const crossing of merged) {
-      const bumpLow = Math.max(0.5, crossing.at - crossing.radius);
-      const bumpHigh = Math.min(length - 0.5, crossing.at + crossing.radius);
-      const chord = bumpHigh - bumpLow;
-      if (chord < 4) {
-        continue;
-      }
-      const radius = Math.max(crossing.radius, chord / 2 + 0.1);
-      const ax = from.x + ux * bumpLow;
-      const ay = from.y + uy * bumpLow;
-      const bx = from.x + ux * bumpHigh;
-      const by = from.y + uy * bumpHigh;
-      path += ` L ${ax},${ay} A ${radius} ${radius} 0 0 ${sweep} ${bx},${by}`;
-    }
-    path += ` L ${to.x},${to.y}`;
-  }
-
-  return path;
 }
 
 // Shares and published routes are stable across camera frames. Cache the joint
@@ -13608,6 +13493,7 @@ function getRouteArrows(
   points: Array<{ x: number; y: number }>,
   strokeWidth: number,
   glance: boolean,
+  hopSpans: ReadonlyArray<HopSpan> = [],
 ): string[] {
   const segments = getPolylineSegments(points);
   const total = segments.reduce((sum, segment) => sum + segment.length, 0);
@@ -13644,10 +13530,23 @@ function getRouteArrows(
     const lastPoint = points[points.length - 1];
     return { x: lastPoint.x, y: lastPoint.y, dx: 1, dy: 0 };
   };
+  // A head drawn over a hop floats straight on while the wire bulges away
+  // under it, so one that would touch a bump slides clear of it, to
+  // whichever side is nearer; undefined when neither side has room.
+  const overHop = (tip: number) =>
+    hopSpans.some((span) => tip > span.from - 2 && tip - length < span.to + 2);
+  const offHops = (tip: number): number | undefined => {
+    const span = hopSpans.find((hop) => tip > hop.from - 2 && tip - length < hop.to + 2);
+    if (!span) return tip;
+    const candidates = [span.from - 2, span.to + 2 + length]
+      .filter((candidate) => candidate - length >= 0 && candidate <= total && !overHop(candidate))
+      .sort((left, right) => Math.abs(left - tip) - Math.abs(right - tip));
+    return candidates[0];
+  };
   // The arrow whose tip would sit at `tip` slid, if need be, so the whole
   // head lies on one straight run; undefined when no run there is long
   // enough to hold it.
-  const settle = (tip: number): number | undefined => {
+  const settleOnRun = (tip: number): number | undefined => {
     for (let i = 0; i < segments.length; i += 1) {
       const start = starts[i];
       const end = start + segments[i].length;
@@ -13664,6 +13563,11 @@ function getRouteArrows(
       }
     }
     return undefined;
+  };
+  const settle = (wantedTip: number): number | undefined => {
+    const clear = offHops(wantedTip);
+    const tip = clear === undefined ? undefined : settleOnRun(clear);
+    return tip === undefined || overHop(tip) ? undefined : tip;
   };
   const arrowAt = (tip: number): string => {
     const { x, y, dx, dy } = at(tip);
