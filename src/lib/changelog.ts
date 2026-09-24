@@ -53,8 +53,8 @@ export const CHANGELOG: ChangelogEntry[] = [
     notes: [
       "New multiblocks start on whole amps: 1A LV, not 0.94A LV.",
       "Raising the tier of a machine set below 1A now gives it 1A of the new tier, so an LCR moved to HV runs like an HV one.",
-      "Switching a singleblock to its multiblock keeps its voltage on one hatch: an EV Forge Hammer becomes a 1A EV Industrial Sledgehammer, not 63A.",
-      "Switching a multiblock back to a singleblock keeps the hatch tier.",
+      "Switching between a singleblock and its multiblock keeps the voltage: an EV Forge Hammer becomes a 1A EV Industrial Sledgehammer, not 63A.",
+      "Drawer rates read in one size, centred when the drawer has no rule.",
     ],
   },
   {
