@@ -87,6 +87,8 @@ function RatioPanel({ request, onClose }: { request: RatioEditorRequest; onClose
     refs: [rootRef],
     onClose: close,
     fade: true,
+    // It opens centred, away from the pencil that opened it.
+    fadeAfterReach: true,
     // The board's unit menus remain usable alongside the current-rate column.
     insideSelector: "[data-board-toolbar]",
   });

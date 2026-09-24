@@ -84,6 +84,13 @@ it("uses the shared mouse fade and page sounds without fading touch or the rate 
   };
   move(800, "touch");
   expect(panel.style.opacity).toBe("");
+  // It opens centred, away from the drawer's pencil: moving off the pencil
+  // must not count as leaving the panel (Jack, 2026-09-23).
+  move(900, "mouse");
+  move(1000, "mouse");
+  expect(screen.getByRole("dialog")).toBe(panel);
+  expect(panel.style.opacity).toBe("");
+  move(300, "mouse", panel);
   move(580, "mouse");
   expect(Number(panel.style.opacity)).toBeGreaterThan(0);
   expect(Number(panel.style.opacity)).toBeLessThan(1);

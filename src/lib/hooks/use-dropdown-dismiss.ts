@@ -33,6 +33,14 @@ export interface DropdownDismissOptions {
   insideSelector?: string;
   /** Dim and close as the mouse moves away. */
   fade?: boolean;
+  /**
+   * With `fade`, start fading only once the mouse has reached the panel. For
+   * a panel that opens AWAY from the pointer (the drawer split editor opens
+   * centred on the window): measured from the moment it opened, the pointer
+   * was already "drifting away", and the first nudge closed it (Jack,
+   * 2026-09-23).
+   */
+  fadeAfterReach?: boolean;
   /** Skip the board-camera rule (a menu that lives off the board and follows nothing). */
   ignoreCameraMove?: boolean;
 }
@@ -82,7 +90,7 @@ function distanceToElement(x: number, y: number, element: Element): number {
 }
 
 export function useDropdownDismiss(open: boolean, options: DropdownDismissOptions): void {
-  const { fade, ignoreCameraMove, insideSelector } = options;
+  const { fade, fadeAfterReach, ignoreCameraMove, insideSelector } = options;
   const refs = options.refs;
   // Held in a ref: callers pass inline closures, and re-subscribing on every
   // render would reset a fading panel's opacity mid-fade.
@@ -95,7 +103,7 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
     if (!open) {
       return;
     }
-    const opts: DropdownDismissOptions = { refs, onClose, insideSelector, fade, ignoreCameraMove };
+    const opts: DropdownDismissOptions = { refs, onClose, insideSelector, fade, fadeAfterReach, ignoreCameraMove };
     const openedWidth = window.innerWidth;
     const editingInside = () => {
       const active = document.activeElement;
@@ -104,6 +112,7 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
     };
     const panel = () => refs[0]?.current as HTMLElement | null | undefined;
     let closed = false;
+    let reached = !fadeAfterReach;
     const close = () => {
       if (closed) return;
       closed = true;
@@ -157,9 +166,11 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
       const element = panel();
       if (!element) return;
       if (nearest <= FADE_GRACE) {
+        reached = true;
         element.style.opacity = "";
         return;
       }
+      if (!reached) return;
       const away = (nearest - FADE_GRACE) / FADE_RANGE;
       if (away >= 1) {
         close();
@@ -190,5 +201,5 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
     };
     // The refs array is rebuilt per render; its members are stable refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, fade, ignoreCameraMove, insideSelector, ...refs]);
+  }, [open, fade, fadeAfterReach, ignoreCameraMove, insideSelector, ...refs]);
 }

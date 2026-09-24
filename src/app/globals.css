@@ -1936,6 +1936,24 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   z-index: 40;
 }
 
+/* A non-strict buffer's rate is its surplus, and a quiet word under it,
+   centred on the rate, says so. */
+.storage-chip-surplus {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  pointer-events: none;
+}
+
+.storage-chip-surplus-word {
+  color: #a8afbb;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 9px;
+  white-space: nowrap;
+}
+
 /* The number in one steady size, the unit beside it small and quiet. One
    line height per size, so the reading never changes height with the font. */
 .storage-chip-rate {

@@ -1197,7 +1197,10 @@ Working notes for future agents on GTNH Factory Flow.
 - Build, and every drawer without a rule: picture and rate as one centred
   group. Trash reads its rate in steel. The role switch wears cycle arrows;
   left-right arrows belong to the strict buffer alone. The ratio pencil sits
-  in the title bar beside the mode key.
+  in the title bar beside the mode key. A NON-STRICT buffer's rate is what it
+  banks, so a quiet "(surplus)" sits under it, centred on the rate (Jack,
+  2026-09-23); strict and ratio buffers bank nothing and carry no word. The
+  strict key's tooltip reads "Surplus clogs the feeder".
 - Sources have NO switch: a source is read off its wires, and turning a
   wired source into a product would drop every wire. Jack asked, weighed
   destructive and unwired-only swaps, and scrapped the idea (2026-09-22).
@@ -1598,7 +1601,10 @@ Working notes for future agents on GTNH Factory Flow.
   `StorageRatioEditor.tsx`, a compact grey NON-MODAL panel (`dialog.show`,
   never `showModal`). No backdrop, dim, blur or focus trap: rate controls and
   the canvas stay interactive. It uses useDropdownDismiss with fade: mouse-away
-  dims then closes, returning restores it; touch never hover-fades. Outside
+  dims then closes, returning restores it; touch never hover-fades. It opens
+  centred, away from the pencil, so the fade waits until the mouse has
+  reached it (`fadeAfterReach`; Jack, 2026-09-23: it vanished the moment the
+  mouse left the pencil). Outside
   presses/camera movement and X/Escape close it. The board toolbar counts as
   inside so unit controls remain usable. Opening/closing play pageOpen/pageClose,
   once per transition, like the machine menu. It renders inside the board's stacking context,

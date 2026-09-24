@@ -606,7 +606,16 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
                 </>
               ) : (
                 <>
-                  <ChipRate net={net} kind={storage.kind} role={role} size="large" />
+                  {role === "buffer" && !isStrictBuffer(storage, solveMode) ? (
+                    // A non-strict buffer's rate is what it banks, the surplus
+                    // leaving the setup, so it says so (Jack, 2026-09-23).
+                    <div className="storage-chip-surplus">
+                      <ChipRate net={net} kind={storage.kind} role={role} size="large" />
+                      <span className="storage-chip-surplus-word">(surplus)</span>
+                    </div>
+                  ) : (
+                    <ChipRate net={net} kind={storage.kind} role={role} size="large" />
+                  )}
                   {ratio ? (
                     // Its own control: a click or right click here is not a browse.
                     <span className="contents" onClick={(event) => event.stopPropagation()} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); }}>

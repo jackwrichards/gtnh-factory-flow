@@ -52,9 +52,9 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "Drawer rates in the resources panel, cleaner wire hops",
     notes: [
       "In Solve, each source and product drawer sits under its resource in the resources panel, with its own rule and rate box.",
-      "A wire crossing another right at a bend now hops over it cleanly. It used to kink, or not hop at all.",
-      "A wire crossing two wires close together hops both in one bump.",
-      "Direction arrows keep clear of hops.",
+      "Wires hop cleanly over crossings at a bend and over two close wires at once, and arrows keep clear of hops.",
+      "Non-strict drawers say (surplus) under their rate, since that is what they bank.",
+      "The drawer split editor no longer closes as soon as the mouse leaves its pencil.",
     ],
   },
   {
