@@ -49,12 +49,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "3.6.0",
     date: "2026-09-23",
-    headline: "Drawer rates in the resources panel, cleaner wire hops",
+    headline: "Share a plan without an account",
     notes: [
+      "Copy plan, beside the screenshot button, copies a link anyone can open, no account needed; paste one back from the plan menu.",
       "In Solve, each source and product drawer sits under its resource in the resources panel, with its own rule and rate box.",
-      "Wires hop cleanly over crossings at a bend and over two close wires at once, and arrows keep clear of hops.",
-      "Non-strict drawers say (surplus) under their rate, since that is what they bank.",
-      "The drawer split editor, a board's paper picker and a note's style panel all open and work again.",
+      "Wires hop cleanly over crossings at bends, and non-strict drawers say (surplus) under their rate.",
+      "The drawer split editor, a board's paper picker and a note's style panel all work again.",
     ],
   },
   {

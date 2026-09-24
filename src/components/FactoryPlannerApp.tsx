@@ -16,6 +16,7 @@ import { useDesignStore } from "@/store/design-store";
 import { recordResourceTrend, resetResourceTrends } from "@/lib/resource-trends";
 import { useWorkspaceView, writeWorkspaceView } from "@/lib/workspace-view";
 import { openCommunityPost } from "@/lib/community/open-post";
+import { openPlanCodeFromAddress } from "@/lib/open-plan-code";
 import { retryPendingPostFollows } from "@/lib/community/post-follow";
 import { forgetSharedPlanId, readSharedPlanId, syncSharedPlanAddress } from "@/lib/community/shared-link";
 import { useIsCompactViewport } from "@/lib/compact-view";
@@ -151,6 +152,8 @@ export function FactoryPlannerApp() {
               error instanceof Error ? error.message : "Importing the shared setup failed.",
             );
           }
+          // A copied plan's link (#p=...) opens as a new tab of its own.
+          await openPlanCodeFromAddress();
         })
         .finally(() => {
           // Autosave stays parked until the stored design is on the canvas.
@@ -162,6 +165,18 @@ export function FactoryPlannerApp() {
 
     return cancelHydration;
   }, [hydrateDesigns, hydrateResourceHistory]);
+
+  // A copied plan's link pasted into the address bar of an open tab fires
+  // no load, only a hash change.
+  useEffect(() => {
+    const onHashChange = () => {
+      if (hydratedRef.current) {
+        void openPlanCodeFromAddress();
+      }
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   // The library follows the account: sign-in starts the sync, sign-out stops
   // it, and every change here reaches the other devices a few seconds later.

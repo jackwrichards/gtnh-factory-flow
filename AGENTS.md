@@ -1528,6 +1528,26 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Import/Export Plans
 
+- COPY PLAN (Jack, 2026-09-23): sharing without an account, the way
+  ShadowTheAge's calculator does it. The plan bar's "Copy plan" button
+  (beside the screenshot button) puts a LINK on the clipboard:
+  `https://gtnhplanner.com/#p=gtnh1.<deflate-raw, base64url JSON>`
+  (`src/lib/import-export/plan-code.ts`). The link opens the plan; the plan
+  menu's "Paste a copied plan..." takes the link or the bare code. Either way
+  it lands as a NEW design tab (`importProjectAsDesign`), never over the
+  plan on the board. Players never see the word "code" (Jack: it reads as
+  programming). The fragment is `#p=`, not `plan`: `?plan=` is a community
+  post link. The arrival code is captured at module load
+  (`open-plan-code.ts`), because SharedAddressSync rewrites the address and
+  drops the fragment; the address is cleaned once it opens.
+  - Slimmed: GregTech `runtimeCalculation` tables are left out (about half
+    the size) and the community post id is dropped; the landing refresh in
+    FactoryPlannerApp restores the tables from the dataset. Power recipes
+    and the bee/crop tables stay whole.
+  - Still long: the oil board is ~16k characters, a big board 100k+. Fine
+    for a paste, a DM or a forum; over Discord's 2,000-character message
+    limit. A short link would need a server store, which is a separate
+    decision. `copy-plan-probe.local.mjs` drives copy, open and paste.
 - Public setups open through `openCommunityPost`: owned posts resume their
   linked personal design; other authors' posts open a VIEW-ONLY session.
   `design-store.publicView` is transient, with no active design id or library

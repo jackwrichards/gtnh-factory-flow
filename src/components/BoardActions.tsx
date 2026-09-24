@@ -6,6 +6,7 @@ import {
   Check,
   ChevronDown,
   ClipboardList,
+  ClipboardPaste,
   Download,
   ImageDown,
   LoaderCircle,
@@ -53,6 +54,8 @@ import { useWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { isPowerRecipe } from "@/lib/power/power-recipe";
 import { pickRecipeRefMatch, recipeContentRef } from "@/lib/import-export/recipe-ref-match";
 import { useFactoryStore } from "@/store/factory-store";
+import { copyToClipboard } from "@/lib/clipboard";
+import { PastePlanDialog } from "./export/PastePlanDialog";
 
 interface BoardActionsProps {
   /**
@@ -109,6 +112,7 @@ export function BoardActions({
   const lastResult = useFactoryStore((state) => state.lastResult);
   const selectedBoardIds = useFactoryStore((state) => state.selectedBoardIds);
   const [diagnosticsState, setDiagnosticsState] = useState<"idle" | "copied" | "failed">("idle");
+  const [isPastingPlan, setPastingPlan] = useState(false);
   // Welcome COVERS the board, so the design underneath still has content and
   // Share would happily post it. But sharing a board you cannot see is a
   // trap, so the button waits until you are looking at the thing it posts.
@@ -315,6 +319,11 @@ export function BoardActions({
           }}
         />
         <MenuAction
+          icon={ClipboardPaste}
+          label="Paste a copied plan"
+          onClick={() => setPastingPlan(true)}
+        />
+        <MenuAction
           icon={diagnosticsState === "copied" ? Check : ClipboardList}
           label={diagnosticsLabel}
           onClick={() => {
@@ -341,6 +350,14 @@ export function BoardActions({
           />
         ) : null}
         {planFileInput}
+        {isPastingPlan ? (
+          <PastePlanDialog
+            onClose={() => {
+              setPastingPlan(false);
+              onAction?.();
+            }}
+          />
+        ) : null}
       </div>
     );
   }
@@ -399,6 +416,14 @@ export function BoardActions({
                   projectInputRef.current?.click();
                 }}
               />
+              <ExportMenuItem
+                icon={ClipboardPaste}
+                label="Paste a copied plan..."
+                onClick={() => {
+                  setExportMenuOpen(false);
+                  setPastingPlan(true);
+                }}
+              />
               <div className="my-1 border-t border-line-strong" />
               <ExportMenuItem
                 icon={diagnosticsState === "copied" ? Check : ClipboardList}
@@ -431,6 +456,7 @@ export function BoardActions({
       </div>
 
       {planFileInput}
+      {isPastingPlan ? <PastePlanDialog onClose={() => setPastingPlan(false)} /> : null}
     </div>
   );
 }
@@ -462,34 +488,6 @@ function MenuAction({
       <span className="truncate">{label}</span>
     </button>
   );
-}
-
-/**
- * Write text to the system clipboard, with the old selection-based path behind
- * it: the async API needs a secure context, and a plan opened from a file or
- * over plain http has none. Reports whether it landed rather than throwing,
- * because the caller's whole job is to say so on the button.
- */
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    try {
-      const scratch = document.createElement("textarea");
-      scratch.value = text;
-      scratch.setAttribute("readonly", "");
-      scratch.style.position = "fixed";
-      scratch.style.opacity = "0";
-      document.body.append(scratch);
-      scratch.select();
-      const copied = document.execCommand("copy");
-      scratch.remove();
-      return copied;
-    } catch {
-      return false;
-    }
-  }
 }
 
 function nextAnimationFrame(): Promise<void> {
