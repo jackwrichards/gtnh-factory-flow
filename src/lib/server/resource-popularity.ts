@@ -28,25 +28,43 @@ import { getCommunityDb, isCommunityConfigured } from "@/lib/server/community";
  *   for more work than one of the litres flanking it.
  *
  * Keys are `${kind}:${id}`, the same shape the dataset catalog uses, so the
- * resources route can look straight up. Cached in-process for half an hour;
- * with Supabase unconfigured (local dev) the map is empty and the sort
- * degrades to best match's order.
+ * resources route can look straight up. With Supabase unconfigured (local
+ * dev) the map is empty and the sort degrades to best match's order.
+ *
+ * THE ITEM LIST NEVER WAITS FOR IT (2026-09-24). "Most popular" is the
+ * items column's default sort, and the sweep reads every public plan's
+ * jsonb from Supabase: when Supabase stalled, every item list request sat
+ * behind the stalled sweep for ~90 s and the whole site read as broken.
+ * `getResourcePopularity` answers at once with the last good map (empty
+ * before the first sweep lands) and starts a sweep in the background when
+ * one is due. The prewarm endpoint starts the first one at boot.
+ *
+ * The sweep is the heaviest read the app makes (every public plan, often
+ * megabytes each), so it runs every six hours, and a failed one waits half
+ * an hour before trying again rather than piling onto a struggling database.
  */
 
-const CACHE_TTL_MS = 30 * 60 * 1000;
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 // Small pages, ordered by the primary key: a plan jsonb can run to megabytes,
 // and 40 of them in one statement tripped Postgres's statement timeout.
 const PAGE_SIZE = 10;
 const MAX_PLANS = 1000;
-const FAILURE_RETRY_MS = 2 * 60 * 1000;
+const FAILURE_RETRY_MS = 30 * 60 * 1000;
 
 let cache: { at: number; map: Map<string, number> } | undefined;
 let inFlight: Promise<Map<string, number>> | undefined;
+const EMPTY = new Map<string, number>();
 
-export async function getResourcePopularity(): Promise<Map<string, number>> {
-  if (cache && Date.now() - cache.at < CACHE_TTL_MS) {
-    return cache.map;
+/** The last good popularity map, never waiting: starts a sweep when one is due. */
+export function getResourcePopularity(): Map<string, number> {
+  if (!cache || Date.now() - cache.at >= CACHE_TTL_MS) {
+    void refreshResourcePopularity();
   }
+  return cache?.map ?? EMPTY;
+}
+
+/** Runs a sweep unless one is already running; resolves with the map it lands. */
+export function refreshResourcePopularity(): Promise<Map<string, number>> {
   if (!inFlight) {
     inFlight = buildPopularityMap()
       .then((map) => {
@@ -55,9 +73,7 @@ export async function getResourcePopularity(): Promise<Map<string, number>> {
       })
       .catch((error) => {
         console.error("resource popularity aggregation failed", error);
-        // A failed sweep should not hammer the database on every keystroke,
-        // but it should retry well before a good sweep would expire.
-        const stale = cache?.map ?? new Map<string, number>();
+        const stale = cache?.map ?? EMPTY;
         cache = { at: Date.now() - CACHE_TTL_MS + FAILURE_RETRY_MS, map: stale };
         return stale;
       })
@@ -66,6 +82,12 @@ export async function getResourcePopularity(): Promise<Map<string, number>> {
       });
   }
   return inFlight;
+}
+
+/** Tests only: forget every sweep. */
+export function resetResourcePopularityForTests(): void {
+  cache = undefined;
+  inFlight = undefined;
 }
 
 async function buildPopularityMap(): Promise<Map<string, number>> {

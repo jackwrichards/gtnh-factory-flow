@@ -49,18 +49,29 @@ import type { RemoteDesignMeta, RemoteFolder } from "./sync-types";
  *   costs one small row.
  *
  * WHEN: on sign-in, on load, when the tab comes back to the front, every
- * half minute, and a few seconds after any change to the library (which is
- * how autosave reaches the account). One run at a time; a request during a
- * run queues one more.
+ * half minute while the tab is in view, and a few seconds after changes to
+ * the library stop (which is how autosave reaches the account) - at most
+ * half a minute behind during nonstop editing, and at once when the tab
+ * goes into the background. One run at a time; a request during a run
+ * queues one more.
  *
  * WHEN NOT: signed out. Database and network failures stay visible and retry
- * on the next poll, focus or connection recovery.
+ * on the next poll, focus or connection recovery. A design the account
+ * REFUSED (too large, not valid, library full) is not sent again until it
+ * changes.
+ *
+ * WHY SO CAREFUL (2026-09-24): every push carries the WHOLE plan. Pushing
+ * half a second after every autosave, and resending refused plans on every
+ * poll, put ~500 MB an hour of plan writes and ~500 MB an hour of refused
+ * uploads on the Supabase instance, which then stopped answering for hours.
  */
 
 export interface LibrarySyncStatus {
   state: "off" | "pending" | "idle" | "syncing" | "error";
   /** Why it is off, or what failed. */
   message?: string;
+  /** The error is a design the account refused: it waits for an edit, not a retry. */
+  refused?: boolean;
   lastSyncedAt?: string;
   /** Set after a pull replaced the plan that was on the canvas. */
   reloadedActiveAt?: string;
@@ -68,7 +79,8 @@ export interface LibrarySyncStatus {
 
 export const useLibrarySyncStore = create<LibrarySyncStatus>(() => ({ state: "off" }));
 
-const PUSH_DEBOUNCE_MS = 500;
+const PUSH_DEBOUNCE_MS = 5000;
+const PUSH_MAX_WAIT_MS = 30000;
 const POLL_MS = 30000;
 
 /* ------------------------------------------------------------------ */
@@ -187,6 +199,24 @@ export function reconcileFolders(local: LocalFolder[], remote: RemoteFolder[]): 
 let running: Promise<void> | undefined;
 let runAgain = false;
 let pushTimer: number | undefined;
+/** The latest moment a queued push may still wait until. */
+let pushDeadline: number | undefined;
+
+/**
+ * Designs the account refused, with the change stamp it refused. The same
+ * design unchanged is refused the same way, so it is held back until its
+ * stamp moves. In memory only: a reload tries once more.
+ */
+const refusedPushes = new Map<string, { stamp: string; message: string }>();
+
+function isRefusal(error: unknown): error is Error {
+  return error instanceof Error && (error as { refused?: unknown }).refused === true;
+}
+
+/** The later of two ISO stamps. */
+function latestStamp(a: string | undefined, b: string): string {
+  return a && ts(a) > ts(b) ? a : b;
+}
 
 function setStatus(patch: Partial<LibrarySyncStatus>) {
   useLibrarySyncStore.setState(patch);
@@ -218,18 +248,32 @@ export function syncLibraryNow(): Promise<void> {
   return running;
 }
 
+/**
+ * Sync once changes have stopped for `delayMs`, but never later than
+ * PUSH_MAX_WAIT_MS after the first change, so nonstop editing still reaches
+ * the account without sending the whole plan after every autosave.
+ */
 function scheduleSync(delayMs = PUSH_DEBOUNCE_MS) {
   if (!isSignedIn()) {
     return;
   }
+  const now = Date.now();
+  pushDeadline ??= now + PUSH_MAX_WAIT_MS;
+  const fireAt = Math.min(now + delayMs, pushDeadline);
   if (pushTimer !== undefined) {
-    return;
+    window.clearTimeout(pushTimer);
   }
   if (useLibrarySyncStore.getState().state !== "error") setStatus({ state: "pending" });
-  pushTimer = window.setTimeout(() => {
-    pushTimer = undefined;
-    void syncLibraryNow();
-  }, delayMs);
+  pushTimer = window.setTimeout(flushScheduledSync, Math.max(0, fireAt - now));
+}
+
+function flushScheduledSync() {
+  if (pushTimer !== undefined) {
+    window.clearTimeout(pushTimer);
+  }
+  pushTimer = undefined;
+  pushDeadline = undefined;
+  void syncLibraryNow();
 }
 
 async function runOnce(): Promise<void> {
@@ -252,12 +296,26 @@ async function runOnce(): Promise<void> {
     if (touched) {
       await useDesignStore.getState().refreshLibrary();
     }
-    setStatus({ state: "idle", message: undefined, lastSyncedAt: new Date().toISOString() });
+    // A refused design is still unsaved: say so rather than "saved".
+    const refusal = designActions
+      .map((action) => (action.kind === "push" ? refusedPushes.get(action.id) : undefined))
+      .find(Boolean);
+    if (refusal) {
+      setStatus({ state: "error", refused: true, message: refusal.message });
+      return;
+    }
+    setStatus({
+      state: "idle",
+      message: undefined,
+      refused: undefined,
+      lastSyncedAt: new Date().toISOString(),
+    });
   } catch (error) {
     // A repaired schema, restored connection or renewed session must recover
     // without requiring the player to reload a page holding unsaved work.
     setStatus({
       state: "error",
+      refused: undefined,
       message: error instanceof Error ? error.message : "Sync failed.",
     });
   }
@@ -375,20 +433,40 @@ async function applyDesignAction(action: DesignAction): Promise<void> {
       if (!record) {
         return;
       }
-      const updatedAt = record.metaUpdatedAt ?? record.updatedAt;
-      const result = await pushRemoteDesign(record.id, {
-        name: record.name,
-        icon: record.icon ?? null,
-        folderId: record.folderId ?? null,
-        closed: Boolean(record.closed),
-        favorite: Boolean(record.favorite),
-        order: record.order ?? null,
-        communityPlanId: record.communityPlanId ?? null,
-        createdAt: record.createdAt,
-        updatedAt,
-        planUpdatedAt: record.updatedAt,
-        ...(action.withPlan ? { plan: record.project } : {}),
-      });
+      // The LATER of the two stamps, the same one `reconcileDesigns` calls
+      // the local change time. Sending the metadata stamp alone when the
+      // plan's was newer stored an older `updatedAt` than the edit, and the
+      // design read as unsaved again on every poll: pushed forever.
+      const updatedAt = latestStamp(record.metaUpdatedAt, record.updatedAt);
+      if (refusedPushes.get(record.id)?.stamp === updatedAt) {
+        return;
+      }
+      let result: Awaited<ReturnType<typeof pushRemoteDesign>>;
+      try {
+        result = await pushRemoteDesign(record.id, {
+          name: record.name,
+          icon: record.icon ?? null,
+          folderId: record.folderId ?? null,
+          closed: Boolean(record.closed),
+          favorite: Boolean(record.favorite),
+          order: record.order ?? null,
+          communityPlanId: record.communityPlanId ?? null,
+          createdAt: record.createdAt,
+          updatedAt,
+          planUpdatedAt: record.updatedAt,
+          ...(action.withPlan ? { plan: record.project } : {}),
+        });
+      } catch (error) {
+        if (!isRefusal(error)) {
+          throw error;
+        }
+        refusedPushes.set(record.id, {
+          stamp: updatedAt,
+          message: `"${record.name}" is not saved to your account: ${error.message}`,
+        });
+        return;
+      }
+      refusedPushes.delete(record.id);
       if (result.behind) {
         runAgain = true;
         return;
@@ -468,7 +546,13 @@ export function startLibrarySync(): () => void {
     }
     setStatus({ state: "pending", message: undefined, lastSyncedAt: undefined });
     void syncLibraryNow();
-    pollTimer = window.setInterval(() => void syncLibraryNow(), POLL_MS);
+    // A tab in the background has nothing to show; coming back into view
+    // syncs at once (below), so it skips the poll meanwhile.
+    pollTimer = window.setInterval(() => {
+      if (document.visibilityState !== "hidden") {
+        void syncLibraryNow();
+      }
+    }, POLL_MS);
   };
   onUser();
   const unsubscribeAuth = useCommunityAuthStore.subscribe(onUser);
@@ -488,6 +572,9 @@ export function startLibrarySync(): () => void {
   const onVisible = () => {
     if (document.visibilityState === "visible") {
       void syncLibraryNow();
+    } else if (pushTimer !== undefined) {
+      // Leaving the tab: send what is waiting rather than hold it back.
+      flushScheduledSync();
     }
   };
   document.addEventListener("visibilitychange", onVisible);
@@ -511,5 +598,6 @@ export function startLibrarySync(): () => void {
       window.clearTimeout(pushTimer);
       pushTimer = undefined;
     }
+    pushDeadline = undefined;
   };
 }

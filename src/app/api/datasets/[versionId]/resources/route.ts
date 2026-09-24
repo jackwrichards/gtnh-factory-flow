@@ -16,8 +16,8 @@ export async function GET(
     const kindParam = url.searchParams.get("kind");
     const sortParam = url.searchParams.get("sort");
     const sourceParam = url.searchParams.get("source");
-    const popularity =
-      sortParam === "popular" ? await getResourcePopularity() : undefined;
+    // Never awaits the database: the last good ranking, or none yet.
+    const popularity = sortParam === "popular" ? getResourcePopularity() : undefined;
     const result = await queryDatasetResources(versionId, {
       query: url.searchParams.get("query") ?? "",
       offset: parseOffset(url.searchParams.get("offset")),
@@ -39,9 +39,11 @@ export async function GET(
     return NextResponse.json(result, {
       // Popularity is community data, not dataset bytes: the datasetHash
       // fingerprint doesn't pin it, so it must not ride the immutable policy.
+      // Before the first sweep lands the order is plain best match, which
+      // must not stick in a browser for half an hour.
       headers:
         sortParam === "popular"
-          ? { "Cache-Control": "public, max-age=1800" }
+          ? { "Cache-Control": popularity?.size ? "public, max-age=1800" : "no-store" }
           : datasetCacheHeaders(request),
     });
   } catch (error) {

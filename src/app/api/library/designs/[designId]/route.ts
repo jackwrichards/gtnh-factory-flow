@@ -72,12 +72,8 @@ export async function PUT(request: Request, context: RouteContext) {
   if (!sessionUser) {
     return NextResponse.json({ error: "Sign in to sync your library." }, { status: 401 });
   }
-  // Autosave pushes a few seconds after edits stop; a busy hour is hundreds,
-  // not thousands.
-  if (!(await checkRateLimit(`user:${sessionUser.id}`, "library-save", 1200, 60 * 60))) {
-    return NextResponse.json({ error: "Saving too fast. Try again later." }, { status: 429 });
-  }
-
+  // Everything that can refuse the request without the database goes before
+  // the rate limit, which costs two round trips (a count and an insert).
   const { designId } = await context.params;
   if (!isLibraryId(designId)) {
     return NextResponse.json({ error: "Bad design id." }, { status: 400 });
@@ -112,6 +108,11 @@ export async function PUT(request: Request, context: RouteContext) {
   }
   if (body.folderId !== null && body.folderId !== undefined && !isLibraryId(body.folderId)) {
     return NextResponse.json({ error: "Bad folder id." }, { status: 400 });
+  }
+  // Autosave pushes a few seconds after edits stop; a busy hour is hundreds,
+  // not thousands.
+  if (!(await checkRateLimit(`user:${sessionUser.id}`, "library-save", 1200, 60 * 60))) {
+    return NextResponse.json({ error: "Saving too fast. Try again later." }, { status: 429 });
   }
 
   const db = getCommunityDb();

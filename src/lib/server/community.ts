@@ -11,6 +11,33 @@ import type { CommunityPlanSummary, EntryIcon, PlanResourceStat } from "@/lib/co
 
 let cachedClient: SupabaseClient | undefined;
 
+/**
+ * How long one database request may take before it is abandoned. Without a
+ * limit, a stalled Supabase instance (2026-09-24: Cloudflare 522s for hours)
+ * held every request open for 90-120 s, so the public setups, the library
+ * and the item list's popularity sort all hung instead of failing, and the
+ * server piled up hundreds of open sockets. A 3 MB plan moves in well under
+ * a second from the droplet, so this only ever cuts off a stall.
+ */
+export const COMMUNITY_DB_TIMEOUT_MS = 20_000;
+
+/**
+ * The client's fetch (database, storage), abandoned after `timeoutMs`,
+ * body included. It aborts with a plain AbortError on purpose: postgrest-js
+ * RETRIES a GET that fails any other way, three more times with backoff, so
+ * `AbortSignal.timeout`'s TimeoutError turned a 20 s limit into ~87 s.
+ */
+export function fetchWithDbTimeout(
+  input: Parameters<typeof fetch>[0],
+  init?: Parameters<typeof fetch>[1],
+  timeoutMs = COMMUNITY_DB_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), timeoutMs).unref?.();
+  const signal = init?.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal;
+  return fetch(input, { ...init, signal });
+}
+
 export function isCommunityConfigured(): boolean {
   return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
@@ -27,6 +54,7 @@ export function getCommunityDb(): SupabaseClient {
 
     cachedClient = createClient(url, key, {
       auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: fetchWithDbTimeout },
     });
   }
 

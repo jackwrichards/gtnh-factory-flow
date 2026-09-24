@@ -111,6 +111,64 @@ it("keeps the local draft and retries after a database outage without a reload",
   expect(useLibrarySyncStore.getState().state).toBe("idle");
 });
 
+it("does not resend a design the account refused until it changes", async () => {
+  // 2026-09-24: a 3.2 MB plan the server refuses as too large went up every
+  // 30 s for hours.
+  const id = "too-large-design";
+  const record = { id, name: "Huge", createdAt: stamp, updatedAt: stamp, project: createEmptyProject() };
+  storage.records.set(id, record);
+  api.fetchRemoteLibrary.mockResolvedValue({ designs: [], folders: [] });
+  api.pushRemoteDesign.mockRejectedValue(
+    Object.assign(new Error("This design is too large to sync."), { refused: true, status: 413 }),
+  );
+  await syncLibraryNow();
+  await syncLibraryNow();
+  await syncLibraryNow();
+  expect(api.pushRemoteDesign).toHaveBeenCalledTimes(1);
+  expect(accountSaveStatus(true, useLibrarySyncStore.getState())).toEqual({
+    text: "Not saved to account",
+    error: true,
+  });
+  expect(useLibrarySyncStore.getState().message).toContain("too large");
+
+  // An edit is a new design as far as the account is concerned: try again.
+  const edited = "2026-09-11T00:05:00.000Z";
+  storage.records.set(id, { ...record, updatedAt: edited, metaUpdatedAt: edited });
+  api.pushRemoteDesign.mockResolvedValue({
+    design: { ...meta, id, updatedAt: edited, planUpdatedAt: edited },
+    behind: false,
+  });
+  await syncLibraryNow();
+  expect(api.pushRemoteDesign).toHaveBeenCalledTimes(2);
+  expect(useLibrarySyncStore.getState().state).toBe("idle");
+});
+
+it("stamps a push with the later of the plan and metadata times", async () => {
+  // A metadata stamp older than the plan's must not be sent as the change
+  // time, or the design reads as unsaved on every poll and is pushed forever.
+  const id = "meta-behind-plan";
+  const planAt = "2026-09-11T00:10:00.000Z";
+  storage.records.set(id, {
+    id,
+    name: "Edited after a rename",
+    createdAt: stamp,
+    updatedAt: planAt,
+    metaUpdatedAt: stamp,
+    project: createEmptyProject(),
+  });
+  api.fetchRemoteLibrary.mockResolvedValue({ designs: [], folders: [] });
+  api.pushRemoteDesign.mockImplementation(async (_id: string, body: { updatedAt: string }) => ({
+    design: { ...meta, id, updatedAt: body.updatedAt, planUpdatedAt: planAt },
+    behind: false,
+  }));
+  await syncLibraryNow();
+  expect(api.pushRemoteDesign).toHaveBeenCalledWith(
+    id,
+    expect.objectContaining({ updatedAt: planAt, planUpdatedAt: planAt }),
+  );
+  expect(storage.records.get(id)?.remoteUpdatedAt).toBe(planAt);
+});
+
 it("never labels an unconfirmed account save as saved", () => {
   for (const state of ["off", "pending", "syncing", "idle"] as const) {
     expect(accountSaveStatus(true, { state }).text).toBe("Saving to account…");

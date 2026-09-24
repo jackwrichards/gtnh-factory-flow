@@ -20,6 +20,24 @@ export class LibrarySyncUnavailable extends Error {
   }
 }
 
+/**
+ * The account refused the request as sent: too large, not a valid plan, or
+ * the library is full. Sending the same thing again fails the same way, so
+ * the sync engine holds that design back until it changes. Recognised by
+ * `refused`, not by class, so the sync engine's tests can mock this module.
+ */
+export class LibraryRequestRefused extends Error {
+  readonly refused = true;
+
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "LibraryRequestRefused";
+  }
+}
+
 async function parseJsonOrThrow<T>(response: Response): Promise<T> {
   const body = (await response.json().catch(() => undefined)) as
     | (T & { error?: string })
@@ -28,6 +46,9 @@ async function parseJsonOrThrow<T>(response: Response): Promise<T> {
     const message = body?.error ?? `Request failed (${response.status})`;
     if (response.status === 401 || response.status === 503 || /schema\.sql/.test(message)) {
       throw new LibrarySyncUnavailable(message);
+    }
+    if (response.status === 400 || response.status === 409 || response.status === 413) {
+      throw new LibraryRequestRefused(message, response.status);
     }
     throw new Error(message);
   }

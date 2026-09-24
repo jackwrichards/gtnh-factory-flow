@@ -1593,6 +1593,31 @@ Working notes for future agents on GTNH Factory Flow.
 
 ## Performance
 
+- THE SUPABASE INSTANCE IS SMALL, and on 2026-09-24 it stopped answering for
+  hours (Cloudflare 522s; auth and REST hung, only storage answered). Load
+  before it fell: account sync writing ~500 MB/hour of whole plans (a push
+  half a second after EVERY autosave) and re-uploading ~500 MB/hour of plans
+  the server refuses (413 too large, 400 invalid) on every 30 s poll, plus
+  the popularity sweep reading every public plan's jsonb every 30 min. The
+  rules since:
+  - Every Supabase request times out (`fetchWithDbTimeout` in
+    community.ts, 20 s). It must abort with a plain AbortError: postgrest-js
+    retries a GET that fails any other way three more times, so
+    `AbortSignal.timeout` turned 20 s into ~87 s.
+  - No request a page needs to render may AWAIT a community sweep.
+    `getResourcePopularity` answers synchronously with the last good map
+    (sweep every 6 h, failures retry after 30 min; prewarm starts the
+    first). The item list's default sort used to hang ~90 s behind it.
+  - Library sync (`library-sync.ts`): pushes wait for 5 s of quiet (30 s at
+    most during nonstop editing, at once when the tab is hidden), hidden
+    tabs skip the poll, a REFUSED design is not resent until its stamp
+    moves, and a push stamps the LATER of plan/metadata times (the earlier
+    one read as unsaved forever). The design PUT validates before it pays
+    for the rate limit's two queries.
+  - Diagnose from the droplet: `journalctl -u gtnh-flow` (522 pages,
+    "statement timeout") and Caddy's JSON log `/var/lib/caddy/access.log`
+    (jq by path/status/`Cf-Connecting-Ip`). The dashboard (restart, Disk IO
+    and memory reports) needs Jack; there is no management token here.
 - Shared-design autosave (`post-follow.ts`) syncs the plan and metadata,
   NEVER a live-board photograph. The old 30-second preview timer forced
   glance/presentation mode and paused motion during capture, making the
