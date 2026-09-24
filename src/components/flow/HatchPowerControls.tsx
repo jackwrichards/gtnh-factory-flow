@@ -13,7 +13,7 @@ import { useRateDisplayUnits } from "@/store/factory-store";
 import { getNodePowerReport } from "@/lib/solver/power-report";
 import { describePowerWorking } from "@/lib/solver/power-working";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
-import { MAX_HATCH_AMPS, stepWholeAmp, stepPowerOfFourAmps } from "@/lib/solver/hatch-input";
+import { MAX_HATCH_AMPS, ampsForNewTier, stepWholeAmp, stepPowerOfFourAmps } from "@/lib/solver/hatch-input";
 import { fullParallelPowerWin, listPowerWinsCached, powerNodeAtBudget } from "@/lib/solver/power-wins";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { getMachineStructuralParallels } from "@/lib/solver/machine-effects";
@@ -457,12 +457,12 @@ export function HatchPowerControls({
       change(tier, amps, "eut");
       return;
     }
-    change(
-      GT_VOLTAGE_TIERS[Math.max(0, Math.min(GT_VOLTAGE_TIERS.length - 1, index + direction))].tier,
-      amps,
-      "amps",
-    );
+    pickTier(GT_VOLTAGE_TIERS[Math.max(0, Math.min(GT_VOLTAGE_TIERS.length - 1, index + direction))].tier);
   };
+  // Leaving raw EU/t for its own tier keeps the supply exactly; a real tier
+  // change lifts a supply under one amp to one (ampsForNewTier).
+  const pickTier = (nextTier: Tier) =>
+    change(nextTier, nextTier === tier ? amps : ampsForNewTier(amps), "amps");
   const amount = raw ? poolEuT : amps;
   const label = raw ? "Supply EU/t" : "Hatch amps";
   const commit = () => {
@@ -499,7 +499,7 @@ export function HatchPowerControls({
           <select aria-label="Power input unit" className="min-h-11 w-full border border-line bg-surface px-3 text-base"
             value={raw ? "eut" : tier} onChange={(event) => {
               if (event.target.value === "eut") change(tier, amps, "eut");
-              else change(event.target.value as Tier, amps, "amps");
+              else pickTier(event.target.value as Tier);
             }}>
             <option value="eut">EU/t</option>
             {GT_VOLTAGE_TIERS.map(value => <option key={value.tier} value={value.tier}>{value.tier}</option>)}

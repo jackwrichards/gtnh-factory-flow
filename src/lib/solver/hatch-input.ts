@@ -1,8 +1,11 @@
 import { getMachineBehaviour } from "@/lib/machines/machine-table";
 import { applyMachineHandlerToRecipe } from "@/lib/model/recipe-rules";
+import { getFusionMachine } from "@/lib/machines/fusion";
 import {
   GT_VOLTAGE_TIERS,
   getRecipeMinimumVoltageTier,
+  getRecipePowerTier,
+  getVoltageTierIndex,
   getVoltageTierMaxEuT,
 } from "@/lib/model/tiers";
 import type { FactoryNode, FactoryProject, Recipe } from "@/lib/model/types";
@@ -66,9 +69,11 @@ export function normalizeHatchInput(
         const required = Math.ceil(
           getMachineStructuralParallels(effective, candidate) * perParallel,
         );
-        const supply = Math.max(lower, required);
-        if (supply <= upper || maxEuT === GT_VOLTAGE_TIERS.at(-1)!.maxEuT) {
-          amps = supply / voltage;
+        // Whole amps: nobody builds 0.94A, and a fraction carried onto a
+        // higher tier leaves the card short of that tier's own voltage.
+        const whole = Math.max(1, Math.ceil(Math.max(lower, required) / voltage));
+        if (whole * voltage <= upper || maxEuT === GT_VOLTAGE_TIERS.at(-1)!.maxEuT) {
+          amps = whole;
           break;
         }
         lower = upper + 1;
@@ -83,6 +88,54 @@ export function normalizeHatchInput(
   )
     return node;
   return { ...node, hatchVoltageTier, hatchAmps: amps, powerEuT };
+}
+
+/**
+ * Switching a card to another machine keeps the voltage it ran at
+ * (community report, 2026-09-23: an EV Forge Hammer switched to the
+ * Industrial Sledgehammer came up 63A EV, the full-parallel seed chasing
+ * parallels that grow with voltage). A singleblock becoming a multiblock
+ * gets ONE hatch of its own tier - 1A, what the singleblock ran on - and a
+ * multiblock becoming a singleblock takes its hatch tier. Multiblock to
+ * multiblock keeps its hatches through the edit funnel, and singleblock to
+ * singleblock keeps the caller's reset, so both answer with nothing.
+ */
+export function carryMachineVoltage(
+  from: { recipe: Recipe; node: FactoryNode },
+  to: { recipe: Recipe; machineHandlerId: string | undefined },
+): Partial<FactoryNode> {
+  if (from.recipe.power || to.recipe.power) return {};
+  const before = applyMachineHandlerToRecipe(from.recipe, from.node);
+  const after = applyMachineHandlerToRecipe(to.recipe, { machineHandlerId: to.machineHandlerId });
+  if (getFusionMachine(before.machineType) || getFusionMachine(after.machineType)) return {};
+  const wasMultiblock = isMultiblockRecipe(before);
+  const isMultiblock = isMultiblockRecipe(after);
+  if (wasMultiblock === isMultiblock) return {};
+  const tier = getNodeRunTier(before, from.node);
+  if (wasMultiblock) return { overclockTier: tier };
+  if (after.eut <= 0) return {};
+  // Floored at what the recipe draws, never at the handler's declared
+  // minimum: a multiblock's controller unlock is not a hatch voltage.
+  const powerTier = getRecipePowerTier(after);
+  const hatchVoltageTier =
+    getVoltageTierIndex(powerTier) > getVoltageTierIndex(tier) ? powerTier : tier;
+  return {
+    hatchVoltageTier,
+    hatchAmps: 1,
+    powerInputMode: "amps",
+    powerEuT: getVoltageTierMaxEuT(hatchVoltageTier),
+  };
+}
+
+/**
+ * A new tier keeps the amps, except that anything under one amp becomes one:
+ * a card seeded at 0.94A LV and moved to HV read 0.94A HV, just under the
+ * tier's own voltage, and ran like an MV machine. A lone hatch is 1A. Zero
+ * stays zero, and typed decimals of one amp or more (a mixed build written
+ * in one tier's terms) stay as typed.
+ */
+export function ampsForNewTier(amps: number): number {
+  return amps > 0 && amps < 1 ? 1 : amps;
 }
 
 export function normalizeProjectHatchInputs(

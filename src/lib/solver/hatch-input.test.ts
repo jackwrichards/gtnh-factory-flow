@@ -9,6 +9,8 @@ import { getNodePowerReport } from "./power-report";
 import { getOverclockedRecipeStats } from "./overclock";
 import { getMachineStructuralParallels } from "./machine-effects";
 import {
+  ampsForNewTier,
+  carryMachineVoltage,
   normalizeHatchInput,
   hatchEquivalent,
   roundHatchBudget,
@@ -144,6 +146,108 @@ describe("per-card hatch input", () => {
       expect(report.overclockSteps).toBe(0);
       expect(normalizeHatchInput(r, n)).toBe(n);
     }
+  });
+  it("seeds whole amps, so a cheap recipe starts on one hatch rather than 0.94A", () => {
+    const r = recipe("Large Chemical Reactor", 30);
+    r.minimumTier = "LV";
+    const n = normalizeHatchInput(r, node({ recipeId: r.id, overclockTier: "LV" }));
+    expect(n).toMatchObject({ hatchVoltageTier: "LV", hatchAmps: 1, powerEuT: 32 });
+    // The community report: 0.94A carried to HV ran like an MV reactor.
+    const short = getNodePowerReport(r, { ...n, hatchVoltageTier: "HV", hatchAmps: 0.9375 });
+    const lifted = getNodePowerReport(r, {
+      ...n,
+      hatchVoltageTier: "HV",
+      hatchAmps: ampsForNewTier(0.9375),
+    });
+    expect(short.overclockSteps).toBe(1);
+    expect(lifted.overclockSteps).toBe(2);
+    expect([0, 0.2, 1, 2.5, 12].map(ampsForNewTier)).toEqual([0, 1, 1, 2.5, 12]);
+  });
+  it("keeps the voltage when a card switches between a singleblock and a multiblock", () => {
+    const hammer = (eut: number): Recipe => ({
+      id: "hammer",
+      name: "hammer",
+      machineType: "Forge Hammer",
+      minimumTier: "LV",
+      durationTicks: 100,
+      eut,
+      inputs: [],
+      outputs: [],
+      machineHandlers: [
+        { id: "single", label: "Forge Hammer", machineType: "Forge Hammer", minimumTier: "LV", kind: "single" },
+        {
+          id: "multi",
+          label: "Industrial Sledgehammer",
+          machineType: "Industrial Sledgehammer",
+          minimumTier: "LV",
+          kind: "multiblock",
+        },
+      ],
+    });
+    // The report: an EV Forge Hammer switched over came up 63A EV.
+    const r = hammer(1536);
+    const single = node({ recipeId: r.id, machineHandlerId: "single", overclockTier: "EV" });
+    expect(
+      normalizeHatchInput(r, { ...single, machineHandlerId: "multi", overclockTier: "LV" }),
+    ).toMatchObject({ hatchVoltageTier: "EV", hatchAmps: 63 });
+    const patch = carryMachineVoltage(
+      { recipe: r, node: single },
+      { recipe: r, machineHandlerId: "multi" },
+    );
+    expect(patch).toEqual({
+      hatchVoltageTier: "EV",
+      hatchAmps: 1,
+      powerInputMode: "amps",
+      powerEuT: 2048,
+    });
+    const multi = normalizeHatchInput(r, {
+      ...single,
+      machineHandlerId: "multi",
+      overclockTier: "LV",
+      ...patch,
+    });
+    expect(multi).toMatchObject({ hatchVoltageTier: "EV", hatchAmps: 1 });
+    expect(getNodePowerReport(r, multi).state).toBe("ok");
+    // A cheap recipe on an HV hammer: 1A HV, not 16.875A LV.
+    const cheap = hammer(15);
+    expect(
+      carryMachineVoltage(
+        { recipe: cheap, node: { ...single, overclockTier: "HV" } },
+        { recipe: cheap, machineHandlerId: "multi" },
+      ),
+    ).toMatchObject({ hatchVoltageTier: "HV", hatchAmps: 1 });
+    // Back to the singleblock: it takes the hatch tier.
+    const hatched = { ...multi, hatchVoltageTier: "IV" as const, hatchAmps: 4 };
+    expect(
+      carryMachineVoltage({ recipe: r, node: hatched }, { recipe: r, machineHandlerId: "single" }),
+    ).toEqual({ overclockTier: "IV" });
+    // Multiblock to multiblock and singleblock to singleblock carry nothing.
+    expect(
+      carryMachineVoltage({ recipe: r, node: hatched }, { recipe: r, machineHandlerId: "multi" }),
+    ).toEqual({});
+    expect(
+      carryMachineVoltage({ recipe: r, node: single }, { recipe: r, machineHandlerId: "single" }),
+    ).toEqual({});
+    // A singleblock below the recipe's draw is floored at it.
+    expect(
+      carryMachineVoltage(
+        { recipe: r, node: { ...single, overclockTier: "LV" } },
+        { recipe: hammer(8000), machineHandlerId: "multi" },
+      ),
+    ).toMatchObject({ hatchVoltageTier: "IV", hatchAmps: 1 });
+    // A refactor onto a multiblock twin carries the voltage the same way.
+    const twin = { ...hammer(1536), id: "twin" };
+    useFactoryStore.getState().setProject({
+      ...createEmptyProject(),
+      recipes: [r],
+      nodes: [{ ...single, id: "card" }],
+    });
+    useFactoryStore.getState().refactorNodeWithRecipe("card", twin, { machineHandlerId: "multi" });
+    expect(useFactoryStore.getState().project.nodes[0]).toMatchObject({
+      recipeId: "twin",
+      hatchVoltageTier: "EV",
+      hatchAmps: 1,
+    });
   });
   it("preserves legacy total exactly, serializes the pair, and is idempotent", () => {
     const r = recipe();

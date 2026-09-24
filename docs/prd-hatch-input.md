@@ -367,3 +367,21 @@ Nothing is open.
   are not newly transcribed coefficients.
 - Verification: model/store regression tests plus desktop and phone browser
   checks of stepping, EU/t entry, Escape, hatch selection, and reload.
+
+## Revision (2026-09-23): whole amps and switches keep the voltage
+
+Community reports: an LCR seeded at 0.94A LV and moved to HV sat at 0.94A
+HV, short of HV's own voltage, and ran like an MV reactor; an EV Forge
+Hammer switched to the Industrial Sledgehammer came up 63A EV, because its
+parallels grow with voltage and the full-parallel seed chased them to a ZPM
+summed voltage.
+
+- The full-parallel seed now lands on whole amps (at least 1A).
+- A tier change lifts a supply under 1A to 1A; typed decimals of 1A or more
+  are kept.
+- Switching singleblock to multiblock (machine menu, refactor, twin swap)
+  seeds one hatch, 1A, at the singleblock's run tier, floored at the
+  recipe's draw tier. Multiblock to singleblock takes the hatch tier.
+  Multiblock to multiblock keeps its hatches, as before.
+- Fresh multiblock placement keeps the section 6 full-parallel default, so a
+  voltage-scaled machine placed straight from search can still seed high.

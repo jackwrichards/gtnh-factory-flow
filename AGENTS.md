@@ -380,6 +380,18 @@ Working notes for future agents on GTNH Factory Flow.
   ordinal assuming the maximum 12-layer height. Ordinary hatches may stack;
   multi-amp/laser hatches are unsupported. Old baked handler stats and fixed
   parallel controls must not override this, nor may runtime ladders hide amps.
+- HOW A MULTIBLOCK'S HATCH POWER IS PICKED (community report, 2026-09-23;
+  `hatch-input.ts`). A fresh card seeds the recipe's minimum tier and the
+  full-parallel supply in WHOLE amps (1A, never 0.94A). A tier change lifts
+  a supply under 1A to 1A (`ampsForNewTier`); typed decimals of 1A or more
+  stay. Switching between a singleblock and a multiblock, by the machine
+  menu or a refactor/twin swap, KEEPS THE VOLTAGE (`carryMachineVoltage`):
+  singleblock to multiblock is ONE hatch (1A) of the singleblock's run
+  tier, floored at the recipe's draw tier and never at the handler's
+  declared minimum; multiblock to singleblock takes the hatch tier. Do not
+  run the full-parallel seed on a switch: voltage-scaled parallels chase
+  it up the tiers (an EV Forge Hammer became a 63A EV Industrial
+  Sledgehammer).
 - Parallels are paid for with power BEFORE overclocks, and only the leftover
   voltage buys overclock steps. See `src/lib/solver/overclock.ts`. Heat
   overclocks belong to the Electric Blast Furnace, Volcanus, the Exothermic

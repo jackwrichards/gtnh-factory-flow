@@ -47,6 +47,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.5.1",
+    date: "2026-09-23",
+    headline: "Machine power starts where you expect",
+    notes: [
+      "New multiblocks start on whole amps: 1A LV, not 0.94A LV.",
+      "Raising the tier of a machine set below 1A now gives it 1A of the new tier, so an LCR moved to HV runs like an HV one.",
+      "Switching a singleblock to its multiblock keeps its voltage on one hatch: an EV Forge Hammer becomes a 1A EV Industrial Sledgehammer, not 63A.",
+      "Switching a multiblock back to a singleblock keeps the hatch tier.",
+    ],
+  },
+  {
     version: "3.5.0",
     date: "2026-09-23",
     headline: "Drawers you can read and set",

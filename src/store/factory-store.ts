@@ -7,7 +7,7 @@ import type { ProductionGroup, PoolResourceRule } from "@/lib/model/types";
 
 import { normalizeFullFarms } from "@/lib/model/full-farms";
 
-import { normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
+import { carryMachineVoltage, normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
 
 import { create, type StateCreator, type StoreApi } from "zustand";
 import { createEmptyProject } from "@/examples";
@@ -5141,6 +5141,7 @@ function refactorNodeToState(
     return addConnectedRecipeNodeToState(state, recipe, nodeId, context, options);
   }
 
+  const oldRecipe = state.project.recipes.find((entry) => entry.id === node.recipeId);
   const recipeAlreadyInProject = state.project.recipes.some((entry) => entry.id === recipe.id);
   const projectBase: FactoryProject = {
     ...state.project,
@@ -5156,6 +5157,12 @@ function refactorNodeToState(
             recipeId: recipe.id,
             machineHandlerId: spawnHandler?.id,
             overclockTier: spawnHandler?.minimumTier ?? recipe.minimumTier,
+            ...(oldRecipe
+              ? carryMachineVoltage(
+                  { recipe: oldRecipe, node: entry },
+                  { recipe, machineHandlerId: spawnHandler?.id },
+                )
+              : undefined),
             // A power pick carries its dialed settings into the swap; every
             // other refactor resets the knobs as before.
             machineConfigTiers: options?.machineConfigTiers,
@@ -5170,7 +5177,6 @@ function refactorNodeToState(
     ],
   };
   // A power card OWNS its recipe; swapping away from one would strand it.
-  const oldRecipe = state.project.recipes.find((entry) => entry.id === node.recipeId);
   if (
     oldRecipe &&
     isPowerRecipe(oldRecipe) &&

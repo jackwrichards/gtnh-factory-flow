@@ -55,6 +55,7 @@ import {
 
 } from "@/lib/machines/energy-hatches";
 import { HatchPowerControls, PowerReadout, PowerControlsGuide } from "./HatchPowerControls";
+import { carryMachineVoltage } from "@/lib/solver/hatch-input";
 import { CardActionsMenu } from "./CardActionsMenu";
 import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
 import { describePowerWorking } from "@/lib/solver/power-working";
@@ -1029,6 +1030,10 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
       ...(energyHatchTypeExistsAtTier(projectNode.energyHatchType, nextHandler.minimumTier)
         ? undefined
         : { energyHatchType: undefined }),
+      ...carryMachineVoltage(
+        { recipe: nodeRecipe, node: projectNode },
+        { recipe: nodeRecipe, machineHandlerId: nextHandler.id },
+      ),
     });
     // Silent: the switch itself sounds (the board's adjust tap), and a
     // close sound on top of it read as a double.

@@ -42,6 +42,16 @@ it("opens without changing power and supports repeated steps, typing, lower tier
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
+it("lifts a supply under one amp to 1A when the tier changes", () => {
+  const changed = vi.fn();
+  const cheap = { ...recipe, minimumTier: "LV" as const, eut: 30 };
+  render(<HatchPowerControls recipe={cheap} node={{ ...initial, hatchVoltageTier: "LV", hatchAmps: 0.9375 }}
+    mode="build" locked={() => false} onChange={changed} />);
+  fireEvent.click(screen.getByRole("button", { name: "Power input unit" }));
+  fireEvent.change(within(screen.getByRole("dialog")).getByRole("combobox"), { target: { value: "HV" } });
+  expect(changed).toHaveBeenLastCalledWith("HV", 1, "amps");
+});
+
 it("does not open or edit a locked machine", () => {
   const changed = vi.fn();
   render(<HatchPowerControls recipe={recipe} node={initial} mode="build" locked={() => true} onChange={changed} />);
