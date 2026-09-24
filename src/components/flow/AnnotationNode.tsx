@@ -2,7 +2,6 @@
 
 import {
   NodeResizer,
-  NodeToolbar,
   Position,
   useReactFlow,
   type Node,
@@ -18,6 +17,7 @@ import type {
 } from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
 import { GT_NODE_COLORS, GT_NODE_COLOR_PALETTE, inkFor } from "./node-colors";
+import { CameraNodeToolbar } from "./scroll-camera";
 import {
   CANVAS_THEMES,
   getCanvasTheme,
@@ -456,7 +456,7 @@ function AnnotationStylePanel({
   const stop = (event: React.SyntheticEvent) => event.stopPropagation();
 
   return (
-    <NodeToolbar
+    <CameraNodeToolbar
       isVisible={selected}
       position={Position.Top}
       align="start"
@@ -475,7 +475,7 @@ function AnnotationStylePanel({
     >
       <div
         // ui-zoom: the toolbar portal lives inside .react-flow, which is unzoomed.
-        className="ui-zoom nodrag relative ml-2 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]"
+        className="ui-zoom nodrag nopan nowheel relative ml-2 border-2 border-[var(--mc-15)] bg-[var(--mc-78)] p-1 shadow-[inset_2px_2px_0_var(--mc-100),inset_-2px_-2px_0_var(--mc-33)]"
         onPointerDown={stop}
         onDoubleClick={stop}
       >
@@ -747,7 +747,7 @@ function AnnotationStylePanel({
           </div>
         ) : null}
       </div>
-    </NodeToolbar>
+    </CameraNodeToolbar>
   );
 }
 

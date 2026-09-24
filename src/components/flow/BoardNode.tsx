@@ -2,9 +2,9 @@
 
 import { useDropdownDismiss } from "@/lib/hooks/use-dropdown-dismiss";
 
-import { NodeToolbar, Position, type Node, type NodeProps, useReactFlow } from "@xyflow/react";
+import { Position, type Node, type NodeProps, useReactFlow } from "@xyflow/react";
 import { memo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Copy, Minimize2, PackageOpen, Save, X } from "lucide-react";
+import { Copy, Minimize2, PackageOpen, X } from "lucide-react";
 import type { FactoryNodeColorTag, FactoryPocket } from "@/lib/model/types";
 import { boardWindowSize } from "@/lib/model/board-windows";
 import {
@@ -15,8 +15,8 @@ import {
   BOARD_WINDOW_TITLE_HEIGHT,
 } from "@/lib/board-grid";
 import { captureBoardSelection, useFactoryStore } from "@/store/factory-store";
-import { useBlueprintStore } from "@/store/blueprint-store";
 import { useBoardView } from "./board-view";
+import { CameraNodeToolbar } from "./scroll-camera";
 import { publishBoardResizeDraft } from "./board-resize";
 import { rectsOverlap, type PlacementRect } from "./board-placement";
 import { CANVAS_THEMES, getCanvasTheme } from "./canvas-themes";
@@ -280,14 +280,6 @@ function BoardNodeComponent({
     }
   };
 
-  // Shelve the whole board: the save dialog opens prefilled with its name.
-  const saveAsBlueprint = () => {
-    const payload = captureBoardSelection(useFactoryStore.getState().project, [pocket.id]);
-    if (payload) {
-      useBlueprintStore.getState().setSaveRequest({ payload, name: pocket.name });
-    }
-  };
-
   const beginResize = (side: ResizeSide, event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) {
       return;
@@ -459,8 +451,9 @@ function BoardNodeComponent({
     >
       {/* The background palette, in a React Flow toolbar PORTAL: the frame
           itself sits under every card, and a popover drawn in the node's own
-          layer would be buried by the very members it floats over. */}
-<NodeToolbar
+          layer would be buried by the very members it floats over. The
+          camera-aware one: the library's own stood off screen. */}
+      <CameraNodeToolbar
         isVisible={isPaletteOpen}
         position={Position.Top}
         // The button sits at the right end of the bar, so the sheet opens
@@ -470,7 +463,7 @@ function BoardNodeComponent({
         style={{ zIndex: 30 }}
       >
         {/* ui-zoom: the toolbar portal lives inside .react-flow, which is unzoomed. */}
-        <div ref={paletteRef} className="ui-zoom nodrag flex w-[340px] flex-col gap-1 border-2 border-[#8d6fd1] bg-[#241b33] p-1 shadow-[4px_4px_0_rgba(0,0,0,0.45)]">
+        <div ref={paletteRef} className="ui-zoom nodrag nopan nowheel flex w-[340px] flex-col gap-1 border-2 border-[var(--mc-15)] bg-[var(--mc-47)] p-1 shadow-[6px_6px_0_rgba(0,0,0,0.45)]">
         <div className="flex flex-wrap gap-1">
           <button
             type="button"
@@ -482,7 +475,7 @@ function BoardNodeComponent({
               "flex h-7 w-9 items-center justify-center border-2 text-white",
               pocket.theme === undefined
                 ? "border-white ring-2 ring-cyan-300"
-                : "border-[#241b33]",
+                : "border-[var(--mc-47)]",
             ].join(" ")}
             style={{ backgroundColor: ownPaper.base, backgroundImage: ownPaper.texture }}
             title="Its own colour"
@@ -502,7 +495,7 @@ function BoardNodeComponent({
                 "flex h-7 w-9 shrink-0 items-center justify-center gap-1 border-2",
                 pocket.theme === theme.id
                   ? "border-white ring-2 ring-cyan-300"
-                  : "border-[#241b33]",
+                  : "border-[var(--mc-47)]",
               ].join(" ")}
               style={{ backgroundColor: theme.base, backgroundImage: theme.texture }}
               title={theme.name}
@@ -520,7 +513,7 @@ function BoardNodeComponent({
           ))}
         </div>
         {/* The ruling on the paper, the same six the canvas itself offers. */}
-        <div className="flex flex-wrap gap-1 border-t border-[#3b2d52] pt-1">
+        <div className="flex flex-wrap gap-1 border-t border-[var(--mc-33)] pt-1">
           {CANVAS_PATTERNS.map((pattern) => (
             <button
               key={pattern}
@@ -533,7 +526,7 @@ function BoardNodeComponent({
                 "relative flex h-7 w-9 shrink-0 items-center justify-center overflow-hidden border-2",
                 (pocket.pattern ?? "dots") === pattern
                   ? "border-white ring-2 ring-cyan-300"
-                  : "border-[#241b33]",
+                  : "border-[var(--mc-47)]",
               ].join(" ")}
               style={{
                 backgroundColor: chrome.floorColor,
@@ -553,7 +546,7 @@ function BoardNodeComponent({
           ))}
         </div>
         </div>
-      </NodeToolbar>
+      </CameraNodeToolbar>
       {/* The frame line only. The PAPER is a separate node underneath the
           wire layer (BoardFloorNode) so a board's own members keep their
           wiring in plain sight while foreign wires pass beneath the board. */}
@@ -662,7 +655,13 @@ function BoardNodeComponent({
               }
               event.stopPropagation();
             }}
-            className="nodrag h-6 min-w-0 flex-1 border-2 border-[#8d6fd1] bg-[#241b33] px-1 text-[13px] leading-none text-white outline-none"
+            className="nodrag h-6 min-w-0 flex-1 border-2 px-1 text-[13px] leading-none outline-none"
+            // The board's own clothes, as the folded card's rename field wears.
+            style={{
+              borderColor: chrome.grip,
+              backgroundColor: chrome.barBevelLo,
+              color: chrome.ink,
+            }}
           />
         )}
         {!calmMode && !isRenaming ? (
@@ -693,25 +692,12 @@ function BoardNodeComponent({
               type="button"
               onClick={(event) => {
                 event.stopPropagation();
-                saveAsBlueprint();
-              }}
-              className="nodrag flex h-6 w-6 shrink-0 items-center justify-center border-2 hover:brightness-125"
-              style={buttonStyle}
-              title={`Save "${pocket.name}" to my shelf (sign in required)`}
-              aria-label={`Save board ${pocket.name} to my shelf`}
-            >
-              <Save aria-hidden className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
                 dissolvePocket(pocket.id);
               }}
               className="nodrag flex h-6 w-6 shrink-0 items-center justify-center border-2 hover:brightness-125"
               style={buttonStyle}
-              title="Dump board"
-              aria-label={`Dump board ${pocket.name}`}
+              title="Remove board, keep its cards"
+              aria-label={`Remove board ${pocket.name}, keep its cards`}
             >
               <PackageOpen aria-hidden className="h-3.5 w-3.5" />
             </button>

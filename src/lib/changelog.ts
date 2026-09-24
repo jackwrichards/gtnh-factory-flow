@@ -54,7 +54,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "In Solve, each source and product drawer sits under its resource in the resources panel, with its own rule and rate box.",
       "Wires hop cleanly over crossings at a bend and over two close wires at once, and arrows keep clear of hops.",
       "Non-strict drawers say (surplus) under their rate, since that is what they bank.",
-      "The drawer split editor no longer closes as soon as the mouse leaves its pencil.",
+      "The drawer split editor, a board's paper picker and a note's style panel all open and work again.",
     ],
   },
   {

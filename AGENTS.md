@@ -887,6 +887,16 @@ Working notes for future agents on GTNH Factory Flow.
 - The board title bar has a paint button (palette in a NodeToolbar portal,
   because the frame's own layer sits under the cards); the paint TOOL works
   on boards too. Both go through `paintPocket`.
+- EVERY NodeToolbar goes through `CameraNodeToolbar` (scroll-camera.tsx)
+  and its panel wears `nopan` (Jack, 2026-09-23: "the paper button doesn't
+  work at all"). The library portals toolbars into the renderer, which the
+  scroll camera scrolls, so the pan was applied twice and the board palette
+  and the annotation style panel stood ~500,000px off screen; and a press
+  inside a toolbar reaches React Flow's pan handler (a React
+  stopPropagation is too late), starting a pan that closed the palette
+  before the click landed. `board-bar-probe.local.mjs` drives both.
+- The board bar is: delete, clone | name | paper, remove, fold (open) or
+  restore (folded). Save-to-shelf is gone from boards (Jack, 2026-09-23).
 - A board is drawn on PAPER: `pocket.theme` is a canvas theme id, and it
   gives the floor its base colour, its grain and its own grid dots on the
   20px pitch (`chromeFor` in BoardNode.tsx cuts the title bar from the same
@@ -950,7 +960,9 @@ Working notes for future agents on GTNH Factory Flow.
 - `dissolvePocket` is the DUMP: the frame goes and its cards stay exactly
   where they were (frame-relative positions get the frame's corner added
   back when the board carries a `size`). Its button lives on both the open
-  title bar and the minimized card.
+  title bar and the minimized card, labelled "Remove board, keep its
+  cards" (Jack found "Dump" unclear; "Delete board" is the other button,
+  which takes the cards too).
 - NOTHING SOLID OVERLAPS. `board-placement.ts` is the magnet, and it runs
   LIVE: `handleNodesChange` rewrites each drag frame's position to the
   nearest free grid spot, so a card is never allowed onto an occupied spot

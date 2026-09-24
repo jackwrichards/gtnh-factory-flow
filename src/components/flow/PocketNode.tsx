@@ -2,7 +2,7 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { memo, useState, type CSSProperties } from "react";
-import { Copy, Maximize2, PackageOpen, Save } from "lucide-react";
+import { Copy, Maximize2, PackageOpen } from "lucide-react";
 import type { FactoryPocket } from "@/lib/model/types";
 import { RECIPE_NODE_WIDTH } from "@/lib/board-grid";
 import { fluidArtPixels, isSwatchFluid, ResourceIcon } from "@/components/nei/ResourceIcon";
@@ -11,7 +11,6 @@ import {
   useFactoryStore,
   useRateDisplayUnits,
 } from "@/store/factory-store";
-import { useBlueprintStore } from "@/store/blueprint-store";
 
 import { formatSlotRateOrNull } from "./flow-explainers";
 import { isWiringConnection, wasRecentWireDrop } from "./connection-drag";
@@ -142,15 +141,6 @@ function PocketNodeComponent({ data, selected }: NodeProps<PocketFlowNode>) {
     }
   };
 
-  // Shelve the whole board: the save dialog opens
-  // prefilled with the board's name and stat card, plus an icon to pick.
-  const saveAsBlueprint = () => {
-    const payload = captureBoardSelection(useFactoryStore.getState().project, [pocket.id]);
-    if (payload) {
-      useBlueprintStore.getState().setSaveRequest({ payload, name: pocket.name });
-    }
-  };
-
   return (
     <div
       className={[
@@ -233,15 +223,15 @@ function PocketNodeComponent({ data, selected }: NodeProps<PocketFlowNode>) {
           }}
         >
           {/* Delete/clone on the left like every card's edit chrome, the
-              name in the middle, shelve, dump and restore on the right —
+              name in the middle, remove and restore on the right —
               restore rightmost, where a window keeps it. Calm mode drops all
-              five and gives the whole row to the name. */}
+              four and gives the whole row to the name. */}
           <div
             className={[
               "grid h-[40px] min-w-0 items-center gap-1",
               calmMode
                 ? "grid-cols-[minmax(0,1fr)]"
-                : "grid-cols-[24px_24px_minmax(0,1fr)_24px_24px_24px]",
+                : "grid-cols-[24px_24px_minmax(0,1fr)_24px_24px]",
             ].join(" ")}
           >
             {!calmMode ? (
@@ -327,25 +317,12 @@ function PocketNodeComponent({ data, selected }: NodeProps<PocketFlowNode>) {
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation();
-                    saveAsBlueprint();
-                  }}
-                  className="nodrag flex h-6 w-6 items-center justify-center border-2 hover:brightness-125"
-                  style={buttonStyle(chrome)}
-                  title={`Save "${pocket.name}" to my shelf (sign in required)`}
-                  aria-label={`Save board ${pocket.name} to my shelf`}
-                >
-                  <Save aria-hidden className="h-3.5 w-3.5" />
-                </button>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
                     dissolvePocket(pocket.id);
                   }}
                   className="nodrag flex h-6 w-6 items-center justify-center border-2 hover:brightness-125"
                   style={buttonStyle(chrome)}
-                  title="Dump board"
-                  aria-label={`Dump board ${pocket.name}`}
+                  title="Remove board, keep its cards"
+                  aria-label={`Remove board ${pocket.name}, keep its cards`}
                 >
                   <PackageOpen aria-hidden className="h-3.5 w-3.5" />
                 </button>

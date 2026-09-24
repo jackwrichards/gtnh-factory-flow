@@ -1,6 +1,6 @@
 "use client";
 
-import { useStoreApi } from "@xyflow/react";
+import { NodeToolbar, useStore, useStoreApi, type NodeToolbarProps } from "@xyflow/react";
 import { useEffect, type RefObject } from "react";
 
 /**
@@ -36,7 +36,8 @@ import { useEffect, type RefObject } from "react";
  *
  * Two things read the viewport's DOM transform and are corrected for the
  * scroll: `getViewportTransform` in FactoryFlow.tsx and the PerfHud's centre
- * line. Image export is unaffected: html-to-image clones the viewport and is
+ * line. React Flow's NodeToolbar is a third: use CameraNodeToolbar below.
+ * Image export is unaffected: html-to-image clones the viewport and is
  * handed its own transform. The board patterns (board-pattern.tsx) live in
  * flow space inside the viewport, so they ride the scroll for free.
  */
@@ -54,6 +55,9 @@ export const SCROLL_CAMERA_OFFSET = 500_000;
 export const SCROLL_CAMERA_ATTRIBUTE = "data-scroll-camera";
 
 export const CAMERA_ZOOM_VAR = "--camera-zoom";
+
+/** Whether a scroll camera is running (the board mounts one, always). */
+let scrollCameraActive = false;
 
 export function ScrollCamera({ boardRef }: { boardRef: RefObject<HTMLElement | null> }) {
   const store = useStoreApi();
@@ -154,6 +158,7 @@ export function ScrollCamera({ boardRef }: { boardRef: RefObject<HTMLElement | n
     });
 
     board.setAttribute(SCROLL_CAMERA_ATTRIBUTE, "");
+    scrollCameraActive = true;
     apply(store.getState().transform);
     const unsubscribe = store.subscribe((state, previous) => {
       if (state.transform !== previous.transform) {
@@ -173,6 +178,7 @@ export function ScrollCamera({ boardRef }: { boardRef: RefObject<HTMLElement | n
         delete (wrapper as { scrollTo?: unknown }).scrollTo;
       }
       board.removeAttribute(SCROLL_CAMERA_ATTRIBUTE);
+      scrollCameraActive = false;
       viewport.style.removeProperty(CAMERA_ZOOM_VAR);
       wrapper.scrollLeft = 0;
       wrapper.scrollTop = 0;
@@ -180,4 +186,35 @@ export function ScrollCamera({ boardRef }: { boardRef: RefObject<HTMLElement | n
   }, [boardRef, store]);
 
   return null;
+}
+
+/**
+ * React Flow's NodeToolbar, put back where it belongs under the scroll camera.
+ *
+ * The library portals a toolbar into the RENDERER and places it at the
+ * node's screen position from the store's pan. The renderer sits inside the
+ * scrolled wrapper, so the scroll moved it by the pan a second time: every
+ * toolbar stood about 500,000px off screen, and a board's paper button and
+ * an annotation's style panel opened nothing you could see (Jack,
+ * 2026-09-23: "the paper button doesn't work at all"). Shifted back by the
+ * scroll offset, the correction the marquee gets; `translate` composes with
+ * the transform the library writes, so its own placement stands.
+ *
+ * Mounted only while visible, so a hidden toolbar costs nothing per camera
+ * frame.
+ */
+export function CameraNodeToolbar({
+  isVisible,
+  ...props
+}: NodeToolbarProps & { isVisible: boolean }) {
+  return isVisible ? <ShiftedNodeToolbar {...props} /> : null;
+}
+
+function ShiftedNodeToolbar({ style, ...props }: NodeToolbarProps) {
+  const x = useStore((state) => state.transform[0]);
+  const y = useStore((state) => state.transform[1]);
+  const translate = scrollCameraActive
+    ? `${SCROLL_CAMERA_OFFSET - x}px ${SCROLL_CAMERA_OFFSET - y}px`
+    : undefined;
+  return <NodeToolbar {...props} isVisible style={{ ...style, translate }} />;
 }
