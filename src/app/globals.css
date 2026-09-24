@@ -1886,7 +1886,11 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   display: flex;
   flex: none;
   flex-direction: column;
+  justify-content: center;
   gap: 2px;
+  /* Always the height it has with its bar, so choosing Any or a rule never
+     moves anything; with no bar the rate sits in the middle of it. */
+  min-height: 25px;
   padding: 2px 4px 3px;
   border: 1px solid rgba(0,0,0,0.26);
   background: rgba(0,0,0,0.12);
@@ -1932,8 +1936,32 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   z-index: 40;
 }
 
+/* The number in one steady size, the unit beside it small and quiet. One
+   line height per size, so the reading never changes height with the font. */
 .storage-chip-rate {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5px;
   pointer-events: none;
+}
+
+.storage-chip-rate--small {
+  height: 13px;
+  line-height: 13px;
+}
+
+.storage-chip-rate--large {
+  height: 15px;
+  line-height: 15px;
+}
+
+.storage-chip-rate-number {
+  font-weight: 800;
+}
+
+.storage-chip-rate-unit {
+  font-weight: 700;
+  opacity: 0.72;
 }
 
 /* Solve's rule row: a rule BUTTON with a ▾, and your rate in a sunken BOX. */
@@ -2010,13 +2038,19 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   outline-offset: 1px;
 }
 
+/* The number comes first: when it and the unit do not both fit, the unit
+   wraps to a second line the box hides, instead of the number being cut
+   (Jack, 2026-09-23: "5.4k" lost its k). The rate under it keeps the unit. */
 .storage-rate-field {
   display: flex;
   flex: 1;
+  flex-wrap: wrap;
+  align-content: flex-start;
   align-items: center;
-  gap: 1px;
+  gap: 0 1px;
   min-width: 0;
-  padding: 0 3px;
+  overflow: hidden;
+  padding: 0 2px 0 3px;
   border: 1px solid #5a5e68;
   background: #0f1114;
   box-shadow: inset 1px 1px 0 rgba(0,0,0,0.7);
@@ -2035,6 +2069,8 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 
 .storage-rate-field-number {
   min-width: 0;
+  height: 12px;
+  line-height: 12px;
   /* Room for an italic's overhang, so "rate?" keeps its question mark. */
   padding-right: 1px;
   overflow: hidden;
@@ -2043,8 +2079,10 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
 
 .storage-rate-field-unit {
   flex: none;
+  height: 12px;
+  line-height: 12px;
   margin-left: auto;
-  padding-left: 2px;
+  padding-left: 1px;
   color: #8a8e97;
   font-size: 8px;
   font-weight: 600;
@@ -2206,8 +2244,10 @@ html:not([data-app-font="minecraft"]) [class*="[text-shadow:"] {
   pointer-events: none;
 }
 
+/* No rule, no bar: the well keeps its height (min-height above) and the rate
+   centres in it. */
 .storage-rate-bar--empty {
-  visibility: hidden;
+  display: none;
 }
 
 .storage-rate-bar > i {

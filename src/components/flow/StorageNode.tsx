@@ -1110,8 +1110,12 @@ function DrainModeSwap({
 /**
  * The chip's rate: what flows, in the drawer's red or green (steel on trash,
  * whose intake is voided, neither shipped nor spare). Large in Build, a step
- * smaller under the rule row in Solve. It gives up SIZE, never digits, when a
- * figure will not fit, fitted by string length so nothing is measured.
+ * smaller in Solve's reading well. The NUMBER keeps one size wherever it fits
+ * and the unit rides beside it small and quiet, as in the rate box above it
+ * (Jack, 2026-09-23: a long "+50k L/hr" used to drop the whole reading a
+ * size, so two drawers side by side read in two sizes). Only a figure that
+ * still will not fit gives up size, never digits, fitted by string length
+ * so nothing is measured.
  */
 const CHIP_RATE_ROOM: Record<StorageRole, number> = {
   product: 63,
@@ -1123,37 +1127,48 @@ const CHIP_RATE_ROOM: Record<StorageRole, number> = {
 };
 const CHIP_RATE_STEPS = {
   large: [
-    { className: "text-[13px] leading-[15px]", perChar: 8.6 },
-    { className: "text-[11px] leading-[13px]", perChar: 7.3 },
-    { className: "text-[9.5px] leading-[11px]", perChar: 6.3 },
-    { className: "text-[8px] leading-[10px]", perChar: 5.3 },
+    { number: "text-[13px]", unit: "text-[9px]", perChar: 8.2, unitPerChar: 5.2 },
+    { number: "text-[11px]", unit: "text-[8px]", perChar: 7, unitPerChar: 4.6 },
+    { number: "text-[9.5px]", unit: "text-[7px]", perChar: 6, unitPerChar: 4.1 },
+    { number: "text-[8px]", unit: "text-[6.5px]", perChar: 5.1, unitPerChar: 3.8 },
   ],
   small: [
-    { className: "text-[12px] leading-[13px]", perChar: 7.9 },
-    { className: "text-[10px] leading-[11px]", perChar: 6.6 },
-    { className: "text-[8.5px] leading-[10px]", perChar: 5.6 },
-    { className: "text-[7px] leading-[9px]", perChar: 4.7 },
+    { number: "text-[11px]", unit: "text-[8px]", perChar: 7, unitPerChar: 4.6 },
+    { number: "text-[10px]", unit: "text-[7.5px]", perChar: 6.4, unitPerChar: 4.3 },
+    { number: "text-[9px]", unit: "text-[7px]", perChar: 5.8, unitPerChar: 4.1 },
+    { number: "text-[8px]", unit: "text-[6.5px]", perChar: 5.1, unitPerChar: 3.8 },
   ],
 } as const;
 
+/** "+" or a true minus, the same width as the plus (a hyphen stood apart
+ * from the digits). */
+function signedChipNumber(value: number, body: string): string {
+  return value >= 0 ? `+${body}` : body.replace(/^-/, "−");
+}
+
 function ChipRate({ net, kind, role, size }: { net: number; kind: string; role: StorageRole; size: "large" | "small" }) {
-  const label = `${net >= 0 ? "+" : ""}${formatCompactRate(net, kind)}`;
+  const parts = formatCompactRateParts(net, kind);
+  const number = signedChipNumber(net, parts.body);
   const steps = CHIP_RATE_STEPS[size];
   // Small sits in the reading well: its padding and border come off the room.
   const room = CHIP_RATE_ROOM[role] - (size === "small" ? 10 : 0);
-  const fit = steps.find((step) => label.length * step.perChar <= room) ?? steps[steps.length - 1];
+  const fit = steps.find((step) => number.length * step.perChar + parts.unit.length * step.unitPerChar + 2 <= room)
+    ?? steps[steps.length - 1];
   return (
     <div
-      className={`storage-net-line storage-chip-rate whitespace-nowrap font-extrabold tabular-nums ${fit.className}`}
+      className={`storage-net-line storage-chip-rate storage-chip-rate--${size} whitespace-nowrap tabular-nums`}
       style={{ color: role === "trash" ? "#b9c0cd" : netRateColor(net) }}
     >
-      <MotionNumberText
-        values={[net]}
-        render={(shown) => {
-          const value = shown[0] ?? net;
-          return `${value >= 0 ? "+" : ""}${formatCompactRate(value, kind)}`;
-        }}
-      />
+      <span className={`storage-chip-rate-number ${fit.number}`}>
+        <MotionNumberText
+          values={[net]}
+          render={(shown) => {
+            const value = shown[0] ?? net;
+            return signedChipNumber(value, formatCompactRateParts(value, kind).body);
+          }}
+        />
+      </span>
+      <span className={`storage-chip-rate-unit ${fit.unit}`}>{parts.unit}</span>
     </div>
   );
 }
@@ -1255,16 +1270,23 @@ function storageMatchesSearch(storage: FactoryStorage, query: string) {
 }
 
 function formatCompactRate(value: number, kind: string): string {
+  const { body, unit, spaced } = formatCompactRateParts(value, kind);
+  return spaced ? `${body} ${unit}` : `${body}${unit}`;
+}
+
+/** The compact rate as its number and its unit, for faces that set the
+ * unit apart. `spaced` says whether the joined form puts a space between. */
+function formatCompactRateParts(value: number, kind: string): { body: string; unit: string; spaced: boolean } {
   const scaled = value * rateMultiplierForKind(kind);
   const unit = rateSuffixForKind(kind).trimStart();
-  if (kind === "power") return `${formatPowerValue(scaled)} ${unit}`;
+  if (kind === "power") return { body: formatPowerValue(scaled), unit, spaced: true };
   const abs = Math.abs(scaled);
 
   // The floor is written per second and scaled with the unit, so "balanced"
   // still reads as a flat 0 while a real trickle keeps its digits per tick.
   const spaced = unit.startsWith("L") || unit.startsWith("EU") || unit.startsWith("A ");
   if (!Number.isFinite(scaled) || abs < 0.005 * rateUnitPrecisionScale()) {
-    return `0${spaced ? ` ${unit}` : unit}`;
+    return { body: "0", unit, spaced };
   }
   const body =
     abs >= 1_000_000
@@ -1277,6 +1299,6 @@ function formatCompactRate(value: number, kind: string): string {
           abs >= 1
           ? trimFlow(scaled)
           : formatCompact(scaled);
-  return spaced ? `${body} ${unit}` : `${body}${unit}`;
+  return { body, unit, spaced };
 }
 

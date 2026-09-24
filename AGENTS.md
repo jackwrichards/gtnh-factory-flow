@@ -1166,6 +1166,13 @@ Working notes for future agents on GTNH Factory Flow.
   open past the edge (the title bar clips itself via `--band-clip`, the
   chip is inset by `--storage-cm`); the open list and row carry
   `data-tooltip-stop` so no hover tooltip covers them.
+- The rate's NUMBER keeps one size (11px in the well, 13px in Build) and its
+  unit rides beside it smaller and quieter; only a figure that still will
+  not fit steps down (Jack, 2026-09-23: "+40/hr" and "+50k L/hr" side by side
+  read in two sizes). Minus is a true minus. The well keeps its with-bar
+  height and centres the rate when there is no bar (Any). In the rate box
+  the unit wraps out of sight when the number needs the room; never clip
+  the number for it.
 - Build, and every drawer without a rule: picture and rate as one centred
   group. Trash reads its rate in steel. The role switch wears cycle arrows;
   left-right arrows belong to the strict buffer alone. The ratio pencil sits
