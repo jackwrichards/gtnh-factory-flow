@@ -75,6 +75,16 @@ Working notes for future agents on GTNH Factory Flow.
     dataset was retired from the droplet to
     `/opt/shared/gtnh-datasets-retired/` and removed from the manifest and
     the systemd prewarm. Do not rebuild, republish, or re-prewarm it.
+  - A FRESH EXPORT IS NOT DETERMINISTIC (found 2026-09-25): two runs of
+    the same pack reorder crafting, furnace, bee produce, crop breeder and
+    essentia recipes, which re-mints ~37,000 recipe ids and reshuffles
+    ~2,700 recipes' slots. When an export only ADDS fields, graft them onto
+    the published raw export instead of shipping the new run whole:
+    `~/graft-sparge.js` matches recipes by content key within a map and
+    copies the named fields, and the rebuild then differs from the live
+    dataset only where those fields matter (verify with a shard diff, e.g.
+    `~/cmp-field.js`). The 2.9 `oracle-export.json` in WSL is now that
+    graft; the full 2026-09-25 run is `oracle-export.sparge-run.json`.
   - `~/copy-datasets.sh` copies the results into the Windows repo's
     `public/datasets/gtnh`.
   - Publish: scp the changed files (gzips, shards, oracle-report) to the
@@ -500,6 +510,27 @@ Working notes for future agents on GTNH Factory Flow.
   new mob also makes (`carryWiresOntoRecipe`, shared with the refactor).
   The crop and mob pickers are two configurations of `RecipeListPicker`.
   An EEC card never takes a second recipe: one controller, one spawner.
+- THE SPARGE TOWER'S ROLLED OUTPUTS (player report, 2026-09-25: "doesn't
+  show the TB recipe generates ThF4"). RecipeLoaderLFTR registers the
+  returned sparge gas and all five byproducts at 0 L, and the exporter
+  drops zero amounts, so the dataset showed only the sparged salt. The
+  oracle now exports `spargeFluidOutputs`, `spargeMaxByproduct` and
+  `spargeGasAmount` for `gtpp.recipe.lftr.sparging`, and
+  `sparge-byproducts.mjs` replays MTESpargeTower.randomizeByproducts'
+  exact expectation (each byproduct randInt(1, min(max, gas - total - 1)),
+  the gas returning the rest). The rolled slots are appended AFTER the
+  exported ones and the recipe id still hashes only the exported slots,
+  so saved plans keep their card. The same export records the chemical
+  plant's catalysts and the IsaMill's milling balls as `wearingInputs`
+  (durability, and the Empty Catalyst Carrier left behind); nothing reads
+  them yet.
+- THTR and HTGR cards follow their Java, not the workbook, for flows: the
+  THTR's TRISO pebbles in and burned balls/pebbles out per 9-hour
+  operation (its 730,000 L helium is a kept charge, not a flow); the HTGR's
+  TRISO fuel, burned fuel and the 256 L of helium each cycle loses, with
+  the cycle length from onRunningTick's coolant/water speedups
+  (`htgrOperation` in reactors.ts). Power-card unlock chips are the tier of
+  the controller's own recipe (the XL turbines: EV, IV, LuV, ZPM, ZPM).
 - Existing supported tier effects include:
   - `parallelMultiplier`
   - `durationMultiplier`

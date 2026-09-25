@@ -242,6 +242,13 @@ public final class GtnhCalcOracleExporter {
                     exportedRecipe.put("itemOutputs", outputItemStacks(recipe));
                     exportedRecipe.put("fluidInputs", fluidInputs);
                     exportedRecipe.put("fluidOutputs", fluidStacks(recipe.mFluidOutputs));
+                    if ("gtpp.recipe.lftr.sparging".equals(map.unlocalizedName)) {
+                        putSpargeByproducts(exportedRecipe, recipe);
+                    }
+                    if ("gtpp.recipe.fluidchemicaleactor".equals(map.unlocalizedName)
+                        || "gtpp.recipe.oremill".equals(map.unlocalizedName)) {
+                        putWearingInputs(exportedRecipe, recipe);
+                    }
                     exportedRecipe.put("nonConsumedInputs", specialItems(recipe.mSpecialItems));
                     exportedRecipe.put("runtimeCalculation", buildGtRuntimeCalculation(map.unlocalizedName, name, recipe));
                     recipes.add(exportedRecipe);
@@ -2519,6 +2526,104 @@ public final class GtnhCalcOracleExporter {
     private Object callFluent(Object target, String methodName, Class<?> parameterType, Object value) throws Exception {
         Method method = target.getClass().getMethod(methodName, parameterType);
         return method.invoke(target, value);
+    }
+
+    /**
+     * A sparge tower rolls its byproducts at run time (MTESpargeTower.randomizeByproducts):
+     * the recipe registers the returned sparge gas and every byproduct at 0 L, which the plain
+     * fluid list drops, and caps each byproduct at SPARGE_MAX_BYPRODUCT. Both are exported so
+     * the normalizer can replay the roll's expected value.
+     */
+    private void putSpargeByproducts(Map<String, Object> exportedRecipe, GTRecipe recipe) {
+        List<Map<String, Object>> fluids = new ArrayList<Map<String, Object>>();
+        for (FluidStack stack : recipe.mFluidOutputs) {
+            if (stack == null || stack.getFluid() == null) {
+                continue;
+            }
+            Map<String, Object> fluid = map();
+            fluid.put("kind", "fluid");
+            fluid.put("id", stack.getFluid().getName());
+            fluid.put("amount", Integer.valueOf(stack.amount));
+            fluid.put("displayName", stack.getLocalizedName());
+            FluidStack shown = stack.copy();
+            shown.amount = Math.max(1, shown.amount);
+            String icon = FluidStackIconExporter.captureIcon(shown);
+            if (icon != null && icon.length() > 0) {
+                fluid.put("icon", icon);
+            }
+            fluids.add(fluid);
+        }
+        exportedRecipe.put("spargeFluidOutputs", fluids);
+        if (recipe.mFluidInputs.length > 0 && recipe.mFluidInputs[0] != null) {
+            exportedRecipe.put("spargeGasAmount", Integer.valueOf(recipe.mFluidInputs[0].amount));
+        }
+        try {
+            Object key = readStaticField(GTRecipeConstants.class, "SPARGE_MAX_BYPRODUCT");
+            for (Method method : GTRecipe.class.getMethods()) {
+                if ("getMetadataOrDefault".equals(method.getName()) && method.getParameterTypes().length == 2) {
+                    Object value = method.invoke(recipe, key, Integer.valueOf(0));
+                    if (value instanceof Number) {
+                        exportedRecipe.put("spargeMaxByproduct", Integer.valueOf(((Number) value).intValue()));
+                    }
+                    break;
+                }
+            }
+        } catch (Throwable t) {
+            exportedRecipe.put("spargeError", t.toString());
+        }
+    }
+
+    /**
+     * Inputs a machine wears down instead of eating whole: GT++ chemical plant catalysts and
+     * IsaMill milling balls sit in their own housing, lose one durability per damage roll and
+     * break at their maximum (a catalyst leaving an Empty Catalyst Carrier). The recipe lists
+     * them as non-consumed; export which ones wear, how far they last and what they leave.
+     */
+    private void putWearingInputs(Map<String, Object> exportedRecipe, GTRecipe recipe) {
+        List<Map<String, Object>> wearing = new ArrayList<Map<String, Object>>();
+        try {
+            Class<?> chemicalPlant = Class.forName(
+                "gtPlusPlus.xmod.gregtech.common.tileentities.machines.multi.production.chemplant.MTEChemicalPlant");
+            Class<?> isaMill = Class.forName(
+                "gtPlusPlus.xmod.gregtech.common.tileentities.machines.multi.processing.MTEIsaMill");
+            Class<?> chemBase = Class.forName("gtPlusPlus.core.item.chemistry.general.ItemGenericChemBase");
+            Method isCatalyst = chemicalPlant.getMethod("isCatalyst", ItemStack.class);
+            Method isMillingBall = isaMill.getMethod("isMillingBall", ItemStack.class);
+            for (ItemStack stack : recipe.mInputs) {
+                if (stack == null || stack.getItem() == null) {
+                    continue;
+                }
+                ItemStack probe = stack.copy();
+                probe.stackSize = 1;
+                Map<String, Object> entry = null;
+                if (Boolean.TRUE.equals(isCatalyst.invoke(null, probe))) {
+                    entry = map();
+                    entry.put("durability", chemBase.getMethod("getMaxCatalystDurability").invoke(null));
+                    Object carrier = readStaticField(
+                        Class.forName("gtPlusPlus.xmod.gregtech.api.enums.GregtechItemList"),
+                        "EmptyCatalystCarrier");
+                    Object spent = carrier.getClass().getMethod("get", long.class, Object[].class)
+                        .invoke(carrier, Long.valueOf(1L), new Object[0]);
+                    if (spent instanceof ItemStack) {
+                        entry.put("spent", itemStack((ItemStack) spent));
+                    }
+                } else if (Boolean.TRUE.equals(isMillingBall.invoke(null, probe))) {
+                    entry = map();
+                    entry.put("durability", chemBase.getMethod("getMaxBallDurability", ItemStack.class).invoke(null, probe));
+                }
+                if (entry != null) {
+                    String registryId = String.valueOf(Item.itemRegistry.getNameForObject(probe.getItem()));
+                    entry.put("id", itemResourceId(registryId, probe.getItemDamage()));
+                    wearing.add(entry);
+                }
+            }
+        } catch (Throwable t) {
+            exportedRecipe.put("wearError", t.toString());
+            return;
+        }
+        if (!wearing.isEmpty()) {
+            exportedRecipe.put("wearingInputs", wearing);
+        }
     }
 
     private List<Map<String, Object>> outputItemStacks(GTRecipe recipe) {

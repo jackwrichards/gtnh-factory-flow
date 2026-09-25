@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { PNG } from "pngjs";
 import { writeDatasetJson } from "./dataset-json-writer.mjs";
 import { getDominantOpaqueColor } from "./icon-utils.mjs";
+import { spargeRolledOutputs } from "./sparge-byproducts.mjs";
 import {
   EEC_MACHINE_TYPE,
   eecDropChance,
@@ -198,6 +199,10 @@ function normalizeGregtech(domain) {
       if (outputs.length === 0) {
         continue;
       }
+      // The sparge tower's rolled outputs join after the exported ones. The
+      // recipe id still hashes only the exported slots, so saved plans keep
+      // their recipe.
+      const sparge = spargeRolledOutputs(rawRecipe, (entry) => resourceAmount(entry));
       const machineConfigControls = machineConfigControlsForOracleRecipe(
         machineType,
         rawRecipe.specialValue,
@@ -230,13 +235,13 @@ function normalizeGregtech(domain) {
         durationTicks,
         eut,
         inputs,
-        outputs,
+        outputs: sparge ? [...outputs, ...sparge.outputs] : outputs,
         machineConfigControls,
         machineHandlers,
         runtimeCalculation: normalizeRuntimeCalculation(
           rawRecipe.runtimeCalculation,
           machineType,
-          outputs,
+          sparge ? [...outputs, ...sparge.outputs] : outputs,
         ),
         programmedCircuit: detectProgrammedCircuit(inputs),
         specialValue: Number(rawRecipe.specialValue) || 0,
@@ -248,13 +253,17 @@ function normalizeGregtech(domain) {
           rawRecipeId: `${recipeMap.id}:${stableId}`,
         },
         nei: {
-          additionalInfo: [`Special value: ${rawRecipe.specialValue ?? 0}`],
+          additionalInfo: [
+            `Special value: ${rawRecipe.specialValue ?? 0}`,
+            ...(sparge ? [sparge.note] : []),
+          ],
         },
         metadata: {
           recipeMapId: recipeMap.id,
           specialValue: Number(rawRecipe.specialValue) || 0,
           ...(recipeMap.id === "gt.recipe.fusionreactor" && Number.isFinite(rawRecipe.fusionStartupEu)
             ? { fusionStartupEu: rawRecipe.fusionStartupEu } : {}),
+          ...(sparge ? { spargeMaxByproduct: sparge.maxByproduct } : {}),
         },
       });
 

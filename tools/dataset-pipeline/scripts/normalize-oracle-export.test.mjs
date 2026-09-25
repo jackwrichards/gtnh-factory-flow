@@ -792,3 +792,55 @@ describe("the Extreme Entity Crusher: one recipe per mob", () => {
     expect(byMob["witchery.eye"].outputs.map((output) => output.id)).toEqual(["xpjuice"]);
   });
 });
+
+describe("LFTR sparging: the rolled outputs the recipe registers at 0 L", () => {
+  const tbSalt = (extra = {}) => ({
+    id: "sparge-tb",
+    durationTicks: 500,
+    eut: 7680,
+    itemInputs: [],
+    fluidInputs: [fluid("fluorine", 100, "Fluorine"), fluid("molten.tbsalt", 50, "TB Salt")],
+    itemOutputs: [],
+    fluidOutputs: [fluid("molten.spargedtbsalt", 50, "Fluorine Sparged TB Salt")],
+    ...extra,
+  });
+  const rolled = {
+    spargeGasAmount: 100,
+    spargeMaxByproduct: 20,
+    spargeFluidOutputs: [
+      fluid("molten.spargedtbsalt", 50, "Fluorine Sparged TB Salt"),
+      fluid("fluorine", 0, "Fluorine"),
+      fluid("lithiumfluoride", 0, "Lithium Fluoride"),
+      fluid("neptuniumhexafluoride", 0, "Neptunium Hexafluoride"),
+      fluid("technetiumhexafluoride", 0, "Technetium Hexafluoride"),
+      fluid("seleniumhexafluoride", 0, "Selenium Hexafluoride"),
+      fluid("thoriumtetrafluoride", 0, "Thorium Tetrafluoride"),
+    ],
+  };
+  const exportOf = (recipe) => ({
+    domains: [{
+      id: "gregtech",
+      recipeMaps: [{ id: "gtpp.recipe.lftr.sparging", name: "LFTR Gas Sparging", recipes: [recipe] }],
+    }],
+  });
+
+  it("lists the gas handed back and every byproduct at its average, ThF4 included", () => {
+    const [recipe] = normalize(exportOf(tbSalt(rolled))).recipes;
+    const byId = Object.fromEntries(recipe.outputs.map((slot) => [slot.id, slot.amount]));
+    expect(recipe.outputs[0].id).toBe("molten.spargedtbsalt");
+    // 1-20 L each, the cap never shrinking for the first four rolls.
+    expect(byId.thoriumtetrafluoride).toBeGreaterThan(10.4);
+    expect(byId.thoriumtetrafluoride).toBeLessThanOrEqual(10.5);
+    expect(byId.lithiumfluoride).toBeCloseTo(10.5, 9);
+    const byproducts = recipe.outputs.slice(2).reduce((sum, slot) => sum + slot.amount, 0);
+    expect(byId.fluorine + byproducts).toBeCloseTo(100, 9);
+    expect(recipe.nei.additionalInfo.some((line) => line.includes("1 to 20 L"))).toBe(true);
+  });
+
+  it("keeps the recipe id the plain export had, so saved plans keep their card", () => {
+    const [plain] = normalize(exportOf(tbSalt())).recipes;
+    const [full] = normalize(exportOf(tbSalt(rolled))).recipes;
+    expect(full.id).toBe(plain.id);
+    expect(plain.outputs).toHaveLength(1);
+  });
+});

@@ -47,6 +47,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.8.1",
+    date: "2026-09-25",
+    headline: "Reactor fuel and sparge byproducts",
+    notes: [
+      "The XL Turbo Steam Turbine now reads EV and the XL Turbo HP Steam Turbine IV, the tiers their controllers are built at. The SC turbines read LuV and ZPM.",
+      "The THTR now takes its TRISO pebbles and returns the burned ones. The HTGR takes its TRISO fuel and the helium it loses each cycle, and returns the burned fuel.",
+      "The LFTR sparge tower lists the gas it hands back and every byproduct, Thorium Tetrafluoride included, at the average of its random roll.",
+      "The LFTR makes 0.37 L/s of Uranium-233, the game's real average, and a partly filled HTGR no longer undercounts its coolant.",
+    ],
+  },
+  {
     version: "3.8.0",
     date: "2026-09-24",
     headline: "Extreme Entity Crusher",
