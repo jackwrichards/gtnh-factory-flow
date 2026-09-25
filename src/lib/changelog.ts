@@ -47,15 +47,6 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "3.6.1",
-    date: "2026-09-24",
-    headline: "Truer machine status on a backed-up line",
-    notes: [
-      "A machine feeding one whose output is backed up now says on demand, not bottleneck.",
-      "On a machine running several recipes, a recipe held up by another recipe on the same machine now names that recipe instead of the machine.",
-    ],
-  },
-  {
     version: "3.6.0",
     date: "2026-09-23",
     headline: "Share a plan without an account",
