@@ -228,6 +228,11 @@ Pebble fill F (up to 675,000): efficiency
 brutal), pebble cost `0.005 x F x eff`, parasitic `-3840 / eff` EU/t, hot
 coolant `4800 x eff` L/t -> EHE -> SC cascade.
 
+The planner follows MTEThoriumHighTempReactor past the sheet: one 648,000-tick
+operation burns the pebble cost in TRISO pebbles and returns them as
+Burned Out TRISO pebble balls (one per 64) plus loose burned pebbles; the
+730,000 L helium charge is primed once and kept, so it is not a flow.
+
 ## HTGR (`7. HTGR`)
 
 Fill x (of 10,000), 9 fuel pebble types each defined by `Base/Mult/Exp`
@@ -237,12 +242,23 @@ efficiency `MIN(1, 0.1 + 0.9(1 - (1-x)^3))`, pebble cost
 coolant `0.5 x fill x mult` L/s AND direct plain steam `0.1 x fill x mult`
 (x160 L/t). Parasitic -1536 EU/t.
 
+The planner follows MTEHighTempGasCooledReactor past the sheet: the fuel base
+is an average, so the multiplier is `Base * (1 + (Mult-1)x)^(1 + (Exp-1)x)`
+(no second x - the ball count already multiplies the coolant line), sized
+on the balls left after the burn and truncated per tick. One operation is
+`(int)((2000 + 18000 eff) / exponent^2)` ticks of progress, and each supplied
+tick adds `(int)(M x 0.0035)` + `(int)(M x 0.0015)` more, so a full glowstone
+reactor cycles every 202 ticks. Per cycle it burns the pebble cost in TRISO
+Fuel (returned as Burned Out TRISO Fuel) and loses 0.05% of its 512,000 L
+helium (256 L), which the hatch tops back up.
+
 ## LFTR (`8. LFTR`)
 
 Direct EU, no turbines: 16 amps of the fuel's base tier (Fuel 1 EV 32,768;
 Fuel 2 IV 131,072; Fuel 3 LuV 524,288 EU/t) burning 1 L/s of fuel. Sparged
 byproducts per second: U-Salt, T-Salt, TB-Salt, UF6, and 0.33 L/s
-Uranium-233 always. The LFTB breeder makes the fuel: base 1920-7680 EU/t
+Uranium-233 always (the sheet's 0.33; MTENuclearReactor is a 1-in-300 chance a tick of
+1-10 L, 0.3667 L/s, which the planner uses). The LFTB breeder makes the fuel: base 1920-7680 EU/t
 over 1800-3000 s per 1000 L, overclockable at x4 power / x2 speed per tier
 (deliberately lossy).
 

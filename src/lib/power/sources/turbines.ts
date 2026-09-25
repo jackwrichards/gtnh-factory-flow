@@ -103,7 +103,8 @@ const SPECS: TurbineSpec[] = [
   {
     id: "large-sc-steam-turbine",
     name: "Large SC Steam Turbine",
-    unlock: "UHV",
+    // GoodGenerator's assembler recipe: IV hull, LuV circuits.
+    unlock: "LuV",
     blurb: "SC steam in; exhausts SH steam.",
     turbineClass: "steam",
     xl: false,
@@ -112,7 +113,9 @@ const SPECS: TurbineSpec[] = [
   {
     id: "xl-turbo-steam-turbine",
     name: "XL Turbo Steam Turbine",
-    unlock: "LuV",
+    // The XL unlocks follow their controller's assembler recipe
+    // (RecipesMachinesCustom): EV, IV, LuV, ZPM and ZPM circuits and power.
+    unlock: "EV",
     blurb: "Sixteen steam turbines; dense too.",
     turbineClass: "steam",
     xl: true,
@@ -122,7 +125,7 @@ const SPECS: TurbineSpec[] = [
   {
     id: "xl-turbo-hp-steam-turbine",
     name: "XL Turbo HP Steam Turbine",
-    unlock: "LuV",
+    unlock: "IV",
     blurb: "Sixteen HP turbines; exhausts steam.",
     turbineClass: "steam",
     xl: true,
@@ -132,7 +135,7 @@ const SPECS: TurbineSpec[] = [
   {
     id: "xl-turbo-sc-steam-turbine",
     name: "XL Turbo SC Steam Turbine",
-    unlock: "UHV",
+    unlock: "ZPM",
     blurb: "Sixteen SC turbines; exhausts SH.",
     turbineClass: "steam",
     xl: true,

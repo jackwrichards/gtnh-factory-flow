@@ -230,6 +230,11 @@ const AUX_NAMES = [
   ["540k Sp Coolant Cell", "item"],
   ["1080k Sp Coolant Cell", "item"],
   ["1G Neutronium Heat Capacitor", "item"],
+  // The THTR burns bartworks' TRISO pebbles and returns them burned, a ball
+  // per 64 plus the loose rest.
+  ["TRISO pebble", "item"],
+  ["Burned Out TRISO pebble ball", "item"],
+  ["Burned Out TRISO pebble", "item"],
   // The LNE's hydroxide boosters are dusts, one per boost window.
   ["Sodium Hydroxide Dust", "item"],
   ["Potassium Hydroxide Dust", "item"],
@@ -286,6 +291,13 @@ function collectNames() {
   }
   for (const [name, kind] of AUX_NAMES) {
     add(name, kind);
+  }
+  // kubatech's HTGR fuel and its burned form, one item per pebble material
+  // (the dataset writes "Uranium 235" where the workbook says "Uranium-235").
+  for (const entry of data.htgrPebbles) {
+    const material = entry.name.replace("-", " ");
+    add(`TRISO Fuel (${material})`, "item");
+    add(`Burned Out TRISO Fuel (${material})`, "item");
   }
   for (const entry of data.plasmas) {
     const base = entry.name.replace(/ Plasma$/, "");
