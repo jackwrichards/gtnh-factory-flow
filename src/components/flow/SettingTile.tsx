@@ -8,7 +8,7 @@ import { ChevronDown, Minus, Plus, Search } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getUiScale } from "@/lib/ui-scale";
-import type { MachineConfigTierControl } from "@/lib/model/recipe-rules";
+import { snapNumericSetting, type MachineConfigTierControl } from "@/lib/model/recipe-rules";
 import type { MachineConfigTierOption, ResourceAmount } from "@/lib/model/types";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
@@ -536,10 +536,10 @@ function MachineNumberTile({ control, onSelect, help }: {
   const [draft, setDraft] = useState<string>();
   const finished = useRef(false);
   const shown = Number(control.current.key);
-  const { min, max = Number.MAX_SAFE_INTEGER } = control.numeric!;
-  const clamp = (n: number) => Math.min(max, Math.max(min, Math.trunc(n)));
+  const numeric = control.numeric!;
+  const { min, max = Number.MAX_SAFE_INTEGER, step = 1 } = numeric;
   const pick = (n: number) => {
-    const key = String(clamp(n));
+    const key = String(snapNumericSetting(n, numeric));
     if (key !== control.current.key) onSelect(key);
   };
   const commit = () => {
@@ -547,14 +547,14 @@ function MachineNumberTile({ control, onSelect, help }: {
     finished.current = true;
     const text = draft?.replaceAll(",", "").trim() ?? "";
     const parsed = Number(text);
-    if (text && Number.isSafeInteger(parsed)) pick(parsed);
+    if (text && Number.isFinite(parsed) && (step < 1 || Number.isSafeInteger(parsed))) pick(parsed);
     setDraft(undefined);
   };
   const caption = settingCaption(control);
   if (draft !== undefined) {
     return <div className={`${SETTING_TILE_CLASS} nodrag`} onPointerDown={(event) => event.stopPropagation()}>
       <div className={SETTING_TILE_CAPTION_CLASS}>{caption}</div>
-      <input autoFocus inputMode="numeric" aria-label={control.label} value={draft}
+      <input autoFocus inputMode={step < 1 ? "decimal" : "numeric"} aria-label={control.label} value={draft}
         onFocus={(event) => event.target.select()}
         onChange={(event) => setDraft(event.target.value)} onBlur={commit}
         onKeyDown={(event) => {
@@ -568,8 +568,8 @@ function MachineNumberTile({ control, onSelect, help }: {
       />
     </div>;
   }
-  return <SettingTile caption={caption} value={shown.toLocaleString("en-US")}
+  return <SettingTile caption={caption} value={shown.toLocaleString("en-US", { maximumFractionDigits: 2 })}
     canStepDown={shown > min} canStepUp={shown < max}
-    onStep={(direction) => pick(shown + direction)}
+    onStep={(direction) => pick(shown + direction * step)}
     onType={() => { finished.current = false; setDraft(String(shown)); }} help={help} />;
 }

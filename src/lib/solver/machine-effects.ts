@@ -1,5 +1,10 @@
 import { getFusionStats } from "@/lib/machines/fusion";
 import {
+  getEecOutputMultiplier,
+  getEecSettings,
+  isEecRecipe,
+} from "@/lib/machines/extreme-entity-crusher";
+import {
   getRecipeCoilTierControl,
   getRecipeMachineConfigTierControls,
   getRecipeSpecialValue,
@@ -131,6 +136,13 @@ export function getMachineOutputMultiplier(
   output: RecipeOutput,
   tier: VoltageTier,
 ): number {
+  if (isEecRecipe(recipe)) {
+    return getEecOutputMultiplier(
+      recipe as Partial<Pick<Recipe, "outputs">> & typeof recipe,
+      output,
+      getEecSettings(node.machineConfigTiers),
+    );
+  }
   const cropStats = getCropsNhStats(recipe);
   if (cropStats) {
     const setup = cropsNhHarvesterFromTiers(

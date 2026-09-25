@@ -211,8 +211,11 @@ export interface MachineConfigControl {
   label: string;
   minimumKey: string;
   defaultKey?: string;
-  /** Whole-number entry; an omitted maximum means there is no machine limit. */
-  numeric?: { min: number; max?: number };
+  /**
+   * Typed-number entry; an omitted maximum means there is no machine limit.
+   * Values snap to `step` (default: whole numbers).
+   */
+  numeric?: { min: number; max?: number; step?: number };
   /**
    * The recipe's own special value is a 1-based minimum tier on this ladder
    * (the Naquadah Fuel Refinery's field restriction coils), so `minimumKey`

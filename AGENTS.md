@@ -464,6 +464,33 @@ Working notes for future agents on GTNH Factory Flow.
   Do not substitute the generic floor-ticks / ceil-parallels rule. Accelerator
   hatch power and neutron-energy regulation remain unmodelled; valid products
   assume the neutron kinetic energy is in the recipe's allowed range.
+- THE EXTREME ENTITY CRUSHER (Jack, 2026-09-24: "add it 100%"). One recipe
+  per mob a Powered Spawner holds, map "Extreme Entity Crusher", 363 in the
+  2.9 export. The oracle adapter `kubatech-eec-mobs` (exportMobDrops) reads
+  kubatech's MobHandlerLoader.recipeMap; MobsInfo only fills it when a world
+  starts, so the exporter calls MobRecipeLoader.processMobRecipeMap() itself
+  at the main menu. `eec-drops.mjs` replays each drop's MobsInfo chance
+  modifiers for a PLAIN Overworld EEC (fake-player kill, no special weapon,
+  enchant, potion or charged creeper; each class read from its bytecode; an
+  unknown class is a gate) and the normalizer merges repeats of an item into
+  one output (amount = expected count), gives each mob its own non-consumed
+  spawner resource (`factoryflow:eec_mob:<key>`, like bee species), keeps
+  the 120 L of Liquid XP, and writes `metadata.eec` (health, per-output drop
+  chances out of 10,000 with and without Looting, lootable/voidable flags,
+  infernal settings). The app replays the machine in
+  `src/lib/machines/extreme-entity-crusher.ts`, called from
+  getOverclockedRecipeStats and getMachineOutputMultiplier: kill ticks
+  max(55, (int)(health / (9 + weapon) x 10)), kubatech's own perfect
+  overclock (whole-tick shifts, 20-tick floor, steps past it multiply the
+  kill by 4 - folded into a PER-KILL duration), infernals as an expected
+  value (8x EU and (int)(ticks x mods x 1.8f) in FLOAT arithmetic, only with
+  8 x 1920 EU/t of input), the Well of Suffering ritual (400 ticks, EU/4, no
+  overclock, 5000 L XP), Looting (+5000 per level, split into whole items)
+  and the void switch. getMaxInputEu sums every hatch's full 2 A, so the
+  table entry is `fullPowerPool`. Not modelled: the infernal kill's random
+  enchanted gear drop, batch mode (rate-neutral), glass tier, the Nether's
+  wither skeletons. Numeric knobs take an optional `step` (weapon damage
+  moves in Sharpness quarters). `extreme-entity-crusher.test.ts` is the exam.
 - Existing supported tier effects include:
   - `parallelMultiplier`
   - `durationMultiplier`

@@ -330,6 +330,9 @@ describe("curated machine table", () => {
         "Auto Workbench",
         // MTEPreciseAssembler's dedicated precise mode has no speed/parallels bonus.
         "Precise Assembler",
+        // kubatech's MTEExtremeEntityCrusher and MobHandlerLoader; the
+        // reference never modelled it. extreme-entity-crusher.test.ts.
+        "Extreme Entity Crusher",
       ].map(normalizeMachineName),
     );
     // Every entry must trace back to a reference definition or a direct source

@@ -14,6 +14,26 @@ export const FREE_INPUT_ITEM_IDS: ReadonlySet<string> = new Set([
   "gregtech:gt.metaitem.02@32765",
 ]);
 
-export function isFreeRecipeInput(resource: Pick<ResourceAmount, "id"> & { kind?: string }): boolean {
-  return (resource.kind === undefined || resource.kind === "item") && FREE_INPUT_ITEM_IDS.has(resource.id);
+/**
+ * Items a machine holds in its CONTROLLER slot for good: the Extreme Entity
+ * Crusher's Powered Spawner, one resource per mob. Treated exactly like a
+ * free input (never supplied, never wired), and drawn the same way, because
+ * it is also the only thing on the card that says which mob the machine runs.
+ */
+const CONTROLLER_SLOT_ID_PREFIXES = ["factoryflow:eec_mob:"];
+
+type InputRef = Pick<ResourceAmount, "id"> & { kind?: string };
+
+export function isControllerSlotInput(resource: InputRef): boolean {
+  return (
+    (resource.kind === undefined || resource.kind === "item") &&
+    CONTROLLER_SLOT_ID_PREFIXES.some((prefix) => resource.id.startsWith(prefix))
+  );
+}
+
+export function isFreeRecipeInput(resource: InputRef): boolean {
+  return (
+    ((resource.kind === undefined || resource.kind === "item") && FREE_INPUT_ITEM_IDS.has(resource.id)) ||
+    isControllerSlotInput(resource)
+  );
 }

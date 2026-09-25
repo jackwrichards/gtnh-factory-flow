@@ -119,6 +119,7 @@ import {
   isCropFarmRecipe,
   isCropProductionConfigControl,
   isCropProductionRecipe,
+  isControllerSlotInput,
   isIndustrialApiaryMachineType,
   makeResourceKey,
   resourceMatchesInput,
@@ -3067,8 +3068,12 @@ function PortRail({
  * nothing to look up, only something to set down next to the machine.
  */
 function FreePortRow({ port }: { port: RailPort }) {
+  // A controller-slot item (the EEC's spawner) sits in the machine for good.
+  const controller = port.resource ? isControllerSlotInput(port.resource) : false;
   return (
-    <MinecraftTooltip content={() => <RecipeTooltip view={{ title: port.displayName, subtitle: "Free input", rows: [], reason: "No supply connection required." }} />}>
+    <MinecraftTooltip content={() => <RecipeTooltip view={controller
+      ? { title: port.displayName, subtitle: "Controller slot", rows: [], reason: "Goes in the machine's controller slot. Never used up." }
+      : { title: port.displayName, subtitle: "Free input", rows: [], reason: "No supply connection required." }} />}>
     <div
       className="flow-port relative flex h-[40px] w-full flex-none items-center gap-1 px-0.5 py-0 opacity-60"
       data-free-input="true"
@@ -3094,7 +3099,7 @@ function FreePortRow({ port }: { port: RailPort }) {
         {/* Same dress as a port's rate line, so the word sits where the
             number would and reads as its stand-in. */}
         <span className="block truncate text-[9px] leading-[9px] tabular-nums text-[var(--mc-ink-muted)] opacity-80">
-          free
+          {controller ? "in controller" : "free"}
         </span>
       </span>
     </div>

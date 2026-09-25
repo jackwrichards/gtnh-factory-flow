@@ -1,5 +1,6 @@
 import { hasAmperageOverclock } from "./power-input-rules";
 import { getFusionStats } from "@/lib/machines/fusion";
+import { getEecMetadata, getEecSettings, getEecStats } from "@/lib/machines/extreme-entity-crusher";
 import {
   getRecipeMinimumVoltageTier,
   getVoltageTierIndex,
@@ -116,6 +117,26 @@ export function getOverclockedRecipeStats(
   // never silently promoted. A singleblock is floored at the minimum, because
   // a lower machine does not exist to be built.
   const tier = getNodeRunTier(effectiveRecipe, node);
+  const eec = getEecMetadata(effectiveRecipe);
+  if (eec) {
+    // kubatech's own overclock, infernals and ritual; the duration returned
+    // is per kill, with the past-floor output multiplier folded in.
+    const stats = getEecStats(
+      eec,
+      getEecSettings(node.machineConfigTiers),
+      getVoltageTierMaxEuT(tier) * getNodePowerAmps(effectiveRecipe, node),
+    );
+    return {
+      tier,
+      minimumTier,
+      overclockSteps: stats.steps,
+      perfectOverclockSteps: stats.steps,
+      perfectSpeedFactor: 4,
+      perfectEuFactor: 4,
+      durationTicks: stats.durationTicks,
+      eut: stats.eut,
+    };
+  }
   const overclockSteps = Math.max(0, getVoltageTierIndex(tier) - getVoltageTierIndex(minimumTier));
   const runtimeVariant = selectRuntimeCalculationVariant(effectiveRecipe, node);
   if (runtimeVariant) {

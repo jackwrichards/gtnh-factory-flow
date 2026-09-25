@@ -47,6 +47,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.8.0",
+    date: "2026-09-24",
+    headline: "Extreme Entity Crusher",
+    notes: [
+      "The Extreme Entity Crusher is here: every mob a Powered Spawner can hold, with the drops it really makes and its Liquid XP.",
+      "Set the weapon's damage, Looting, infernal spawns, the blood ritual and the damaged gear switch, and the rates follow the machine.",
+    ],
+  },
+  {
     version: "3.7.0",
     date: "2026-09-24",
     headline: "The right pipe casings",

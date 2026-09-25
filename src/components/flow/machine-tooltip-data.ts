@@ -42,8 +42,10 @@ export function buildConfigTooltip(recipe: Recipe, node: FactoryNode, control: M
   const selected = getRecipeMachineConfigTierControls(effective, node).find(c => c.id === control.id) ?? control;
   // Only curated control notes: arbitrary scraped tooltips can claim effects
   // the machine never receives. These explain source/glass requirements too.
-  const curatedOption = getMachineTableControls(effective.machineType)
-    .find(c => c.id === control.id)?.tiers.find(t => t.key === selected.current.key);
+  const curatedControl = getMachineTableControls(effective.machineType).find(c => c.id === control.id);
+  // A typed number never matches a listed rung; its one rung carries the help.
+  const curatedOption = curatedControl?.tiers.find(t => t.key === selected.current.key)
+    ?? (control.numeric ? curatedControl?.tiers[0] : undefined);
   return {
     title: control.label, subtitle: selected.current.label,
     bullets: curatedOption?.resource.tooltip,

@@ -37,6 +37,7 @@
  * running the probe described in that test if the reference is ever updated.
  */
 import type { MachineConfigControl } from "@/lib/model/types";
+import { EEC_CONTROLS, EEC_MODE } from "./extreme-entity-crusher";
 import { neutronActivatorSpeed, quantiseNeutronActivatorDuration } from "./neutron-activator";
 import { HILE_SOURCE_CONTROL, hileSourceAt, normalizeHileSettings } from "./hile";
 import { PRASS_NORMAL_CASING, PRASS_PRECISE_CASING, PRASS_MACHINE_CASING, prassInputVoltageLimit } from "./precise-assembler";
@@ -934,6 +935,22 @@ const MACHINES: Record<string, MachineBehaviour> = {
     controls: [ITEM_PIPE_CONTROL],
     hidesControls: [PIPE],
     normalizeConfig: normalizeLatheSettings,
+  },
+  /**
+   * kubatech's Extreme Entity Crusher. Its kill time, overclock (20-tick
+   * floor, extra steps multiply the drops), infernals and drops are replayed
+   * by extreme-entity-crusher.ts, which getOverclockedRecipeStats and
+   * getMachineOutputMultiplier call. This entry supplies the knobs, the one
+   * parallel, the summed hatch power getMaxInputEu reads, and the ritual's
+   * quarter power for the draw check.
+   */
+  "Extreme Entity Crusher": {
+    overclock: OVERCLOCK.perfect(),
+    power: (c) => (c.tier(EEC_MODE) === 1 ? 0.25 : 1),
+    parallels: 1,
+    fullPowerPool: true,
+    controls: EEC_CONTROLS,
+    note: "An infernal kill also drops one random enchanted item, which is not listed.",
   },
   "Industrial Maceration Stack": {
     overclock: OVERCLOCK.normal(),

@@ -321,13 +321,27 @@ function dropHiddenControls(
     : controls.filter((control) => !hidden.includes(control.id));
 }
 
+/** A typed number, snapped to the knob's step (whole numbers by default) and clamped. */
+export function snapNumericSetting(
+  value: number,
+  numeric: NonNullable<MachineConfigControl["numeric"]>,
+): number {
+  const { min, max = Number.MAX_SAFE_INTEGER, step } = numeric;
+  const snapped = step ? Number((Math.round(value / step) * step).toFixed(6)) : Math.trunc(value);
+  return Math.min(max, Math.max(min, snapped));
+}
+
 export function getAdjacentMachineConfigTier(
   control: MachineConfigTierControl,
   direction: -1 | 1,
 ): string {
   if (control.numeric) {
-    return String(Math.min(control.numeric.max ?? Number.MAX_SAFE_INTEGER,
-      Math.max(control.numeric.min, Number(control.current.key) + direction)));
+    return String(
+      snapNumericSetting(
+        Number(control.current.key) + direction * (control.numeric.step ?? 1),
+        control.numeric,
+      ),
+    );
   }
   const currentIndex = control.tiers.findIndex((entry) => entry.key === control.current.key);
   const minimumIndex = control.tiers.findIndex((entry) => entry.key === control.minimum.key);
@@ -404,9 +418,10 @@ function resolveMachineConfigTierControl(
   }
 
   if (control.numeric) {
-    const { min, max = Number.MAX_SAFE_INTEGER } = control.numeric;
     const raw = Number(selectedKey?.trim() || control.defaultKey || control.minimumKey);
-    const value = Number.isFinite(raw) ? Math.min(max, Math.max(min, Math.trunc(raw))) : min;
+    const value = Number.isFinite(raw)
+      ? snapNumericSetting(raw, control.numeric)
+      : control.numeric.min;
     const current = {
       ...minimum,
       key: String(value),

@@ -28,6 +28,7 @@ import {
   GT_VOLTAGE_TIERS,
   formatRate,
   getRecipeMachineHandlers,
+  isControllerSlotInput,
   isFreeRecipeInput,
   isOreDictionaryResource,
   isRecipeInputConsumed,
@@ -2101,7 +2102,7 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
                 key={`in-${index}`}
                 resource={chip.resource}
                 amountText={
-                  isFreeRecipeInput(chip.raw)
+                  isFreeRecipeInput(chip.raw) && !isControllerSlotInput(chip.raw)
                     ? { text: "FREE" }
                     : chip.raw.consumed === false
                     ? { text: "NC" }
