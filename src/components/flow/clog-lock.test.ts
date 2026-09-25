@@ -6,6 +6,7 @@ import { calculateThroughput } from "@/lib/solver/throughput";
 import { findDeathSpirals } from "./death-spiral";
 import { describeClogLock, describeClogLockForNode, findClogLocks } from "./clog-lock";
 import { deriveNodeVerdict } from "./node-verdict";
+import { sectionNodeId } from "@/lib/model/shared-machine";
 
 /**
  * The clog lock's exam: the minimal board is two machines whose loop hands
@@ -409,5 +410,51 @@ describe("a fed card held by its second output", () => {
     const furnace = deriveNodeVerdict(proj, result, "node-b02b49ee-f858-4317-b918-df16f0e7ede6");
     expect(furnace.kind).toBe("clogged");
     expect(furnace.clog?.heldTakerName).toBe("Chemical Reactor");
+  });
+
+  it("reads a heater feeding a held reactor as on demand, not bottleneck", () => {
+    // Ktz's alumina line (2026-09-24), slimmed to its recipes. A fluid heater
+    // feeds a shared Large Chemical Reactor whose alumina recipe sends its
+    // bauxite slag only to a centrifuge, and that centrifuge's rutile goes to
+    // a titanium loop already at 100%. The reactor asked for slurry at full
+    // speed, so the heater at 12% read BOTTLENECK, though nothing more it
+    // made could be taken. Its solver disposal reads 1: only the verdict's
+    // own held-output reading sees the jam.
+    const proj = normalizeLoadedProject(
+      JSON.parse(
+        readFileSync(new URL("./__fixtures__/alumina-line-shared-reactor.json", import.meta.url), "utf8"),
+      ),
+    );
+    const result = calculateThroughput(proj, { generatedAt: "fixed" });
+    const reactor = "node-5f49041d-0bc1-4ef6-8cea-ad435b3d2add";
+    const heater = "node-5471e65a-7c22-4ee4-97d6-5eadf1905f2c";
+    expect(result.nodes[reactor]!.disposalUtilization).toBe(1);
+
+    const heaterVerdict = deriveNodeVerdict(proj, result, heater);
+    expect(heaterVerdict.kind).toBe("demand-set");
+    expect(heaterVerdict.deficit).toBeUndefined();
+
+    // The trail still leads down the line: the alumina recipe is held by
+    // its slag, the centrifuge's rutile recipe by the titanium loop.
+    const alumina = deriveNodeVerdict(proj, result, reactor);
+    expect(alumina.kind).toBe("clogged");
+    expect(alumina.clog?.displayName).toBe("Bauxite Slag Dust");
+    expect(alumina.clog?.heldTakerName).toBe("Multiblock Centrifuge");
+    const rutile = deriveNodeVerdict(
+      proj,
+      result,
+      sectionNodeId("node-8915c305-f438-4a7f-ac1e-a9a44bac0d53", 1),
+    );
+    expect(rutile.kind).toBe("clogged");
+    expect(rutile.clog?.displayName).toBe("Rutile Dust");
+    expect(rutile.clog?.heldTakerPct).toBe(100);
+
+    // A recipe held by another recipe on the same card names that recipe,
+    // not the machine: "Large Chemical Reactor limits Carbon Dioxide
+    // output" on a reactor read as the machine clogging itself.
+    const quicklime = deriveNodeVerdict(proj, result, sectionNodeId(reactor, 1));
+    expect(quicklime.kind).toBe("clogged");
+    expect(quicklime.clog?.displayName).toBe("Carbon Dioxide");
+    expect(quicklime.clog?.heldTakerName).toBe("The Alumina Dust recipe on this machine");
   });
 });

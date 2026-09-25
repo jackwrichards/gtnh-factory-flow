@@ -427,12 +427,11 @@ function isStoppedBySetup(
 function findStoppedTakerClog(
   project: FactoryProject,
   result: ThroughputResult,
+  nodeId: string,
   nodeResult: NodeThroughputResult,
   outgoing: ProjectEdge[],
 ): NodeVerdict["clog"] {
-  const storageIds = new Set((project.storages ?? []).map((storage) => storage.id));
-  const recipeById = new Map(project.recipes.map((entry) => [entry.id, entry]));
-  const nodeById = new Map(project.nodes.map((entry) => [entry.id, entry]));
+  const { recipeById, nodeById, storageById: storageIds } = boardLookups(project);
   const outgoingBy = outgoingByNode(project);
   const capable = clamp01(nodeResult.capableUtilization, 1);
   const utilization = clamp01(nodeResult.utilization, 0);
@@ -489,7 +488,7 @@ function findStoppedTakerClog(
       }
       if (stoppedTaker === undefined) {
         const recipe = takerNode ? recipeById.get(takerNode.recipeId) : undefined;
-        stoppedTaker = recipe?.machineType ?? recipe?.name ?? takerResult?.recipeName;
+        stoppedTaker = takerDisplayName(taker, nodeId, recipe, takerResult?.recipeName ?? taker);
       }
     }
     if (!allStopped) {
@@ -529,6 +528,7 @@ function findStoppedTakerClog(
 function findHeldOutputClog(
   project: FactoryProject,
   result: ThroughputResult,
+  nodeId: string,
   nodeResult: NodeThroughputResult,
   outgoing: ProjectEdge[],
   hungryKey: string,
@@ -560,7 +560,7 @@ function findHeldOutputClog(
     if (!isMaterialShortfall(made - taken, made)) {
       continue;
     }
-    const named = rankHeldTaker(project, result, takers);
+    const named = rankHeldTaker(project, result, takers, nodeId);
     const clog: NonNullable<NodeVerdict["clog"]> = {
       resourceKey: key,
       kind: flow.kind,
@@ -588,8 +588,7 @@ function machineTakersBehindOutput(
   project: FactoryProject,
   edges: ProjectEdge[],
 ): Set<string> | undefined {
-  const storageById = new Map((project.storages ?? []).map((storage) => [storage.id, storage]));
-  const nodeIds = new Set(project.nodes.map((entry) => entry.id));
+  const { storageById, nodeById: nodeIds } = boardLookups(project);
   const outgoingBy = outgoingByNode(project);
   const takers = new Set<string>();
   const seen = new Set<string>();
@@ -625,20 +624,18 @@ function rankHeldTaker(
   project: FactoryProject,
   result: ThroughputResult,
   takers: Set<string>,
+  askerId: string,
 ): { rank: number; name: string; pct: number } {
-  const recipeById = new Map(project.recipes.map((entry) => [entry.id, entry]));
-  const nodeById = new Map(project.nodes.map((entry) => [entry.id, entry]));
+  const { recipeById, nodeById } = boardLookups(project);
   let best: { rank: number; name: string; pct: number } | undefined;
   for (const taker of [...takers].sort()) {
     const takerResult = result.nodes[taker];
     const takerNode = nodeById.get(taker);
     const takerUtil = clamp01(takerResult?.utilization, 0);
-    const takerCapable = clamp01(takerResult?.capableUtilization, 1);
-    const takerDisposal = clamp01(takerResult?.disposalUtilization, 1);
     const rank =
       takerNode?.enabled === false || !takerResult || takerUtil <= VERDICT_EPSILON
         ? 3
-        : takerDisposal < 1 - VERDICT_EPSILON && takerDisposal < takerCapable - VERDICT_EPSILON
+        : isHeldByOwnOutput(project, result, taker, askerId)
           ? 3
           : takerUtil >= 1 - VERDICT_EPSILON
             ? 2
@@ -647,12 +644,170 @@ function rankHeldTaker(
       const recipe = takerNode ? recipeById.get(takerNode.recipeId) : undefined;
       best = {
         rank,
-        name: recipe?.machineType ?? recipe?.name ?? takerResult?.recipeName ?? taker,
+        name: takerDisplayName(taker, askerId, recipe, takerResult?.recipeName ?? taker),
         pct: Math.round(takerUtil * 1000) / 10,
       };
     }
   }
   return best ?? { rank: 0, name: "", pct: 0 };
+}
+
+/**
+ * The name a clog story gives the machine holding it: its machine type, or,
+ * when the taker is another recipe on the SAME card, that recipe. A reactor
+ * whose one recipe makes more carbon dioxide than its other recipe drinks
+ * used to read "Large Chemical Reactor limits Carbon Dioxide output", which
+ * a player took for the machine clogging itself (Ktz, 2026-09-24).
+ */
+function takerDisplayName(
+  takerId: string,
+  askerId: string,
+  recipe: Recipe | undefined,
+  fallback: string,
+): string {
+  if (recipe?.name && sectionOwnerId(takerId) === sectionOwnerId(askerId)) {
+    const colon = recipe.name.lastIndexOf(": ");
+    const product = colon >= 0 ? recipe.name.slice(colon + 2) : recipe.name;
+    return `The ${product} recipe on this machine`;
+  }
+  return recipe?.machineType ?? recipe?.name ?? fallback;
+}
+
+const boardLookupsCache = new WeakMap<
+  FactoryProject,
+  {
+    recipeById: Map<string, Recipe>;
+    nodeById: Map<string, FactoryProject["nodes"][number]>;
+    storageById: Map<string, NonNullable<FactoryProject["storages"]>[number]>;
+  }
+>();
+function boardLookups(project: FactoryProject) {
+  let cached = boardLookupsCache.get(project);
+  if (!cached) {
+    cached = {
+      recipeById: new Map(project.recipes.map((entry) => [entry.id, entry])),
+      nodeById: new Map(project.nodes.map((entry) => [entry.id, entry])),
+      storageById: new Map((project.storages ?? []).map((entry) => [entry.id, entry])),
+    };
+    boardLookupsCache.set(project, cached);
+  }
+  return cached;
+}
+
+/**
+ * Whether a machine is held by its OWN output side, so what it asks of an
+ * input is not hunger a feeder can answer: feed it more and it still cannot
+ * get rid of what it makes. Two ways there, and the deficit reader has to
+ * know both or it crowns the feeder BOTTLENECK while the jam sits a step
+ * further down. Ktz's alumina line (2026-09-24): a fluid heater at 12% read
+ * BOTTLENECK because the reactor it fed asked for slurry at full speed,
+ * while that reactor's slag only left as fast as a centrifuge could pass
+ * its rutile to a titanium loop already at 100%.
+ *
+ * - The solver's disposal figure binds below what the inputs allow.
+ * - The held-output clog the verdict itself reads (findHeldOutputClog): the
+ *   card runs below what its inputs and asks allow, and a wired output that
+ *   only machines take, none of them short on it, ships less than the card
+ *   would make. The solver's disposal misses this one when another output's
+ *   taker begs at nameplate and lifts the card's demand to 100%.
+ *
+ * Asked recursively of the takers on that output, so a chain of held cards
+ * reads held all the way up. The card ASKING is taken as not held for the
+ * length of the question, and so is any card met again on the way round a
+ * loop: inside a ring every member is held by the next, and letting that
+ * excuse the asker's own taker cut the trail of clogged cards short of the
+ * machine that really sets the ring's pace. Memoized per (project, result)
+ * and asker.
+ */
+const heldByOwnOutputCache = new WeakMap<
+  FactoryProject,
+  { result: ThroughputResult; byAsker: Map<string, Map<string, boolean>> }
+>();
+function isHeldByOwnOutput(
+  project: FactoryProject,
+  result: ThroughputResult,
+  nodeId: string,
+  askerId: string,
+): boolean {
+  let cached = heldByOwnOutputCache.get(project);
+  if (!cached || cached.result !== result) {
+    cached = { result, byAsker: new Map() };
+    heldByOwnOutputCache.set(project, cached);
+  }
+  let held = cached.byAsker.get(askerId);
+  if (!held) {
+    held = new Map([[askerId, false]]);
+    cached.byAsker.set(askerId, held);
+  }
+  const known = held.get(nodeId);
+  if (known !== undefined) {
+    return known;
+  }
+  held.set(nodeId, false);
+  const answer = computeHeldByOwnOutput(project, result, nodeId, askerId);
+  held.set(nodeId, answer);
+  return answer;
+}
+
+function computeHeldByOwnOutput(
+  project: FactoryProject,
+  result: ThroughputResult,
+  nodeId: string,
+  askerId: string,
+): boolean {
+  const nodeResult = result.nodes[nodeId];
+  if (!nodeResult) {
+    return false;
+  }
+  const utilization = clamp01(nodeResult.utilization, 0);
+  const capable = clamp01(nodeResult.capableUtilization, 1);
+  const demand = clamp01(nodeResult.demandUtilization, utilization);
+  const disposal = clamp01(nodeResult.disposalUtilization, 1);
+  if (disposal < 1 - VERDICT_EPSILON && disposal < capable - VERDICT_EPSILON) {
+    return true;
+  }
+  const wanted = Math.min(1, capable, Math.max(demand, utilization));
+  if (utilization >= wanted - VERDICT_EPSILON) {
+    return false;
+  }
+  const outgoing = outgoingByNode(project).get(nodeId) ?? [];
+  for (const [key, flow] of Object.entries(nodeResult.outputs)) {
+    if (flow.amountPerSecond <= RATE_EPSILON || flow.kind === "power") {
+      continue;
+    }
+    const edges = outgoing.filter(
+      (edge) => makeResourceKey(edge.resourceKind, edge.resourceId) === key,
+    );
+    if (edges.length === 0) {
+      continue;
+    }
+    const takers = machineTakersBehindOutput(project, edges);
+    if (!takers || takers.size === 0) {
+      continue;
+    }
+    let taken = 0;
+    let hungry = false;
+    for (const edge of edges) {
+      const edgeResult = result.edges[edge.id];
+      const transferred = edgeResult?.transferredPerSecond ?? 0;
+      taken += transferred;
+      const ask = honestEdgeAskPerSecond(edgeResult, result.nodes[edge.target], edge);
+      if (
+        isMaterialShortfall(ask - transferred, ask) &&
+        !isHeldByOwnOutput(project, result, edge.target, askerId)
+      ) {
+        hungry = true;
+      }
+    }
+    if (hungry) {
+      continue;
+    }
+    const made = flow.amountPerSecond * wanted;
+    if (isMaterialShortfall(made - taken, made)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -829,7 +984,7 @@ export function deriveNodeVerdict(
   // needs; the only true thing to say is which machine stopped, so the
   // player goes there instead of adding machines here or hanging a drawer.
   if (utilization <= VERDICT_EPSILON && capable > VERDICT_EPSILON && result) {
-    const waiting = findStoppedTakerClog(project, result, nodeResult, outgoing);
+    const waiting = findStoppedTakerClog(project, result, nodeId, nodeResult, outgoing);
     if (waiting) {
       return { kind: "clogged", pct, clog: waiting };
     }
@@ -862,7 +1017,7 @@ export function deriveNodeVerdict(
           ),
         );
         if (takers && takers.size > 0) {
-          const named = rankHeldTaker(project, result, takers);
+          const named = rankHeldTaker(project, result, takers, nodeId);
           clog.heldTakerName = named.name;
           clog.heldTakerPct = named.pct;
         }
@@ -895,6 +1050,7 @@ export function deriveNodeVerdict(
       ? findHeldOutputClog(
           project,
           result,
+          nodeId,
           nodeResult,
           outgoing,
           deficit.resourceKey,
@@ -1195,10 +1351,10 @@ function findWorstOutputDeficit(
     if (!edgeResult) {
       continue;
     }
-    // An output-throttled consumer (disposal its binding limit — the same
-    // predicate the CLOGGED branch reads) cannot run faster however much it
-    // is fed, so its leftover ask is not hunger this card can answer. Its
-    // damped ask never collapses to shipped, and counting it crowned feeders
+    // An output-held consumer (isHeldByOwnOutput: the same two readings
+    // the CLOGGED branches make) cannot run faster however much it is fed,
+    // so its leftover ask is not hunger this card can answer. Its damped ask
+    // never collapses to shipped, and counting it crowned feeders
     // BOTTLENECK at 18% while the real jam sat on the consumer's output side.
     const targetResult = result.nodes[edge.target];
     // A taker stopped by its own setup (no power, a bare slot) is not hungry
@@ -1214,15 +1370,8 @@ function findWorstOutputDeficit(
     ) {
       continue;
     }
-    if (targetResult) {
-      const targetDisposal = clamp01(targetResult.disposalUtilization, 1);
-      const targetCapable = clamp01(targetResult.capableUtilization, 1);
-      if (
-        targetDisposal < 1 - VERDICT_EPSILON &&
-        targetDisposal < targetCapable - VERDICT_EPSILON
-      ) {
-        continue;
-      }
+    if (isHeldByOwnOutput(project, result, edge.target, nodeId)) {
+      continue;
     }
     const wanted = honestEdgeAskPerSecond(edgeResult, targetResult, edge);
     const missing = Math.max(0, wanted - (edgeResult.transferredPerSecond ?? 0));
