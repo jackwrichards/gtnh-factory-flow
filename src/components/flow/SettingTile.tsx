@@ -60,7 +60,9 @@ export const STEPPER_MAX_RUNGS = 6;
  */
 const CAPTIONS: Record<string, string> = {
   heatingCoil: "Coil",
-  pipeCasing: "Casing",
+  // Two different blocks: a lathe player was misled by a bare "Casing".
+  pipeCasing: "Fluid pipe",
+  itemPipeCasing: "Item pipe",
   solenoidCoil: "Solenoid",
   arcElectrode: "Electrode",
   preciseCasing: "Unit casing",

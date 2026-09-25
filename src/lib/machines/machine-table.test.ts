@@ -14,6 +14,7 @@ import {
   getMachineDurationMultiplier,
   getMachineEutMultiplier,
   getMachineParallelMultiplier,
+  getMachineStructuralParallels,
 } from "@/lib/solver/machine-effects";
 import {
   getRecipeCoilTierControl,
@@ -434,5 +435,126 @@ describe("curated machine table", () => {
     // Falls back to the scraped 99s rather than silently reading as 1.
     expect(getMachineDurationMultiplier(unlisted, node)).toBe(99);
     expect(getMachineParallelMultiplier(unlisted, node)).toBe(17);
+  });
+});
+
+describe("pipe casings", () => {
+  // The dataset's scraped knob: the fluid pipe ladder with two rungs no
+  // machine takes, handed to every machine whose tooltip says "Pipe Casing".
+  const SCRAPED_KEYS = ["bronze", "steel", "titanium", "tungstensteel", "ptfe", "pbi"];
+  function scrapedPipeControl(): MachineConfigControl {
+    return {
+      id: "pipeCasing",
+      label: "Pipe Casing",
+      minimumKey: "bronze",
+      defaultKey: "bronze",
+      tiers: SCRAPED_KEYS.map((key) => ({
+        key,
+        label: key,
+        parallelMultiplier: 99,
+        resource: resource(),
+      })),
+    };
+  }
+  const recipeFor = (machineType: string) =>
+    ({
+      machineType,
+      minimumTier: "LV",
+      eut: 16,
+      machineConfigControls: [scrapedPipeControl()],
+    }) as unknown as Recipe;
+  const controlIds = (recipe: Recipe, tiers: Record<string, string> = {}) =>
+    getRecipeMachineConfigTierControls(recipe, { machineConfigTiers: tiers }).map(
+      (control) => control.id,
+    );
+
+  it("gives the lathe item pipe casings, tin to black plutonium (MTEMultiLathe)", () => {
+    const lathe = recipeFor("Industrial Precision Lathe");
+    const [control, ...rest] = getRecipeMachineConfigTierControls(lathe, {});
+
+    expect(rest).toEqual([]);
+    expect(control.id).toBe("itemPipeCasing");
+    expect(control.tiers.map((tier) => tier.label)).toEqual([
+      "Tin",
+      "Brass",
+      "Electrum",
+      "Platinum",
+      "Osmium",
+      "Quantium",
+      "Fluxed Electrum",
+      "Black Plutonium",
+    ]);
+    expect(control.tiers[0].resource.id).toBe("gregtech:gt.blockcasings11");
+    expect(control.tiers[7].resource.id).toBe("gregtech:gt.blockcasings11@7");
+    expect(control.tiers[7].resource.displayName).toBe("Black Plutonium Item Pipe Casing");
+
+    // getMaxParallelRecipes: pipeTier * 8, tin = 1.
+    const parallels = (key: string) =>
+      getMachineStructuralParallels(lathe, { machineConfigTiers: { itemPipeCasing: key } });
+    expect(parallels("tin")).toBe(8);
+    expect(parallels("black-plutonium")).toBe(64);
+  });
+
+  it("carries a lathe saved on the old knob to the item pipe with the same parallels", () => {
+    const lathe = recipeFor("Industrial Precision Lathe");
+    SCRAPED_KEYS.forEach((key, position) => {
+      const node = { machineConfigTiers: { pipeCasing: key } };
+      expect(getMachineStructuralParallels(lathe, node)).toBe((position + 1) * 8);
+    });
+    expect(
+      getRecipeMachineConfigTierControls(lathe, { machineConfigTiers: { pipeCasing: "pbi" } })[0]
+        .current.key,
+    ).toBe("quantium");
+
+    // A pick made on the real knob wins over whatever the old one says.
+    expect(
+      getMachineStructuralParallels(lathe, {
+        machineConfigTiers: { pipeCasing: "pbi", itemPipeCasing: "tin" },
+      }),
+    ).toBe(8);
+  });
+
+  it("never offers PTFE or PBI pipe casings, which no structure accepts", () => {
+    for (const machine of ["Chemical Plant", "Industrial Autoclave"]) {
+      const control = getRecipeMachineConfigTierControls(recipeFor(machine), {}).find(
+        (entry) => entry.id === "pipeCasing",
+      );
+      expect(control?.tiers.map((tier) => tier.key)).toEqual([
+        "bronze",
+        "steel",
+        "titanium",
+        "tungstensteel",
+      ]);
+      expect(control?.tiers[3].resource.id).toBe("gregtech:gt.blockcasings2@15");
+    }
+
+    // A plan saved on either keeps the best real casing, tungstensteel.
+    const chemPlantRecipe = recipeFor("Chemical Plant");
+    for (const key of ["ptfe", "pbi"]) {
+      expect(
+        getMachineStructuralParallels(chemPlantRecipe, { machineConfigTiers: { pipeCasing: key } }),
+      ).toBe(8);
+      expect(
+        getMachineEutMultiplier(recipeFor("Industrial Autoclave"), {
+          machineConfigTiers: { pipeCasing: key },
+        }),
+      ).toBeCloseTo(8 / 12, 10);
+    }
+  });
+
+  it("hides the scraped pipe knob on machines that have no fluid pipes", () => {
+    for (const machine of [
+      "Dissection Apparatus",
+      "Industrial Wire Factory",
+      "Amazon Warehousing Depot",
+      "Industrial Mixing Machine",
+    ]) {
+      expect(controlIds(recipeFor(machine))).toEqual(["itemPipeCasing"]);
+    }
+    expect(controlIds(recipeFor("Steam Blender"))).toEqual(["steamPressure"]);
+    expect(controlIds(recipeFor("Industrial Autoclave"))).toEqual([
+      "pipeCasing",
+      "itemPipeCasing",
+    ]);
   });
 });

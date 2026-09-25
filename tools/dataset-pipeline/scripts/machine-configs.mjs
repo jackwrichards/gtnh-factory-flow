@@ -64,13 +64,27 @@ export const heatingCoilTiers = [
   { heat: 13501, key: "eternal", label: "Eternal", blockId: "gregtech:gt.blockcasings5@13" },
 ];
 
+// Fluid pipe casings: gt.blockcasings2 metas 12-15 are all any tiered
+// structure accepts (MTEChemicalPlant, MTEMultiAutoclave). PTFE and PBI pipe
+// casings are other blocks, and no pipe-tiered machine takes them.
 const pipeCasingTiers = [
   { key: "bronze", label: "Bronze", blockId: "gregtech:gt.blockcasings2@12" },
   { key: "steel", label: "Steel", blockId: "gregtech:gt.blockcasings2@13" },
   { key: "titanium", label: "Titanium", blockId: "gregtech:gt.blockcasings2@14" },
   { key: "tungstensteel", label: "Tungstensteel", blockId: "gregtech:gt.blockcasings2@15" },
-  { key: "ptfe", label: "PTFE", blockId: "gregtech:gt.blockcasings8@1" },
-  { key: "pbi", label: "PBI", blockId: "gregtech:gt.blockcasings9" },
+];
+
+// Item pipe casings: gt.blockcasings11 metas 0-7, tier meta + 1. Keys match
+// the app's curated itemPipeCasing control.
+const itemPipeCasingTiers = [
+  { key: "tin", label: "Tin", blockId: "gregtech:gt.blockcasings11" },
+  { key: "brass", label: "Brass", blockId: "gregtech:gt.blockcasings11@1" },
+  { key: "electrum", label: "Electrum", blockId: "gregtech:gt.blockcasings11@2" },
+  { key: "platinum", label: "Platinum", blockId: "gregtech:gt.blockcasings11@3" },
+  { key: "osmium", label: "Osmium", blockId: "gregtech:gt.blockcasings11@4" },
+  { key: "quantium", label: "Quantium", blockId: "gregtech:gt.blockcasings11@5" },
+  { key: "fluxed-electrum", label: "Fluxed Electrum", blockId: "gregtech:gt.blockcasings11@6" },
+  { key: "black-plutonium", label: "Black Plutonium", blockId: "gregtech:gt.blockcasings11@7" },
 ];
 
 const solenoidTiers = [
@@ -1200,6 +1214,23 @@ function machineConfigTierDefinitionForSubject(subject) {
         ]),
       })),
       tooltipPrefix: "Heating coil tier",
+    };
+  }
+  // Before the fluid pipes, which "pipe casing" would otherwise catch too.
+  // Only a tooltip that says "Item" gets here: the lathe's says plain "Pipe
+  // Casing Tier" for its item pipes, and the app's machine table covers it.
+  if (normalized.includes("item pipe casing")) {
+    return {
+      id: "itemPipeCasing",
+      label: "Item Pipe Casing",
+      tiers: itemPipeCasingTiers.map((tier) => ({
+        key: tier.key,
+        label: tier.label,
+        resource: machineConfigResource(tier.blockId, `${tier.label} Item Pipe Casing`, [
+          "Item pipe casing tier",
+        ]),
+      })),
+      tooltipPrefix: "Item pipe casing tier",
     };
   }
   if (normalized.includes("pipe casing")) {

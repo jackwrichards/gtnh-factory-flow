@@ -416,6 +416,17 @@ Working notes for future agents on GTNH Factory Flow.
   discount plus perfect overclocks, and that is what we implement. Machines
   that diverge on purpose are listed in `machine-table.test.ts`.
 - Machine config controls are structured data, not frontend hardcoding. Use `machineConfigControls`.
+- PIPE CASINGS ARE TWO BLOCK FAMILIES (lathe bug report, 2026-09-24).
+  `pipeCasing` is the FLUID pipe: gt.blockcasings2 metas 12-15, Bronze to
+  Tungstensteel, the only ones MTEChemicalPlant and MTEMultiAutoclave accept
+  (PTFE and PBI pipe casings fit no tiered structure). `itemPipeCasing` is
+  the ITEM pipe: gt.blockcasings11 metas 0-7, Tin to Black Plutonium, tier
+  meta + 1. The scraper sent every "Pipe Casing" tooltip to the fluid ladder,
+  and MTEMultiLathe's own tooltip calls its item pipes "Pipe Casing Tier", so
+  the machine table overrides it: `FLUID_PIPE_CONTROL` on the two fluid
+  machines (saved ptfe/pbi read as tungstensteel), `ITEM_PIPE_CONTROL` plus
+  `hidesControls: [PIPE]` on the item pipe machines. A lathe saved on the old
+  knob carries by position, which keeps its parallels.
 - HILE's `laserSource` is one real voltage/amperage hatch choice (`hile.ts`),
   replacing the duplicate `laserAmperage` knob. Source amps give floored
   cube-root parallels; source tier + 1 independently gates recipes and caps

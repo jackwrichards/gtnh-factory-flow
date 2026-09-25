@@ -254,7 +254,7 @@ const ELECTROMAGNET = "electromagnet";
 function choiceControl(
   id: string,
   label: string,
-  options: Array<string | { label: string; icon: string }>,
+  options: Array<string | { label: string; icon: string; name?: string }>,
   defaultIndex = 0,
 ): MachineConfigControl {
   const tiers = options.map((option, index) => {
@@ -268,7 +268,9 @@ function choiceControl(
         kind: "item" as const,
         id: icon,
         amount: 1,
-        displayName: optionLabel,
+        // The block's full name: the config UI also matches icons by name, and
+        // a bare "Tin" could land on some other item called Tin.
+        displayName: typeof option === "string" ? optionLabel : (option.name ?? optionLabel),
         tooltip: [label],
         consumed: false,
       },
@@ -322,17 +324,67 @@ function slug(value: string): string {
     .replace(/^-|-$/g, "");
 }
 
-/** Item pipe casings, in the reference's order. */
-const ITEM_PIPE_CONTROL = choiceControl(ITEM_PIPE, "Item Pipe Casing", [
-  "Tin",
-  "Brass",
-  "Electrum",
-  "Platinum",
-  "Osmium",
-  "Quantium",
-  "Fluxed Electrum",
-  "Black Plutonium",
-]);
+/**
+ * Item pipe casings, in the reference's order: gt.blockcasings11 metas 0-7,
+ * which every item pipe machine reads as tier meta + 1 (tin = 1).
+ */
+const ITEM_PIPE_CONTROL = choiceControl(
+  ITEM_PIPE,
+  "Item Pipe Casing",
+  [
+    "Tin",
+    "Brass",
+    "Electrum",
+    "Platinum",
+    "Osmium",
+    "Quantium",
+    "Fluxed Electrum",
+    "Black Plutonium",
+  ].map((label, meta) => ({
+    label,
+    icon: meta === 0 ? "gregtech:gt.blockcasings11" : `gregtech:gt.blockcasings11@${meta}`,
+    name: `${label} Item Pipe Casing`,
+  })),
+);
+
+/**
+ * Fluid pipe casings. The two machines that read them take gt.blockcasings2
+ * metas 12-15 and nothing else: MTEChemicalPlant's addTieredBlock(12, 16)
+ * and MTEMultiAutoclave's getFluidTierFromMeta. The scraper also offered PTFE
+ * and PBI pipe casings, which neither structure accepts. Keys match the
+ * dataset's control, so a saved pick carries straight over.
+ */
+const FLUID_PIPE_CONTROL = choiceControl(
+  PIPE,
+  "Pipe Casing",
+  ["Bronze", "Steel", "Titanium", "Tungstensteel"].map((label, index) => ({
+    label,
+    icon: `gregtech:gt.blockcasings2@${12 + index}`,
+    name: `${label} Pipe Casing`,
+  })),
+);
+
+/** The scraper's fluid pipe ladder, including the two rungs no machine takes. */
+const SCRAPED_FLUID_PIPE_KEYS = ["bronze", "steel", "titanium", "tungstensteel", "ptfe", "pbi"];
+
+/** A plan saved on PTFE or PBI keeps the best casing the machine really takes. */
+function normalizeFluidPipeSettings(settings: Record<string, string>): Record<string, string> {
+  const key = settings[PIPE];
+  return key === "ptfe" || key === "pbi" ? { ...settings, [PIPE]: "tungstensteel" } : settings;
+}
+
+/**
+ * The lathe was offered the fluid pipe ladder (GT's own tooltip calls its
+ * item pipes "Pipe Casing Tier"), at 8 parallels a rung like the real one.
+ * A plan saved on it keeps its parallels: the old rung's position picks the
+ * item pipe casing that gives the same count.
+ */
+function normalizeLatheSettings(settings: Record<string, string>): Record<string, string> {
+  if (settings[ITEM_PIPE] !== undefined) return settings;
+  const position = SCRAPED_FLUID_PIPE_KEYS.indexOf(settings[PIPE] ?? "");
+  const carried = ITEM_PIPE_CONTROL.tiers[position];
+  return carried ? { ...settings, [ITEM_PIPE]: carried.key } : settings;
+}
 
 const CONTAINMENT_CONTROL = choiceControl(CONTAINMENT, "Containment Block", [
   "Neutronium",
@@ -586,6 +638,9 @@ const STEAM_MULTIBLOCK: MachineBehaviour = {
   parallels: 8,
   speed: (c) => 0.625 * (c.tier(STEAM_PRESSURE) + 1),
   controls: [STEAM_PRESSURE_CONTROL],
+  // The Steam Blender's handler inherited the mixer map's scraped pipe knob.
+  // Its pipes are bronze or steel with the rest of the build: the pressure.
+  hidesControls: [PIPE],
 };
 
 /** checkMachine accepts any pipe height >= 4; it never imposes a top rung. */
@@ -663,6 +718,8 @@ const MACHINES: Record<string, MachineBehaviour> = {
     aliases: ["ExxonMobil Chemical Plant"],
     speed: (c) => c.tier(COIL) * 0.5 + 0.5,
     parallels: (c) => (c.tier(PIPE) + 1) * 2,
+    controls: [FLUID_PIPE_CONTROL],
+    normalizeConfig: normalizeFluidPipeSettings,
   },
   "Pyrolyse Oven": { overclock: OVERCLOCK.normal(), speed: (c) => (c.tier(COIL) + 1) * 0.5 },
   "Oil Cracker": {
@@ -842,7 +899,8 @@ const MACHINES: Record<string, MachineBehaviour> = {
     speed: (c) => 1.25 + c.tier(COIL) * 0.25,
     power: (c) => (11 - c.tier(PIPE)) / 12,
     parallels: (c) => c.tier(ITEM_PIPE) * 12 + 12,
-    controls: [ITEM_PIPE_CONTROL],
+    controls: [FLUID_PIPE_CONTROL, ITEM_PIPE_CONTROL],
+    normalizeConfig: normalizeFluidPipeSettings,
   },
   "Electric Implosion Compressor": {
     overclock: OVERCLOCK.normal(),
@@ -855,6 +913,7 @@ const MACHINES: Record<string, MachineBehaviour> = {
     power: 0.85,
     parallels: (c) => (c.tier(ITEM_PIPE) + 1) * 8,
     controls: [ITEM_PIPE_CONTROL],
+    hidesControls: [PIPE],
   },
   "Industrial Sledgehammer": {
     // Rewritten as MTEIndustrialForgeHammer: the anvils are gone, parallels
@@ -865,11 +924,16 @@ const MACHINES: Record<string, MachineBehaviour> = {
   },
   "Industrial Precision Lathe": {
     // Rewritten as MTEMultiLathe: flat 4x speed and 0.8x EU, with 8 parallels
-    // per pipe casing tier (bronze = 1).
+    // per ITEM pipe casing tier (gt.blockcasings11, tin = 1). Its tooltip says
+    // "Pipe Casing Tier", which is how the scraper came to offer it the fluid
+    // pipes (bronze to PBI).
     overclock: OVERCLOCK.normal(),
     speed: 4,
     power: 0.8,
-    parallels: (c) => (c.tier(PIPE) + 1) * 8,
+    parallels: (c) => (c.tier(ITEM_PIPE) + 1) * 8,
+    controls: [ITEM_PIPE_CONTROL],
+    hidesControls: [PIPE],
+    normalizeConfig: normalizeLatheSettings,
   },
   "Industrial Maceration Stack": {
     overclock: OVERCLOCK.normal(),
@@ -923,6 +987,7 @@ const MACHINES: Record<string, MachineBehaviour> = {
     power: 0.75,
     parallels: (c) => c.voltageTier * 4,
     controls: [ITEM_PIPE_CONTROL],
+    hidesControls: [PIPE],
   },
   "Amazon Warehousing Depot": {
     // MTEIndustrialPackager: throughput is item pipe tier + 1, tin included.
@@ -931,6 +996,7 @@ const MACHINES: Record<string, MachineBehaviour> = {
     power: 0.75,
     parallels: (c) => c.voltageTier * 16,
     controls: [ITEM_PIPE_CONTROL],
+    hidesControls: [PIPE],
   },
   // MTEPreciseAssembler's normal Assembler handler. Keep its dedicated
   // Precise Assembler recipe map separate: the two modes have different math.

@@ -47,6 +47,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.6.1",
+    date: "2026-09-24",
+    headline: "The right pipe casings",
+    notes: [
+      "The Industrial Precision Lathe now asks for item pipe casings, Tin to Black Plutonium, as it does in game. A lathe you already placed keeps its parallels.",
+      "The Chemical Plant and Industrial Autoclave no longer offer PTFE or PBI pipe casings, which they do not accept. A machine set to one now uses Tungstensteel.",
+      "Pipe casing settings show the real block and say Fluid pipe or Item pipe.",
+    ],
+  },
+  {
     version: "3.6.0",
     date: "2026-09-23",
     headline: "Share a plan without an account",
