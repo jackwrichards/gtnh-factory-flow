@@ -16,4 +16,4 @@
  * `src/lib/changelog.ts` written for players, not for developers, and kept to
  * a headline plus a few one-line notes.
  */
-export const APP_VERSION = "3.6.1";
+export const APP_VERSION = "3.7.0";
