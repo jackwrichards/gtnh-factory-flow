@@ -47,7 +47,7 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "3.8.1",
+    version: "3.9.0",
     date: "2026-09-25",
     headline: "Reactor fuel and sparge byproducts",
     notes: [
