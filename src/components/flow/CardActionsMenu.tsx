@@ -1,19 +1,22 @@
 "use client";
 import { useState } from "react";
-import { Copy, Menu, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Copy, Menu, Plus, RefreshCw, Skull, Trash2 } from "lucide-react";
 import { MenuShell } from "./EnergyHatchMenu";
 export function CardActionsMenu({
   onDelete,
   onClone,
   onRefactor,
   onAddRecipe,
+  onChangeMob,
 }: {
   onDelete: () => void;
   onClone: () => void;
   onRefactor: () => void;
   onAddRecipe?: () => void;
+  /** An Extreme Entity Crusher swaps the spawner in its controller slot. */
+  onChangeMob?: () => void;
 }) {
-  const [anchor, setAnchor] = useState<{ x: number; top: number; bottom: number }>();
+  const [anchor, setAnchor] = useState<{ x: number; top: number; bottom: number; hangsFrom?: Element }>();
   return (
     <div className="relative">
       <button
@@ -23,9 +26,10 @@ export function CardActionsMenu({
         data-hatch-menu-anchor
         onClick={(e) => {
           e.stopPropagation();
-          const r = (e.currentTarget.closest("[data-node-glance-root]") ?? e.currentTarget).getBoundingClientRect();
+          const card = e.currentTarget.closest("[data-node-glance-root]") ?? undefined;
+          const r = (card ?? e.currentTarget).getBoundingClientRect();
           setAnchor(
-            anchor ? undefined : { x: r.left, top: r.top, bottom: r.bottom },
+            anchor ? undefined : { x: r.left, top: r.top, bottom: r.bottom, hangsFrom: card },
           );
         }}
         className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[var(--mc-15)] bg-[var(--mc-49)] text-white shadow-[inset_2px_2px_0_var(--mc-85),inset_-2px_-2px_0_var(--mc-25)] hover:bg-[var(--mc-61)]"
@@ -56,6 +60,7 @@ export function CardActionsMenu({
             }}
           >
             {[
+              ...(onChangeMob ? [{ label: "Change mob", icon: Skull, run: onChangeMob }] : []),
               { label: "Clone node", icon: Copy, run: onClone },
               { label: "Replace the recipe", icon: RefreshCw, run: onRefactor },
               ...(onAddRecipe

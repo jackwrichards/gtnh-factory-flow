@@ -53,6 +53,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     notes: [
       "The Extreme Entity Crusher is here: every mob a Powered Spawner can hold, with the drops it really makes and its Liquid XP.",
       "Set the weapon's damage, Looting, infernal spawns, the blood ritual and the damaged gear switch, and the rates follow the machine.",
+      "Change the mob from the spawner on the card or the card's menu: the machine keeps its power and settings.",
     ],
   },
   {

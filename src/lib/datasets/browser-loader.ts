@@ -247,6 +247,20 @@ export async function listRecipeDatasetCrops(
   return fetchJson<{ crops: RecipeSummary[] }>(url.toString(), { signal: options.signal });
 }
 
+/** The Extreme Entity Crusher's mobs, for the spawner picker on its card. */
+export async function listRecipeDatasetMobs(
+  _manifestUrl: string,
+  version: DatasetVersion,
+  options: { signal?: AbortSignal } = {},
+): Promise<{ mobs: RecipeSummary[] }> {
+  const url = new URL(
+    `/api/datasets/${encodeURIComponent(version.id)}/mobs`,
+    window.location.origin,
+  );
+  addDatasetCacheKey(url, version);
+  return fetchJson<{ mobs: RecipeSummary[] }>(url.toString(), { signal: options.signal });
+}
+
 export async function queryRecipeDatasetResources(
   _manifestUrl: string,
   version: DatasetVersion,

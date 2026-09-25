@@ -20,6 +20,9 @@ import { subscribeBoardCameraMove } from "@/lib/board-camera-signal";
  * - with `fade`, a MOUSE drifting away dims the panel with distance and
  *   closes it past `FADE_GRACE + FADE_RANGE` px from the panel or anchor.
  *   Re-entering restores it. Fingers never fade: a touch has no hover.
+ *   Distance counts from the NEAREST the mouse has come since the panel
+ *   opened, so a panel that opens away from the pointer can be walked to;
+ *   and a `fadeKeep` element (the card a menu hangs from) counts as over it.
  *
  * Capture phase throughout: the board's pan handler and the search's panels
  * stop pointer events on their way up, and a bubbling listener never heard
@@ -43,6 +46,13 @@ export interface DropdownDismissOptions {
   fadeAfterReach?: boolean;
   /** Skip the board-camera rule (a menu that lives off the board and follows nothing). */
   ignoreCameraMove?: boolean;
+  /**
+   * With `fade`, the element the panel hangs from (a card): the mouse over it
+   * counts as over the panel. A card's menu that opened BELOW the card had
+   * the whole card between the button and the menu, and crossing it read as
+   * drifting away (Jack, 2026-09-24).
+   */
+  fadeKeep?: () => Element | null | undefined;
 }
 
 /** Pixels of free travel outside the panel before the fade begins. */
@@ -95,8 +105,10 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
   // Held in a ref: callers pass inline closures, and re-subscribing on every
   // render would reset a fading panel's opacity mid-fade.
   const onCloseRef = useRef(options.onClose);
+  const fadeKeepRef = useRef(options.fadeKeep);
   useEffect(() => {
     onCloseRef.current = options.onClose;
+    fadeKeepRef.current = options.fadeKeep;
   });
   useEffect(() => {
     const onClose = () => onCloseRef.current();
@@ -113,6 +125,12 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
     const panel = () => refs[0]?.current as HTMLElement | null | undefined;
     let closed = false;
     let reached = !fadeAfterReach;
+    // The nearest the mouse has been to the panel since it opened. The fade
+    // runs from THERE, not from where the mouse stood when the panel opened:
+    // a panel that opens away from the pointer (a card's menu dropping below
+    // the card, the mob picker opened from a menu item) can be walked to,
+    // and only walking back away from it fades it (Jack, 2026-09-24).
+    let closest = Number.POSITIVE_INFINITY;
     const close = () => {
       if (closed) return;
       closed = true;
@@ -156,6 +174,11 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
       // Over the panel or its anchor, however deep: that is distance zero,
       // whatever the boxes say.
       let nearest = isInside(event.target, opts) ? 0 : Number.POSITIVE_INFINITY;
+      const keep = fadeKeepRef.current?.();
+      if (nearest !== 0 && keep?.isConnected &&
+          distanceToRect(event.clientX, event.clientY, keep.getBoundingClientRect()) === 0) {
+        nearest = 0;
+      }
       for (const ref of refs) {
         if (nearest === 0) break;
         const element = ref.current;
@@ -165,13 +188,19 @@ export function useDropdownDismiss(open: boolean, options: DropdownDismissOption
       if (!Number.isFinite(nearest)) return;
       const element = panel();
       if (!element) return;
+      closest = Math.min(closest, nearest);
+      // Once the mouse has been at the panel this is the plain grace;
+      // before, the grace starts at the closest it has come so far.
+      const grace = closest <= FADE_GRACE ? FADE_GRACE : closest + FADE_GRACE;
       if (nearest <= FADE_GRACE) {
         reached = true;
+      }
+      if (nearest <= grace) {
         element.style.opacity = "";
         return;
       }
       if (!reached) return;
-      const away = (nearest - FADE_GRACE) / FADE_RANGE;
+      const away = (nearest - grace) / FADE_RANGE;
       if (away >= 1) {
         close();
         return;

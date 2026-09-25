@@ -4620,3 +4620,119 @@ describe("cycled input picks", () => {
     expect(useFactoryStore.getState().project.nodes[0]?.recipeInputOverrides).toBeUndefined();
   });
 });
+
+describe("swapping the mob in an Extreme Entity Crusher", () => {
+  const eecMeta = (mob: string) => ({
+    eec: { mob, maxHealth: 20, baseEut: 1920, outputs: [] as unknown[] },
+  });
+  const mob = (id: string, outputs: Array<{ kind: "item" | "fluid"; id: string; amount: number }>) => ({
+    id,
+    name: `Extreme Entity Crusher: ${id}`,
+    machineType: "Extreme Entity Crusher",
+    minimumTier: "EV" as const,
+    durationTicks: 55,
+    eut: 1920,
+    inputs: [{ kind: "item" as const, id: `factoryflow:eec_mob:${id}`, amount: 1, consumed: false }],
+    outputs,
+    metadata: eecMeta(id),
+  });
+  const ZOMBIE = mob("zombie", [
+    { kind: "item", id: "minecraft:rotten_flesh", amount: 1 },
+    { kind: "fluid", id: "xpjuice", amount: 120 },
+  ]);
+  const SKELETON = mob("skeleton", [
+    { kind: "item", id: "minecraft:arrow", amount: 1 },
+    { kind: "item", id: "minecraft:bone", amount: 1 },
+    { kind: "fluid", id: "xpjuice", amount: 120 },
+  ]);
+  const taker = (id: string, resource: { kind: "item" | "fluid"; id: string }) => ({
+    id,
+    name: id,
+    machineType: "Taker",
+    minimumTier: "LV" as const,
+    durationTicks: 20,
+    eut: 8,
+    inputs: [{ ...resource, amount: 1 }],
+    outputs: [{ kind: "item" as const, id: `${id}-out`, amount: 1 }],
+  });
+  const card = (id: string, recipeId: string, x: number, extra: object = {}) => ({
+    id,
+    recipeId,
+    machineCount: 1,
+    parallel: 1,
+    overclockTier: "LV" as const,
+    enabled: true,
+    position: { x, y: 0 },
+    ...extra,
+  });
+  const PROJECT = (): FactoryProject => ({
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "eec-swap",
+    name: "EEC swap",
+    fuelProfiles: [],
+    recipes: [
+      ZOMBIE,
+      taker("flesh-eater", { kind: "item", id: "minecraft:rotten_flesh" }),
+      taker("xp-user", { kind: "fluid", id: "xpjuice" }),
+    ],
+    nodes: [
+      card("eec", "zombie", 0, {
+        machineCount: 3,
+        overclockTier: "IV",
+        hatchVoltageTier: "IV",
+        hatchAmps: 4,
+        machineConfigTiers: { eecLooting: "3", eecWeaponDamage: "13.25", eecInfernal: "off" },
+      }),
+      card("eater", "flesh-eater", 440),
+      card("xp", "xp-user", 440),
+    ],
+    edges: [
+      { id: "e-flesh", source: "eec", target: "eater", resourceKind: "item", resourceId: "minecraft:rotten_flesh" },
+      { id: "e-xp", source: "eec", target: "xp", resourceKind: "fluid", resourceId: "xpjuice" },
+    ],
+    storages: [],
+    metadata: { createdAt: "2026-09-24T00:00:00.000Z", updatedAt: "2026-09-24T00:00:00.000Z" },
+  });
+
+  it("changes the mob in place and keeps the machine exactly as built", () => {
+    useFactoryStore.getState().setProject(PROJECT());
+    const before = useFactoryStore.getState().project.nodes.find((entry) => entry.id === "eec")!;
+
+    useFactoryStore.getState().swapMachineRecipe("eec", SKELETON);
+
+    const state = useFactoryStore.getState();
+    const eec = state.project.nodes.find((entry) => entry.id === "eec")!;
+    expect(state.project.nodes).toHaveLength(3);
+    expect(eec.recipeId).toBe("skeleton");
+    expect({ ...eec, recipeId: before.recipeId }).toEqual(before);
+    // The XP wire still has a port; rotten flesh does not.
+    expect(state.project.edges.map((edge) => edge.id)).toEqual(["e-xp"]);
+    expect(state.project.edges[0].sourceHandle).toBe(
+      makeResourceHandleId("output", SKELETON.outputs[2], 2),
+    );
+  });
+
+  it("swaps even when no wire survives, and undoes in one step", () => {
+    const project = PROJECT();
+    project.edges = project.edges.filter((edge) => edge.id === "e-flesh");
+    useFactoryStore.getState().setProject(project);
+
+    useFactoryStore.getState().swapMachineRecipe("eec", SKELETON);
+    expect(useFactoryStore.getState().project.nodes.map((entry) => entry.recipeId)).toEqual([
+      "skeleton",
+      "flesh-eater",
+      "xp-user",
+    ]);
+    expect(useFactoryStore.getState().project.edges).toEqual([]);
+
+    useFactoryStore.getState().undo();
+    const restored = useFactoryStore.getState().project;
+    expect(restored.nodes.find((entry) => entry.id === "eec")?.recipeId).toBe("zombie");
+    expect(restored.edges.map((edge) => edge.id)).toEqual(["e-flesh"]);
+  });
+
+  it("never takes a second recipe: the controller holds one spawner", () => {
+    useFactoryStore.getState().setProject(PROJECT());
+    expect(useFactoryStore.getState().addRecipeToNode("eec", SKELETON)).toBe(false);
+  });
+});

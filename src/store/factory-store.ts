@@ -6,6 +6,7 @@ import { dissolveProductionGroup, productionGroupDescendants } from "@/lib/model
 import type { ProductionGroup, PoolResourceRule } from "@/lib/model/types";
 
 import { normalizeFullFarms } from "@/lib/model/full-farms";
+import { isEecRecipe } from "@/lib/machines/extreme-entity-crusher";
 
 import { carryMachineVoltage, normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
 
@@ -334,6 +335,12 @@ interface FactoryStore {
     recipe: Recipe,
     options?: { machineHandlerId?: string },
   ) => void;
+  /**
+   * Another recipe on the same machine, as swapping a controller-slot item
+   * does (the EEC's spawner): in place, every machine setting kept, wires
+   * the new recipe can serve re-docked. One undo step.
+   */
+  swapMachineRecipe: (nodeId: string, recipe: Recipe) => void;
   updateNode: (nodeId: string, patch: Partial<FactoryNode>) => void;
   /**
    * SHARED MACHINES (shared-machine.ts). Opens the recipe search with this
@@ -1665,6 +1672,9 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
   refactorNodeWithRecipe: (nodeId, recipe, options) => {
     set((state) => refactorNodeToState(state, nodeId, recipe, options));
   },
+  swapMachineRecipe: (nodeId, recipe) => {
+    set((state) => swapMachineRecipeToState(state, nodeId, recipe));
+  },
   updateNode: (nodeId, patch) => {
     set((state) => {
       const project = touchProject(
@@ -1735,9 +1745,14 @@ export const useFactoryStore = create<FactoryStore>(withViewerGuard((set, get, w
       }
       const primary = state.project.recipes.find((entry) => entry.id === node.recipeId);
       // Generators, crop farms and custom rate cards own their recipe and
-      // run nothing else; the same goes for the pick.
+      // run nothing else; the same goes for the pick. So does an EEC: its
+      // controller holds one spawner.
       const ownsRecipe = (entry: Recipe | undefined) =>
-        !entry || isPowerRecipe(entry) || isCropFarmRecipe(entry) || isCustomRateRecipe(entry);
+        !entry ||
+        isPowerRecipe(entry) ||
+        isCropFarmRecipe(entry) ||
+        isCustomRateRecipe(entry) ||
+        isEecRecipe(entry);
       if (ownsRecipe(primary) || ownsRecipe(recipe)) {
         return state;
       }
@@ -5080,26 +5095,13 @@ function withSectionInputOverrides(
  * the old card is left standing and the pick lands beside it instead: a
  * replace that severs everything is not a refactor.
  */
-function refactorNodeToState(
-  state: FactoryStore,
-  nodeId: string,
-  recipe: Recipe,
-  options?: { machineHandlerId?: string; machineConfigTiers?: Record<string, string> },
-): Partial<FactoryStore> {
-  const node = state.project.nodes.find((entry) => entry.id === nodeId);
-  if (!node) {
-    return addRecipeNodeToState(state, recipe, undefined, { ...options, focusCamera: true });
-  }
-  if (node.recipeId === recipe.id) {
-    return state;
-  }
-
-  const spawnHandler = options?.machineHandlerId
-    ? recipe.machineHandlers?.find((handler) => handler.id === options.machineHandlerId)
-    : undefined;
-  // A shared machine's refactor swaps its FIRST recipe; the other sections
-  // and their wires stand.
-  const touching = state.project.edges.filter(
+/**
+ * The wires on a card's first recipe, and which of them the new recipe can
+ * still serve, re-docked onto its matching slot. A shared machine's other
+ * sections and their wires are not touched.
+ */
+function carryWiresOntoRecipe(edges: FactoryEdge[], nodeId: string, recipe: Recipe) {
+  const touching = edges.filter(
     (edge) =>
       (edge.source === nodeId && edgeSectionAt(edge, nodeId, "source") === 0) ||
       (edge.target === nodeId && edgeSectionAt(edge, nodeId, "target") === 0),
@@ -5130,6 +5132,71 @@ function refactorNodeToState(
       }
     }
   }
+  return { touching, carried };
+}
+
+/**
+ * A new recipe on the SAME machine, the way a player swaps the item in its
+ * controller slot (the Extreme Entity Crusher's spawner): always in place,
+ * and the machine stays exactly as built - handler, hatches, tier, count and
+ * every knob. Wires the new recipe can serve re-dock; the rest drop.
+ */
+function swapMachineRecipeToState(
+  state: FactoryStore,
+  nodeId: string,
+  recipe: Recipe,
+): Partial<FactoryStore> {
+  const node = state.project.nodes.find((entry) => entry.id === nodeId);
+  if (!node || node.recipeId === recipe.id) {
+    return state;
+  }
+  const { touching, carried } = carryWiresOntoRecipe(state.project.edges, nodeId, recipe);
+  const recipeAlreadyInProject = state.project.recipes.some((entry) => entry.id === recipe.id);
+  const project = touchProject(
+    pruneOrphanStorages(
+      applyEdgeInputOverrides(
+        {
+          ...state.project,
+          recipes: recipeAlreadyInProject
+            ? state.project.recipes.map((entry) =>
+                entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
+              )
+            : [...state.project.recipes, recipe],
+          nodes: state.project.nodes.map((entry) =>
+            entry.id === nodeId ? { ...entry, recipeId: recipe.id, recipeInputOverrides: undefined } : entry,
+          ),
+          edges: [...state.project.edges.filter((edge) => !touching.includes(edge)), ...carried],
+        },
+        carried,
+      ),
+    ),
+  );
+  return withProjectHistory(state, {
+    project,
+    selectedNodeId: nodeId,
+    selectedRecipeId: recipe.id,
+    lastResult: solveBooks(project),
+  });
+}
+
+function refactorNodeToState(
+  state: FactoryStore,
+  nodeId: string,
+  recipe: Recipe,
+  options?: { machineHandlerId?: string; machineConfigTiers?: Record<string, string> },
+): Partial<FactoryStore> {
+  const node = state.project.nodes.find((entry) => entry.id === nodeId);
+  if (!node) {
+    return addRecipeNodeToState(state, recipe, undefined, { ...options, focusCamera: true });
+  }
+  if (node.recipeId === recipe.id) {
+    return state;
+  }
+
+  const spawnHandler = options?.machineHandlerId
+    ? recipe.machineHandlers?.find((handler) => handler.id === options.machineHandlerId)
+    : undefined;
+  const { touching, carried } = carryWiresOntoRecipe(state.project.edges, nodeId, recipe);
 
   if (touching.length > 0 && carried.length === 0) {
     // Nothing survives: the pick lands beside the old card, which stays.

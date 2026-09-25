@@ -33,6 +33,7 @@ import {
   resourceMatchesInput,
 } from "@/lib/model";
 import { machineTableControlResourceIds } from "@/lib/machines/machine-table";
+import { EEC_MACHINE_TYPE } from "@/lib/machines/extreme-entity-crusher";
 import { pickRecipeRefMatch, type RecipeContentRef } from "@/lib/import-export/recipe-ref-match";
 import {
   MAX_RECIPE_QUERY_CLAUSES,
@@ -1116,16 +1117,21 @@ function scoreRecipeIndexes(
  * appear in the recipe book like any other recipe; this is the flat catalogue
  * the card's own dropdown searches.
  */
-export async function listDatasetCropFarmRecipes(versionId: string) {
+/**
+ * Every recipe of one map, as summaries sorted by name: the list a card's own
+ * picker offers (a crop farm's crops, an EEC's mobs). Only for small maps that
+ * are one choice each - the whole map ships in one response.
+ */
+async function listDatasetMapRecipes(versionId: string, recipeMap: string) {
   const catalog = await loadCatalog(versionId);
   if (!catalog.version.recipeLookupIndexPath) {
-    return { crops: [] };
+    return [];
   }
 
   const lookup = await loadRecipeLookupIndex(catalog.version);
-  const mapId = lookup.recipeMapIds.get(CROP_FARM_RECIPE_MAP);
+  const mapId = lookup.recipeMapIds.get(recipeMap);
   if (mapId === undefined) {
-    return { crops: [] };
+    return [];
   }
 
   const recipeIndexes: number[] = [];
@@ -1135,9 +1141,18 @@ export async function listDatasetCropFarmRecipes(versionId: string) {
     }
   }
 
-  const crops = await getRecipeSummariesByIndex(catalog, recipeIndexes);
-  crops.sort((left, right) => left.name.localeCompare(right.name));
-  return { crops };
+  const recipes = await getRecipeSummariesByIndex(catalog, recipeIndexes);
+  recipes.sort((left, right) => left.name.localeCompare(right.name));
+  return recipes;
+}
+
+export async function listDatasetCropFarmRecipes(versionId: string) {
+  return { crops: await listDatasetMapRecipes(versionId, CROP_FARM_RECIPE_MAP) };
+}
+
+/** The Extreme Entity Crusher's mobs, one recipe each, for its spawner picker. */
+export async function listDatasetEecMobs(versionId: string) {
+  return { mobs: await listDatasetMapRecipes(versionId, EEC_MACHINE_TYPE) };
 }
 
 async function queryDatasetRecipesFromLookup(

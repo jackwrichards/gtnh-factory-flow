@@ -159,6 +159,9 @@ import {
   RECIPE_RAIL_AREA_WIDTH,
 } from "@/lib/board-grid";
 import { CropPickerMenu } from "./CropPickerMenu";
+import { MobPickerMenu } from "./MobPickerMenu";
+import { recipeChoiceName } from "./RecipeListPicker";
+import { isEecRecipe } from "@/lib/machines/extreme-entity-crusher";
 import {
   MachineMenu,
   machineArtPixels,
@@ -304,6 +307,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
     key: string;
   }>();
   const [isCropMenuOpen, setCropMenuOpen] = useState(false);
+  const [isMobMenuOpen, setMobMenuOpen] = useState(false);
   // The hatch-count chip mid-edit: the typed digits, or undefined at rest.
   const recipeSearch = useFactoryStore((state) => state.highlightSearch);
   // The right panel's PEAK/AVG switch drives the card's power figures too,
@@ -488,6 +492,11 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
         : undefined;
     const isCropFarmNode = isCropFarmRecipe(effectiveRecipe);
     const isCropFarmPlaceholder = isCropFarmNode && effectiveRecipe.outputs.length === 0;
+    // An Extreme Entity Crusher: its spawner names the mob and swaps it.
+    const isEecNode = isEecRecipe(effectiveRecipe);
+    const mobSpawner = isEecNode
+      ? effectiveRecipe.inputs.find((input) => isControllerSlotInput(input))
+      : undefined;
     // Custom rate nodes: the dialed rate lives on the raw recipe (the panel
     // writes it there), so the slot is read from `recipe`, not the effective
     // pipeline output.
@@ -524,6 +533,8 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
       cropSeedResource,
       isCropFarmNode,
       isCropFarmPlaceholder,
+      isEecNode,
+      mobSpawner,
       isCustomRateNode,
       customRateSlot,
       customRateDial,
@@ -572,6 +583,8 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
     cropSeedResource,
     isCropFarmNode,
     isCropFarmPlaceholder,
+    isEecNode,
+    mobSpawner,
     isCustomRateNode,
     customRateSlot,
     customRateDial,
@@ -1110,7 +1123,7 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
   };
   // A card whose machine can take another recipe: everything but the
   // generators, crop farms and custom rate cards, which own their recipe.
-  const canShareMachine = !powerInfo && !isCropFarmNode && !isCustomRateNode && !calmMode;
+  const canShareMachine = !powerInfo && !isCropFarmNode && !isEecNode && !isCustomRateNode && !calmMode;
   const hasMachineMenu = (hasMachinePicker || hasTwins || canShareMachine) && !calmMode;
   const cycleMachineHandler = (direction: -1 | 1) => {
     const ordered = orderMachineHandlers(machineHandlers);
@@ -1286,6 +1299,17 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
                 </button>
               </MinecraftTooltip>
               {isCropMenuOpen ? <CropPickerMenu nodeId={projectNode.id} onClose={() => setCropMenuOpen(false)} /> : null}
+            </div> : null}
+            {isEecNode ? <div className="pool-crop-picker">
+              <MinecraftTooltip content={"Change mob: " + recipeChoiceName(recipe.name)}>
+                <button type="button" className="pool-machine-icon-button pool-crop-button" data-mob-picker-toggle
+                  aria-label={"Change mob: " + recipeChoiceName(recipe.name)} aria-expanded={isMobMenuOpen}
+                  onClick={() => setMobMenuOpen((open) => !open)}>
+                  {mobSpawner ? <ResourceIcon resource={mobSpawner} size="sm" className="!h-6 !w-6" iconPixelSize={24} bare showAmount={false} showConsumedState={false} tooltip={false} /> : null}
+                  <RefreshCw className="pool-machine-swap" aria-hidden="true" />
+                </button>
+              </MinecraftTooltip>
+              {isMobMenuOpen ? <MobPickerMenu nodeId={projectNode.id} onClose={() => setMobMenuOpen(false)} /> : null}
             </div> : null}
             <span className="pool-machine-title" title={machineDisplayName}>{machineDisplayName}</span>
           </div>
@@ -1678,7 +1702,10 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
             ].join(" "),
           }}
         >
-          {!calmMode && showHatchControl ? <CardActionsMenu onDelete={() => deleteNode(projectNode.id)} onClone={() => duplicateNode(projectNode.id)} onRefactor={() => beginRecipeRefactor(projectNode.id)} onAddRecipe={canShareMachine ? () => browseMachineRecipes(projectNode.id) : undefined} /> : !calmMode ? (
+          {!calmMode && showHatchControl ? <>
+            <CardActionsMenu onDelete={() => deleteNode(projectNode.id)} onClone={() => duplicateNode(projectNode.id)} onRefactor={() => beginRecipeRefactor(projectNode.id)} onAddRecipe={canShareMachine ? () => browseMachineRecipes(projectNode.id) : undefined} onChangeMob={isEecNode && !editorLocked ? () => setMobMenuOpen(true) : undefined} />
+            {isMobMenuOpen ? <MobPickerMenu nodeId={projectNode.id} onClose={() => setMobMenuOpen(false)} /> : null}
+          </> : !calmMode ? (
             <>
               <button
                 type="button"
@@ -3050,7 +3077,7 @@ function PortRail({
     >
       {ports.map((port) =>
         port.free ? (
-          <FreePortRow key={port.key} port={port} />
+          <FreePortRow key={port.key} nodeId={nodeId} port={port} />
         ) : isInput ? (
           <PortChip key={port.key} nodeId={nodeId} port={port} pending={pending} />
         ) : (
@@ -3067,13 +3094,14 @@ function PortRail({
  * would go. No handle, no bar, no browse: there is nothing to wire and
  * nothing to look up, only something to set down next to the machine.
  */
-function FreePortRow({ port }: { port: RailPort }) {
-  // A controller-slot item (the EEC's spawner) sits in the machine for good.
-  const controller = port.resource ? isControllerSlotInput(port.resource) : false;
+function FreePortRow({ nodeId, port }: { nodeId: string; port: RailPort }) {
+  // A controller-slot item (the EEC's spawner) sits in the machine for good,
+  // and swapping it is how the card changes mob.
+  if (port.resource && isControllerSlotInput(port.resource)) {
+    return <ControllerSlotRow nodeId={nodeId} port={port} />;
+  }
   return (
-    <MinecraftTooltip content={() => <RecipeTooltip view={controller
-      ? { title: port.displayName, subtitle: "Controller slot", rows: [], reason: "Goes in the machine's controller slot. Never used up." }
-      : { title: port.displayName, subtitle: "Free input", rows: [], reason: "No supply connection required." }} />}>
+    <MinecraftTooltip content={() => <RecipeTooltip view={{ title: port.displayName, subtitle: "Free input", rows: [], reason: "No supply connection required." }} />}>
     <div
       className="flow-port relative flex h-[40px] w-full flex-none items-center gap-1 px-0.5 py-0 opacity-60"
       data-free-input="true"
@@ -3099,11 +3127,75 @@ function FreePortRow({ port }: { port: RailPort }) {
         {/* Same dress as a port's rate line, so the word sits where the
             number would and reads as its stand-in. */}
         <span className="block truncate text-[9px] leading-[9px] tabular-nums text-[var(--mc-ink-muted)] opacity-80">
-          {controller ? "in controller" : "free"}
+          free
         </span>
       </span>
     </div>
     </MinecraftTooltip>
+  );
+}
+
+/**
+ * The item in a machine's controller slot (the EEC's Powered Spawner): the
+ * free row's footprint and dress, but a key - it names the mob, and pressing
+ * it opens the mob picker, the way a player swaps the spawner.
+ */
+function ControllerSlotRow({ nodeId, port }: { nodeId: string; port: RailPort }) {
+  const [open, setOpen] = useState(false);
+  const locked = useFactoryStore((state) => state.isReadOnly || state.checklistMode);
+  return (
+    <div className="relative">
+      <MinecraftTooltip content={() => <RecipeTooltip view={{
+        title: port.displayName,
+        subtitle: "Controller slot",
+        rows: [],
+        reason: locked
+          ? "Goes in the machine's controller slot. Never used up."
+          : "Goes in the machine's controller slot. Never used up. Click to put in another mob.",
+      }} />}>
+        <button
+          type="button"
+          data-free-input="true"
+          data-mob-picker-toggle
+          disabled={locked}
+          aria-label={`Change mob: ${port.displayName}`}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpen((value) => !value);
+          }}
+          className="flow-port group relative flex h-[40px] w-full flex-none items-center gap-1 px-0.5 py-0 text-left opacity-75 enabled:hover:bg-[var(--mc-85)] enabled:hover:opacity-100"
+        >
+          <span className="pointer-events-none relative flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden grayscale">
+            {port.resource ? (
+              <ResourceIcon
+
+                itemZoom={1.5}
+                resource={{ ...port.resource, amount: 1, chance: undefined }}
+                bare
+                tooltip={false}
+                showAmount={false}
+                showConsumedState={false}
+                className="!h-7 !w-7"
+              />
+            ) : null}
+          </span>
+          <span className="flex min-w-0 flex-1 flex-col justify-center pr-0.5">
+            <span className="flow-port-name text-[9px] font-bold leading-[9px] text-[var(--mc-ink-muted)]">
+              {port.displayName}
+            </span>
+            <span className="block truncate text-[9px] leading-[9px] tabular-nums text-[var(--mc-ink-muted)] opacity-80">
+              in controller
+            </span>
+          </span>
+          {locked ? null : (
+            <RefreshCw aria-hidden className="h-3 w-3 shrink-0 text-[var(--mc-ink-muted)] group-hover:text-[var(--mc-ink)]" />
+          )}
+        </button>
+      </MinecraftTooltip>
+      {open ? <MobPickerMenu nodeId={nodeId} onClose={() => setOpen(false)} /> : null}
+    </div>
   );
 }
 

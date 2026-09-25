@@ -89,12 +89,55 @@ describe("useDropdownDismiss fade", () => {
     wrapper.getBoundingClientRect = () => rect(1000, 10, 32, 32);
     menu.getBoundingClientRect = () => rect(800, 48, 232, 300);
 
+    // The mouse has been on the menu; now it leaves.
+    move(900, 200, view.getByTestId("last-row"));
     move(800 - FADE_GRACE - FADE_RANGE / 2, 200);
     expect(onClose).not.toHaveBeenCalled();
     expect(Number(wrapper.style.opacity)).toBeLessThan(1);
 
     move(800 - FADE_GRACE - FADE_RANGE - 1, 200);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the mouse walk to a menu that opened away from it", () => {
+    const onClose = vi.fn();
+    const view = render(<Foldout onClose={onClose} />);
+    const wrapper = view.getByTestId("wrapper");
+    const menu = view.getByTestId("menu");
+    wrapper.getBoundingClientRect = () => rect(1000, 10, 32, 32);
+    menu.getBoundingClientRect = () => rect(800, 48, 232, 300);
+
+    // Opened 500px below the pointer (a card's menu dropping under the card,
+    // a picker opened from a menu item): the walk toward it never fades it.
+    for (let y = 848; y > 348; y -= 20) {
+      move(900, y);
+    }
+    expect(onClose).not.toHaveBeenCalled();
+    expect(menu.style.opacity).toBe("");
+
+    // Walking back away from the nearest point it reached still closes it.
+    move(900, 348 + FADE_GRACE + FADE_RANGE + 30);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts the card a menu hangs from as over the menu", () => {
+    const onClose = vi.fn();
+    const card = document.createElement("div");
+    document.body.appendChild(card);
+    card.getBoundingClientRect = () => rect(0, 0, 400, 600);
+    function OnCard() {
+      const panelRef = useRef<HTMLDivElement>(null);
+      useDropdownDismiss(true, { refs: [panelRef], onClose, fade: true, fadeKeep: () => card });
+      return <div ref={panelRef} data-testid="panel" />;
+    }
+    const view = render(<OnCard />);
+    view.getByTestId("panel").getBoundingClientRect = () => rect(0, 604, 224, 200);
+
+    // On the menu, then up across the whole card and back: never away.
+    move(100, 700);
+    for (let y = 600; y >= 0; y -= 50) move(100, y);
+    expect(onClose).not.toHaveBeenCalled();
+    card.remove();
   });
 });
 

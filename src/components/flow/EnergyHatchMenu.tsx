@@ -83,8 +83,11 @@ export function MenuShell({
   onClose,
   children,
 }: {
-  /** The chip's right edge and its top and bottom, in screen coordinates. */
-  anchor: { x: number; top: number; bottom: number };
+  /**
+   * The chip's right edge and its top and bottom, in screen coordinates;
+   * `hangsFrom` is the card, which counts as over the menu for the fade.
+   */
+  anchor: { x: number; top: number; bottom: number; hangsFrom?: Element };
   align?: "left" | "right";
   width: number;
   maxHeight: number;
@@ -101,6 +104,7 @@ export function MenuShell({
     onClose,
     insideSelector: "[data-hatch-menu-anchor]",
     fade: true,
+    fadeKeep: () => anchor.hangsFrom,
   });
 
   // Prefer opening UPWARD (the card stays visible for the hover-preview),

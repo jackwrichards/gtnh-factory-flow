@@ -491,6 +491,15 @@ Working notes for future agents on GTNH Factory Flow.
   enchanted gear drop, batch mode (rate-neutral), glass tier, the Nether's
   wither skeletons. Numeric knobs take an optional `step` (weapon damage
   moves in Sharpness quarters). `extreme-entity-crusher.test.ts` is the exam.
+  CHANGING THE MOB (Jack, same day): the card's controller-slot row
+  ("Enderman Spawner · in controller", a key with a swap glyph), the card
+  menu's "Change mob" and the Pool worksheet's machine cell all open
+  `MobPickerMenu` (the `mobs` dataset route, searchable by mob or drop). A
+  pick runs `swapMachineRecipe`: in place ALWAYS, the machine exactly as
+  built (hatches, tier, count, every knob), wires re-docked on drops the
+  new mob also makes (`carryWiresOntoRecipe`, shared with the refactor).
+  The crop and mob pickers are two configurations of `RecipeListPicker`.
+  An EEC card never takes a second recipe: one controller, one spawner.
 - Existing supported tier effects include:
   - `parallelMultiplier`
   - `durationMultiplier`
@@ -1180,6 +1189,14 @@ Working notes for future agents on GTNH Factory Flow.
   key is added to either toolbar.
 
 ## Board Gestures
+
+- DROPDOWN FADE (Jack, 2026-09-24: "we need to be smarter about this").
+  `useDropdownDismiss`'s mouse fade counts distance from the NEAREST the
+  mouse has come to the panel since it opened, so a panel that opens away
+  from the pointer (a card menu dropping below its card, the mob picker
+  opened from a menu item) can be walked to; only moving back away fades
+  it. `fadeKeep` names the card a menu hangs from, which counts as over the
+  menu. A menu opening under the pointer behaves exactly as before.
 
 - Checklist mode (`ChecklistMode.tsx`) lives in View options, with a labelled
   on/off control and inline progress/reset. Its active
