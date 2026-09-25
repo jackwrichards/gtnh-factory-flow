@@ -156,3 +156,30 @@ describe("the machine list follows each board card", () => {
     expect(formatMachineListCount(0)).toBe("0");
   });
 });
+
+describe("power card tiers in the machine list", () => {
+  it("never reads a heat exchanger's pipe tier as a voltage", async () => {
+    // Player crash report, 2026-09-25: an LHE stores `tier: "1"` (its pipe
+    // tier), and the MACHINES panel looked "1" up in the voltage colours.
+    const { buildPowerRecipe } = await import("@/lib/power/power-recipe");
+    const lheSettings = { fluid: "Hot Coolant", intake: "1000", tier: "1" };
+    const turbineSettings = { tier: "EV" };
+    const lhe = buildPowerRecipe("large-heat-exchanger", lheSettings, "r-lhe")!;
+    const turbine = buildPowerRecipe("steam-turbine", turbineSettings, "r-turbine")!;
+    const p: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "power-tiers",
+      name: "Power tiers",
+      fuelProfiles: [],
+      recipes: [lhe, turbine],
+      edges: [],
+      nodes: [
+        { id: "lhe", recipeId: "r-lhe", machineCount: 100, parallel: 1, enabled: true, overclockTier: "EV", position: { x: 0, y: 0 }, machineConfigTiers: lheSettings },
+        { id: "turbine", recipeId: "r-turbine", machineCount: 1, parallel: 1, enabled: true, overclockTier: "EV", position: { x: 400, y: 0 }, machineConfigTiers: turbineSettings },
+      ],
+    };
+    const lines = buildMachineList(p, calculateThroughput(p));
+    expect(lines.find((line) => line.nodeId === "lhe")?.tier).toBeUndefined();
+    expect(lines.find((line) => line.nodeId === "turbine")?.tier).toBe("EV");
+  });
+});

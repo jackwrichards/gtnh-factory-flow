@@ -516,8 +516,8 @@ function ListLine({
             <span
               className="inspector-build-config flex shrink-0 items-center gap-1 rounded-sm px-1 font-bold leading-4"
               style={{
-                color: GT_TIER_COLORS[chip.tier].text,
-                backgroundColor: GT_TIER_COLORS[chip.tier].background,
+                color: (GT_TIER_COLORS[chip.tier] ?? NEUTRAL_CHIP).text,
+                backgroundColor: (GT_TIER_COLORS[chip.tier] ?? NEUTRAL_CHIP).background,
               }}
             >
               {chip.isMultiblock && (

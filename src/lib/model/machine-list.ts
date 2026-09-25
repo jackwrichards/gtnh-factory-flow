@@ -3,7 +3,7 @@ import { getSelectedMachineHandler } from "./recipe-rules";
 import { applyRecipeInputOverrides } from "./recipe-input-overrides";
 import { isCustomRateRecipe } from "./custom-rate";
 import { listNodeSections } from "./shared-machine";
-import { getVoltageTierIndex } from "./tiers";
+import { getVoltageTierIndex, isVoltageTierName } from "./tiers";
 import {
   CROP_HARVESTER_INDUSTRIAL_FARM_ID,
   cropsNhEnvironmentFromTiers,
@@ -151,11 +151,11 @@ export function buildMachineList(
       ? average((part) => (part.steam?.drawSteamPerTick ?? 0) * 20)
       : undefined;
     const cropTier = crop ? (cropsNhHarvesterTierName(crop.tierIndex) as VoltageTier) : undefined;
-    const powerSetting = recipe.power
-      ? (node.machineConfigTiers?.tier as VoltageTier | undefined)
-      : undefined;
-    const powerTier =
-      powerSetting && getVoltageTierIndex(powerSetting) >= 0 ? powerSetting : undefined;
+    // A power card's `tier` setting is a voltage for the singleblock
+    // generators but a plain number on the heat exchangers (their pipe tier),
+    // which the list must not read as a voltage.
+    const powerSetting = recipe.power ? node.machineConfigTiers?.tier : undefined;
+    const powerTier = isVoltageTierName(powerSetting) ? powerSetting : undefined;
     const tier = report?.tier ?? cropTier ?? powerTier;
     entries.push({
       nodeId: node.id,

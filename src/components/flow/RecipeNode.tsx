@@ -57,7 +57,7 @@ import {
 import { HatchPowerControls, PowerReadout, PowerControlsGuide } from "./HatchPowerControls";
 import { carryMachineVoltage } from "@/lib/solver/hatch-input";
 import { CardActionsMenu } from "./CardActionsMenu";
-import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
+import { getVoltageTierMaxEuT, isVoltageTierName } from "@/lib/model/tiers";
 import { describePowerWorking } from "@/lib/solver/power-working";
 import { prefersCuratedMachineMath } from "@/lib/solver/runtime-calculation";
 import {
@@ -856,7 +856,10 @@ function RecipeNodeComponent({ data, selected, controlsOnly = false, renderEdito
     : 0;
   const powerCardMakes = (powerInfo?.euPerTick ?? 0) > 0;
   const powerCardGlanceWord = powerInfo
-    ? (projectNode.machineConfigTiers?.tier ?? getPowerSource(powerInfo.sourceId)?.unlock)
+    ? // An exchanger's `tier` is its pipe tier, a bare number, not a voltage.
+      (isVoltageTierName(projectNode.machineConfigTiers?.tier)
+        ? projectNode.machineConfigTiers?.tier
+        : getPowerSource(powerInfo.sourceId)?.unlock)
     : undefined;
   // What the LOD step paints this card, per smart view. Every non-identity
   // view returns a surface for EVERY card — a card with nothing to say gets

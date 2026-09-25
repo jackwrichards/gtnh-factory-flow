@@ -58,6 +58,14 @@ export function getVoltageTierIndex(tier: Exclude<MachineTier, "DEMO">): number 
   return index === -1 ? GT_VOLTAGE_TIERS.length - 1 : index;
 }
 
+/**
+ * Whether a stored string names a real voltage tier. getVoltageTierIndex cannot
+ * answer that: it maps anything it does not know to the top tier.
+ */
+export function isVoltageTierName(value: unknown): value is Exclude<MachineTier, "DEMO"> {
+  return GT_VOLTAGE_TIERS.some((entry) => entry.tier === value);
+}
+
 export function isVoltageTierAbove(
   tier: Exclude<MachineTier, "DEMO">,
   maxTier: Exclude<MachineTier, "DEMO">,
