@@ -3,6 +3,60 @@ import type { Recipe } from "@/lib/model/types";
 import { isPowerRecipe } from "@/lib/power/power-recipe";
 import { recipeContentRef } from "@/lib/import-export/recipe-ref-match";
 import { getRecipeDatasetRecipe, resolveRecipeDatasetRecipes } from "./browser-loader";
+import { noteRestorableRecipes } from "./restorable-recipes";
+
+/**
+ * Which of a plan's recipes to fetch fresh from the dataset: each id once per
+ * dataset version, and AGAIN when a recipe whose dataset body carries a
+ * runtime table arrives without one. Plans synced through the account and
+ * copied plans travel without their GregTech tables (`withoutRuntimeTables`),
+ * and a synced plan can land recipes this page already refreshed for another
+ * plan; keyed on the id alone, those stayed bare and solved on fallback math.
+ *
+ * `checked` maps `version|id` to whether the dataset's body had a table;
+ * `requested` holds recipe objects already sent, so none is fetched twice.
+ */
+export function recipesToRefresh(
+  recipes: Recipe[],
+  versionId: string,
+  checked: Map<string, boolean>,
+  requested: WeakSet<Recipe>,
+): Recipe[] {
+  return recipes.filter((recipe) => {
+    if (requested.has(recipe)) {
+      return false;
+    }
+    const key = `${versionId}|${recipe.id}`;
+    return !checked.has(key) || (checked.get(key) === true && !recipe.runtimeCalculation);
+  });
+}
+
+/** Marks `recipes` as sent, then what the dataset answered for them. */
+export function noteRecipesRequested(
+  recipes: Recipe[],
+  versionId: string,
+  checked: Map<string, boolean>,
+  requested: WeakSet<Recipe>,
+): void {
+  for (const recipe of recipes) {
+    requested.add(recipe);
+    const key = `${versionId}|${recipe.id}`;
+    if (!checked.has(key)) {
+      checked.set(key, false);
+    }
+  }
+}
+
+export function noteRecipesRefreshed(
+  refreshed: Recipe[],
+  versionId: string,
+  checked: Map<string, boolean>,
+): void {
+  noteRestorableRecipes(refreshed);
+  for (const recipe of refreshed) {
+    checked.set(`${versionId}|${recipe.id}`, Boolean(recipe.runtimeCalculation));
+  }
+}
 
 /**
  * The dataset's current bodies for a plan's stored recipes.

@@ -1,6 +1,12 @@
 "use client";
 
-import { resolveProjectRecipes } from "@/lib/datasets/refresh-project-recipes";
+import {
+  noteRecipesRefreshed,
+  noteRecipesRequested,
+  recipesToRefresh,
+  resolveProjectRecipes,
+} from "@/lib/datasets/refresh-project-recipes";
+import type { Recipe } from "@/lib/model/types";
 import { useCallback, useEffect, useRef, type CSSProperties } from "react";
 import {
   DEFAULT_DATASET_MANIFEST_URL,
@@ -57,8 +63,11 @@ export function FactoryPlannerApp() {
   const hydratedRef = useRef(false);
   // Which stored recipes have been checked against which dataset version,
   // so a design opened AFTER the dataset landed (a tab switch, a hydrated
-  // plan) gets the same refresh the boot load gives, exactly once each.
-  const checkedRecipesRef = useRef<Set<string>>(new Set());
+  // plan) gets the same refresh the boot load gives, exactly once each - and
+  // once more when a synced or copied plan brings one back without its
+  // runtime table (recipesToRefresh).
+  const checkedRecipesRef = useRef<Map<string, boolean>>(new Map());
+  const requestedRecipesRef = useRef<WeakSet<Recipe>>(new WeakSet());
   const datasetVersionId = useFactoryStore((state) => state.dataset?.datasetVersionId);
   const datasetManifest = useFactoryStore((state) => state.datasetManifest);
   const datasetManifestUrl = useFactoryStore((state) => state.datasetManifestUrl);
@@ -70,21 +79,23 @@ export function FactoryPlannerApp() {
     if (!version) {
       return;
     }
-    const pending = project.recipes.filter(
-      (recipe) => !checkedRecipesRef.current.has(`${version.id}|${recipe.id}`),
+    const pending = recipesToRefresh(
+      project.recipes,
+      version.id,
+      checkedRecipesRef.current,
+      requestedRecipesRef.current,
     );
     if (pending.length === 0) {
       return;
     }
-    for (const recipe of pending) {
-      checkedRecipesRef.current.add(`${version.id}|${recipe.id}`);
-    }
+    noteRecipesRequested(pending, version.id, checkedRecipesRef.current, requestedRecipesRef.current);
     let cancelled = false;
     void resolveProjectRecipes(
       datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
       version,
       pending,
     ).then(({ refreshed, migration }) => {
+      noteRecipesRefreshed(refreshed, version.id, checkedRecipesRef.current);
       if (!cancelled && refreshed.length > 0) {
         refreshProjectRecipes(refreshed, migration);
       }
@@ -116,9 +127,10 @@ export function FactoryPlannerApp() {
         const projectRecipes = useFactoryStore.getState().project.recipes;
         if (projectRecipes.length > 0) {
           const { refreshed, migration } = await resolveProjectRecipes(manifestUrl, version, projectRecipes);
-          checkedRecipesRef.current = new Set(
-            projectRecipes.map((recipe) => `${version.id}|${recipe.id}`),
-          );
+          const checked = new Map<string, boolean>();
+          noteRecipesRequested(projectRecipes, version.id, checked, requestedRecipesRef.current);
+          noteRecipesRefreshed(refreshed, version.id, checked);
+          checkedRecipesRef.current = checked;
           refreshProjectRecipes(refreshed, migration);
         }
       } catch (error) {

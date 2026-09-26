@@ -1668,7 +1668,16 @@ Working notes for future agents on GTNH Factory Flow.
   - Slimmed: GregTech `runtimeCalculation` tables are left out (about half
     the size) and the community post id is dropped; the landing refresh in
     FactoryPlannerApp restores the tables from the dataset. Power recipes
-    and the bee/crop tables stay whole.
+    and the bee/crop tables stay whole. Account sync pushes the same slim
+    plan (`withoutRuntimeTables`, 2026-09-25). TWO RULES keep it lossless:
+    a table is stripped ONLY when this page has seen the dataset carry one
+    for that id (`isRestorableRecipe`, filled by every refresh; unknown
+    means keep - an old plan's recipe the dataset no longer knows has no
+    other copy of its table), and the landing refresh re-fetches a recipe
+    that arrives bare even when its id was already refreshed this page
+    (`recipesToRefresh`; keyed on the id alone, a synced plan's recipes
+    stayed bare and solved on fallback math). `slim-restore-probe.local.mjs`
+    drives Copy plan and a paste in one real page.
   - Still long: the oil board is ~16k characters, a big board 100k+. Fine
     for a paste, a DM or a forum; over Discord's 2,000-character message
     limit. A short link would need a server store, which is a separate
@@ -1717,6 +1726,9 @@ Working notes for future agents on GTNH Factory Flow.
     `remoteUpdatedAt` sync writes), not by the designs array's identity;
     a refused or held-back push does not count as touching the library.
     Pushed names are clipped to the account's 80 characters.
+  - Pushes send `withoutRuntimeTables(plan)` (about half the size; the
+    3 MB cap refused big plans, and every push rewrites the whole row).
+    See "Import/Export Plans" for the restore rule it depends on.
   - Library sync (`library-sync.ts`): pushes wait for 5 s of quiet (30 s at
     most during nonstop editing, at once when the tab is hidden), hidden
     tabs skip the poll, a REFUSED design is not resent until its stamp

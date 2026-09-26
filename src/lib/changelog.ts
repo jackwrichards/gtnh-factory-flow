@@ -49,10 +49,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "3.9.2",
     date: "2026-09-25",
-    headline: "Account sync fixes",
+    headline: "Big plans save to your account",
     notes: [
+      "Plans send about half as much to your account, so most plans that were too large to sync now fit.",
       "A design your account refuses no longer keeps the planner saving to your account every few seconds.",
       "Designs with names over 80 characters now save to your account, under their first 80 characters.",
+      "A copied or synced plan keeps the overclock data of recipes the current game data no longer has.",
     ],
   },
   {

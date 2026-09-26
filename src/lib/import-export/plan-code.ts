@@ -2,6 +2,7 @@ import { normalizeProjectFuelProfiles } from "../model/fuels";
 import { factoryProjectSchema } from "../model/schemas";
 import type { FactoryProject } from "../model/types";
 import { isPowerRecipe } from "../power/power-recipe";
+import { isRestorableRecipe } from "../datasets/restorable-recipes";
 import { FactoryJsonError, parseFactoryProjectJson } from "./factory-json";
 
 /**
@@ -37,19 +38,27 @@ const CODE_PREFIX = "gtnh1.";
  */
 export const PLAN_CODE_HASH_KEY = "p";
 
-export async function encodePlanCode(project: FactoryProject): Promise<string> {
-  const plan = factoryProjectSchema.parse(normalizeProjectFuelProfiles(project));
-  // A code is a copy, never the post: whoever opens it gets a plan of their
-  // own, not a link to the sender's community setup.
-  const { communityPlanId, ...metadata } = plan.metadata ?? {};
-  void communityPlanId;
-  const slim = {
-    ...plan,
-    metadata,
-    recipes: plan.recipes.map((recipe) => {
+/**
+ * The plan without the GregTech overclock tables the dataset will put back
+ * when it lands on a board (`recipesToRefresh`). Only those: a table is left
+ * out only when this page has seen the dataset carry one for that id
+ * (`isRestorableRecipe`); for a recipe the dataset no longer knows, the
+ * stored table is the only copy and it travels. Power recipes stay whole
+ * (made here, not by the dataset), and so do the small bee and crop tables.
+ * About half of a big plan. Copied plans travel this way, and so do plans
+ * synced to the account (a 3 MB cap, and every push rewrites the row).
+ */
+export function withoutRuntimeTables(
+  project: FactoryProject,
+  canRestore: (recipeId: string) => boolean = isRestorableRecipe,
+): FactoryProject {
+  return {
+    ...project,
+    recipes: project.recipes.map((recipe) => {
       if (
         isPowerRecipe(recipe) ||
-        !recipe.runtimeCalculation?.sourceKind.startsWith("gregtech-")
+        !recipe.runtimeCalculation?.sourceKind.startsWith("gregtech-") ||
+        !canRestore(recipe.id)
       ) {
         return recipe;
       }
@@ -58,6 +67,15 @@ export async function encodePlanCode(project: FactoryProject): Promise<string> {
       return rest;
     }),
   };
+}
+
+export async function encodePlanCode(project: FactoryProject): Promise<string> {
+  const plan = factoryProjectSchema.parse(normalizeProjectFuelProfiles(project));
+  // A code is a copy, never the post: whoever opens it gets a plan of their
+  // own, not a link to the sender's community setup.
+  const { communityPlanId, ...metadata } = plan.metadata ?? {};
+  void communityPlanId;
+  const slim = withoutRuntimeTables({ ...plan, metadata });
   const packed = await pipeThrough(
     new TextEncoder().encode(JSON.stringify(slim)),
     new CompressionStream("deflate-raw"),

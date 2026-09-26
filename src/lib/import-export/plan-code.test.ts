@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { loadBiodieselDemoProject } from "@/examples";
 import type { FactoryProject } from "../model/types";
+import { noteRestorableRecipes } from "../datasets/restorable-recipes";
 import { parseFactoryProjectJson, serializeFactoryProject } from "./factory-json";
 import {
   decodePlanCode,
   encodePlanCode,
   planCodeLink,
   readPlanCodeFromHash,
+  withoutRuntimeTables,
 } from "./plan-code";
 
 /** The demo, with a GregTech overclock table and a crop table on its recipes. */
@@ -45,6 +47,8 @@ describe("copied plans (plan codes)", () => {
   });
 
   it("leaves out GregTech overclock tables and the community post, nothing else", async () => {
+    // The dataset has been seen to carry these tables, so it can put them back.
+    noteRestorableRecipes(demoWithTables().recipes);
     const decoded = await decodePlanCode(await encodePlanCode(demoWithTables()));
     expect(decoded.metadata?.communityPlanId).toBeUndefined();
     expect(decoded.recipes[0]?.runtimeCalculation?.sourceKind).toBe("passive-crop");
@@ -55,6 +59,7 @@ describe("copied plans (plan codes)", () => {
 
   it("is far shorter than the JSON download", async () => {
     const project = demoWithTables();
+    noteRestorableRecipes(project.recipes);
     const code = await encodePlanCode(project);
     expect(code.length * 5).toBeLessThan(serializeFactoryProject(project).length);
   });
@@ -71,5 +76,27 @@ describe("copied plans (plan codes)", () => {
     expect(readPlanCodeFromHash("p=gtnh1.abc")).toBe("gtnh1.abc");
     expect(readPlanCodeFromHash("#somewhere")).toBeUndefined();
     expect(readPlanCodeFromHash("")).toBeUndefined();
+  });
+});
+
+describe("withoutRuntimeTables (copied and account-synced plans)", () => {
+  it("drops only the GregTech tables, and the plan stays valid", () => {
+    const project = demoWithTables();
+    const slim = withoutRuntimeTables(project, () => true);
+    expect(slim.recipes[0]?.runtimeCalculation?.sourceKind).toBe("passive-crop");
+    expect(slim.recipes.slice(1).every((recipe) => recipe.runtimeCalculation === undefined)).toBe(true);
+    expect(slim.nodes).toBe(project.nodes);
+    expect(slim.metadata).toBe(project.metadata);
+    expect(() => parseFactoryProjectJson(JSON.stringify(slim))).not.toThrow();
+  });
+
+  it("keeps a table the dataset cannot put back", () => {
+    // An old plan's recipe the dataset no longer knows: its stored table is
+    // the only copy there is.
+    const project = demoWithTables();
+    const unknown = project.recipes[1]!.id;
+    const slim = withoutRuntimeTables(project, (id) => id !== unknown);
+    expect(slim.recipes[1]?.runtimeCalculation?.sourceKind).toBe("gregtech-overclock-calculator");
+    expect(slim.recipes[2]?.runtimeCalculation).toBeUndefined();
   });
 });

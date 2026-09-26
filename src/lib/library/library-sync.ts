@@ -14,6 +14,7 @@ import {
   writeDesignSummary,
 } from "@/lib/designs/design-storage";
 import { parseFactoryProjectJson } from "@/lib/import-export";
+import { withoutRuntimeTables } from "@/lib/import-export/plan-code";
 import { useCommunityAuthStore } from "@/store/community-auth-store";
 import { useDesignStore } from "@/store/design-store";
 import {
@@ -483,7 +484,10 @@ async function applyDesignAction(action: DesignAction): Promise<boolean> {
           createdAt: record.createdAt,
           updatedAt,
           planUpdatedAt: record.updatedAt,
-          ...(action.withPlan ? { plan: record.project } : {}),
+          // Without the GregTech tables the dataset puts back on landing:
+          // about half the size, so big plans fit the cap and every push
+          // rewrites half as much of the account's row.
+          ...(action.withPlan ? { plan: withoutRuntimeTables(record.project) } : {}),
         });
       } catch (error) {
         if (!isRefusal(error)) {
