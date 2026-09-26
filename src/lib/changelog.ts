@@ -47,6 +47,15 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.9.2",
+    date: "2026-09-25",
+    headline: "Account sync fixes",
+    notes: [
+      "A design your account refuses no longer keeps the planner saving to your account every few seconds.",
+      "Designs with names over 80 characters now save to your account, under their first 80 characters.",
+    ],
+  },
+  {
     version: "3.9.1",
     date: "2026-09-25",
     headline: "No more runaway conflict copies",

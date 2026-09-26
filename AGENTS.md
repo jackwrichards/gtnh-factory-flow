@@ -1710,6 +1710,13 @@ Working notes for future agents on GTNH Factory Flow.
     `getResourcePopularity` answers synchronously with the last good map
     (sweep every 6 h, failures retry after 30 min; prewarm starts the
     first). The item list's default sort used to hang ~90 s behind it.
+  - A sync run must never schedule the next one by itself (2026-09-25: a
+    player with a refused design listed their library every 6 s for hours).
+    Only a LOCAL change schedules a push, judged by
+    `libraryChangeSignature` (ids and plan/meta stamps, never the
+    `remoteUpdatedAt` sync writes), not by the designs array's identity;
+    a refused or held-back push does not count as touching the library.
+    Pushed names are clipped to the account's 80 characters.
   - Library sync (`library-sync.ts`): pushes wait for 5 s of quiet (30 s at
     most during nonstop editing, at once when the tab is hidden), hidden
     tabs skip the poll, a REFUSED design is not resent until its stamp

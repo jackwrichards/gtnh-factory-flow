@@ -29,7 +29,11 @@ import {
   readPendingDeletes,
   subscribeToLibraryDeletions,
 } from "./library-deletes";
-import type { RemoteDesignMeta, RemoteFolder } from "./sync-types";
+import {
+  LIBRARY_DESIGN_NAME_MAX_LENGTH,
+  type RemoteDesignMeta,
+  type RemoteFolder,
+} from "./sync-types";
 
 /**
  * Keeps the browser's library and the account's copy the same.
@@ -193,6 +197,26 @@ export function reconcileFolders(local: LocalFolder[], remote: RemoteFolder[]): 
   return actions;
 }
 
+/**
+ * What counts as a change HERE, worth a push: a design or folder added,
+ * removed or restamped. Sync's own bookkeeping (the `remoteUpdatedAt` it
+ * stamps) is not in it, and neither is a relist that changed nothing, so a
+ * sync run cannot schedule the next one by itself. A refused design used to
+ * do exactly that: every run relisted the library, the relist looked like an
+ * edit, and the next run came five seconds later, forever (2026-09-25: one
+ * player's browser listed their library every 6 s for hours).
+ */
+export function libraryChangeSignature(
+  designs: Pick<DesignSummary, "id" | "updatedAt" | "metaUpdatedAt">[],
+  folders: Pick<DesignFolder, "id" | "createdAt" | "updatedAt">[],
+): string {
+  const rows = [
+    ...designs.map((design) => `d:${design.id}:${design.updatedAt}:${design.metaUpdatedAt ?? ""}`),
+    ...folders.map((folder) => `f:${folder.id}:${folder.updatedAt ?? folder.createdAt}`),
+  ];
+  return rows.sort().join("|");
+}
+
 /* ------------------------------------------------------------------ */
 /* Running it. */
 
@@ -290,8 +314,10 @@ async function runOnce(): Promise<void> {
     const designActions = reconcileDesigns(designs, remote.designs);
     let touched = folderActions.length > 0;
     for (const action of designActions) {
-      await applyDesignAction(action);
-      touched = true;
+      // A push held back or refused changed nothing here.
+      if (await applyDesignAction(action)) {
+        touched = true;
+      }
     }
     if (touched) {
       await useDesignStore.getState().refreshLibrary();
@@ -371,7 +397,8 @@ async function applyFolderAction(action: FolderAction, local: DesignFolder[]): P
   }
 }
 
-async function applyDesignAction(action: DesignAction): Promise<void> {
+/** Resolves to whether the local library changed. */
+async function applyDesignAction(action: DesignAction): Promise<boolean> {
   const store = useDesignStore.getState();
   switch (action.kind) {
     case "pull-plan": {
@@ -390,12 +417,12 @@ async function applyDesignAction(action: DesignAction): Promise<void> {
       if (design.closed && action.id === store.activeDesignId) {
         await store.closeDesign(action.id);
       }
-      return;
+      return true;
     }
     case "pull-meta": {
       const existing = await readDesign(action.id);
       if (!existing) {
-        return;
+        return false;
       }
       const wasClosed = Boolean(existing.closed);
       await writeDesignSummary({
@@ -417,7 +444,7 @@ async function applyDesignAction(action: DesignAction): Promise<void> {
           await store.closeDesign(action.id);
         }
       }
-      return;
+      return true;
     }
     case "delete-local": {
       if (action.id === store.activeDesignId) {
@@ -426,12 +453,12 @@ async function applyDesignAction(action: DesignAction): Promise<void> {
         await deleteDesign(action.id);
         forgetDesignCameras([action.id]);
       }
-      return;
+      return true;
     }
     case "push": {
       const record = await readDesign(action.id);
       if (!record) {
-        return;
+        return false;
       }
       // The LATER of the two stamps, the same one `reconcileDesigns` calls
       // the local change time. Sending the metadata stamp alone when the
@@ -439,12 +466,14 @@ async function applyDesignAction(action: DesignAction): Promise<void> {
       // design read as unsaved again on every poll: pushed forever.
       const updatedAt = latestStamp(record.metaUpdatedAt, record.updatedAt);
       if (refusedPushes.get(record.id)?.stamp === updatedAt) {
-        return;
+        return false;
       }
       let result: Awaited<ReturnType<typeof pushRemoteDesign>>;
       try {
         result = await pushRemoteDesign(record.id, {
-          name: record.name,
+          // The account takes 80 characters; a longer local name (old
+          // stacked conflict copies) used to be refused on every edit.
+          name: record.name.trim().slice(0, LIBRARY_DESIGN_NAME_MAX_LENGTH),
           icon: record.icon ?? null,
           folderId: record.folderId ?? null,
           closed: Boolean(record.closed),
@@ -464,12 +493,12 @@ async function applyDesignAction(action: DesignAction): Promise<void> {
           stamp: updatedAt,
           message: `"${record.name}" is not saved to your account: ${error.message}`,
         });
-        return;
+        return false;
       }
       refusedPushes.delete(record.id);
       if (result.behind) {
         runAgain = true;
-        return;
+        return false;
       }
       // Re-read before stamping: autosave may have written since.
       const fresh = await readDesign(record.id);
@@ -479,6 +508,7 @@ async function applyDesignAction(action: DesignAction): Promise<void> {
           remoteUpdatedAt: result.design.updatedAt,
         });
       }
+      return true;
     }
   }
 }
@@ -558,12 +588,19 @@ export function startLibrarySync(): () => void {
   const unsubscribeAuth = useCommunityAuthStore.subscribe(onUser);
 
   // The library changed here: push a few seconds after the last change.
+  // A relist that changed nothing is not a change (libraryChangeSignature).
   let lastDesigns = useDesignStore.getState().designs;
   let lastFolders = useDesignStore.getState().folders;
+  let lastSignature = libraryChangeSignature(lastDesigns, lastFolders);
   const unsubscribeDesigns = useDesignStore.subscribe((state) => {
-    if (state.designs !== lastDesigns || state.folders !== lastFolders) {
-      lastDesigns = state.designs;
-      lastFolders = state.folders;
+    if (state.designs === lastDesigns && state.folders === lastFolders) {
+      return;
+    }
+    lastDesigns = state.designs;
+    lastFolders = state.folders;
+    const signature = libraryChangeSignature(state.designs, state.folders);
+    if (signature !== lastSignature) {
+      lastSignature = signature;
       scheduleSync();
     }
   });

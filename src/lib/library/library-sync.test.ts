@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 // the client module and the auth store are not needed for the pure rules.
 vi.mock("./client", () => ({}));
 
-import { reconcileDesigns, reconcileFolders } from "./library-sync";
+import { libraryChangeSignature, reconcileDesigns, reconcileFolders } from "./library-sync";
 import type { RemoteDesignMeta, RemoteFolder } from "./sync-types";
 
 const T0 = "2026-09-01T00:00:00.000Z";
@@ -132,5 +132,26 @@ describe("reconcileFolders", () => {
     ]);
     const renamedHere = { ...synced, updatedAt: T2 };
     expect(reconcileFolders([renamedHere], [folder("f")])).toEqual([{ kind: "push", id: "f" }]);
+  });
+});
+
+describe("libraryChangeSignature", () => {
+  const design = { id: "a", name: "A", createdAt: T0, updatedAt: T1, metaUpdatedAt: T1 };
+  const folder = { id: "f", name: "F", createdAt: T0, updatedAt: T1 };
+  const base = libraryChangeSignature([design], [folder]);
+
+  it("does not move for a relist that changed nothing, or for sync's own stamp", () => {
+    // A refused design kept sync relisting the library every run, and the
+    // relist read as an edit: one player's browser synced every 6 s for hours.
+    expect(libraryChangeSignature([{ ...design }], [{ ...folder }])).toBe(base);
+    expect(libraryChangeSignature([{ ...design, remoteUpdatedAt: T2 } as typeof design], [folder])).toBe(base);
+  });
+
+  it("moves for an edit, a rename, a new design or a folder change", () => {
+    expect(libraryChangeSignature([{ ...design, updatedAt: T2 }], [folder])).not.toBe(base);
+    expect(libraryChangeSignature([{ ...design, metaUpdatedAt: T2 }], [folder])).not.toBe(base);
+    expect(libraryChangeSignature([design, { ...design, id: "b" }], [folder])).not.toBe(base);
+    expect(libraryChangeSignature([design], [{ ...folder, updatedAt: T2 }])).not.toBe(base);
+    expect(libraryChangeSignature([design], [])).not.toBe(base);
   });
 });
