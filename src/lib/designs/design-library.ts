@@ -108,6 +108,59 @@ export function makeUniqueDesignName(base: string, taken: Iterable<string>): str
   }
 }
 
+/** The longest design name the account accepts (library sync refuses more). */
+const DESIGN_NAME_MAX_LENGTH = 80;
+const CONFLICT_COPY_SUFFIX = " (conflict copy)";
+
+/**
+ * The name for a tab's edits kept aside because another tab saved first.
+ *
+ * A copy of a conflict copy counts on ("(2)") rather than stacking the words,
+ * and the name is clipped to fit the account: a player hit a chain of these
+ * (2026-09-25) and every one past 80 characters was refused by sync.
+ */
+export function conflictCopyName(name: string, taken: Iterable<string>): string {
+  const base = name.replace(/(\s*\(conflict copy\)(\s*\(\d+\))?)+$/i, "").trim() || name.trim();
+  // Room for the suffix and for makeUniqueDesignName's " (NN)".
+  const room = DESIGN_NAME_MAX_LENGTH - CONFLICT_COPY_SUFFIX.length - 5;
+  const clipped = base.length > room ? base.slice(0, room).trimEnd() : base;
+  return makeUniqueDesignName(`${clipped}${CONFLICT_COPY_SUFFIX}`, taken);
+}
+
+/**
+ * A metadata-only write (rename, star, folder, sync's stamp) as it should
+ * land over the summary already `stored`.
+ *
+ * `updatedAt` is the PLAN's stamp, and a write that does not carry the plan
+ * must never move it: every such writer read the summary first, and if a
+ * save landed in between, writing that copy back put the stamp behind the
+ * plan, so the tab that saved read its own next save as another tab's and
+ * split its work into a conflict copy (2026-09-25). The marks read off the
+ * plan (icon, stat row, post link) are the stored plan's for the same reason.
+ */
+export function keepStoredPlanMarks(
+  summary: DesignSummary,
+  stored: DesignSummary | undefined,
+): DesignSummary {
+  if (!stored || stored.updatedAt === summary.updatedAt) {
+    return summary;
+  }
+  const kept: DesignSummary = { ...summary, updatedAt: stored.updatedAt };
+  delete kept.icon;
+  delete kept.stats;
+  delete kept.communityPlanId;
+  if (stored.icon) {
+    kept.icon = stored.icon;
+  }
+  if (stored.stats) {
+    kept.stats = stored.stats;
+  }
+  if (stored.communityPlanId) {
+    kept.communityPlanId = stored.communityPlanId;
+  }
+  return kept;
+}
+
 export function createDesign(
   project: FactoryProject,
   name: string,

@@ -472,6 +472,46 @@ describe("two browser tabs on one library (Jack, 2026-09-23: hours lost to a sec
     expect(storage.writeDesign).not.toHaveBeenCalled();
   });
 
+  it("two saves in flight at once never make a conflict copy of this tab's own work", async () => {
+    // A player on one browser tab got "(conflict copy) (conflict copy) ..."
+    // over and over (2026-09-25): a big plan's write was still landing when
+    // the next autosave started, both checked against the same stored version,
+    // and the second one read the first as another tab's save.
+    const current = await openAt();
+    useFactoryStore.getState().renameProject("First edit");
+    const first = useDesignStore.getState().saveActiveProject("a", useFactoryStore.getState().project);
+    useFactoryStore.getState().renameProject("Second edit");
+    const second = useDesignStore.getState().saveActiveProject("a", useFactoryStore.getState().project);
+    await Promise.all([first, second]);
+
+    expect(useDesignStore.getState().tabConflict).toBeUndefined();
+    expect(useDesignStore.getState().activeDesignId).toBe("a");
+    expect([...current.keys()]).toEqual(["a"]);
+    expect(storage.writeDesign.mock.calls.at(-1)?.[0].project.name).toBe("Design a");
+    expect(writesOf("a")).toBe(2);
+  });
+
+  it("a conflict copy of a conflict copy does not stack the words", async () => {
+    const current = library(summary("a", { updatedAt: T0, name: "Oil (conflict copy)" }));
+    await useDesignStore.getState().hydrate();
+    otherTabSaves(current);
+    useFactoryStore.getState().renameProject("An edit");
+    await useDesignStore.getState().saveActiveProject("a", useFactoryStore.getState().project);
+    expect(useDesignStore.getState().tabConflict?.copyName).toBe("Oil (conflict copy) (2)");
+  });
+
+  it("a conflict copy's name fits the account's 80 characters", async () => {
+    const long = "a".repeat(78);
+    const current = library(summary("a", { updatedAt: T0, name: long }));
+    await useDesignStore.getState().hydrate();
+    otherTabSaves(current);
+    useFactoryStore.getState().renameProject("An edit");
+    await useDesignStore.getState().saveActiveProject("a", useFactoryStore.getState().project);
+    const copyName = useDesignStore.getState().tabConflict?.copyName ?? "";
+    expect(copyName.length).toBeLessThanOrEqual(80);
+    expect(copyName.endsWith("(conflict copy)")).toBe(true);
+  });
+
   it("saves its own edits and tells the other tabs", async () => {
     const current = await openAt();
     useFactoryStore.getState().renameProject("Real work");

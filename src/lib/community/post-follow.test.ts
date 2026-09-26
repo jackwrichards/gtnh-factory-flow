@@ -20,7 +20,10 @@ vi.mock("./plan-preview-capture", () => ({
 }));
 vi.mock("@/lib/designs/design-storage", () => ({
   readDesign: (id: string) => readDesign(id),
-  writeDesign: (record: unknown) => writeDesign(record),
+  writeDesignIfUnchanged: async (record: unknown) => {
+    await writeDesign(record);
+    return "written";
+  },
 }));
 vi.mock("@/lib/setups-tab", () => ({ notifySetupsChanged: () => undefined }));
 vi.mock("@/store/community-auth-store", () => ({

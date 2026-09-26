@@ -645,6 +645,22 @@ Working notes for future agents on GTNH Factory Flow.
   - A stale tab that DOES hold its own edits keeps them as a new design,
     "<name> (conflict copy)", switches to it without touching the canvas,
     and says so (`TabConflictNotice`). Nothing is lost either way.
+  ONE TAB MUST NEVER CONFLICT WITH ITSELF (player report, 2026-09-25: a
+  single tab minted "(conflict copy) (conflict copy) ..." every few
+  autosaves). Two traps, both closed:
+  - Saves are QUEUED (`persistQueue`): two in flight both checked against
+    the same `canvasBase`, and the second read the first as another tab.
+    A big plan's write outlasts the 350 ms autosave debounce, and a flush
+    on a tab switch can land mid-autosave. A queued save whose design has
+    left the canvas by its turn writes nothing ("gone"); nothing writes a
+    design without the version check.
+  - `writeDesignSummary` (rename, star, folder, sync's push stamp, backfill)
+    keeps the STORED plan stamp and plan marks (`keepStoredPlanMarks`), read
+    and written in one transaction. Every summary writer reads first, and a
+    save landing in between used to put `updatedAt` back behind the plan.
+  Conflict copy names come from `conflictCopyName`: counted, never stacked,
+  clipped to the account's 80 characters. `self-conflict-probe.local.mjs`
+  slows the designs database in one real tab and fails on any copy.
   Tabs announce saves over a BroadcastChannel (`design-tab-sync.ts`); a
   VISIBLE tab with no edits reloads on the spot, and a hidden one checks when
   it comes back into view (it would otherwise re-solve the plan on every

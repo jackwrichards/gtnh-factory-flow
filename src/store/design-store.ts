@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { createEmptyProject } from "@/examples";
 import {
   UNTITLED_DESIGN_NAME,
+  conflictCopyName,
   createDesign as createDesignRecord,
   createFolder as createFolderRecord,
   duplicateDesign as duplicateDesignRecord,
@@ -15,7 +16,6 @@ import {
   sortFolders,
   stampDesignOrder,
   toDesignSummary,
-  makeUniqueDesignName,
   touchDesignMeta,
   updateDesignProject,
   type DesignFolder,
@@ -277,12 +277,23 @@ function withCurrentView(project: FactoryProject): FactoryProject {
 }
 
 type PersistOutcome =
-  | { outcome: "clean" | "written" | "stale" }
+  | { outcome: "clean" | "written" | "stale" | "gone" }
   | { outcome: "copied"; copy: DesignRecord };
+
+/**
+ * ONE SAVE AT A TIME in this tab. A save checks the stored version against
+ * `canvasBase` and moves `canvasBase` once its write lands, so two saves in
+ * flight together both checked against the same version and the second read
+ * the first as ANOTHER tab's save: a player on one browser tab got a fresh
+ * "(conflict copy)" every few autosaves (2026-09-25; a big plan's write is
+ * slow enough for the next autosave to start before it lands).
+ */
+let persistQueue: Promise<unknown> = Promise.resolve();
 
 /**
  * Save the canvas into `summary`'s record, if this tab has anything of its
  * own to save and the stored plan is still the version it started from.
+ * Queued behind any save already under way.
  *
  * - "clean": nothing was edited here; nothing is written.
  * - "written": saved, and the other tabs told.
@@ -290,15 +301,30 @@ type PersistOutcome =
  *   and this tab's edits are written as a new design, `copy`.
  * - "stale": another tab saved a newer version and this tab had only changed
  *   the dressing; nothing is written.
+ * - "gone": by its turn the canvas had moved to another design (a save ahead
+ *   of it kept a conflict copy, say); nothing is written.
  */
-async function persistCanvas(summary: DesignSummary, canvas: FactoryProject): Promise<PersistOutcome> {
+function persistCanvas(summary: DesignSummary, canvas: FactoryProject): Promise<PersistOutcome> {
+  const turn = persistQueue.then(() => persistCanvasNow(summary, canvas));
+  persistQueue = turn.catch(() => undefined);
+  return turn;
+}
+
+async function persistCanvasNow(summary: DesignSummary, canvas: FactoryProject): Promise<PersistOutcome> {
   if (!canvasPlanEdited && !canvasViewEdited) {
     return { outcome: "clean" };
   }
+  // Never written without the version check: a save for a design the canvas
+  // has left would otherwise go through unguarded.
+  if (canvasBase?.designId !== summary.id) {
+    return { outcome: "gone" };
+  }
+  // The strip's copy of the summary is fresher than the one captured when
+  // this save was queued (a rename may have landed meanwhile).
+  const current = useDesignStore.getState().designs.find((design) => design.id === summary.id) ?? summary;
   const project = withCurrentView(canvas);
-  const record = withStats(updateDesignProject({ ...summary, project }, project));
-  const expected = canvasBase?.designId === summary.id ? canvasBase.updatedAt : undefined;
-  const outcome = await writeDesignIfUnchanged(record, expected);
+  const record = withStats(updateDesignProject({ ...current, project }, project));
+  const outcome = await writeDesignIfUnchanged(record, canvasBase.updatedAt);
   if (outcome === "written") {
     schedulePostFollow(record.id, Boolean(record.project.metadata?.communityPlanId));
     canvasBase = { designId: summary.id, updatedAt: record.updatedAt };
@@ -317,15 +343,15 @@ async function persistCanvas(summary: DesignSummary, canvas: FactoryProject): Pr
   const copy: DesignRecord = {
     ...createDesignRecord(
       duplicateDesignRecord(record, []).project,
-      makeUniqueDesignName(
-        `${summary.name} (conflict copy)`,
+      conflictCopyName(
+        current.name,
         designs.map((design) => design.name),
       ),
     ),
-    folderId: summary.folderId,
+    folderId: current.folderId,
   };
   await writeDesign(copy);
-  useDesignStore.setState({ tabConflict: { name: summary.name, copyName: copy.name } });
+  useDesignStore.setState({ tabConflict: { name: current.name, copyName: copy.name } });
   return { outcome: "copied", copy };
 }
 

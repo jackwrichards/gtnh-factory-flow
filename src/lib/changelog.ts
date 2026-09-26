@@ -47,6 +47,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "3.9.1",
+    date: "2026-09-25",
+    headline: "No more runaway conflict copies",
+    notes: [
+      "Editing a big plan quickly no longer makes a new \"(conflict copy)\" design every few saves.",
+      "A copy of a conflict copy is numbered instead of repeating the words, and its name fits your account.",
+      "Copies already made are ordinary designs: delete the ones you don't need.",
+      "A heat exchanger on the board no longer breaks the Machines list.",
+    ],
+  },
+  {
     version: "3.9.0",
     date: "2026-09-25",
     headline: "Reactor fuel and sparge byproducts",

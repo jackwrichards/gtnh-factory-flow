@@ -2,6 +2,7 @@
 
 import type { FactoryProject } from "@/lib/model/types";
 import {
+  keepStoredPlanMarks,
   toDesignSummary,
   type DesignFolder,
   type DesignRecord,
@@ -164,6 +165,10 @@ export async function writeDesignIfUnchanged(
  *
  * Renaming shouldn't rewrite a megabyte of plan, and autosave shouldn't be
  * forced to wait behind it.
+ *
+ * The plan's own stamp and marks stay as stored (`keepStoredPlanMarks`), read
+ * and written in one transaction, so a summary read before a save cannot put
+ * the stamp back behind the plan.
  */
 export async function writeDesignSummary(summary: DesignSummary): Promise<void> {
   if (!isDesignStorageAvailable()) {
@@ -173,7 +178,11 @@ export async function writeDesignSummary(summary: DesignSummary): Promise<void> 
   const db = await openDesignDb();
   try {
     const transaction = db.transaction(META_STORE, "readwrite");
-    transaction.objectStore(META_STORE).put(summary);
+    const meta = transaction.objectStore(META_STORE);
+    const current = meta.get(summary.id);
+    current.onsuccess = () => {
+      meta.put(keepStoredPlanMarks(summary, current.result as DesignSummary | undefined));
+    };
     await transactionToPromise(transaction);
   } finally {
     db.close();

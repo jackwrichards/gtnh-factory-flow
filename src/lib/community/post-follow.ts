@@ -1,7 +1,7 @@
 "use client";
 
 import { patchCommunityPlan } from "@/lib/community/client";
-import { readDesign, writeDesign } from "@/lib/designs/design-storage";
+import { readDesign, writeDesignIfUnchanged } from "@/lib/designs/design-storage";
 import { serializeFactoryProject } from "@/lib/import-export/factory-json";
 import { notifySetupsChanged } from "@/lib/setups-tab";
 import { useCommunityAuthStore } from "@/store/community-auth-store";
@@ -119,13 +119,23 @@ async function pushDesign(designId: string): Promise<void> {
 }
 
 async function unlinkDesign(designId: string): Promise<void> {
-  const record = await readDesign(designId);
-  if (!record?.project.metadata?.communityPlanId) {
-    return;
+  // Guarded like a save: a save landing between the read and the write would
+  // otherwise be written over with the older plan, and its stamp with it.
+  for (let attempt = 0; ; attempt += 1) {
+    const record = await readDesign(designId);
+    if (!record?.project.metadata?.communityPlanId) {
+      return;
+    }
+    const { communityPlanId, ...metadata } = record.project.metadata;
+    void communityPlanId;
+    const outcome = await writeDesignIfUnchanged(
+      { ...record, project: { ...record.project, metadata } },
+      record.updatedAt,
+    );
+    if (outcome === "written" || attempt >= 2) {
+      break;
+    }
   }
-  const { communityPlanId, ...metadata } = record.project.metadata;
-  void communityPlanId;
-  await writeDesign({ ...record, project: { ...record.project, metadata } });
   const { useDesignStore } = await import("@/store/design-store");
   const { useFactoryStore } = await import("@/store/factory-store");
   if (useDesignStore.getState().activeDesignId === designId) {

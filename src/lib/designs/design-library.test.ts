@@ -3,7 +3,9 @@ import { createEmptyProject } from "@/examples";
 import {
   UNTITLED_DESIGN_NAME,
   UNTITLED_FOLDER_NAME,
+  conflictCopyName,
   createDesign,
+  keepStoredPlanMarks,
   createFolder,
   duplicateDesign,
   makeUniqueDesignName,
@@ -46,6 +48,54 @@ describe("makeUniqueDesignName", () => {
 
   it("treats names case-insensitively, since tabs read as the same label", () => {
     expect(makeUniqueDesignName("Platline", ["platline"])).toBe("Platline (2)");
+  });
+});
+
+describe("conflictCopyName", () => {
+  it("adds the words once, and counts on for a copy of a copy", () => {
+    expect(conflictCopyName("Oil", ["Oil"])).toBe("Oil (conflict copy)");
+    expect(conflictCopyName("Oil (conflict copy)", ["Oil", "Oil (conflict copy)"])).toBe(
+      "Oil (conflict copy) (2)",
+    );
+    expect(
+      conflictCopyName("Oil (conflict copy) (conflict copy) (2)", ["Oil (conflict copy)"]),
+    ).toBe("Oil (conflict copy) (2)");
+  });
+
+  it("fits the account's 80 characters", () => {
+    const name = conflictCopyName("h".repeat(79), []);
+    expect(name.length).toBeLessThanOrEqual(80);
+    expect(name.endsWith(" (conflict copy)")).toBe(true);
+  });
+});
+
+describe("keepStoredPlanMarks", () => {
+  const stored: DesignSummary = {
+    ...makeSummary("a", "Oil", "2026-09-25T10:00:00.000Z"),
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    icon: { kind: "item", resourceId: "new" },
+    communityPlanId: "post",
+  };
+
+  it("never moves the plan's stamp back behind a save it did not see", () => {
+    const stale: DesignSummary = {
+      ...makeSummary("a", "Oil renamed", "2026-09-25T10:00:00.000Z"),
+      updatedAt: "2026-09-25T11:00:00.000Z",
+      icon: { kind: "item", resourceId: "old" },
+      remoteUpdatedAt: "2026-09-25T11:00:00.000Z",
+    };
+    expect(keepStoredPlanMarks(stale, stored)).toEqual({
+      ...stale,
+      updatedAt: stored.updatedAt,
+      icon: stored.icon,
+      communityPlanId: "post",
+    });
+  });
+
+  it("writes a summary that saw the stored plan as it is", () => {
+    const fresh = { ...stored, name: "Renamed", icon: undefined };
+    expect(keepStoredPlanMarks(fresh, stored)).toBe(fresh);
+    expect(keepStoredPlanMarks(fresh, undefined)).toBe(fresh);
   });
 });
 
