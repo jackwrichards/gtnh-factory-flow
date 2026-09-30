@@ -38,6 +38,8 @@ export interface PowerSelectSetting {
   options: PowerSelectOption[];
   defaultKey: string;
   enabledWhen?: PowerSettingCondition;
+  /** Retired option key -> the current key it reads as; shipped plans store old option keys. */
+  legacyKeys?: Record<string, string>;
 }
 
 export interface PowerNumberSetting {
@@ -108,6 +110,20 @@ export interface PowerSourceDefinition {
   compute(read: PowerSettingsReader): PowerModel;
 }
 
+/** The option a select setting reads as: the stored key, its legacy mapping, or the default. */
+export function selectValue(setting: PowerSelectSetting, raw: string | undefined): string {
+  if (raw === undefined) {
+    return setting.defaultKey;
+  }
+  if (setting.options.some((option) => option.key === raw)) {
+    return raw;
+  }
+  const mapped = setting.legacyKeys?.[raw];
+  return mapped !== undefined && setting.options.some((option) => option.key === mapped)
+    ? mapped
+    : setting.defaultKey;
+}
+
 export function buildPowerSettingsReader(
   definition: PowerSourceDefinition,
   values: Record<string, string> | undefined,
@@ -119,10 +135,7 @@ export function buildPowerSettingsReader(
       if (setting?.type !== "select") {
         return "";
       }
-      const raw = values?.[id];
-      return raw !== undefined && setting.options.some((option) => option.key === raw)
-        ? raw
-        : setting.defaultKey;
+      return selectValue(setting, values?.[id]);
     },
     number(id) {
       const setting = byId.get(id);

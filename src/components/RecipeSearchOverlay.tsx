@@ -39,6 +39,7 @@ import {
   isFreeRecipeInput,
   isOreDictionaryResource,
   isRecipeInputConsumed,
+  machineCycleTicks,
 } from "@/lib/model";
 import type { MachineTier, ResourceAmount } from "@/lib/model/types";
 import { getVoltageTierIndex } from "@/lib/model/tiers";
@@ -1909,10 +1910,13 @@ const CompactRecipeCard = memo(function CompactRecipeCard({
   // crafting maps are exported instant), so the card and its rate views read
   // the workbench's LV seed instead of claiming twenty crafts a second.
   const isAutoWorkbench = primary?.id === AUTO_WORKBENCH_HANDLER_ID;
+  // A machine on its own fixed cycle (the Extreme Heat Exchanger) states its
+  // amounts per cycle, whatever duration the recipe was exported with.
   const durationTicks =
-    isAutoWorkbench && primary.durationTicks !== undefined
+    machineCycleTicks(primary?.machineType) ??
+    (isAutoWorkbench && primary.durationTicks !== undefined
       ? primary.durationTicks
-      : recipe.durationTicks;
+      : recipe.durationTicks);
   const eut = isAutoWorkbench ? (primary.eut ?? recipe.eut) : recipe.eut;
   const minimumTier = isAutoWorkbench ? primary.minimumTier : recipe.minimumTier;
   const seconds = durationTicks / 20;

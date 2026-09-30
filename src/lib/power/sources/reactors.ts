@@ -12,7 +12,8 @@ const thtr: PowerSourceDefinition = {
   id: "thtr",
   name: "Thorium High Temperature Reactor",
   group: "reactors",
-  unlock: "EV",
+  // The controller is crafted with two circuitUltimate (ZPM) circuits.
+  unlock: "ZPM",
   blurb: "Thorium pebbles to hot coolant.",
   settings: [
     {
@@ -91,9 +92,11 @@ export function htgrOperation(pebble: { base: number; mult: number; exp: number 
   // base machine adds: 7% of the operation per second for full coolant and
   // 3% for full water.
   const maxProgress = Math.floor((1 / (fuelExponent * fuelExponent)) * (2000 + 18_000 * efficiency));
-  // onRunningTick's own expression order (drained share 1, full charge).
-  const speedup = (rate: number) => Math.trunc((maxProgress * rate * 1 * HTGR_HELIUM) / HTGR_HELIUM);
-  const perTick = 1 + speedup(HTGR_COOLANT_SPEEDUP) + speedup(HTGR_WATER_SPEEDUP);
+  // onRunningTick's own expression order (drained share 1, full charge). A
+  // draw that truncates to 0 L/t drains nothing, so it adds no progress.
+  const speedup = (rate: number, draw: number) =>
+    draw > 0 ? Math.trunc((maxProgress * rate * 1 * HTGR_HELIUM) / HTGR_HELIUM) : 0;
+  const perTick = 1 + speedup(HTGR_COOLANT_SPEEDUP, coolantPerTick) + speedup(HTGR_WATER_SPEEDUP, waterPerTick);
   const cycleTicks = Math.max(1, Math.ceil(maxProgress / perTick));
   // Each operation loses 0.05% of the charge, (int) truncated; the hatch
   // tops it back up before the next one.
@@ -110,7 +113,8 @@ const htgr: PowerSourceDefinition = {
   id: "htgr",
   name: "High Temperature Gas-cooled Reactor",
   group: "reactors",
-  unlock: "IV",
+  // The controller is crafted with four circuitUltimate (ZPM) circuits.
+  unlock: "ZPM",
   blurb: "TRISO pebbles to coolant and steam.",
   settings: [
     {
@@ -120,7 +124,8 @@ const htgr: PowerSourceDefinition = {
       options: powerPlannerData.htgrPebbles.map((entry) => ({ key: entry.name, label: entry.name })),
       defaultKey: powerPlannerData.htgrPebbles[0]?.name ?? "",
     },
-    { type: "number", id: "fill", label: "Pebble fill", min: 1, max: 10_000, step: 100, defaultValue: 10_000 },
+    // MTEHighTempGasCooledReactor will not start below 1% of its 10,000 balls.
+    { type: "number", id: "fill", label: "Pebble fill", min: 100, max: 10_000, step: 100, defaultValue: 10_000 },
   ],
   compute(read): PowerModel {
     const pebble =
@@ -162,7 +167,8 @@ const lftr: PowerSourceDefinition = {
   id: "lftr",
   name: "Liquid Fluoride Thorium Reactor",
   group: "reactors",
-  unlock: "EV",
+  // The controller is crafted around an IV Machine Hull.
+  unlock: "IV",
   blurb: "Burns fuel salts for direct EU.",
   settings: [
     {
@@ -486,7 +492,8 @@ const dehp: PowerSourceDefinition = {
   id: "dehp",
   name: "Deep Earth Heating Pump",
   group: "reactors",
-  unlock: "EV",
+  // bartworks assembles the controller at RECIPE_IV.
+  unlock: "IV",
   blurb: "Geothermal steam or hot coolant.",
   settings: [
     {

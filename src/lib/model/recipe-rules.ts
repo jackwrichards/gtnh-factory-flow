@@ -160,6 +160,15 @@ function steamSingleblockDurationTicks(
   return isHighPressureSteamHandler(handler) ? base : base * 2;
 }
 
+/**
+ * The fixed cycle of a machine that never reads its recipe's duration (the
+ * Extreme Heat Exchanger's 20 ticks). Its recipe amounts are per cycle, so
+ * this replaces every duration the recipe or a handler states.
+ */
+export function machineCycleTicks(machineType: string | undefined): number | undefined {
+  return getMachineBehaviour(machineType)?.cycleTicks;
+}
+
 export function getSelectedMachineHandler(
   recipe: Pick<Recipe, "machineType" | "minimumTier" | "source" | "machineHandlers"> & Partial<Recipe>,
   node: Pick<FactoryNode, "machineHandlerId">,
@@ -195,9 +204,9 @@ export function applyMachineHandlerToRecipe(
   const seedsFromBase = machineTableSeedsFromBase(handler.machineType);
   const minimumTier = getMachineBehaviour(handler.machineType)?.recipeTierFromBase
     ? recipe.minimumTier : handler.minimumTier;
-  const handlerDurationTicks = seedsFromBase
+  const handlerDurationTicks = machineCycleTicks(handler.machineType) ?? (seedsFromBase
     ? steamSingleblockDurationTicks(recipe, handler)
-    : (handler.durationTicks ?? steamSingleblockDurationTicks(recipe, handler));
+    : (handler.durationTicks ?? steamSingleblockDurationTicks(recipe, handler)));
   const handlerEut = seedsFromBase ? undefined : handler.eut;
   // Steam machines burn steam, not EU. Their handlers carry no EU override,
   // so without this they would inherit the electric recipe's EU draw and the

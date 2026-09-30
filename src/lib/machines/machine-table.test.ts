@@ -192,6 +192,10 @@ describe("curated machine table", () => {
       // Real hatch combinations and the independent source-voltage OC cap;
       // the reference only asks for raw amps. See hile.test.ts.
       "Hyper-Intensity Laser Engraver",
+      // A fixed 20-tick cycle with no energy hatch, so nothing to overclock;
+      // the reference overclocks the recipe's duration. See
+      // extreme-heat-exchanger.test.ts.
+      "Extreme Heat Exchanger",
       "Utupu-Tanuri",
       "Zyngen",
       "Exothermic Hearth",

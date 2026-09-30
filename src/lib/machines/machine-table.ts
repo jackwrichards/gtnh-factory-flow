@@ -136,6 +136,12 @@ type Coefficient = number | ((ctx: MachineContext) => number);
 export interface MachineBehaviour {
   /** A source-verified machine-specific whole/sub-tick rounding rule. */
   quantiseDuration?: (durationTicks: number) => number;
+  /**
+   * The machine's own fixed cycle in ticks. It never reads the recipe's
+   * duration, so the recipe's amounts are per cycle and this replaces the
+   * duration the recipe or any handler states (`applyMachineHandlerToRecipe`).
+   */
+  cycleTicks?: number;
   /** Throughput multiplier: 2 means the recipe finishes in half the time. */
   speed?: Coefficient;
   /** EU/t multiplier applied before parallels. */
@@ -1316,6 +1322,18 @@ const MACHINES: Record<string, MachineBehaviour> = {
     recipeTierFromBase: true,
     hidesControls: ["machineParallel", "voltageParallel"],
     note: "Distillery mode assumes 12 layers: 8 parallels per voltage tier. Tower mode has 12 parallels. Power comes from ordinary energy hatches; multi-amp and laser hatches are not supported.",
+  },
+  /**
+   * goodgenerator's MTEExtremeHeatExchanger. Its recipes carry no duration
+   * (ExtremeHeatExchangerRecipe passes 0, which the dataset clamps to one
+   * tick). checkProcessing_EM sets mMaxProgresstime = 20 and drains up to the
+   * recipe's hot fluid once per cycle; onRunningTick turns water into steam
+   * so each cycle matches the recipe's water and steam. The amounts are per
+   * second, as NEI labels them. No energy hatch, parallels or overclocks.
+   */
+  "Extreme Heat Exchanger": {
+    cycleTicks: 20,
+    overclock: OVERCLOCK.none(),
   },
 };
 

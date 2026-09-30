@@ -190,6 +190,13 @@
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/antimony_plasma-e0d90b923f11.png",
    "dominantColor": "#cdd7ea"
   },
+  "Apple": {
+   "kind": "item",
+   "id": "minecraft:apple",
+   "displayName": "Apple",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/apple-1ca480cec4db.png",
+   "dominantColor": "#ad1821"
+  },
   "Aqua Crystal Plate": {
    "kind": "item",
    "id": "gregtech:gt.metaitem.01@17543",
@@ -329,6 +336,13 @@
    "displayName": "Bismuth Plasma",
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/bismuth_plasma-c465a6b11f91.png",
    "dominantColor": "#5d9c9c"
+  },
+  "Blank Slate": {
+   "kind": "item",
+   "id": "awwayoftime:blankslate",
+   "displayName": "Blank Slate",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/blank_slate-861cb828730c.png",
+   "dominantColor": "#2b2929"
   },
   "Blaze Rod": {
    "kind": "item",
@@ -2138,10 +2152,10 @@
   },
   "Molten Ardite": {
    "kind": "fluid",
-   "id": "ardite.molten",
+   "id": "molten.ardite",
    "displayName": "Molten Ardite",
-   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/molten_ardite-0224c08a597b.png",
-   "dominantColor": "#b78a52"
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/molten_ardite-03004a5012b3.png",
+   "dominantColor": "#e37500"
   },
   "Molten Arsenic": {
    "kind": "fluid",
@@ -2257,17 +2271,17 @@
   },
   "Molten Cobalt": {
    "kind": "fluid",
-   "id": "cobalt.molten",
+   "id": "molten.cobalt",
    "displayName": "Molten Cobalt",
-   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/molten_cobalt-819965dca19b.png",
-   "dominantColor": "#455bad"
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/molten_cobalt-9bae102aec5a.png",
+   "dominantColor": "#4949e4"
   },
   "Molten Copper": {
    "kind": "fluid",
-   "id": "copper.molten",
+   "id": "molten.copper",
    "displayName": "Molten Copper",
-   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/molten_copper-8bc37150ee0e.png",
-   "dominantColor": "#fab64b"
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/molten_copper-2f958bff8625.png",
+   "dominantColor": "#e85b00"
   },
   "Molten Cosmic Neutronium": {
    "kind": "fluid",
@@ -2717,6 +2731,13 @@
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/molten_strontium-d57711187f6c.png",
    "dominantColor": "#bababa"
   },
+  "Molten Superconductor Base UMV": {
+   "kind": "fluid",
+   "id": "molten.superconductorumvbase",
+   "displayName": "Molten Superconductor Base UMV",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/molten_superconductor_base_umv-000e34ec00d1.png",
+   "dominantColor": "#aa24c0"
+  },
   "Molten Tantalum": {
    "kind": "fluid",
    "id": "molten.tantalum",
@@ -3130,6 +3151,13 @@
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/nitrogen_plasma-45cc97f66844.png",
    "dominantColor": "#0093c4"
   },
+  "Obsidian": {
+   "kind": "item",
+   "id": "minecraft:obsidian",
+   "displayName": "Obsidian",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/obsidian-ac73b9e8484a.png",
+   "dominantColor": "#0e0e16"
+  },
   "Octane": {
    "kind": "fluid",
    "id": "octane",
@@ -3367,6 +3395,13 @@
    "displayName": "Propionic Acid",
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/propionic_acid-d624bede58f4.png",
    "dominantColor": "#9ca575"
+  },
+  "Protomatter": {
+   "kind": "fluid",
+   "id": "protomatter",
+   "displayName": "Protomatter",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/protomatter-c142d27a800e.png",
+   "dominantColor": "#6a798d"
   },
   "Pu Pellet": {
    "kind": "item",
@@ -3731,6 +3766,13 @@
    "displayName": "Steeleaf Plate",
    "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/steeleaf_plate-a9708eba3a3a.png",
    "dominantColor": "#173917"
+  },
+  "Stick": {
+   "kind": "item",
+   "id": "minecraft:stick",
+   "displayName": "Stick",
+   "iconPath": "/datasets/gtnh/local-2.9.0-beta-2/textures/rendered/stick-a52eda84b444.png",
+   "dominantColor": "#3f2f12"
   },
   "Strontium Plasma": {
    "kind": "fluid",

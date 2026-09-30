@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { getPowerSource } from "@/lib/power/registry";
-import type {
-  PowerNumberSetting,
-  PowerSettingCondition,
-  PowerSourceDefinition,
+import {
+  selectValue,
+  type PowerNumberSetting,
+  type PowerSettingCondition,
+  type PowerSourceDefinition,
 } from "@/lib/power/types";
 import { useFactoryStore } from "@/store/factory-store";
 import { RecipeTooltip } from "./RecipeTooltip";
@@ -45,17 +46,15 @@ export function PowerConfigPanel({
     <div className="min-w-0 py-1">
       <div className="grid min-w-0 grid-cols-2 gap-1">
         {source.settings.map((setting) => {
-          // The tier ladder lives on the header chip, like every machine's.
-          if (setting.id === "tier") {
+          // The tier ladder lives on the header chip, like every machine's. A
+          // numeric "tier" (the heat exchangers' circuit) has no chip, so it
+          // stays in the panel.
+          if (setting.id === "tier" && setting.type === "select") {
             return null;
           }
           const enabled = isEnabled(setting.enabledWhen);
           if (setting.type === "select") {
-            const value =
-              values?.[setting.id] &&
-              setting.options.some((option) => option.key === values[setting.id])
-                ? values[setting.id]
-                : setting.defaultKey;
+            const value = selectValue(setting, values?.[setting.id] || undefined);
             return (
               <PowerSelectTile
                 key={setting.id}
@@ -179,9 +178,7 @@ function settingValue(
   }
   const raw = values?.[settingId];
   if (setting.type === "select") {
-    return raw !== undefined && setting.options.some((option) => option.key === raw)
-      ? raw
-      : setting.defaultKey;
+    return selectValue(setting, raw);
   }
   if (setting.type === "toggle") {
     return raw === undefined ? (setting.defaultOn ? "1" : "0") : raw;

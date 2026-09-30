@@ -73,16 +73,38 @@ softened per class. OT = the rotor's overflow tier:
 | Large Plasma | opt x (1.5 OT + 1) | 3 OT + 1 |
 | every XL variant | opt x 1.25 | 1 (none) |
 
-XL turbines are the same lookups x16. Plasma flows are per second (the sheet
+XL turbines are the same lookups x16 (the pack's MTEXLTurbine* hold 12 rotors
+at `getSpeedMultiplier() = 16`). Plasma flows are per second (the sheet
 carries x20 conversions). XL Turbo Plasma derates weak plasmas:
 `effXL = eff * MIN(1, (fuelEU * 0.005)^2 / RD.DL:DO[size])`.
 
-Rotor lifespan (seconds): regular steam/SH/gas
-`2 * ROUNDUP(totalDur / MIN(EU/5, EU^0.6) * 50)`; plasma the same without
-the leading 2x; XL variants
-`ROUNDUP(totalDur / MIN(EU/25, (EU/5)^0.6) * 50)` x1.25 loose. Loose fitting
-multiplies lifespan x1.25 generally; SC steam is the quirk: x0.5 tight, x2
-loose.
+Where the planner follows the Java (GT5U 5.09.54.20) over the sheet:
+
+- Each fluidIntoPower truncates in float after every step (flow x fuel EU,
+  x the loss, x efficiency) and clamps at 2,147,483,640 (`safeInt`).
+- Optimal flow: steam and gas truncate (`(long)` cast), the Large Plasma rounds
+  up (`Math.ceil`), the XL Plasma truncates, so an XL plasma optimum under
+  1 L/s takes nothing. The SC and XL losses are measured on the unrounded
+  optimum.
+- Gas: a rotor whose tight optimal EU/t (flow x base efficiency) is under the
+  fuel's EU/L burns 1 L/t for exactly that EU/t, in either fitting, and the XL
+  makes one rotor's worth, not 16. A Large Gas optimum that truncates to
+  0 L/t makes nothing.
+- Dense steam (XL only) goes in whole dense litres: the turbine takes up to
+  ceil(cap / 1000) and uses up to the cap in steam-equivalent litres. The best
+  feed is usually ceil(16 x opt / 1000), since overshooting costs d^2/opt and
+  falling short about 2d (Duranium Large tight dense SC: 1,229 L/t for
+  2,641,920 EU/t; the sheet's 1,228 gives 2,638,480).
+- The Large SC casts base efficiency to int (`useLegacyEfficiencyScaling`):
+  rotors under 100% do not run.
+
+Rotor lifespan (seconds), from `doRandomMaintenanceDamage`: a roll every 1002
+ticks lands half the time for `perRoll x floor(MIN(floor(EU/5), EU^0.6))`, so
+`life = totalDur x 100.2 / damage`. The XL rolls each rotor on `EU/5`
+(`MIN(EU/25, (EU/5)^0.6)`). perRoll (getDamageToComponent): steam and SH 1
+tight, 0.75 loose; Large SC 2 tight, 0.5 loose; Large Gas and both plasmas 1;
+XL Gas 0.75 in either fitting. The sheet halves plasma and every XL and uses
+x1.25 for loose.
 
 Steam EU/L (`'Fuel Data'!B6:C11`): Steam 0.5, SH Steam 1.0, SC Steam 1.0,
 Dense Steam 500, Dense SH 1000, Dense SC 1000 (dense = 1000x, XL turbines
@@ -109,11 +131,19 @@ Solar Salt), fields `Threshold, Max, Throttle, Under Ratio, Over Ratio`:
 | Hot Solar Salt | LHE | 160 | 320 | -6 | 2000 -> Steam | 1000 -> SH |
 | Hot Solar Salt | EHE | 1600 | 3200 | -150 | 1000 -> SH | 1000 -> SC |
 
-Chain: effective threshold = base + (tier-1) x Throttle; LHE caps at 2x its
+Chain: effective threshold = base + (circuit-1) x Throttle, where "tier" is
+the controller's programmed circuit, 1 to 25; LHE and XL cap at 2x their
 effective threshold, TB/EHE at Max; steam L/t = MIN(input L/s, cap) x Ratio
-/ 20; efficiency = 1 - 0.015 x (tier-1) (Thermal Boiler exempt); grade flips
-from Under to Over at the threshold (EHE: SH below, SC above - the
-supercritical gate). Cold fluid returns 1:1 (closed loop).
+/ 20; efficiency = 1 - 0.015 x (circuit-1) (Thermal Boiler has no circuit);
+grade flips from Under to Over at the threshold (EHE: SH below, SC above - the
+supercritical gate; its threshold never drops below 1). Cold fluid returns
+1:1 (closed loop).
+
+Java corrections (`correctSteamMakers` in `tools/power-planner-extract.mjs`):
+the sheet's Thermal Boiler lava and pahoehoe ratio of 160 is 16 in
+`RecipesGregTech.thermalBoilerRecipes` (1000 L -> 16,000 L plain Steam a
+second); the XL's sheet Max is only its circuit-1 cap
+(`MTEAdvHeatExchanger`: 2x the lowered threshold).
 
 ## Singleblock generators (`Singleblocks`)
 
@@ -127,29 +157,60 @@ EUout    = V EU/t (1 amp of the machine's tier)
 
 `V`/`ampLoss` from the ladder (loss 1/2/4/8... EU per packet - the sheet DOES
 charge GT's output loss). Efficiency is a per-family, per-tier table
-(`AE6:BC17`), e.g. steam turbine 0.85/0.75/0.66/0.60/0.50 LV->IV, gas
-turbine 0.95/0.90/0.85..., naquadah reactors RISING with tier
-(0.5/0.6/1.0/1.5/2.0/2.5). Solid/one-shot fuels (naquadah rods, magic items)
-use EU-per-item lists and a x3600 hour basis instead of L/s.
+(`AE6:BC17`), e.g. gas turbine 0.95/0.90/0.85..., naquadah reactors RISING
+with tier (0.8/1.0/1.5/2.0/2.5 EV->UV). Solid/one-shot fuels (naquadah rods,
+magic items) use EU-per-item lists and a x3600 hour basis instead of L/s.
+
+The planner follows the Java (`MTEBasicGenerator.onPostTick`, one burn per 10
+ticks) where the sheet does not:
+
+- Fluid EU per L is `floor(fuelValue x eff% / 100)`; a burn drains at most the
+  tank (16,000 L; steam turbine 24,000 x tier; geothermal 5,000 x tier; rocket
+  32,000), so thin fuels derate below V.
+- Items burn one per 10 ticks (2/s max) at `fuelValue x 10 x eff%` EU, so
+  small items derate below V.
+- Steam turbine: 3 EU per (6 + tier) L, efficiency 6/(6+tier); the sheet's
+  0.85/0.66 are the tooltip's truncation.
+- Rocket fuel generator burns the fuel map value (RP-1 512); the sheet's 1536
+  is the Large Rocket Engine's x3.
+- Naquadah reactor: each mark has its own fuel map, its naquadah or naquadria
+  part plus one tiberium form.
+- Magic energy absorber never runs the base burn (it absorbs eggs, crystals,
+  enchantments, vis); its card still carries the sheet's model.
+- RTG (not in the sheet): a pellet holds `min(1,728,000 x days x EU/t,
+  Integer.MAX_VALUE)` EU and pays the packet loss; Pu-238 is 87 days and the
+  IC2 pellet 2 (`roundToClosestInt`).
 
 ## Large Engines (`Large Engines`)
 
 - Large Combustion Engine: 2048 EU/t, boosted x3 = 6144. Boost consumes
   40 L/s oxygen and raises fuel EFFICIENCY x1.5 (3x power for 2x fuel).
-  Lubricant 1000 L/hr. Fuels over 2048 EU/L refuse to run unboosted
+  Fuels over 2048 EU/L refuse to run unboosted
   (`IF(AND(fuelEU>2048, NOT(boost)), 0, ...)`).
 - Extreme Combustion Engine: 10900 EU/t, boosted 32700; liquid oxygen 40;
-  lubricant 8000 L/hr; own 3-fuel list (HOG family).
+  own 3-fuel list (HOG family). The tooltip says 8000 L/hr lubricant; the
+  code uses the same gate as the LCE.
 - A third 2048/6144 block over the semifluid fuel list.
-- GT++ Rocket Engines: throttle setting; output
-  `1.6384 * P * cbrtCap30k * cbrtCap80k` where `P = 0.05 * throttle *
-  fuelEU`, with cube-root falloff past 30k and 80k EU; CO2 out 1000/hr, air
-  intake `0.01 * EU`, liquid hydrogen `0.003 * EU` when boosted (x3 caps).
+- The planner follows the Java past the sheet on fuel burn: litres per tick
+  are whole, `floor(2048 / fuelEU)` (x2 nominal boosted; the LCE and ECE add
+  a weighted extra litre when a boosted fuel leaves a remainder). Lubricant is
+  1 L (2 boosted) per `mRuntime % 72` gate, which fires 14 times per 1002
+  ticks because mRuntime wraps after 1001.
+- GT++ Rocket Engines: throttle setting; output `1.6384 * euProduction`.
+  The sheet uses `P = 0.05 * throttle * fuelEU` with the falloff knees x3
+  when boosted. The Java burns once per 21 ticks but spreads the energy over
+  20, so `P = 0.0525 * throttle * fuelEU`, and boost meters the falloff on a
+  third of the fuel: `euProduction = boost ? 3 f(P/3) : f(P)`, `f(x) = x *
+  cbrt(30000/x) * cbrt(80000/x)` past each knee. Air `euProduction / 100` per
+  tick, liquid hydrogen `3 * euProduction / 1000` per burn, CO2 1 L (3
+  boosted) per gate, consumed.
   A second variant uses efficiency `1.5 * EXP(-fuelCoeff / 0.2)` (per-fuel
   coefficient column in Fuel Data).
-- One more tiered block (T1-T3, capacity 375000/1e6/2.5e6, decay 200/400/
-  700, `SQRT(MIN(16, x)) * 1.2^tier` and a `(...)^12.5` durability law) -
-  NOT yet identified; resolve against GT++ source at build time.
+- Large Neutralization Engine (T1-T3, capacity 375000/1e6/2.5e6, decay
+  200/400/700, `SQRT(MIN(16, arms)) * 1.2^tier` and a `(...)^12.5` residue
+  law). The sheet loses an arm on `arms / (45 (tier + 1))` a minute; the Java
+  rolls `45 (tier + 2)` with LV as tier 0. A hydroxide dust lasts its boost
+  window plus one tick (NaOH 21 ticks).
 
 ## Large Boilers (`1. Large Boiler`)
 
@@ -163,6 +224,12 @@ Tungstensteel 16000 SH (per boiler). Rules:
   per-tier fuel tables in Fuel Data (higher tiers burn faster - smaller
   divisors). Water in = steam / 160.
 - Titanium/Tungstensteel chain SH turbines into steam turbines (cascade).
+- Java corrections (`correctSteamMakers`): a solid burns fuel value / 80
+  ticks times the tier's runtimeBoost (x2, x1, x3/10, x15/100,
+  `MTELargeBoilerBase`); the sheet's longer times for Solid Super Fuel, Magic
+  Solid Super Fuel, Diamond and Block of Diamond carry the NEI-only log bonus.
+  Titanium/Tungstensteel take only `LargeBoilerFuelBackend.ALLOWED_FUELS`, so
+  Naquadah Gas, Nefarious Gas and Nitrobenzene are dropped.
 
 ## SOFC I / II (`2. SOFC`)
 
@@ -249,7 +316,8 @@ is an average, so the multiplier is `Base * (1 + (Mult-1)x)^(1 + (Exp-1)x)`
 on the balls left after the burn and truncated per tick. One operation is
 `(int)((2000 + 18000 eff) / exponent^2)` ticks of progress, and each supplied
 tick adds `(int)(M x 0.0035)` + `(int)(M x 0.0015)` more, so a full glowstone
-reactor cycles every 202 ticks. Per cycle it burns the pebble cost in TRISO
+reactor cycles every 202 ticks. A draw that truncates to 0 L/t drains nothing
+and adds no speedup, and the reactor will not start below 100 balls (1%). Per cycle it burns the pebble cost in TRISO
 Fuel (returned as Burned Out TRISO Fuel) and loses 0.05% of its 512,000 L
 helium (256 L), which the hatch tops back up.
 
@@ -259,7 +327,8 @@ Direct EU, no turbines: 16 amps of the fuel's base tier (Fuel 1 EV 32,768;
 Fuel 2 IV 131,072; Fuel 3 LuV 524,288 EU/t) burning 1 L/s of fuel. Sparged
 byproducts per second: U-Salt, T-Salt, TB-Salt, UF6, and 0.33 L/s
 Uranium-233 always (the sheet's 0.33; MTENuclearReactor is a 1-in-300 chance a tick of
-1-10 L, 0.3667 L/s, which the planner uses). The LFTB breeder makes the fuel: base 1920-7680 EU/t
+1-10 L, 0.3667 L/s, which the planner uses). Fuel 2 leaves TB-Salt, not the
+sheet's T-Salt (RecipeLoaderLFTR). The LFTB breeder makes the fuel: base 1920-7680 EU/t
 over 1800-3000 s per 1000 L, overclockable at x4 power / x2 speed per tier
 (deliberately lossy).
 
@@ -284,7 +353,10 @@ EU/t = baseEUt(fuel) x coolantEff x boosterMult x count
 Fuels MK1-MK6 (975,000 EU/t up to 2.08e9); coolants None/IC2 1.05/Super
 1.5/Cryotheum 2.75/Tachyon 5.0 (1000 L/s, Tachyon 20); boosters x2/x3/x4/
 x16/x64 multiply output AND fuel burn (180 or 20 L/s of booster fluid);
-liquid air flat 2400 L/s. The sheet also models the whole excited-fuel
+liquid air 2400 L/s. Those per-second figures are per draw: the reactor draws
+liquid air, coolant and booster whenever progress is a multiple of 20 ticks,
+ceil(d/20) times a d-tick recipe, so Mk-II (70 ticks) and Plutonium (150)
+draw 8/7 and 16/15 of them. The sheet also models the whole excited-fuel
 PRODUCTION chain (9 recipe dusts x T1-T4 machines with EU costs) and nets it
 against the reactor - its own sample config is net NEGATIVE, which is the
 cautionary tale the planner will surface naturally once the chain is wired.
@@ -297,6 +369,11 @@ success-pity expectation model, x4 EU per overclock, hydrogen/helium
 overflow multipliers, star matter yields. Port the success/pity expectation
 (`success = clamp(base - 0.0925(t2-1) + 0.05(t3-1))`, expected tries from
 the pity ladder) rather than the raw columns.
+
+The duration column is seconds (EyeOfHarmonyRecipeStorage.timeCalculator,
+18,000 x 1.4^tier), so net EU/t is net EU over seconds x 20. Each craft
+consumes 1e9 x (rocket tier + 1) L of hydrogen and of helium; the Deep Dark
+is the sheet's T10 but rocket tier 9.
 
 ## Antimatter (`13. Antimatter`)
 
@@ -313,6 +390,13 @@ exponent ~1.5-: the optimum is interior, and the sheet finds it with a
 3235-row sweep. Reimplement as a small numeric search, not a table. Catalyst
 fluids (Tengam, Spacetime, Shirabon, Depleted Mk-V) are consumed at
 `AM^0.5 / AM^(2/7) / AM^(1/3)` rates; depleted fuel byproduct feeds LNRs.
+
+The Forge depletes Protomatter equal to the antimatter it adds, and the
+generator runs at full efficiency with Molten Superconductor Base UMV equal
+to the antimatter it burns; the planner lists both. The burn cap is the
+exotic dynamo hatches' storage (V x 24 x amps each), a player choice: the
+planner uses 64 UIV hatches at 1,048,576 A, the sheet's selector defaults to
+UMV.
 
 ## Fuel Data table map (for the extractor)
 

@@ -132,6 +132,14 @@ const AUX_NAMES = [
   ["Molten Tengam", "fluid"],
   ["Molten SpaceTime", "fluid"],
   ["Molten Shirabon", "fluid"],
+  // Antimatter: the forge eats protomatter, the generator a UMV catalyst.
+  ["Protomatter", "fluid"],
+  ["Molten Superconductor Base UMV", "fluid"],
+  // Byproducts: the lava boiler's obsidian, the magic converter's containers.
+  ["Obsidian", "item"],
+  ["Blank Slate", "item"],
+  ["Apple", "item"],
+  ["Stick", "item"],
   // The LNR's depleted fuel returns, litre for litre with the fuel burned.
   ["Thorium Based Liquid Fuel (Depleted)", "fluid"],
   ["Uranium Based Liquid Fuel (Depleted)", "fluid"],
@@ -326,8 +334,11 @@ function pick(results, displayName, kind) {
     (entry) => (entry.displayName ?? "").toLowerCase() === lower && entry.kind === kind,
   );
   if (exact.length > 0) {
-    // Prefer the busiest resource when ids collide on one display name.
-    return exact.sort((a, b) => (b.recipeCount ?? 0) - (a.recipeCount ?? 0))[0];
+    // GregTech's own molten fluids are "molten.<material>" (plasma exhaust,
+    // fusion); Tinkers' share the display name, so GT's wins a "Molten" tie.
+    // Otherwise prefer the busiest resource when ids collide on one name.
+    const gtMolten = (entry) => (lower.startsWith("molten ") && entry.id.startsWith("molten.") ? 1 : 0);
+    return exact.sort((a, b) => gtMolten(b) - gtMolten(a) || (b.recipeCount ?? 0) - (a.recipeCount ?? 0))[0];
   }
   const anyKind = results.filter((entry) => (entry.displayName ?? "").toLowerCase() === lower);
   return anyKind.sort((a, b) => (b.recipeCount ?? 0) - (a.recipeCount ?? 0))[0];

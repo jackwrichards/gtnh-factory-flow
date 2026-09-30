@@ -42,9 +42,12 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "3.9.6",
     date: "2026-09-30",
-    headline: "SC steam turbines fixed",
+    headline: "Power numbers checked against the game",
     notes: [
       "Large and XL Turbo SC Steam Turbines showed 16 times their real steam flow and EU; they now match the game.",
+      "Extreme Heat Exchangers run on the game's 20-tick cycle, so a board needs 20 times as many as it showed.",
+      "Eye of Harmony power, lava in the Thermal Boiler, the Rocket Fuel Generator and RTG pellets were far off and now match the game.",
+      "Turbines, engines, boilers, reactors and generators now use the game's own fuel burn, rotor wear and unlock tiers.",
     ],
   },
   {

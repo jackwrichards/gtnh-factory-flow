@@ -69,6 +69,9 @@ computes in float: replicate it.
 - HILE (`hile.ts`): one `laserSource` voltage/amp choice; cube-root parallels; supplies no power.
 - Neutron Activator (`neutron-activator.ts`): integer pipe height >= 4, 0.9f per extra
   layer, CEIL duration above one tick, FLOOR parallels below. Not the generic rule.
+- Extreme Heat Exchanger: a fixed 20-tick cycle (`cycleTicks`) replaces the recipe's
+  duration everywhere, search card included; its recipe amounts are per second. The
+  dataset's 1 tick is Java's 0 clamped.
 - Utupu-Tanuri is both `Multiblock Dehydrator` and `Vacuum Furnace`; keep both aliases on
   one entry (`minimumHeatFromSpecialValue`).
 - Naquadah Fuel Refinery: special value = minimum coil tier (`minimumFromSpecialValue`).

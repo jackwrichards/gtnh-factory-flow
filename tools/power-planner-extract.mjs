@@ -4,7 +4,9 @@
  * Planner" spreadsheet (by Fox) into JSON the app imports. Source of truth
  * for the power cards; the decoded model is docs/power-planner-math.md.
  *
- *   node tools/power-planner-extract.mjs "path/to/GTNH Power Planner 2.9.xlsx"
+ *   node tools/power-planner-extract.mjs "path/to/Copy of GTNH Power Planner 2.9.xlsx"
+ *
+ * (the 2.9 copy whose EOH sheet is "13. EOH"; the later copies renumber it)
  *
  * Writes src/lib/power/data/power-planner-data.json. Deterministic: same
  * workbook, same output. No dependencies - the zip reader below handles the
@@ -361,7 +363,8 @@ const data = {
         .map((row) => ({
           name: row[0],
           tier: row[1],
-          durationTicks: row[2],
+          // Column AC is seconds (EyeOfHarmonyRecipeStorage.timeCalculator).
+          durationSeconds: row[2],
           baseSuccess: row[3],
           efficiency: row[4],
           euInput: row[5],
@@ -390,6 +393,209 @@ function rotorClass(row, effTight, effLoose, optTight, optLoose) {
     optimalLoose: rangeRows(rotorData, `${optLoose}${row}:${offsetColumn(optLoose, 3)}${row}`)[0],
   };
 }
+
+// --------------------------------------------------------- Java corrections
+//
+// Where the workbook and the pack's Java (GT5U tag 5.09.54.20) disagree, the
+// Java wins. Each correction names the class or loader it follows, so the JSON
+// stays a pure function of workbook + this file. Never hand-edit the JSON.
+
+const withoutNames = (rows, names) => rows.filter((row) => !names.includes(row.name));
+
+function correctEngineFuels() {
+  // Not registered anywhere in the pack (no fuel recipe, no fluid in the 2.9 dataset).
+  data.semifluidFuels = withoutNames(data.semifluidFuels, [
+    "Raw Animal Waste",
+    "Manure Slurry",
+    "Fertile Manure Slurry",
+  ]);
+  // The sheet lists Ether twice (diesel and gas rows); one option per fuel.
+  data.ucfeFuels = data.ucfeFuels.filter(
+    (row, index, rows) => rows.findIndex((other) => other.name === row.name) === index,
+  );
+  // MTELargeNeutralizationEngine reads ItemList.ROBOT_ARMS from index 0 (LV).
+  if (!data.lneRobotArms.some((row) => row.tier === 0)) {
+    data.lneRobotArms.unshift({ name: "Amount (LV)", tier: 0 });
+  }
+  // useBooster: each hydroxide dust lasts this many ticks, then one more tick to reload.
+  const boostTicks = {
+    "Sodium Hydroxide": 20,
+    "Potassium Hydroxide": 50,
+    "Caesium Hydroxide": 200,
+    "Francium Hydroxide": 240,
+  };
+  data.lneBases = data.lneBases.map((row) => ({ ...row, boostTicks: boostTicks[row.name] }));
+}
+
+// Rotor columns are what TurbineStatCalculator returns for a rotor made by
+// MetaGeneratedTool.getToolWithStats. The game computes them in Java float, and
+// the sheet in double: at the ties (base efficiency 1.3, 2.1) Math.round(base * 85)
+// lands one step lower in float, and large loose flows differ past float precision.
+const f32 = Math.fround;
+
+// ToolTurbineSmall/Normal/Large/Huge: getSpeedMultiplier and getBaseDamage.
+const TURBINE_SIZES = [
+  { speed: 1, damage: 0 },
+  { speed: 2, damage: 2.5 },
+  { speed: 3, damage: 5 },
+  { speed: 4, damage: 7.5 },
+];
+
+/** TurbineStatCalculator for one size, float-exact. `stats` are the material's tool fields. */
+function turbineStats(stats, sizeIndex) {
+  const size = TURBINE_SIZES[sizeIndex];
+  // getBaseEfficiency: 0.5F + (0.5F + getToolCombatDamage) * 0.1F; combat damage = base damage + mToolQuality.
+  const base = f32(0.5 + f32(f32(0.5 + f32(size.damage + stats.quality)) * f32(0.1)));
+  // getLooseEfficiency: (float) (-0.2f + Math.round(base * 85.0f) * 0.01), the round on a float product.
+  const loose = f32(f32(-0.2) + Math.round(f32(base * 85)) * 0.01);
+  const flow = f32(f32(size.speed * f32(stats.speed)) * 50);
+  const exponent = f32(f32(base - f32(0.8)) * 20);
+  const steam = f32(flow * f32(stats.steamMultiplier));
+  const gas = f32(flow * f32(stats.gasMultiplier));
+  const plasma = f32(f32(flow * f32(stats.plasmaMultiplier)) * 42);
+  return {
+    // The tight efficiency keeps the sheet's double form; it is the same number to float precision.
+    efficiencyTight: 0.5 + (0.5 + size.damage + stats.quality) * 0.1,
+    steam: {
+      efficiencyLoose: f32(loose * f32(0.9)),
+      optimalTight: steam,
+      optimalLoose: f32(f32(3 * steam) * f32(Math.pow(f32(1.1), exponent))),
+    },
+    gas: {
+      efficiencyLoose: f32(loose * f32(0.95)),
+      optimalTight: gas,
+      optimalLoose: f32(f32(2 * gas) * f32(Math.pow(f32(1.05), exponent))),
+    },
+    plasma: {
+      efficiencyLoose: loose,
+      optimalTight: plasma,
+      optimalLoose: f32(f32(2 * plasma) * f32(Math.pow(f32(1.03), exponent))),
+      euAtOptimalTight: f32(plasma * base),
+    },
+  };
+}
+
+/**
+ * A bartworks rotor's tool stats: Werkstoff.getToolQuality, getToolSpeed and
+ * getDurability, in float, from the Werkstoff's protons (summed over its
+ * contents), mass (averaged), melting point and content count (the amounts'
+ * sum for a compound or mixture).
+ */
+function werkstoffToolStats({ protons, mass, meltingPoint, contentCount }) {
+  const quality = Math.trunc(f32(f32(15 * f32(f32(protons / 188) + f32(meltingPoint / 10801))) / contentCount));
+  const sum = f32(f32(-mass + f32(f32(0.1) * meltingPoint)) + protons);
+  const speed = Math.max(1, f32(f32(f32(f32(f32(2 * sum) * f32(0.1)) / contentCount) * f32(0.1)) * quality));
+  const durability = Math.trunc(f32(f32(f32(f32(0.01) * meltingPoint) * mass) / contentCount));
+  return { quality, speed, durability };
+}
+
+function correctRotors() {
+  // Base stats: C tier (mToolQuality), E mining speed (mToolSpeed), F durability
+  // (100 x mDurability), H/I/J steam, gas and plasma multipliers.
+  const base = new Map(
+    rangeRows(rotorData, "B6:J171")
+      .filter((row) => typeof row[0] === "string" && row[0].trim() !== "")
+      .map((row) => [
+        row[0].trim(),
+        {
+          quality: row[1],
+          speed: row[3],
+          durability: row[4],
+          steamMultiplier: row[6],
+          gasMultiplier: row[7],
+          plasmaMultiplier: row[8],
+        },
+      ]),
+  );
+
+  // Where the pack's materials differ from the sheet's.
+  const javaStats = {
+    // WerkstoffLoader.HDCS, a mixture of 12 Tungstensteel, 9 HSS-E, 6 HSS-G,
+    // 3 Ruridit, 2 Magneto Resonatic and 1 Plutonium: 5552 protons, mass 107.
+    "High Durability Compound Steel": werkstoffToolStats({ protons: 5552, mass: 107, meltingPoint: 9000, contentCount: 33 }),
+    // GGMaterial.atomicSeparationCatalyst, a compound of 2 Orundum (120 protons,
+    // mass 196), 1 Plutonium (94, 246) and 2 Naquadah (130, 330).
+    "Atomic Separation Catalyst": werkstoffToolStats({
+      protons: 2 * 120 + 94 + 2 * 130,
+      mass: Math.trunc((2 * 196 + 246 + 2 * 330) / 5),
+      meltingPoint: 5000,
+      contentCount: 5,
+    }),
+    // MaterialsInit.loadUniversium: setTool(10_485_760, 30, 1.0f).
+    Universium: { quality: 30 },
+  };
+
+  for (const rotor of data.rotors) {
+    const stats = base.get(rotor.name);
+    if (!stats) {
+      throw new Error(`Rotor ${rotor.name} has no base stats row.`);
+    }
+    const fix = javaStats[rotor.name];
+    if (fix) {
+      Object.assign(stats, fix);
+      if (fix.durability !== undefined) {
+        // MetaGeneratedTool.getToolWithStats: MaxDamage = 100 x mDurability x size multiplier.
+        stats.durability = 100 * fix.durability;
+      }
+    }
+    rotor.durability = stats.durability;
+    // TurbineStatCalculator.getOverflowEfficiency: 1 + min(2, mToolQuality / 3), integer division.
+    rotor.overflowTier = 1 + Math.min(2, Math.trunc(stats.quality / 3));
+    const sizes = TURBINE_SIZES.map((_, index) => turbineStats(stats, index));
+    for (const turbineClass of ["steam", "gas", "plasma"]) {
+      const target = rotor[turbineClass];
+      target.efficiencyTight = sizes.map((size) => size.efficiencyTight);
+      for (const field of Object.keys(sizes[0][turbineClass])) {
+        target[field] = sizes.map((size) => size[turbineClass][field]);
+      }
+    }
+  }
+}
+
+function correctSteamMakers() {
+  // MTEThermalBoiler runs RecipesGregTech.thermalBoilerRecipes: 1000 L of lava or
+  // pahoehoe lava a second makes 16,000 L of plain Steam, so 16 per L, not 160.
+  const thermal = data.heatExchangers.find((row) => row.name === "Thermal Boiler");
+  for (const fluid of ["Lava", "Pahoehoe Lava"]) {
+    if (thermal?.fluids[fluid]) {
+      thermal.fluids[fluid] = { ...thermal.fluids[fluid], underRatio: 16, overRatio: 16 };
+    }
+  }
+  // LargeBoilerFuelBackend.ALLOWED_FUELS: the superheated boilers refuse any other fluid.
+  const refusedBySuperheated = ["Naquadah Gas", "Nefarious Gas", "Nitrobenzene"];
+  data.boilerFuels.titaniumLiquid = withoutNames(data.boilerFuels.titaniumLiquid, refusedBySuperheated);
+  data.boilerFuels.tungstensteelLiquid = withoutNames(
+    data.boilerFuels.tungstensteelLiquid,
+    refusedBySuperheated,
+  );
+  // MTELargeBoilerBase burns a solid for fuel value / 80 ticks, then the tier's
+  // runtimeBoost. The log bonus in LargeBoilerFuelBackend only feeds the NEI page.
+  const runtimeBoost = {
+    bronzeSolid: (ticks) => ticks * 2,
+    steelSolid: (ticks) => ticks,
+    titaniumSolid: (ticks) => Math.trunc((ticks * 3) / 10),
+    tungstensteelSolid: (ticks) => Math.trunc((ticks * 15) / 100),
+  };
+  for (const [table, boost] of Object.entries(runtimeBoost)) {
+    data.boilerFuels[table] = data.boilerFuels[table].map((row) => ({
+      ...row,
+      burnTime: boost(Math.trunc(row.euPerItem / 80)) / 20,
+    }));
+  }
+}
+
+function correctReactors() {
+  // RecipeLoaderLFTR: LFTR Fuel 2 (LiFBeF2ZrF4UF4) leaves 100 L of TB Salt
+  // (LiFBeF2ThF4), not T Salt.
+  data.lftrFuels = data.lftrFuels.map((row) =>
+    row.name === "LFTR Fuel 2" ? { ...row, tSalt: 0, tbSalt: 100 } : row,
+  );
+}
+
+correctEngineFuels();
+correctRotors();
+correctSteamMakers();
+correctReactors();
 
 fs.mkdirSync(path.dirname(outPath), { recursive: true });
 fs.writeFileSync(outPath, JSON.stringify(data, null, 1) + "\n");

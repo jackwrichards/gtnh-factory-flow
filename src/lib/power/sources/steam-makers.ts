@@ -145,43 +145,54 @@ function buildBoiler(spec: BoilerSpec): PowerSourceDefinition {
 /**
  * The singleblock boilers (MTEBoiler subclasses). Steam flows at the full
  * per-second rate once hot; at steady state fuel is burned only to cancel
- * cooldown, energyConsumption per cooldownInterval ticks, and a solid fuel
- * item is worth its furnace burn time / 10 in boiler energy. Water is
- * 1 L per 160 L of steam (GTValues.STEAM_PER_WATER).
+ * cooldown, and a solid fuel item is worth its furnace burn time / 10 in
+ * boiler energy. MTEBoiler.calculateCooldown drops one degree every
+ * cooldownInterval + 1 ticks (the timer must pass the interval), and each
+ * degree costs energyConsumption to win back. Water is 1 L per 160 L of
+ * steam (GTValues.STEAM_PER_WATER).
  */
 interface SmallBoilerSpec {
   id: string;
   name: string;
   unlock: string;
   steamPerSecond: number;
-  /** energyConsumption x 20 / cooldownInterval, from the machine's class. */
+  /** energyConsumption x 20 / (cooldownInterval + 1), from the machine's class. */
   energyPerSecond: number;
   automatable: boolean;
 }
 
 const SMALL_BOILER_SPECS: SmallBoilerSpec[] = [
-  // MTEBoilerBronze: 120 L/s, consumption 1 per 45t cooldown.
+  // MTEBoilerBronze: 120 L/s, consumption 1, cooldown interval 45.
   {
     id: "small-coal-boiler",
     name: "Small Coal Boiler",
     unlock: "ULV",
     steamPerSecond: 120,
-    energyPerSecond: 20 / 45,
+    energyPerSecond: 20 / 46,
     automatable: false,
   },
-  // MTEBoilerSteel, in-game name "Large Coal Boiler": 300 L/s, 2 per 40t.
+  // MTEBoilerSteel, in-game name "Large Coal Boiler": 300 L/s, consumption 2, interval 40.
   {
     id: "large-coal-boiler",
     name: "Large Coal Boiler",
     unlock: "LV",
     steamPerSecond: 300,
-    energyPerSecond: 1,
+    energyPerSecond: 40 / 41,
     automatable: false,
   },
 ];
 
+/**
+ * MTEBoilerBronze.getCombustionPotential only takes fuels that leave ash:
+ * coal, lignite, charcoal, coke and diamond, or anything burning 2000 ticks
+ * or more. Sulfur dust (1600) is refused.
+ */
+function smallBoilerTakes(entry: PowerFuelEntry): boolean {
+  return (entry.euPerItem ?? 0) >= 2000 || /coal|lignite|charcoal|coke|diamond/i.test(entry.name);
+}
+
 function buildSmallBoiler(spec: SmallBoilerSpec): PowerSourceDefinition {
-  const solidTable = powerPlannerData.boilerFuels.bronzeSolid;
+  const solidTable = powerPlannerData.boilerFuels.bronzeSolid.filter(smallBoilerTakes);
   return {
     id: spec.id,
     name: spec.name,
@@ -232,8 +243,16 @@ function buildSmallBoiler(spec: SmallBoilerSpec): PowerSourceDefinition {
 
 /**
  * GT++ Advanced Boilers (MTEAdvancedBoilerBase): 750 L/s per tier,
- * consumption 2 per 40t cooldown, automatable, and no water explosion.
+ * automatable, and no water explosion. A fuel item goes in only once the
+ * boiler has cooled to 101C, and gives burnTime / 10 energy (2 per degree)
+ * plus burnTime / 500 bonus degrees. Cooldown takes one degree every 41
+ * ticks, so an item lasts (floor(bt/10)/2 + floor(bt/500)) x 41/20 seconds
+ * on every tier.
  */
+function advancedBoilerSecondsPerItem(burnTime: number): number {
+  return (Math.floor(burnTime / 10) / 2 + Math.floor(burnTime / 500)) * (41 / 20);
+}
+
 const ADVANCED_BOILER_TIERS = [
   { key: "LV", label: "Advanced Boiler [LV] (750 L/s)", tier: 1 },
   { key: "MV", label: "Advanced Boiler [MV] (1,500 L/s)", tier: 2 },
@@ -277,7 +296,7 @@ const advancedBoiler: PowerSourceDefinition = {
       ADVANCED_BOILER_TIERS.find((row) => row.key === read.select("tier")) ?? ADVANCED_BOILER_TIERS[0];
     const steamPerSecond = 750 * entry.tier;
     const fuel = findFuel(powerPlannerData.boilerFuels.bronzeSolid, read.select("solidFuel"));
-    const secondsPerItem = (fuel.euPerItem ?? 0) / 10;
+    const secondsPerItem = advancedBoilerSecondsPerItem(fuel.euPerItem ?? 0);
     return {
       euPerTick: 0,
       inputs: [
@@ -294,15 +313,20 @@ const advancedBoiler: PowerSourceDefinition = {
 };
 
 /**
- * MTEBoilerLava: 600 L/s, 1 boiler energy per L of lava, 3 per 20t
- * cooldown, so 3 L/s of lava at steady state. Drains lava from below.
+ * MTEBoilerLava: 600 L/s, 1 boiler energy per L of lava, 3 energy per degree
+ * of cooldown. MTEBoiler.calculateCooldown drops a degree every 20 + 1 ticks,
+ * so 60/21 L/s of lava at steady state. Every 1000 L burned leaves one
+ * obsidian, and the boiler stops taking lava while that slot is full.
+ * Pulls lava from a tank above it.
  */
+const LAVA_PER_SECOND = 60 / 21;
+
 const lavaBoiler: PowerSourceDefinition = {
   id: "lava-boiler",
   name: "Reinforced Lava Boiler",
   group: "steam",
   unlock: "LV",
-  blurb: "600 L/s of steam on 3 L/s of lava.",
+  blurb: `600 L/s of steam on ${formatAmount(LAVA_PER_SECOND)} L/s of lava.`,
   settings: [
     {
       type: "select",
@@ -315,22 +339,30 @@ const lavaBoiler: PowerSourceDefinition = {
   compute(read): PowerModel {
     return {
       euPerTick: 0,
-      inputs: [liters("Lava", 3), liters(read.select("waterKind"), 600 / 160)],
-      outputs: [liters("Steam", 600)],
-      stats: [stat("Steam", "30 L/t"), stat("Lava", "3 L/s")],
+      inputs: [liters("Lava", LAVA_PER_SECOND), liters(read.select("waterKind"), 600 / 160)],
+      outputs: [liters("Steam", 600), items("Obsidian", LAVA_PER_SECOND / 1000)],
+      stats: [
+        stat("Steam", "30 L/t"),
+        stat("Lava", `${formatAmount(LAVA_PER_SECOND)} L/s`),
+        stat("Obsidian", `${formatAmount((LAVA_PER_SECOND / 1000) * 3600)} per hour`),
+      ],
     };
   },
 };
 
 /**
  * MTEBoilerSolar / MTEBoilerSolarSteel, values from MachineStats.cfg (at
- * defaults): fuel-free steam that calcifies from max down to min output
- * over its runtime on regular water; distilled water never calcifies.
+ * defaults): fuel-free steam. On regular water the boiler counts steaming
+ * ticks; past calcificationTicks the output falls linearly and reaches the
+ * minimum at getMaxRuntimeTicks, (max - min) x calcification / max +
+ * calcification. Distilled water never calcifies.
  */
 const SOLAR_BOILER_MODELS = [
   { key: "bronze", label: "Simple Solar Boiler", max: 120, min: 40 },
   { key: "steel", label: "Advanced Solar Boiler", max: 360, min: 120 },
 ];
+const SOLAR_CALCIFICATION_TICKS = 1_080_000;
+const TICKS_PER_HOUR = 72_000;
 
 const solarBoiler: PowerSourceDefinition = {
   id: "solar-boiler",
@@ -368,8 +400,14 @@ const solarBoiler: PowerSourceDefinition = {
     const steamPerSecond = onWater && read.on("calcified") ? model.min : model.max;
     const warnings: string[] = [];
     if (onWater) {
+      const fallTicks = ((model.max - model.min) * SOLAR_CALCIFICATION_TICKS) / model.max;
+      const minTicks = fallTicks + SOLAR_CALCIFICATION_TICKS;
       warnings.push(
-        `Regular water calcifies this boiler from ${model.max} down to ${model.min} L/s over 15 hours. Distilled water does not.`,
+        `Regular water calcifies this boiler: full ${model.max} L/s for ${formatAmount(
+          SOLAR_CALCIFICATION_TICKS / TICKS_PER_HOUR,
+        )} hours of run time, then down to ${model.min} L/s by ${formatAmount(
+          minTicks / TICKS_PER_HOUR,
+        )} hours. Distilled water does not.`,
       );
     }
     return {
@@ -382,11 +420,28 @@ const solarBoiler: PowerSourceDefinition = {
   },
 };
 
-/** Exchanger tiers above 1 shift the threshold by the fluid's throttle and cost 1.5% steam each. */
+/**
+ * Each programmed circuit above 1 in the controller (1 to 25) lowers the
+ * threshold by the fluid's throttle and costs 1.5% steam (MTEHeatExchanger,
+ * MTEAdvHeatExchanger, MTEExtremeHeatExchanger). The LHE and the XL take at
+ * most twice their lowered threshold a second; the EHE takes its recipe's
+ * fixed amount and never lets the threshold drop below 1. MTEThermalBoiler
+ * reads no circuit.
+ */
+const EXCHANGER_UNLOCK: Record<string, string> = {
+  "Thermal Boiler": "IV",
+  "Large Heat Exchanger": "EV",
+  "Whakawhiti Wera XL": "LuV",
+  "Extreme Heat Exchanger": "IV",
+};
+
+/** RecipesGregTech.thermalBoilerRecipes: lava makes plain Steam, the rest superheated. */
+const THERMAL_BOILER_PLAIN_STEAM = new Set(["Lava", "Pahoehoe Lava"]);
+
 function buildExchanger(entry: (typeof powerPlannerData.heatExchangers)[number]): PowerSourceDefinition {
   const isThermalBoiler = entry.name === "Thermal Boiler";
   const isExtreme = entry.name === "Extreme Heat Exchanger";
-  const capAtMax = isThermalBoiler || isExtreme || entry.name === "Whakawhiti Wera XL";
+  const capAtMax = isThermalBoiler || isExtreme;
   const fluidNames = Object.keys(entry.fluids);
   const id = entry.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   // Names as the resource map keys them (the workbook's own spellings).
@@ -415,8 +470,19 @@ function buildExchanger(entry: (typeof powerPlannerData.heatExchangers)[number])
       defaultValue: Math.max(1, defaults?.threshold ?? 1),
       unit: "L/s",
     },
-    { type: "number", id: "tier", label: "Pipe tier", min: 1, max: 10, step: 1, defaultValue: 1 },
   ];
+  if (!isThermalBoiler) {
+    // The id stays "tier" so saved plans keep their circuit.
+    settings.push({
+      type: "number",
+      id: "tier",
+      label: "Circuit",
+      min: 1,
+      max: 25,
+      step: 1,
+      defaultValue: 1,
+    });
+  }
   if (isThermalBoiler) {
     // MTEThermalBoiler.useWater takes plain water first, distilled second;
     // the true exchangers demand distilled and explode without it.
@@ -436,7 +502,7 @@ function buildExchanger(entry: (typeof powerPlannerData.heatExchangers)[number])
     id,
     name: entry.name,
     group: "steam",
-    unlock: isExtreme ? "UHV" : isThermalBoiler ? "HV" : entry.name.startsWith("Whakawhiti") ? "UV" : "EV",
+    unlock: EXCHANGER_UNLOCK[entry.name] ?? "EV",
     blurb: isExtreme
       ? "Hot fluids to supercritical steam."
       : entry.name.startsWith("Whakawhiti")
@@ -446,9 +512,10 @@ function buildExchanger(entry: (typeof powerPlannerData.heatExchangers)[number])
     compute(read): PowerModel {
       const fluidName = read.select("fluid");
       const rule = entry.fluids[fluidName] ?? defaults;
-      const tier = read.number("tier");
+      const tier = isThermalBoiler ? 1 : read.number("tier");
       const intake = read.number("intake");
-      const threshold = rule.threshold + (tier - 1) * rule.throttle;
+      const lowered = rule.threshold + (tier - 1) * rule.throttle;
+      const threshold = isExtreme ? Math.max(1, lowered) : lowered;
       const cap = capAtMax ? rule.max : threshold * 2;
       const used = Math.min(intake, cap);
       const overThreshold = used >= threshold;
@@ -456,7 +523,9 @@ function buildExchanger(entry: (typeof powerPlannerData.heatExchangers)[number])
       const efficiency = isThermalBoiler ? 1 : 1 - 0.015 * (tier - 1);
       const steamPerSecond = used * ratio * efficiency;
       const grade = isThermalBoiler
-        ? "SH Steam"
+        ? THERMAL_BOILER_PLAIN_STEAM.has(fluidName)
+          ? "Steam"
+          : "SH Steam"
         : isExtreme
           ? overThreshold
             ? "SC Steam"

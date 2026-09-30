@@ -22,7 +22,8 @@ const SPECS: SofcSpec[] = [
   {
     id: "solid-oxide-fuel-cell-1",
     name: "Solid-Oxide Fuel Cell Mk I",
-    unlock: "IV",
+    // Kekztech Crafting: HV hull, HV pumps, HV circuits.
+    unlock: "HV",
     output: 2048,
     oxygenPerSecond: 100,
     steamPerSecond: 20_000,
@@ -32,7 +33,8 @@ const SPECS: SofcSpec[] = [
   {
     id: "solid-oxide-fuel-cell-2",
     name: "Solid-Oxide Fuel Cell Mk II",
-    unlock: "ZPM",
+    // Kekztech Crafting: IV hull and pumps, LuV circuits.
+    unlock: "LuV",
     output: 24_576,
     oxygenPerSecond: 2000,
     steamPerSecond: 96_000,
