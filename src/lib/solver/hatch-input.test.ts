@@ -12,11 +12,14 @@ import {
   ampsForNewTier,
   carryMachineVoltage,
   normalizeHatchInput,
+  normalizeProjectSingleblockTiers,
+  normalizeSingleblockTier,
   hatchEquivalent,
   roundHatchBudget,
   stepWholeAmp,
   stepPowerOfFourAmps,
 } from "./hatch-input";
+import { parseFactoryProjectJson, serializeFactoryProject } from "@/lib/import-export/factory-json";
 import { listPowerWinsCached } from "./power-wins";
 import { useFactoryStore } from "@/store/factory-store";
 
@@ -383,5 +386,88 @@ describe("raw EU/t and whole amp steps", () => {
     const n = node({ hatchVoltageTier: "ULV", hatchAmps: 100 });
     expect(listPowerWinsCached(r, n)).toHaveLength(0);
     expect(listPowerWinsCached(r, { ...n, powerInputMode: "eut" })).not.toHaveLength(0);
+  });
+});
+
+describe("singleblock stored tier", () => {
+  const LADDER = ["LV", "MV", "HV", "EV", "IV", "LuV", "ZPM", "UV", "UHV", "UEV", "UIV", "UMV"];
+  // The 2.9 macerator: a 2 EU/t recipe is ULV by its draw, but the family's
+  // lowest registered block is the LV Macerator.
+  const macerator = (): Recipe => ({
+    id: "macerate",
+    name: "Macerator: Crushed Iron Ore",
+    machineType: "Macerator",
+    minimumTier: "ULV",
+    durationTicks: 400,
+    eut: 2,
+    inputs: [],
+    outputs: [],
+    machineHandlers: [
+      { id: "macerator", label: "Macerator", machineType: "Macerator", kind: "single",
+        minimumTier: "LV", maximumTier: "UMV", availableTiers: LADDER },
+      { id: "steam-macerator", label: "Steam Macerator", machineType: "Steam Macerator",
+        kind: "single", minimumTier: "ULV" },
+      { id: "industrial-maceration-stack", label: "Industrial Maceration Stack",
+        machineType: "Industrial Maceration Stack", kind: "multiblock", minimumTier: "ULV" },
+    ],
+  });
+  const card = (patch: Partial<FactoryNode> = {}) =>
+    node({ recipeId: "macerate", overclockTier: "ULV", ...patch });
+
+  it("stores the lowest registered machine instead of the recipe's draw tier", () => {
+    const settled = normalizeSingleblockTier(macerator(), card());
+    expect(settled.overclockTier).toBe("LV");
+    expect(normalizeSingleblockTier(macerator(), settled)).toBe(settled);
+  });
+
+  it("changes nothing the solver computes", () => {
+    const r = macerator();
+    const stored = card();
+    const effective = applyMachineHandlerToRecipe(r, stored);
+    const before = getOverclockedRecipeStats(effective, stored);
+    const after = getOverclockedRecipeStats(effective, normalizeSingleblockTier(r, stored));
+    expect(after).toEqual(before);
+  });
+
+  it("settles a tier in a ladder gap or above the last machine onto a real block", () => {
+    const coldTrap: Recipe = {
+      ...macerator(),
+      minimumTier: "LuV",
+      eut: 30000,
+      machineHandlers: [
+        { id: "cold-trap", label: "Cold Trap", machineType: "Cold Trap", kind: "single",
+          minimumTier: "LuV", maximumTier: "ZPM", availableTiers: ["IV", "ZPM"] },
+      ],
+    };
+    expect(normalizeSingleblockTier(coldTrap, card({ overclockTier: "LuV" })).overclockTier).toBe("ZPM");
+    expect(normalizeSingleblockTier(macerator(), card({ overclockTier: "MAX" })).overclockTier).toBe("UMV");
+    expect(normalizeSingleblockTier(macerator(), card({ overclockTier: "HV" })).overclockTier).toBe("HV");
+  });
+
+  it("leaves steam machines, multiblocks and ladderless recipes as stored", () => {
+    const r = macerator();
+    for (const machineHandlerId of ["steam-macerator", "industrial-maceration-stack"]) {
+      const n = card({ machineHandlerId });
+      expect(normalizeSingleblockTier(r, n)).toBe(n);
+    }
+    const ladderless: Recipe = { ...r, machineHandlers: undefined };
+    const n = card();
+    expect(normalizeSingleblockTier(ladderless, n)).toBe(n);
+  });
+
+  it("seeds a new card, a loaded plan and an exported plan at the real machine", () => {
+    useFactoryStore.getState().setProject({ ...createEmptyProject(), recipes: [] });
+    useFactoryStore.getState().addNodeForRecipeObject(macerator());
+    expect(useFactoryStore.getState().project.nodes[0].overclockTier).toBe("LV");
+
+    const legacy = { ...createEmptyProject(), recipes: [macerator()], nodes: [card()] };
+    expect(normalizeLoadedProject(legacy).nodes[0].overclockTier).toBe("LV");
+    // Export settles too: a design's recipes can gain their ladder after load.
+    const exported = JSON.parse(serializeFactoryProject(legacy));
+    expect(exported.nodes[0].overclockTier).toBe("LV");
+    expect(parseFactoryProjectJson(serializeFactoryProject(legacy)).nodes[0].overclockTier).toBe("LV");
+    expect(normalizeProjectSingleblockTiers(normalizeLoadedProject(legacy))).toEqual(
+      normalizeLoadedProject(legacy),
+    );
   });
 });

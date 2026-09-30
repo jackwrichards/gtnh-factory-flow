@@ -3,8 +3,10 @@ import { applyMachineHandlerToRecipe } from "@/lib/model/recipe-rules";
 import { getFusionMachine } from "@/lib/machines/fusion";
 import {
   GT_VOLTAGE_TIERS,
+  getRecipeAvailableVoltageTiers,
   getRecipeMinimumVoltageTier,
   getRecipePowerTier,
+  getRunVoltageTier,
   getVoltageTierIndex,
   getVoltageTierMaxEuT,
 } from "@/lib/model/tiers";
@@ -147,6 +149,39 @@ export function normalizeProjectHatchInputs(
   const nodes = project.nodes.map((node) => {
     const recipe = recipes.get(node.recipeId);
     const next = recipe ? normalizeHatchInput(recipe, node, migrate) : node;
+    changed ||= next !== node;
+    return next;
+  });
+  return changed ? { ...project, nodes } : project;
+}
+
+/**
+ * A singleblock stores the tier of the machine it runs as. Cards seed from the
+ * recipe's draw tier, and a 2 EU/t recipe is ULV by its draw although the
+ * lowest macerator is LV. The solver lifts that at run time, so the stored
+ * tier must say LV too, or an exported plan names a machine that does not
+ * exist. The rewrite is getRunVoltageTier's own answer, so nothing that
+ * resolves the tier changes. A shared card settles on its first recipe, the
+ * one its tier chip reads.
+ */
+export function normalizeSingleblockTier(recipe: Recipe, node: FactoryNode): FactoryNode {
+  // Only dataset handlers carry a registered ladder; skip the handler
+  // derivation for every other card, since this runs on each edit.
+  if (recipe.power || !recipe.machineHandlers?.some((handler) => handler.availableTiers?.length)) {
+    return node;
+  }
+  const effective = applyMachineHandlerToRecipe(recipe, node);
+  if (isMultiblockRecipe(effective) || !getRecipeAvailableVoltageTiers(effective)) return node;
+  const overclockTier = getRunVoltageTier(effective, node.overclockTier);
+  return overclockTier === node.overclockTier ? node : { ...node, overclockTier };
+}
+
+export function normalizeProjectSingleblockTiers(project: FactoryProject): FactoryProject {
+  const recipes = new Map(project.recipes.map((recipe) => [recipe.id, recipe]));
+  let changed = false;
+  const nodes = project.nodes.map((node) => {
+    const recipe = recipes.get(node.recipeId);
+    const next = recipe ? normalizeSingleblockTier(recipe, node) : node;
     changed ||= next !== node;
     return next;
   });

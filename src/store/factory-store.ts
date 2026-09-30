@@ -8,7 +8,11 @@ import type { ProductionGroup, PoolResourceRule } from "@/lib/model/types";
 import { normalizeFullFarms } from "@/lib/model/full-farms";
 import { isEecRecipe } from "@/lib/machines/extreme-entity-crusher";
 
-import { carryMachineVoltage, normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
+import {
+  carryMachineVoltage,
+  normalizeProjectHatchInputs,
+  normalizeProjectSingleblockTiers,
+} from "@/lib/solver/hatch-input";
 
 import { create, type StateCreator, type StoreApi } from "zustand";
 import { createEmptyProject } from "@/examples";
@@ -6132,7 +6136,9 @@ function touchProject(project: FactoryProject): FactoryProject {
     // a custom rate card never keeps a resource after its last wire goes —
     // whether the wire, the machine at the far end or a whole selection was
     // what got deleted.
-    ...normalizeProjectHatchInputs(normalizeFullFarms(releaseCustomRates(project))),
+    ...normalizeProjectSingleblockTiers(
+      normalizeProjectHatchInputs(normalizeFullFarms(releaseCustomRates(project))),
+    ),
     metadata: {
       ...project.metadata,
       updatedAt: new Date().toISOString(),
