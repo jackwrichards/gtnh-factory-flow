@@ -1,6 +1,9 @@
 import { normalizeProductionGroups } from "./production-groups";
 import { normalizeFullFarms } from "./full-farms";
-import { normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
+import {
+  normalizeProjectHatchInputs,
+  normalizeProjectSingleblockTiers,
+} from "@/lib/solver/hatch-input";
 import type { FactoryProject } from "./types";
 import { energyHatchTypeExistsAtTier } from "@/lib/machines/energy-hatches";
 import { normalizeProjectFuelProfiles } from "./fuels";
@@ -20,7 +23,7 @@ import { repairWiredInputOverrides } from "./edge-input-overrides";
 export function normalizeLoadedProject(project: FactoryProject): FactoryProject {
   project = normalizeProductionGroups(project);
   project = repairWiredInputOverrides(project);
-  return normalizeProjectHatchInputs(
+  project = normalizeProjectHatchInputs(
     snapProjectToGrid(
       repairPocketReferences(
         unpaintCustomRateCards(
@@ -49,6 +52,8 @@ export function normalizeLoadedProject(project: FactoryProject): FactoryProject 
     ),
     true,
   );
+  // After renameOpvTier, so a legacy "OpV" settles as the UXV it means.
+  return normalizeProjectSingleblockTiers(project);
 }
 
 /**

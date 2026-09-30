@@ -45,6 +45,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     headline: "SC steam turbines fixed",
     notes: [
       "Large and XL Turbo SC Steam Turbines showed 16 times their real steam flow and EU; they now match the game.",
+      "Machines on low-power recipes, like a Macerator crushing iron ore, now save and export at the LV tier they run at instead of a ULV machine that does not exist.",
     ],
   },
   {

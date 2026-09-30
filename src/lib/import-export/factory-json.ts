@@ -2,6 +2,7 @@ import { ZodError } from "zod";
 import { normalizeProjectFuelProfiles } from "../model/fuels";
 import { normalizeLoadedProject } from "../model/project-normalize";
 import { factoryProjectSchema } from "../model/schemas";
+import { normalizeProjectSingleblockTiers } from "../solver/hatch-input";
 import type { FactoryProject } from "../model/types";
 
 export class FactoryJsonError extends Error {
@@ -37,7 +38,11 @@ export function parseFactoryProjectJson(source: string): FactoryProject {
 }
 
 export function serializeFactoryProject(project: FactoryProject): string {
-  const validatedProject = factoryProjectSchema.parse(normalizeProjectFuelProfiles(project));
+  // Settled again here because a design's recipes can be refreshed from the
+  // dataset after it loads, which adds the machine ladders the tier needs.
+  const validatedProject = factoryProjectSchema.parse(
+    normalizeProjectSingleblockTiers(normalizeProjectFuelProfiles(project)),
+  );
   return `${JSON.stringify(validatedProject, null, 2)}\n`;
 }
 
