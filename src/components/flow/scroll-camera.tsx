@@ -47,6 +47,9 @@ export const SCROLL_CAMERA_ATTRIBUTE = "data-scroll-camera";
 
 export const CAMERA_ZOOM_VAR = "--camera-zoom";
 
+/** Release the scaled raster after the camera has stopped zooming. */
+const ZOOM_RASTER_SETTLE_MS = 200;
+
 /** Whether a scroll camera is running (the board mounts one, always). */
 let scrollCameraActive = false;
 
@@ -96,12 +99,22 @@ export function ScrollCamera({ boardRef }: { boardRef: RefObject<HTMLElement | n
     let expectedLeft = 0;
     let expectedTop = 0;
     let writtenZoom: number | undefined;
+    let rasterTimer: ReturnType<typeof setTimeout> | undefined;
     const apply = (transform: readonly [number, number, number]) => {
       expectedLeft = SCROLL_CAMERA_OFFSET - transform[0];
       expectedTop = SCROLL_CAMERA_OFFSET - transform[1];
       // Zoom first: a wheel zoom changes x, y and z together, and the scroll
       // offsets below are only right against the new scale.
       if (transform[2] !== writtenZoom) {
+        if (writtenZoom !== undefined) {
+          // Retain the layer during the gesture, then let text rasterize at
+          // the final scale. Pans do not extend a zoom's cached raster.
+          if (viewport.style.willChange !== "transform") viewport.style.willChange = "transform";
+          clearTimeout(rasterTimer);
+          rasterTimer = setTimeout(() => {
+            viewport.style.removeProperty("will-change");
+          }, ZOOM_RASTER_SETTLE_MS);
+        }
         writtenZoom = transform[2];
         viewport.style.setProperty(CAMERA_ZOOM_VAR, String(transform[2]));
       }
@@ -163,6 +176,8 @@ export function ScrollCamera({ boardRef }: { boardRef: RefObject<HTMLElement | n
     });
 
     return () => {
+      clearTimeout(rasterTimer);
+      viewport.style.removeProperty("will-change");
       unsubscribe();
       marqueeObserver.disconnect();
       wrapper.removeEventListener("scroll", onScroll);

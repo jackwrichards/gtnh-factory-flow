@@ -556,12 +556,11 @@ textarea {
   z-index: auto !important;
 }
 
-/* Always, not only while a gesture is flagged as moving: that flag flickers
-   per frame on keyboard pans, promoting and dropping the layer. The pan is a
-   scroll offset (scroll-camera.tsx), so this transform only changes on zoom;
-   the retained layer keeps a zoom from repainting the whole board. */
+/* The scroll camera promotes the viewport only while zooming, then releases
+   the scaled raster so card text sharpens at the final scale. Panning uses
+   the scroll surface and needs no permanent transform hint. */
 .factory-flow-board .react-flow__viewport {
-  will-change: transform;
+  will-change: auto;
 }
 
 /* NO gesture hides the drop-shadows. A pan never re-rasterises a composited

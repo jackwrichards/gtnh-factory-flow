@@ -45,13 +45,12 @@
   height: 1000000px !important;
 }
 
-/* The viewport and the multi-selection frame (React Flow gives it the same
-   transform as the viewport) sit at the centre of the scroll area, zoom only.
-   3d so the pinned layer stays its own compositor surface across both
-   engines. */
+/* The viewport and the multi-selection frame sit at the centre of the scroll
+   area, zoom only. Keep this 2D so the browser can rasterize card text at the
+   current scale instead of enlarging a retained compositor surface. */
 .factory-flow-board[data-scroll-camera] .react-flow__viewport,
 .factory-flow-board[data-scroll-camera] .react-flow__nodesselection {
-  transform: translate3d(500000px, 500000px, 0) scale(var(--camera-zoom, 1)) !important;
+  transform: translate(500000px, 500000px) scale(var(--camera-zoom, 1)) !important;
 }
 
 /* The marquee (.react-flow__selection) is drawn inside the scrolled pane at
