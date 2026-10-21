@@ -50,6 +50,7 @@ export function planWithAdditions(): FactoryProject {
       {
         id: "t1",
         title: "Build the biodiesel line",
+          sourcePlans: [{ plan: "biodiesel-plan", name: "Biodiesel line" }],
         text: "Two LV mixers first.",
         status: "doing",
         order: "a0",

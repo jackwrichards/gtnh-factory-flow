@@ -32,6 +32,7 @@ import { TaskBox } from "./TaskBox";
 import { TaskChainView } from "./TaskChainView";
 import { PriorityIcon, StatusDot, TaskFaces, TimeDots, useNameOf } from "./task-look";
 import { useTaskAuthor } from "./task-people";
+import { TaskPlanLabel } from "./TaskPlanLabel";
 
 /**
  * A task board, the game's TaskBoardView: four columns, Blocked, To do, Doing and Done, each a stack of task cards.
@@ -423,6 +424,7 @@ const TaskCard = memo(function TaskCard({
         <img className="tb-card-pic" src={facts.picture.thumb} alt="" draggable={false} />
       ) : null}
       <div className="tb-card-body">
+        <TaskPlanLabel task={task} />
         <div className="tb-card-top">
           <span className="tb-card-title">{task.title}</span>
           <PriorityIcon priority={priority} />

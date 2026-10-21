@@ -4,13 +4,21 @@ import { Cursor } from "./cursor";
 import { A, Director, type Step } from "./director";
 import * as input from "./input";
 import { getTour, resetTour } from "./tour-store";
+import { useDesignStore } from "@/store/design-store";
+import { useFactoryStore } from "@/store/factory-store";
+import * as sandbox from "./sandbox";
 
 /** jsdom has no layout: give elements a box and make the hit test find the one under a point. */
 function box(el: HTMLElement, x: number, y: number, w: number, h: number) {
   el.getBoundingClientRect = () => ({ x, y, left: x, top: y, right: x + w, bottom: y + h, width: w, height: h, toJSON: () => ({}) });
 }
 
-function mount(): { layer: HTMLElement; button: HTMLElement; field: HTMLInputElement; clicks: number[] } {
+function mount(): {
+  layer: HTMLElement;
+  button: HTMLElement;
+  field: HTMLInputElement;
+  clicks: number[];
+} {
   document.body.innerHTML = "";
   const layer = document.createElement("div");
   const button = document.createElement("div");
@@ -82,6 +90,51 @@ describe("the tour's hands", () => {
 
 describe("the director", () => {
   beforeEach(() => resetTour());
+
+  it("recaptures later checkpoints after a replay creates a new task board id", async () => {
+    const designs = useDesignStore.getState();
+    const factory = useFactoryStore.getState();
+    const returning = vi.spyOn(sandbox, "returnToDesign");
+    const { layer } = mount();
+    let made = 0;
+    const summary = (id: string) => ({ id, name: id, createdAt: "now", updatedAt: "now" });
+    useDesignStore.setState({ activeDesignId: "source", designs: [summary("source")] });
+    const steps: Step[] = [
+      {
+        id: "create",
+        actions: [
+          A.run(() => {
+            const id = `board-${++made}`;
+            useDesignStore.setState({
+              activeDesignId: id,
+              designs: [summary("source"), summary(id)],
+            });
+          }),
+        ],
+        note: { text: "Created." },
+      },
+      { id: "update", actions: [A.wait(1)], note: { text: "Updated." } },
+      { id: "end", actions: [A.wait(1)], note: { text: "Done." } },
+    ];
+    const director = new Director(steps, new Cursor(layer), {
+      onNote: () => undefined,
+      onLeave: () => undefined,
+    });
+    try {
+      await director.play(0, true);
+      await director.play(1, true);
+      await director.back();
+      await director.play(1, true);
+      await director.play(2, true);
+      await director.back();
+      expect(returning).toHaveBeenLastCalledWith("board-2", ["source", "board-2"]);
+    } finally {
+      director.stop();
+      returning.mockRestore();
+      useDesignStore.setState(designs, true);
+      useFactoryStore.setState(factory, true);
+    }
+  });
 
   it("plays a step's actions, then waits on its note", async () => {
     const { layer, clicks } = mount();

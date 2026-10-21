@@ -7,6 +7,13 @@ import { readLibraryTabState, openLibrary } from "@/lib/library/library-tab";
 import { onSfx } from "@/lib/sound/sfx";
 import { useDesignStore } from "@/store/design-store";
 import { ModTabs } from "./ModTabs";
+import { openAddPlanToTask, openUpdateTask } from "@/components/tasks/AddToTask";
+import { relatedPlanTasks } from "@/lib/tasks/make-task";
+
+vi.mock("@/components/tasks/AddToTask", () => ({ openAddPlanToTask: vi.fn(), openUpdateTask: vi.fn() }));
+vi.mock("@/lib/tasks/make-task", async (original) => ({
+  ...await original<typeof import("@/lib/tasks/make-task")>(), relatedPlanTasks: vi.fn(async () => []),
+}));
 
 vi.mock("@/lib/compact-view", () => ({ isCompactViewport: () => false }));
 
@@ -36,6 +43,7 @@ beforeEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
   for (const fn of Object.values(actions)) fn.mockClear();
+  vi.mocked(relatedPlanTasks).mockReset().mockResolvedValue([]);
   useDesignStore.setState({
     designs: [design("a", "Benzene"), design("b", "ref-chain"), design("c", "Parked", { closed: true })],
     publicViews: [],
@@ -44,12 +52,42 @@ beforeEach(() => {
     ...actions,
   });
 });
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllEnvs();
+});
 
 const props = { onPaste: vi.fn(), onShare: vi.fn() };
 const rows = () => [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((element) => element.textContent);
 
 describe("the plan tabs", () => {
+  it("offers Update a task only when this plan has a linked whole-plan task", async () => {
+    vi.stubEnv("NEXT_PUBLIC_LIVE_URL", "ws://localhost:3001");
+    const targets = [{ id: "task", title: "Build copper", status: "todo" as const, done: 1, all: 2, boardId: "board", boardName: "Build list" }];
+    vi.mocked(relatedPlanTasks).mockResolvedValue(targets);
+    render(<ModTabs {...props} />);
+    fireEvent.contextMenu(screen.getByText("ref-chain"));
+    fireEvent.click(await screen.findByText("Update a task"));
+    expect(relatedPlanTasks).toHaveBeenCalledWith("b");
+    expect(openUpdateTask).toHaveBeenCalledWith(expect.any(Object), targets);
+  });
+
+  it("adds the whole active plan from its tab menu when task boards are available", () => {
+    vi.stubEnv("NEXT_PUBLIC_LIVE_URL", "ws://localhost:3001");
+    render(<ModTabs {...props} />);
+    fireEvent.contextMenu(screen.getByText("ref-chain"));
+    fireEvent.click(screen.getByText("Add plan as a task"));
+    expect(openAddPlanToTask).toHaveBeenCalled();
+  });
+
+  it("never offers to turn a task board into a machine task", () => {
+    vi.stubEnv("NEXT_PUBLIC_LIVE_URL", "ws://localhost:3001");
+    useDesignStore.setState({ designs: [design("b", "Build list", { taskBoard: true })] });
+    render(<ModTabs {...props} />);
+    fireEvent.contextMenu(screen.getByText("Build list"));
+    expect(screen.queryByText("Add plan as a task")).toBeNull();
+  });
+
   it("shows one tab per open plan, the active one marked, and leaves the parked plan on the shelf", () => {
     render(<ModTabs {...props} />);
     const tabs = [...document.querySelectorAll(".mt-tab")];

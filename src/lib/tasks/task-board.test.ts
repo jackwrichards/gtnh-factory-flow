@@ -5,6 +5,7 @@ import { factoryProjectSchema } from "@/lib/model/schemas";
 import {
   addBlocker,
   addTask,
+  addTaskSourcePlan,
   addTaskComment,
   addTaskItem,
   addThing,
@@ -53,6 +54,22 @@ function board(): FactoryProject {
 
 const titles = (project: FactoryProject, status: "todo" | "doing" | "blocked" | "done") =>
   tasksIn(project, status).map((task) => task.title);
+
+describe("whole-plan task identification", () => {
+  it("keeps explicit plan sources through renames and checklist removal, without repeating a plan", () => {
+    const made = addTask(createEmptyProject(), { title: "Copper line" });
+    let project = addTaskSourcePlan(made.project, made.id, { plan: "copper", name: "Copper line" });
+    expect(addTaskSourcePlan(project, made.id, { plan: "copper", name: "Copper line" })).toBe(project);
+    project = addTaskSourcePlan(project, made.id, { plan: "power", name: "Power line" });
+    project = addThing(project, made.id, { id: "machine", text: "Bender", kind: "machine", link: { plan: "copper", node: "n1" } });
+    project = updateTask(project, made.id, { title: "Build the factory" });
+    project = removeThing(project, "machine");
+    expect(project.tasks?.[0]).toMatchObject({ title: "Build the factory", sourcePlans: [
+      { plan: "copper", name: "Copper line" }, { plan: "power", name: "Power line" },
+    ] });
+    expect(project.taskItems).toEqual([]);
+  });
+});
 
 describe("the task board's edits", () => {
   it("adds tasks to the bottom of To do, and leaves the plan alone for an empty title", () => {

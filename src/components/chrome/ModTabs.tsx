@@ -33,6 +33,8 @@ import { copyPlanCode } from "./share-actions";
 import type { ShareMode } from "@/components/community/SharePlanDialog";
 import { isLiveConfigured } from "@/lib/live/live-config";
 import { ChecklistIcon } from "./pixel-icons";
+import { openAddPlanToTask, openUpdateTask } from "@/components/tasks/AddToTask";
+import { relatedPlanTasks, type PlanTaskTarget } from "@/lib/tasks/make-task";
 
 /** What the tab strip asks of the bar: the dialogs it does not own. */
 export interface ModTabsActions {
@@ -67,7 +69,7 @@ const TAB_GAP = 2;
 
 type TabMenu =
   | { kind: "plus"; anchor: ChromeAnchor }
-  | { kind: "tab"; anchor: ChromeAnchor; id: string; name: string }
+  | { kind: "tab"; anchor: ChromeAnchor; id: string; name: string; targets?: PlanTaskTarget[] }
   | { kind: "delete"; anchor: ChromeAnchor; id: string; name: string };
 
 /** The plan tabs of the top bar (the mod's PlanTabs): one per open plan, then "+". */
@@ -319,7 +321,13 @@ export function ModTabs({ onPaste, onShare }: ModTabsActions) {
   const openTabMenu = (event: React.MouseEvent<HTMLElement>, id: string, name: string) => {
     event.preventDefault();
     const rect = event.currentTarget.getBoundingClientRect();
-    setMenu({ kind: "tab", id, name, anchor: { left: rect.left, top: rect.top, bottom: rect.bottom + 1 } });
+    const anchor = { left: rect.left, top: rect.top, bottom: rect.bottom + 1 };
+    setMenu({ kind: "tab", id, name, anchor });
+    if (isLiveConfigured() && !allDesigns.find((design) => design.id === id)?.taskBoard) {
+      void relatedPlanTasks(id).then((targets) => setMenu((current) =>
+        current?.kind === "tab" && current.anchor === anchor ? { ...current, targets } : current,
+      ));
+    }
   };
 
   const entries = (m: TabMenu): MenuEntry[] => {
@@ -364,6 +372,28 @@ export function ModTabs({ onPaste, onShare }: ModTabsActions) {
     const rows: MenuEntry[] = [
       { label: "Rename", onSelect: () => setRenaming(m.id) },
       { label: "Copy plan code", detail: "to paste or share", onSelect: () => void copyCode(m.id) },
+      ...(isLiveConfigured() && !designs.find((design) => design.id === m.id)?.taskBoard
+        ? [{
+            label: "Add plan as a task",
+            detail: "all machines",
+            onSelect: () => {
+              void (async () => {
+                if (m.id !== activeDesignId) await activate(m.id);
+                await openAddPlanToTask(m.anchor);
+              })();
+            },
+          }]
+        : []),
+      ...(isLiveConfigured() && m.targets?.length ? [{
+        label: "Update a task",
+        detail: "from this plan",
+        onSelect: () => {
+          void (async () => {
+            if (m.id !== activeDesignId) await activate(m.id);
+            openUpdateTask(m.anchor, m.targets!);
+          })();
+        },
+      }] : []),
       ...libraryRows(
         Boolean(m.id === activeDesignId ? linkedPostId : designs.find((design) => design.id === m.id)?.communityPlanId),
         (mode) => {

@@ -225,6 +225,63 @@
   align-items: flex-start;
   gap: 3px;
 }
+.tb-task-plan {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-bottom: 4px;
+  color: #b9a5e8;
+  flex-wrap: wrap;
+}
+.tb-plan-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.tb-plan-link:hover .tb-plan-name {
+  text-decoration: underline;
+}
+.tb-plan-link:hover .tb-plan-chip {
+  background: rgba(167, 139, 250, 0.24);
+}
+.tb-plan-link:focus-visible {
+  outline: 1px solid #ffd257;
+}
+.tb-plan-chip {
+  flex: none;
+  padding: 1px 3px;
+  background: rgba(167, 139, 250, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.3);
+  font-size: 7px;
+  line-height: 9px;
+}
+.tb-plan-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tb-task-plan[data-compact] {
+  display: inline-flex;
+  margin: 0 3px 0 0;
+  vertical-align: baseline;
+}
+.tbx-main > .tb-task-plan {
+  margin: 4px 0 8px;
+}
+.tbx-main > .tb-task-plan .tb-plan-name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .tb-card-title {
   flex: 1 1 auto;
   min-width: 0;
