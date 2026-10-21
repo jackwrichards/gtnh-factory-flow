@@ -19,6 +19,9 @@ import {
 } from "@/lib/datasets/browser-loader";
 import { loadResourceHistory, useFactoryStore } from "@/store/factory-store";
 import { useDesignStore } from "@/store/design-store";
+import { useNetworkStore } from "@/store/network-store";
+import { startNetworkSession } from "@/lib/networks/sync";
+import { NetworkPage } from "./networks/NetworkPage";
 import { useCommunityAuthStore } from "@/store/community-auth-store";
 import { recordResourceTrend, resetResourceTrends } from "@/lib/resource-trends";
 import { useWorkspaceView, writeWorkspaceView } from "@/lib/workspace-view";
@@ -218,6 +221,7 @@ export function FactoryPlannerApp() {
   // The library follows the account: sign-in starts the sync, sign-out stops
   // it, and every change here reaches the other devices a few seconds later.
   useEffect(() => startLibrarySync(), []);
+  useEffect(() => startNetworkSession(), []);
 
   // Who is signed in is asked once as the app opens. The mod's bar has no
   // account key (the Library has it), so nothing else asks before the Library
@@ -422,13 +426,15 @@ const BoardColumn = memo(function BoardColumn() {
         would throw away the camera, routed wires and solve.
       */}
       <div className="relative min-h-0">
-        <FactoryFlow />
+        <FactoryFlow covered={Boolean(covering) || showTasks} />
         {TASKS_ENABLED ? <TaskLinkIndexController /> : null}
         {TASKS_ENABLED ? <AddToTaskMenu /> : null}
         {showTasks ? (
           <div className="absolute inset-0 z-30">
             <TaskBoard />
           </div>
+        ) : covering === "network" ? (
+          <div className="absolute inset-0 z-40"><NetworkPage /></div>
         ) : null}
         {/* The board's keys float over its top edge: no band, no space reserved. */}
         {covering ? null : <BoardToolbar />}
@@ -451,17 +457,20 @@ const BoardColumn = memo(function BoardColumn() {
  * together. With NO design open the shelf is shown regardless of its flag,
  * because a board with no design behind it could not save an edit.
  */
-function useCoveringPage(): "welcome" | "shelf" | undefined {
+function useCoveringPage(): "welcome" | "shelf" | "network" | undefined {
   const welcome = useWelcomeTab();
   const shelf = useLibraryTab();
+  const networkId = useNetworkStore((state) => state.activeId);
   const isHydrated = useDesignStore((state) => state.isHydrated);
   const hasActiveDesign = useDesignStore((state) => state.activeDesignId !== undefined || state.publicView !== undefined);
   if (welcome.active) {
     return "welcome";
   }
-  if (shelf.active || (isHydrated && !hasActiveDesign)) {
+  if (shelf.active) {
     return "shelf";
   }
+  if (networkId) return "network";
+  if (isHydrated && !hasActiveDesign) return "shelf";
   return undefined;
 }
 
@@ -492,10 +501,10 @@ export function ColumnWorkspace({ workspace, onLoadDatasetVersion, header }: Wor
       covering: hideBoardPanels,
       itemsLeft,
     },
-    planLayout,
+    planLayout && covering !== "network",
   );
   const columns = planLayout
-    ? fit.initial
+    ? covering === "network" ? { ...fit.initial, template: "0px minmax(0,1fr) 0px", leftPx: 0, rightPx: 0 } : fit.initial
     : workspaceColumns({
         itemsOpen: workspace.leftPanelOpen,
         inspectorOpen: workspace.rightPanelOpen,
@@ -509,7 +518,7 @@ export function ColumnWorkspace({ workspace, onLoadDatasetVersion, header }: Wor
   const itemsEdge = columns.itemsSide === "left" ? "right" : "left";
   const overviewEdge = itemsEdge === "left" ? "right" : "left";
 
-  const items = itemsOpen ? (
+  const items = covering === "network" ? <div /> : itemsOpen ? (
     <ViewerAwareBrowser onLoadDatasetVersion={onLoadDatasetVersion} />
   ) : (
     <PanelRail side={columns.itemsSide} label="Items" />

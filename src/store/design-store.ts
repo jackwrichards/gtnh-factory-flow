@@ -60,6 +60,7 @@ import {
 } from "@/lib/designs/design-camera";
 import { computeDesignStats } from "@/lib/designs/design-stats";
 import { parseFactoryProjectJson } from "@/lib/import-export";
+import { forgetNetworkPlan, useNetworkStore } from "@/store/network-store";
 import { applyPlanView, capturePlanView } from "@/lib/plan-view";
 import { noteLibraryDeletion } from "@/lib/library/library-deletes";
 import { leaveLibrary, openLibrary } from "@/lib/library/library-tab";
@@ -243,6 +244,7 @@ function landOnDesign(
   rest?: Partial<DesignStore>,
 ) {
   beginDesignCameraHandover();
+  useNetworkStore.getState().leave();
   useFactoryStore.getState().dismissPlanNotice();
   writeActiveDesignId(record.id);
   set({ ...rest, activeDesignId: record.id, publicView: undefined });
@@ -557,6 +559,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
   },
 
   switchToDesign: async (id) => {
+    useNetworkStore.getState().leave();
     const { activeDesignId, designs } = get();
     if (id === activeDesignId) {
       // Already on the canvas; the only thing left to do is show it.
@@ -777,6 +780,7 @@ export const useDesignStore = create<DesignStore>((set, get) => ({
     const sharedCopy = Boolean(designs.find((design) => design.id === id)?.cloud);
 
     await deleteDesign(id);
+    if (!sharedCopy) await forgetNetworkPlan(id);
     forgetDesignCameras([id]);
     if (!options?.fromSync && !sharedCopy) {
       // The account hears about it as a tombstone on the next push.

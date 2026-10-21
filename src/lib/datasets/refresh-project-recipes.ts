@@ -70,6 +70,11 @@ export function noteRecipesRefreshed(
  * so old cards still pick up the dataset's current handlers. Power cards are
  * synthesized on the way in and are skipped.
  */
+export function isDatasetRecipe(recipe: Recipe): boolean {
+  return !recipe.isDemo && !isPowerRecipe(recipe) && !isCustomRateRecipe(recipe) &&
+    recipe.source?.recipeMap !== FLUID_TANK_EMPTY_MAP && recipe.id !== CROP_FARM_PLACEHOLDER_RECIPE_ID;
+}
+
 export async function resolveProjectRecipes(
   manifestUrl: string,
   version: DatasetVersion,
@@ -77,14 +82,7 @@ export async function resolveProjectRecipes(
 ): Promise<{ refreshed: Recipe[]; migration: Record<string, string> }> {
   // A demo recipe is the plan's own data: the dataset never has it, so asking only fills the console with 404s.
   // Custom rate cards, empty fluid tanks and the empty crop farm are the plan's own cards too.
-  const asked = recipes.filter(
-    (recipe) =>
-      !recipe.isDemo &&
-      !isPowerRecipe(recipe) &&
-      !isCustomRateRecipe(recipe) &&
-      recipe.source?.recipeMap !== FLUID_TANK_EMPTY_MAP &&
-      recipe.id !== CROP_FARM_PLACEHOLDER_RECIPE_ID,
-  );
+  const asked = recipes.filter(isDatasetRecipe);
   const byId = await Promise.allSettled(
     asked.map((recipe) => getRecipeDatasetRecipe(manifestUrl, version, recipe.id)),
   );

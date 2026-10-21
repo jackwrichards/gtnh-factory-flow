@@ -1,0 +1,693 @@
+/* The resource ledger uses the planner's frame and signals; its shared boundary stays beside each resource. */
+.netview.mx {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: var(--mc-bar);
+  color: var(--mc-ink);
+  padding: 18px;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.netview.mx.netview-page {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.netview-page > :not(.netview-layout) {
+  flex-shrink: 0;
+}
+.netview h1 {
+  font-size: 24px;
+  margin: 0 0 6px;
+}
+.netview p {
+  margin: 8px 0;
+  color: var(--mc-muted);
+}
+.netview button,
+.netview input,
+.netview select {
+  font: inherit;
+  line-height: 1.5;
+}
+.netview button,
+.netview select,
+.netview input:not([type="checkbox"]) {
+  border: 1px solid var(--mc-ring);
+  background: var(--mc-key);
+  color: var(--mc-ink);
+  padding: 5px 9px;
+  min-height: 38px;
+}
+.netview button {
+  cursor: pointer;
+}
+.netview button:hover {
+  background: var(--mc-key-hover);
+}
+.netview button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.netview :focus-visible {
+  outline: 2px solid var(--mc-cyan);
+  outline-offset: 2px;
+}
+.netview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 2px solid var(--mc-frame);
+  padding-bottom: 14px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.netview-kicker {
+  display: block;
+  color: var(--mc-muted);
+  font-size: 13px;
+}
+.netview-header > div:first-child {
+  flex: 1;
+  min-width: 200px;
+}
+.netview input.netview-title {
+  width: 100%;
+  font-size: 24px;
+  border-color: transparent;
+  background: transparent;
+  padding-left: 0;
+  max-width: 100%;
+}
+.netview-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.netview-actions > span,
+.netview-hint {
+  color: var(--mc-muted);
+  font-size: 13px;
+}
+.netview-save-status {
+  color: var(--mc-muted);
+  font-size: 13px;
+}
+.netview-settings {
+  margin-top: 18px;
+  border-top: 1px solid var(--mc-frame);
+  padding-top: 8px;
+}
+.netview-settings > summary {
+  cursor: pointer;
+  padding: 6px 0;
+  font-size: 14px;
+  color: var(--mc-muted);
+}
+.netview-settings .netview-field {
+  margin-top: 8px;
+}
+.netview-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.netview .netview-filters button,
+.netview .netview-shortage-count {
+  min-height: 30px;
+  padding: 3px 8px;
+  font-size: 13px;
+}
+.netview .netview-filters button[aria-pressed="true"] {
+  color: var(--mc-cyan);
+  border-color: var(--mc-cyan);
+}
+.netview .netview-shortage-count {
+  color: var(--mc-red);
+}
+.netview-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, min(var(--network-sidebar-width, 300px), 50%)) minmax(0, 1fr);
+  gap: 20px;
+  flex: 1;
+  min-height: 0;
+}
+.netview-members {
+  position: relative;
+  border-right: 1px solid var(--mc-frame);
+  min-width: 0;
+  min-height: 0;
+}
+.netview-members-scroll {
+  height: 100%;
+  overflow: auto;
+  padding-right: 16px;
+}
+.netview-members > .panel-handle {
+  top: 0;
+}
+.netview-ledger {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.netview-ledger > :not(.netview-table-scroll) {
+  flex-shrink: 0;
+}
+.netview-self-powered {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 6px;
+  color: var(--mc-gold);
+}
+.netview-power .netview-self-powered {
+  color: var(--mc-gold);
+  margin-left: 0;
+}
+.netview-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 12px 0 8px;
+  color: var(--mc-muted);
+  font-size: 13px;
+  text-transform: uppercase;
+}
+.netview .netview-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  min-height: 34px;
+  padding: 6px;
+}
+.netview-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 60%);
+}
+.netview.mx.netview-modal {
+  width: min(900px, calc(100 * var(--ui-vw) - 32px));
+  height: auto;
+  max-height: calc(100 * var(--ui-dvh) - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+  border: 1px solid var(--mc-ring);
+  box-shadow: 0 12px 48px rgb(0 0 0 / 55%);
+}
+.netview-modal-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.netview-modal-title > strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.netview-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.netview-modal .netview-port-list {
+  min-height: 0;
+  max-height: none;
+}
+.netview-tree {
+  list-style: none;
+  padding-left: 12px;
+  margin: 0;
+}
+.netview-members-scroll > .netview-tree {
+  padding-left: 0;
+}
+.netview .netview-link {
+  border: 0;
+  background: transparent;
+  padding: 4px;
+  min-height: 34px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.netview .netview-link[aria-current] {
+  color: var(--mc-cyan);
+}
+.netview-resource {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.netview-resource-icon {
+  flex-shrink: 0;
+}
+.netview-member {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 5px 0;
+}
+.netview-section-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.netview .netview-member-plan {
+  display: grid;
+  grid-template-columns: 12px 16px minmax(0, 1fr) 26px;
+  gap: 6px;
+  align-items: center;
+  position: relative;
+  min-height: 34px;
+  margin: 0;
+  padding: 2px 4px;
+}
+.netview .netview-plan-name {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  line-height: 1.45;
+  padding: 2px 0;
+  min-height: 0;
+}
+.netview .netview-more,
+.netview .netview-plan-io {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  min-height: 26px;
+  padding: 3px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--mc-muted);
+}
+.netview .netview-more:hover,
+.netview .netview-plan-io:hover,
+.netview .netview-more[aria-expanded="true"] {
+  background: var(--mc-key);
+  color: var(--mc-ink);
+}
+.netview .netview-plan-io {
+  position: absolute;
+  right: 32px;
+  top: 4px;
+  opacity: 0;
+  pointer-events: none;
+}
+.netview-member-plan:hover .netview-plan-io,
+.netview-member-plan:focus-within .netview-plan-io {
+  opacity: 1;
+  pointer-events: auto;
+  background: var(--mc-bar);
+}
+.netview-member-plan:hover .netview-plan-name,
+.netview-member-plan:focus-within .netview-plan-name {
+  padding-right: 28px;
+}
+@media (hover: none) {
+  .netview .netview-plan-io {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .netview .netview-plan-name {
+    padding-right: 28px;
+  }
+}
+.netview-plan-group {
+  margin: 10px 0;
+  border: 1px solid transparent;
+  padding: 4px 0;
+  background: rgb(255 255 255 / 2%);
+}
+.netview-plan-group > .netview-draggable-plan {
+  margin-left: 12px;
+  border-left: 1px solid var(--mc-ring);
+  padding-left: 4px;
+}
+.netview-draggable-plan:hover,
+.netview-draggable-plan:focus-within {
+  background: rgb(255 255 255 / 3%);
+}
+.netview-plan-group[data-drop-target] {
+  border-color: var(--mc-cyan);
+  background: var(--mc-key);
+}
+.netview-draggable-plan {
+  cursor: grab;
+}
+.netview-draggable-plan[data-dragging] {
+  opacity: 0.45;
+}
+.netview .netview-drag-handle {
+  flex: 0 0 auto;
+  color: var(--mc-muted);
+  opacity: 0.45;
+}
+.netview-drop-hint {
+  font-size: 13px;
+  padding: 4px;
+}
+.netview-plan-group summary {
+  cursor: pointer;
+  padding: 4px 6px;
+  color: var(--mc-muted);
+  font-size: 14px;
+}
+.netview-group-caption {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: calc(100% - 18px);
+  vertical-align: middle;
+}
+.netview-group-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.netview-group-count {
+  font-size: 12px;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}
+.netview-modal .netview-choices {
+  max-height: none;
+  min-height: 0;
+}
+.netview-group-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+  white-space: nowrap;
+}
+.netview-group-field select {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+}
+.netview-port-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.netview-port-toolbar > button,
+.netview-port-toolbar > select {
+  flex-shrink: 0;
+}
+.netview-member > .netview-link,
+.netview-member > span {
+  flex: 1;
+  min-width: 0;
+}
+.netview input[type="checkbox"] {
+  accent-color: var(--mc-cyan);
+  width: 15px;
+  height: 15px;
+}
+.netview-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 20px;
+}
+.netview-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 12px 0;
+}
+.netview .netview-warning {
+  padding: 10px;
+  border-left: 3px solid var(--mc-gold);
+  color: var(--mc-gold);
+  background: var(--mc-key);
+}
+.netview-warning p {
+  color: inherit;
+  font-size: 13px;
+}
+.netview-power {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 8px 0 16px;
+}
+.netview-power strong {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+.netview-power span {
+  color: var(--mc-muted);
+}
+.netview-power strong {
+  color: var(--mc-ink);
+}
+.netview-table-scroll {
+  width: 100%;
+  overflow: auto;
+  margin-top: 14px;
+  flex: 1;
+  min-height: 120px;
+}
+.netview table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.netview th,
+.netview td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--mc-bar-line);
+  white-space: nowrap;
+  text-align: right;
+  font-weight: normal;
+}
+.netview th:first-child {
+  text-align: left;
+  min-width: 170px;
+  white-space: normal;
+}
+.netview thead {
+  color: var(--mc-muted);
+}
+.netview thead th {
+  border-bottom: 2px solid var(--mc-frame);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--mc-bar);
+}
+.netview tr > th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--mc-bar);
+  border-right: 1px solid var(--mc-frame);
+}
+.netview thead th:first-child {
+  z-index: 3;
+}
+.netview .netview-resource-cell {
+  padding: 0;
+}
+.netview .netview-resource-toggle {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 58px;
+  height: 100%;
+  padding: 10px 8px;
+}
+.netview td.netview-empty {
+  text-align: left;
+  white-space: normal;
+  padding: 20px 8px;
+  color: var(--mc-muted);
+}
+.netview .netview-contribution th:first-child {
+  background: var(--mc-key);
+}
+.netview .netview-free {
+  color: var(--mc-cyan);
+}
+.netview .netview-short,
+.netview .netview-danger {
+  color: var(--mc-red);
+}
+.netview-note {
+  display: block;
+  font-size: 13px;
+}
+.netview-contribution {
+  background: var(--mc-key);
+  color: var(--mc-muted);
+  font-size: 14px;
+}
+.netview-contribution th:first-child {
+  padding-left: 24px;
+}
+.netview-picker {
+  border: 1px solid var(--mc-ring);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.netview-port-list {
+  display: grid;
+  gap: 12px;
+  max-height: 420px;
+  overflow: auto;
+}
+.netview-port-machine {
+  min-width: 0;
+  border: 1px solid var(--mc-ring);
+}
+.netview-port-machine > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+.netview-port-machine > summary::-webkit-details-marker {
+  display: none;
+}
+.netview-port-machine-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.netview-port-chevron {
+  flex-shrink: 0;
+  color: var(--mc-muted);
+}
+.netview-port-machine[open] > summary .netview-port-chevron {
+  transform: rotate(90deg);
+}
+.netview-port-count {
+  flex-shrink: 0;
+  white-space: nowrap;
+  color: var(--mc-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.netview-machine-ports {
+  border-top: 1px solid var(--mc-ring);
+  padding: 4px 12px 8px;
+}
+@media (max-width: 380px) {
+  .netview-port-count-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+.netview-port {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+}
+.netview-port span:last-child {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.netview-choices {
+  max-height: 240px;
+  overflow: auto;
+}
+.netview-network-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+.netview-network-list button {
+  text-align: left;
+  padding: 16px;
+}
+.netview-network-list span {
+  display: block;
+  color: var(--mc-muted);
+  margin-top: 6px;
+}
+.netview-library.mx {
+  height: 100%;
+  font-size: 13px;
+}
+.netview-library h1 {
+  font-size: 20px;
+}
+.netview-library button,
+.netview-library input:not([type="checkbox"]) {
+  min-height: 32px;
+}
+.netview-library .netview-network-list button {
+  padding: 12px;
+}
+.netview-library .netview-network-list span {
+  font-size: 12px;
+}
+html[data-compact] .netview {
+  padding: 12px;
+}
+html[data-compact] .netview-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+html[data-compact] .netview-members {
+  border-right: 0;
+  border-bottom: 1px solid var(--mc-frame);
+  padding: 0 0 12px;
+}
+html[data-compact] .netview-page {
+  overflow: auto;
+}
+html[data-compact] .netview-members > .panel-handle {
+  display: none;
+}
+html[data-compact] .netview-members-scroll {
+  height: auto;
+  overflow: visible;
+  padding: 0;
+}
+html[data-compact] .netview-table-scroll {
+  flex: none;
+  max-height: calc(65 * var(--ui-dvh));
+}
+html[data-compact] .netview-layout {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+}
+html[data-compact] .netview-ledger {
+  order: 1;
+}
+html[data-compact] .netview-members {
+  order: 2;
+}

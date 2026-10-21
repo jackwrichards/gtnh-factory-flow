@@ -17,6 +17,7 @@ import { playSfx } from "@/lib/sound/sfx";
  * returns to the same view, and a new visit starts on the open design.
  */
 export type LibraryView =
+  | { kind: "networks" }
   | { kind: "all" }
   | { kind: "favorites" }
   | { kind: "folder"; folderId: string }
@@ -48,7 +49,7 @@ function isLibraryView(value: unknown): value is LibraryView {
     return typeof (value as { folderId?: unknown }).folderId === "string";
   }
   return (
-    kind === "all" ||
+    kind === "all" || kind === "networks" ||
     kind === "favorites" ||
     kind === "public" ||
     kind === "saved" ||

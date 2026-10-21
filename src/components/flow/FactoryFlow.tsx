@@ -154,7 +154,7 @@ import {
   writeDesignCamera,
   type BoardCamera,
 } from "@/lib/designs/design-camera";
-import { isEditableKeyboardTarget } from "./keyboard";
+import { isEditableKeyboardTarget, listenForBoardInput } from "./keyboard";
 import {
   didBoardTimelapseEndHeld,
   getBoardTimelapseCameraMode,
@@ -1910,7 +1910,11 @@ interface ResolvedResourceHandle {
   resourceId: string;
 }
 
-export function FactoryFlow() {
+export function FactoryFlow({ covered = false }: { covered?: boolean } = {}) {
+  const coveredRef = useRef(covered);
+  useLayoutEffect(() => {
+    coveredRef.current = covered;
+  }, [covered]);
   const isReadOnly = useFactoryStore((state) => state.isReadOnly);
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
@@ -3513,10 +3517,10 @@ export function FactoryFlow() {
       }
       stopBoardTimelapse();
     };
-    window.addEventListener("keydown", onKeyDown, true);
+    const stopKeys = listenForBoardInput("keydown", onKeyDown, () => coveredRef.current, true);
     board?.addEventListener("pointerdown", onPointerDown, true);
     return () => {
-      window.removeEventListener("keydown", onKeyDown, true);
+      stopKeys();
       board?.removeEventListener("pointerdown", onPointerDown, true);
     };
   }, [timelapseActive]);
@@ -5039,8 +5043,7 @@ export function FactoryFlow() {
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    return listenForBoardInput("keydown", handleKeyDown, () => coveredRef.current);
   }, [
     annotationTool,
     cancelResourceConnection,
@@ -6139,8 +6142,7 @@ export function FactoryFlow() {
       event.preventDefault();
       void placeImageFile(file);
     };
-    window.addEventListener("paste", handlePaste);
-    return () => window.removeEventListener("paste", handlePaste);
+    return listenForBoardInput("paste", handlePaste, () => coveredRef.current);
   }, [placeImageFile]);
 
   const handleAnnotationPointerDown = useCallback(
@@ -6256,10 +6258,10 @@ export function FactoryFlow() {
     };
 
     window.addEventListener("pointermove", followCursor);
-    window.addEventListener("keydown", cancelOnEscape);
+    const stopKeys = listenForBoardInput("keydown", cancelOnEscape, () => coveredRef.current);
     return () => {
       window.removeEventListener("pointermove", followCursor);
-      window.removeEventListener("keydown", cancelOnEscape);
+      stopKeys();
     };
   }, [annotationTool]);
 

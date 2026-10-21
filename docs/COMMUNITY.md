@@ -21,7 +21,11 @@ others built, vote, and open any shared plan directly in the editor.
 ## Setup
 
 1. Create a project at [supabase.com](https://supabase.com) (free tier is fine).
-2. In the SQL editor, run the contents of `supabase/schema.sql`.
+2. In the SQL editor, run `supabase/schema.sql`, then the files in
+   `supabase/migrations/` in filename order. This includes
+   `2026-10-19-plan-networks.sql` for account network storage. On an existing
+   installation, apply any migrations not yet installed. Network setup and
+   accounting rules: [Plan networks](plan-networks.md).
 3. In **Project Settings → API**, copy:
    - the project URL → `SUPABASE_URL`
    - the `service_role` secret → `SUPABASE_SERVICE_ROLE_KEY`

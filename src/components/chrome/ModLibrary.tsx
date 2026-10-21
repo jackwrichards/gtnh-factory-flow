@@ -26,6 +26,8 @@ import { SharedWithMe } from "@/components/live/SharedWithMe";
 import { isLiveConfigured } from "@/lib/live/live-config";
 import { useCloudLibraryStore } from "@/lib/library/cloud-library";
 import { ChecklistIcon } from "./pixel-icons";
+import { NetworksLibrary } from "@/components/networks/NetworkPage";
+import { useNetworkStore } from "@/store/network-store";
 
 /** Plans shared with you come with live plans: none of it shows without NEXT_PUBLIC_LIVE_URL. */
 const LIVE = isLiveConfigured();
@@ -41,14 +43,15 @@ export function ModLibrary() {
   // Copies of plans shared with us are listed under Shared with me, never among ours.
   const designs = useMemo(() => everyDesign.filter((design) => !design.cloud), [everyDesign]);
   const sharedCount = useCloudLibraryStore((state) => state.shared?.length);
+  const networkCount = useNetworkStore((state) => state.catalogue?.networks.length);
   const filters = useSetupFilters("top");
   const [publicTotal, setPublicTotal] = useState<number>();
   const [mineQuery, setMineQuery] = useState("");
   const [menu, setMenu] = useState<{ kind: "sort" | "tier"; anchor: ChromeAnchor }>();
   const { user } = useCommunityUser();
   const showShared = LIVE && Boolean(user);
-  const shelf: "mine" | "public" | "shared" =
-    library.view.kind === "public" || library.view.kind === "saved"
+  const shelf: "mine" | "public" | "shared" | "networks" =
+    library.view.kind === "networks" ? "networks" : library.view.kind === "public" || library.view.kind === "saved"
       ? "public"
       : library.view.kind === "shared" && showShared
         ? "shared"
@@ -95,6 +98,7 @@ export function ModLibrary() {
     <div className="ml mx" data-mod-library="">
       <div className="ml-head">
         <ShelfTab label="MY PLANS" count={String(designs.length)} on={shelf === "mine"} onClick={() => setLibraryView({ kind: "all" })} />
+        <ShelfTab label="NETWORKS" count={networkCount === undefined ? "..." : String(networkCount)} on={shelf === "networks"} onClick={() => setLibraryView({ kind: "networks" })} />
         {showShared ? (
           <ShelfTab
             label="SHARED WITH ME"
@@ -109,7 +113,7 @@ export function ModLibrary() {
           on={shelf === "public"}
           onClick={() => setLibraryView({ kind: "public" })}
         />
-        {shelf === "shared" ? null : shelf === "mine" ? (
+        {shelf === "shared" || shelf === "networks" ? null : shelf === "mine" ? (
           <input
             className="ml-search"
             style={{ width: 240 }}
@@ -164,7 +168,7 @@ export function ModLibrary() {
         </div>
       </div>
       <div className="ml-body">
-        {shelf === "mine" ? (
+        {shelf === "networks" ? <NetworksLibrary /> : shelf === "mine" ? (
           <MyPlans query={mineQuery} />
         ) : shelf === "shared" ? (
           <div className="ml-public ml-shared" data-shared-shelf="">

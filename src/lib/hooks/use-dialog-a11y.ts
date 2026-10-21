@@ -3,13 +3,20 @@
 import { useEffect, useRef, type RefObject } from "react";
 
 const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [role="button"][tabindex="0"], [role="radio"][tabindex="0"]';
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), details > summary:first-of-type, [tabindex]:not([tabindex="-1"]), [role="button"][tabindex="0"], [role="radio"][tabindex="0"]';
 
 /** Open dialogs, newest last: only the top one answers Escape and traps Tab. */
 const stack: object[] = [];
 
 function visible(element: HTMLElement): boolean {
   if (element.closest("[hidden], [inert]")) return false;
+  // Closed details expose only their summary; hidden inputs cannot be a trap endpoint.
+  for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+    if (ancestor.tagName === "DETAILS" && !ancestor.hasAttribute("open")) {
+      const summary = ancestor.querySelector(":scope > summary");
+      if (!summary?.contains(element)) return false;
+    }
+  }
   const style = getComputedStyle(element);
   return style.display !== "none" && style.visibility !== "hidden";
 }

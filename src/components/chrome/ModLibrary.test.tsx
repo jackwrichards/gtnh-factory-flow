@@ -5,6 +5,7 @@ import type { DesignSummary } from "@/lib/designs/design-library";
 import { stampOpened, resetLastOpenForTests } from "@/lib/library/last-open";
 import { openLibrary, readLibraryTabState } from "@/lib/library/library-tab";
 import { useDesignStore } from "@/store/design-store";
+import { useNetworkStore } from "@/store/network-store";
 
 vi.mock("@/lib/compact-view", () => ({ isCompactViewport: () => false }));
 const auth = vi.hoisted(() => ({ user: undefined as undefined | { username: string } }));
@@ -62,6 +63,7 @@ beforeEach(() => {
   stampOpened("b", Date.parse("2026-10-14T10:30:00.000Z"));
   stampOpened("c", Date.parse("2026-10-14T09:00:00.000Z"));
   openLibrary({ kind: "all" });
+  useNetworkStore.setState({ catalogue: undefined });
 });
 afterEach(() => cleanup());
 
@@ -71,12 +73,19 @@ describe("the library", () => {
   it("has the mod's header: MY PLANS with its count, COMMUNITY, a Find a plan box and a close key, and no sign-in key (that is the top bar's account key)", () => {
     render(<ModLibrary />);
     const tabs = [...document.querySelectorAll(".ml-tab")].map((tab) => tab.textContent);
-    expect(tabs).toEqual(["MY PLANS3", "COMMUNITY..."]);
+    expect(tabs).toEqual(["MY PLANS3", "NETWORKS...", "COMMUNITY..."]);
     expect(document.querySelector(".ml-tab[data-on]")?.textContent).toContain("MY PLANS");
     expect(screen.getByPlaceholderText("Find a plan")).toBeTruthy();
     expect(document.querySelector(".ml-signin")).toBeNull();
     expect(screen.queryByText("Sign in")).toBeNull();
     expect(screen.getByLabelText("Close the panel")).toBeTruthy();
+  });
+
+  it("shows the saved network count in its badge", () => {
+    useNetworkStore.setState({ catalogue: { account: "local", token: "t", revision: 0, dirty: false,
+      networks: [{ id: "one", name: "One", included: true, members: [], sharing: {} }] } });
+    render(<ModLibrary />);
+    expect(screen.getByRole("tab", { name: "NETWORKS1" }).textContent).toBe("NETWORKS1");
   });
 
   it("My plans lists every plan, the most recently open first, after the new-plan tile", () => {

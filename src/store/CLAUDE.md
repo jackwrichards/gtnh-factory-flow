@@ -4,6 +4,12 @@
 `design-store.ts` owns the design library (IndexedDB) and tabs. Related code:
 `src/lib/designs/`, `src/lib/library/`, `src/lib/import-export/`, `src/lib/community/`.
 
+`network-store.ts` owns personal plan networks, independently of FactoryProject and library folders. Catalogue saves
+validate the hierarchy with unique direct membership; browser tokens and account revisions reject stale writes.
+Conflicting local topology is retained for an explicit choice. Closed-plan calculations never land on the canvas or
+write a saved plan. Rules and migration: `docs/plan-networks.md`. Tests: `src/lib/networks/*.test.ts` and
+`src/app/api/library/networks/route.test.ts`.
+
 The plan of record is IndexedDB; localStorage `project.v2` is only a one-shot seed.
 Load migrations are not Zod-guarded: open each design under its own guard and never make
 an unreadable design active.

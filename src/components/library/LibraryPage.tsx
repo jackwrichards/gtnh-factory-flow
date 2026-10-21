@@ -32,6 +32,7 @@ import { SharedWithMe } from "@/components/live/SharedWithMe";
 import { isLiveConfigured } from "@/lib/live/live-config";
 import { useCloudLibraryStore } from "@/lib/library/cloud-library";
 import { parsePlanSearch } from "@/lib/community/search-query";
+import { NetworksLibrary } from "@/components/networks/NetworkPage";
 
 /**
  * The Library: your designs and the network's public setups, as one kind of
@@ -417,6 +418,7 @@ export function LibraryPage() {
               className="h-9 w-full border-2 border-[var(--mc-33)] bg-[#17191d] px-2 text-[13px] font-bold text-neutral-100 outline-none shadow-[inset_2px_2px_0_#30343b,inset_-2px_-2px_0_#050607]"
             >
               <option value="all">My designs ({designs.length})</option>
+              <option value="networks">Networks</option>
               <option value="favorites">
                 Favorites ({designs.filter((design) => design.favorite).length})
               </option>
@@ -441,6 +443,7 @@ export function LibraryPage() {
               selected={library.view.kind === "all"}
               onClick={() => setLibraryView({ kind: "all" })}
             />
+            <RailItem icon={LayoutGrid} label="Networks" selected={library.view.kind === "networks"} onClick={() => setLibraryView({ kind: "networks" })} />
             {/* Favorites ships with the library: a collection that is a star,
                 not a name, and cannot be deleted or renamed. */}
             <RailItem
@@ -539,7 +542,7 @@ export function LibraryPage() {
 
           {/* THE PAGE. */}
           <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-            {library.view.kind === "shared" ? (
+            {library.view.kind === "networks" ? <NetworksLibrary /> : library.view.kind === "shared" ? (
               <SharedWithMe />
             ) : library.view.kind === "public" ? (
               <SetupsGrid scope="network" presetQuery={library.view.search} />
@@ -1018,6 +1021,7 @@ function railValue(view: ReturnType<typeof useLibraryTab>["view"]): string {
     case "saved":
     case "favorites":
     case "all":
+    case "networks":
     case "shared":
       return view.kind;
   }
@@ -1027,7 +1031,7 @@ function railView(value: string): Parameters<typeof setLibraryView>[0] {
   if (value.startsWith("folder:")) {
     return { kind: "folder", folderId: value.slice("folder:".length) };
   }
-  if (value === "public" || value === "saved" || value === "favorites" || value === "shared") {
+  if (value === "public" || value === "saved" || value === "favorites" || value === "shared" || value === "networks") {
     return { kind: value };
   }
   return { kind: "all" };

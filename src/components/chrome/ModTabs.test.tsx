@@ -6,6 +6,7 @@ import type { DesignSummary } from "@/lib/designs/design-library";
 import { readLibraryTabState, openLibrary } from "@/lib/library/library-tab";
 import { onSfx } from "@/lib/sound/sfx";
 import { useDesignStore } from "@/store/design-store";
+import { useNetworkStore } from "@/store/network-store";
 import { ModTabs } from "./ModTabs";
 
 vi.mock("@/lib/compact-view", () => ({ isCompactViewport: () => false }));
@@ -33,6 +34,7 @@ const actions = {
 };
 
 beforeEach(() => {
+  useNetworkStore.setState({ activeId: undefined, openIds: [], catalogue: undefined });
   window.localStorage.clear();
   window.sessionStorage.clear();
   for (const fn of Object.values(actions)) fn.mockClear();
@@ -50,6 +52,56 @@ const props = { onPaste: vi.fn(), onShare: vi.fn() };
 const rows = () => [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((element) => element.textContent);
 
 describe("the plan tabs", () => {
+  it("reveals newly opened and reactivated network tabs when the strip overflows", () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("mt-strip") ? 150 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("mt-tab") ? 120 : 0;
+    });
+    vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (this: HTMLElement) {
+      return [...(this.parentElement?.children ?? [])].indexOf(this) * 122;
+    });
+    const networks = ["first", "second", "third"].map((id) => ({
+      id, name: id, included: true, sharing: {}, members: [],
+    }));
+    useNetworkStore.setState({ activeId: "first", openIds: ["first"], catalogue: {
+      account: "local", token: "t", revision: 0, dirty: false, networks,
+    } });
+    try {
+      render(<ModTabs {...props} />);
+      const strip = document.querySelector<HTMLElement>(".mt-strip")!;
+      expect(strip.scrollLeft).toBe(0);
+      act(() => useNetworkStore.setState({ activeId: "third", openIds: ["first", "second", "third"] }));
+      expect(strip.scrollLeft).toBe(214);
+      act(() => useNetworkStore.setState({ activeId: "first" }));
+      expect(strip.scrollLeft).toBe(0);
+      act(() => useNetworkStore.setState({ activeId: "third" }));
+      expect(strip.scrollLeft).toBe(214);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+  it("opens network-specific options and confirms network deletion", () => {
+    const original = useNetworkStore.getState().remove;
+    const remove = vi.fn(async () => undefined);
+    useNetworkStore.setState({ activeId: "net", openIds: ["net"], remove, catalogue: {
+      account: "local", token: "t", revision: 0, dirty: false,
+      networks: [{ id: "net", name: "Main network", members: [], included: true, sharing: {} }],
+    } });
+    try {
+      render(<ModTabs {...props} />);
+      fireEvent.contextMenu(screen.getByText("▤ Main network"));
+      expect(screen.getByRole("menu", { name: "Network options for Main network" })).toBeTruthy();
+      expect(rows()).toEqual(["Rename", "New subnetwork", "Close tabkept in Networks", "Delete network"]);
+      fireEvent.click(screen.getByRole("menuitem", { name: "Delete network" }));
+      expect(remove).not.toHaveBeenCalled();
+      expect(document.querySelector(".mm-title")?.textContent).toContain("Plans stay");
+      fireEvent.click(screen.getByRole("menuitem", { name: /Delete network/ }));
+      expect(remove).toHaveBeenCalledWith("net");
+      expect(actions.removeDesign).not.toHaveBeenCalled();
+    } finally { useNetworkStore.setState({ remove: original }); }
+  });
   it("shows one tab per open plan, the active one marked, and leaves the parked plan on the shelf", () => {
     render(<ModTabs {...props} />);
     const tabs = [...document.querySelectorAll(".mt-tab")];
@@ -113,7 +165,7 @@ describe("the plan tabs", () => {
   it("the + menu: New plan, Open a plan, Paste plan, Browse Community", () => {
     render(<ModTabs {...props} />);
     fireEvent.click(screen.getByLabelText("New plan"));
-    expect(rows()).toEqual(["New plan", "Open a plan...My plans", "Open plan file....json", "Paste plana plan link, code or file", "Browse Communitypublic plans"]);
+    expect(rows()).toEqual(["New plan", "Open a plan...My plans", "New network", "Open a network...", "Open plan file....json", "Paste plana plan link, code or file", "Browse Communitypublic plans"]);
     fireEvent.click(screen.getByText("Paste plan"));
     expect(props.onPaste).toHaveBeenCalled();
   });

@@ -36,6 +36,8 @@ export interface DeviceSettings {
   overviewWidth: number;
   /** The items list's width, set the same way. */
   itemsWidth: number;
+  /** Network plan list width, set by its visible resize handle (shell px). */
+  networkSidebarWidth: number;
   /** The settings box's open section, kept so it opens where it was left. */
   settingsSection: string;
 }
@@ -54,6 +56,7 @@ export const DEFAULT_DEVICE_SETTINGS: DeviceSettings = {
   itemsLeft: false,
   overviewWidth: OVERVIEW_DEFAULT_WIDTH,
   itemsWidth: ITEMS_DEFAULT_WIDTH,
+  networkSidebarWidth: 300,
   settingsSection: "Board",
 };
 
@@ -103,6 +106,11 @@ export function parseDeviceSettings(raw: string | null): DeviceSettings {
         typeof parsed.settingsSection === "string"
           ? parsed.settingsSection
           : DEFAULT_DEVICE_SETTINGS.settingsSection,
+      networkSidebarWidth:
+        typeof parsed.networkSidebarWidth === "number" &&
+        Number.isFinite(parsed.networkSidebarWidth)
+          ? Math.max(240, Math.min(640, parsed.networkSidebarWidth))
+          : DEFAULT_DEVICE_SETTINGS.networkSidebarWidth,
     };
   } catch {
     return DEFAULT_DEVICE_SETTINGS;

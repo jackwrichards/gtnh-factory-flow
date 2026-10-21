@@ -8,6 +8,14 @@ import {
 } from "./device-settings";
 
 describe("device settings", () => {
+  it("keeps network sidebar widths within the visible resize handle's limits", () => {
+    const width = (value: unknown) =>
+      parseDeviceSettings(JSON.stringify({ networkSidebarWidth: value })).networkSidebarWidth;
+    expect(width(420)).toBe(420);
+    expect(width(20)).toBe(240);
+    expect(width(1000)).toBe(640);
+    expect(width("wide")).toBe(300);
+  });
   it("starts at the mod's defaults: names on, problem outlines on, scroll changes values, items on the right, Board section", () => {
     expect(DEFAULT_DEVICE_SETTINGS).toEqual({
       zoomedOutNames: true,
@@ -17,6 +25,7 @@ describe("device settings", () => {
       itemsLeft: false,
       overviewWidth: 336,
       itemsWidth: 256,
+      networkSidebarWidth: 300,
       settingsSection: "Board",
     });
     expect(parseDeviceSettings(null)).toBe(DEFAULT_DEVICE_SETTINGS);
@@ -46,12 +55,12 @@ describe("device settings", () => {
 
   it("reads Scroll changes values: on unless saved off, and only a real boolean counts", () => {
     expect(parseDeviceSettings("{}").scrollChangesValues).toBe(true);
-    expect(parseDeviceSettings(JSON.stringify({ scrollChangesValues: false })).scrollChangesValues).toBe(
-      false,
-    );
-    expect(parseDeviceSettings(JSON.stringify({ scrollChangesValues: "no" })).scrollChangesValues).toBe(
-      true,
-    );
+    expect(
+      parseDeviceSettings(JSON.stringify({ scrollChangesValues: false })).scrollChangesValues,
+    ).toBe(false);
+    expect(
+      parseDeviceSettings(JSON.stringify({ scrollChangesValues: "no" })).scrollChangesValues,
+    ).toBe(true);
   });
 
   it("wheelChangesValues follows the setting at the moment it is asked", () => {
@@ -92,6 +101,7 @@ describe("device settings", () => {
       itemsLeft: false,
       overviewWidth: 336,
       itemsWidth: 256,
+      networkSidebarWidth: 300,
       settingsSection: "Board",
     });
   });

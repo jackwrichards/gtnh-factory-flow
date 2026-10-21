@@ -17,6 +17,7 @@ import { parseFactoryProjectJson } from "@/lib/import-export";
 import { withoutRuntimeTables } from "@/lib/import-export/plan-code";
 import { useCommunityAuthStore } from "@/store/community-auth-store";
 import { useDesignStore } from "@/store/design-store";
+import { forgetNetworkPlan } from "@/store/network-store";
 import { isDesignOpenLive, markDesignFresh } from "@/store/live-edit-gate";
 import { isLiveConfigured } from "@/lib/live/live-config";
 import { forgetRemoteLibrary, noteRemoteLibrary } from "./cloud-library";
@@ -516,6 +517,7 @@ async function applyDesignAction(action: DesignAction): Promise<boolean> {
       return true;
     }
     case "delete-local": {
+      await forgetNetworkPlan(action.id);
       if (action.id === store.activeDesignId) {
         await store.removeDesign(action.id, { fromSync: true });
       } else {

@@ -11,6 +11,7 @@ import { leaveWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { playBoardSound } from "@/lib/board-sounds";
 import { playSfx } from "@/lib/sound/sfx";
 import { useDesignStore } from "@/store/design-store";
+import { useNetworkStore } from "@/store/network-store";
 import { useFactoryStore } from "@/store/factory-store";
 import { useSolvingBooks } from "@/components/flow/use-solving-books";
 import { tipAttrs } from "@/components/flow/clean/interaction";
@@ -67,11 +68,15 @@ const TAB_GAP = 2;
 
 type TabMenu =
   | { kind: "plus"; anchor: ChromeAnchor }
+  | { kind: "network" | "network-delete"; anchor: ChromeAnchor; id: string; name: string }
   | { kind: "tab"; anchor: ChromeAnchor; id: string; name: string }
   | { kind: "delete"; anchor: ChromeAnchor; id: string; name: string };
 
 /** The plan tabs of the top bar (the mod's PlanTabs): one per open plan, then "+". */
 export function ModTabs({ onPaste, onShare }: ModTabsActions) {
+  const networkId = useNetworkStore((state) => state.activeId);
+  const networkTabs = useNetworkStore((state) => state.openIds);
+  const networks = useNetworkStore((state) => state.catalogue?.networks);
   const allDesigns = useDesignStore((state) => state.designs);
   const publicViews = useDesignStore((state) => state.publicViews);
   const publicView = useDesignStore((state) => state.publicView);
@@ -100,8 +105,8 @@ export function ModTabs({ onPaste, onShare }: ModTabsActions) {
   const allDesignsRef = useRef(allDesigns);
   const canClose = designs.length + publicViews.length > 1;
   // One tab is in the Tab order (roving): the open plan's, else the first. The arrows move among the rest.
-  const tabIds = [...publicViews.map((view) => `public:${view.id}`), ...designs.map((design) => design.id)];
-  const wanted = publicView ? `public:${publicView.id}` : activeDesignId;
+  const tabIds = [...networkTabs.map((id) => `network:${id}`), ...publicViews.map((view) => `public:${view.id}`), ...designs.map((design) => design.id)];
+  const wanted = networkId ? `network:${networkId}` : publicView ? `public:${publicView.id}` : activeDesignId;
   const tabStop = wanted && tabIds.includes(wanted) ? wanted : tabIds[0];
   useLayoutEffect(() => {
     designIdsRef.current = designIds;
@@ -144,7 +149,7 @@ export function ModTabs({ onPaste, onShare }: ModTabsActions) {
   useEffect(() => {
     keepActiveInView();
     syncFade();
-  }, [activeDesignId, publicView?.id, designs.length, syncFade, keepActiveInView]);
+  }, [activeDesignId, publicView?.id, designs.length, networkId, networkTabs.length, syncFade, keepActiveInView]);
 
   /** The new order of the open tabs, with the parked plans left in their own places among the rest. */
   const commitOrder = useCallback(
@@ -309,6 +314,7 @@ export function ModTabs({ onPaste, onShare }: ModTabsActions) {
   };
 
   const activate = async (id: string) => {
+    useNetworkStore.getState().leave();
     // A tab switched turns a page; its cards are not landing, they were there.
     if (id !== activeDesignId) playSfx("ui.page");
     leaveWelcomeTab();
@@ -350,6 +356,8 @@ export function ModTabs({ onPaste, onShare }: ModTabsActions) {
             ]
           : []),
         { label: "Open a plan...", detail: "My plans", onSelect: () => openLibrary({ kind: "all" }) },
+        { label: "New network", onSelect: () => void useNetworkStore.getState().create("New network") },
+        { label: "Open a network...", onSelect: () => openLibrary({ kind: "networks" }) },
         { label: "Open plan file...", detail: ".json", onSelect: () => document.querySelector<HTMLInputElement>("[data-plan-file-input]")?.click() },
         { label: "Paste plan", detail: "a plan link, code or file", onSelect: onPaste },
         { label: "Browse Community", detail: "public plans", onSelect: () => openLibrary({ kind: "public" }) },
@@ -359,6 +367,20 @@ export function ModTabs({ onPaste, onShare }: ModTabsActions) {
       return [
         { label: "Delete it", tone: "red", onSelect: () => void removeDesign(m.id) },
         { label: "Keep it", onSelect: () => undefined },
+      ];
+    }
+    if (m.kind === "network-delete") {
+      return [
+        { label: "Delete network", detail: "plans are kept", tone: "red", onSelect: () => void useNetworkStore.getState().remove(m.id) },
+        { label: "Cancel", onSelect: () => undefined },
+      ];
+    }
+    if (m.kind === "network") {
+      return [
+        { label: "Rename", onSelect: () => setRenaming(`network:${m.id}`) },
+        { label: "New subnetwork", onSelect: () => void useNetworkStore.getState().create("New subnetwork", m.id) },
+        { label: "Close tab", detail: "kept in Networks", onSelect: () => useNetworkStore.getState().close(m.id) },
+        { label: "Delete network", tone: "red", onSelect: () => setMenu({ ...m, kind: "network-delete" }) },
       ];
     }
     const rows: MenuEntry[] = [
@@ -432,8 +454,24 @@ export function ModTabs({ onPaste, onShare }: ModTabsActions) {
             strip.scrollLeft += event.deltaY + event.deltaX > 0 ? 40 : -40;
           }}
         >
+          {networkTabs.map((id) => {
+            const network = networks?.find((entry) => entry.id === id);
+            if (!network) return null;
+            const showMenu = (element: HTMLElement) => setMenu({ kind: "network", id, name: network.name, anchor: chromeAnchorOf(element) });
+            return <div key={`network:${id}`} className="mt-tab" role="tab" aria-selected={networkId === id} data-active={networkId === id ? "" : undefined} data-network-tab={id} tabIndex={tabStop === `network:${id}` ? 0 : -1}
+              onContextMenu={(event) => { event.preventDefault(); showMenu(event.currentTarget); }}
+              onKeyDown={(event) => { if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); showMenu(event.currentTarget); } else activateOnKey(event); }}
+              onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); useNetworkStore.getState().close(id); } }}
+              onDoubleClick={() => setRenaming(`network:${id}`)} onClick={() => useNetworkStore.getState().open(id)}>
+              {renaming === `network:${id}` ? <RenameField initial={network.name} label="Network name" onDone={(name) => {
+                setRenaming(undefined);
+                if (name) void useNetworkStore.getState().edit((entries) => entries.map((entry) => entry.id === id ? { ...entry, name } : entry));
+              }} /> : <span className="mt-name">▤ {network.name}</span>}
+              <span className="mt-close" role="button" aria-label={`Close ${network.name}`} onClick={(event) => { event.stopPropagation(); useNetworkStore.getState().close(id); }}><CloseGlyph /></span>
+            </div>;
+          })}
           {publicViews.map((view) => {
-            const active = publicView?.id === view.id;
+            const active = !networkId && publicView?.id === view.id;
             return (
               <div
                 key={`public:${view.id}`}
@@ -451,6 +489,7 @@ export function ModTabs({ onPaste, onShare }: ModTabsActions) {
                   }
                 }}
                 onClick={() => {
+                  useNetworkStore.getState().leave();
                   leaveWelcomeTab();
                   leaveLibrary();
                   void useDesignStore.getState().switchToPublicView(view.id);
@@ -484,7 +523,7 @@ export function ModTabs({ onPaste, onShare }: ModTabsActions) {
             );
           })}
           {designs.map((design) => {
-            const active = design.id === activeDesignId && !publicView;
+            const active = !networkId && design.id === activeDesignId && !publicView;
             const isRenaming = renaming === design.id;
             return (
               <div
@@ -607,8 +646,8 @@ export function ModTabs({ onPaste, onShare }: ModTabsActions) {
         <ChromeMenu
           anchor={menu.anchor}
           entries={entries(menu)}
-          label={menu.kind === "plus" ? "New plan" : `Plan options for ${menu.name}`}
-          title={menu.kind === "delete" ? `Delete '${menu.name}' for good?` : undefined}
+          label={menu.kind === "plus" ? "New plan" : `${menu.kind === "network" || menu.kind === "network-delete" ? "Network" : "Plan"} options for ${menu.name}`}
+          title={menu.kind === "delete" ? `Delete '${menu.name}' for good?` : menu.kind === "network-delete" ? `Delete '${menu.name}'? Plans stay. Subnetworks move to its parent.` : undefined}
           minWidth={menu.kind === "plus" ? 190 : menu.kind === "delete" ? 150 : 170}
           onClose={closeMenu}
         />
@@ -630,7 +669,7 @@ function CloseGlyph() {
   );
 }
 
-function RenameField({ initial, onDone }: { initial: string; onDone: (name: string) => void }) {
+function RenameField({ initial, label = "Plan name", onDone }: { initial: string; label?: string; onDone: (name: string) => void }) {
   const [value, setValue] = useState(initial);
   const doneRef = useRef(false);
   const finish = (commit: boolean) => {
@@ -642,7 +681,8 @@ function RenameField({ initial, onDone }: { initial: string; onDone: (name: stri
     <input
       autoFocus
       className="mt-rename"
-      aria-label="Plan name"
+      aria-label={label}
+      maxLength={80}
       value={value}
       onFocus={(event) => event.currentTarget.select()}
       onChange={(event) => setValue(event.target.value)}
