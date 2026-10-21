@@ -1,9 +1,12 @@
 import type { EntryIcon, FactoryProject } from "@/lib/model/types";
 import type { DesignStats } from "./design-stats";
+import type { PlanFingerprints } from "../import-export/import-fingerprint";
 
 /** Tab-strip metadata: everything needed to draw the tabs without loading plans. */
 export interface DesignSummary {
   id: string;
+  /** Content of the current stored plan. Calculated locally on every plan write. */
+  fingerprints?: PlanFingerprints;
   name: string;
   createdAt: string;
   updatedAt: string;
@@ -150,6 +153,9 @@ export function keepStoredPlanMarks(
   summary: DesignSummary,
   stored: DesignSummary | undefined,
 ): DesignSummary {
+  // Metadata writers never replace fingerprints derived from the stored plan.
+  if (stored && summary.fingerprints !== stored.fingerprints)
+    summary = { ...summary, fingerprints: stored.fingerprints };
   if (!stored || stored.updatedAt === summary.updatedAt) {
     return summary;
   }
@@ -324,6 +330,7 @@ export function toDesignSummary(record: DesignRecord): DesignSummary {
   if (record.cloud) {
     summary.cloud = record.cloud;
   }
+  if (record.fingerprints) summary.fingerprints = record.fingerprints;
   return summary;
 }
 

@@ -7,7 +7,7 @@ import { useDialogA11y } from "@/lib/hooks/use-dialog-a11y";
 import { openPlanCode } from "@/lib/open-plan-code";
 
 /**
- * Paste a plan (a link, a code, or a plan file's text) and open it as a new tab, in the mod's box
+ * Paste a plan (a link, a code, or a plan file's text) and open it, in the mod's box
  * (`chrome/mod-panel.css`). The other half of Copy plan code.
  */
 export function PastePlanDialog({ onClose }: { onClose: () => void }) {

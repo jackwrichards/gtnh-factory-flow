@@ -8,7 +8,10 @@ import type { DesignRecord, DesignSummary } from "@/lib/designs/design-library";
  * plans shared with us are never pushed as ours, and go once unshared.
  */
 
-const storage = vi.hoisted(() => ({ records: new Map<string, DesignRecord>() }));
+const storage = vi.hoisted(() => ({
+  records: new Map<string, DesignRecord>(),
+  replacements: new Set<string>(),
+}));
 vi.mock("@/lib/designs/design-storage", () => ({
   listDesignSummaries: vi.fn(async () =>
     [...storage.records.values()].map((record) => {
@@ -20,10 +23,27 @@ vi.mock("@/lib/designs/design-storage", () => ({
   listDesignFolders: vi.fn(async () => []),
   readDesign: vi.fn(async (id: string) => storage.records.get(id)),
   readDesignSummary: vi.fn(async (id: string) => storage.records.get(id)),
+  readDesignLiveReplacement: vi.fn(async (id: string) =>
+    storage.replacements.has(id) ? { doc: `owner:${id}`, pending: [] } : undefined,
+  ),
   writeDesign: vi.fn(async (record: DesignRecord) => {
     storage.records.set(record.id, record);
   }),
   writeDesignIfUnchanged: vi.fn(async () => "written"),
+  replaceDesignIfUnchanged: vi.fn(async (record: DesignRecord, expected: DesignSummary) => {
+    const { isDesignOpenLive } = await import("@/store/live-edit-gate");
+    if (isDesignOpenLive(record.id) || storage.replacements.has(record.id)) return "live";
+    const stored = storage.records.get(record.id);
+    if (!stored) return "missing";
+    if (
+      stored.updatedAt !== expected.updatedAt ||
+      stored.metaUpdatedAt !== expected.metaUpdatedAt ||
+      stored.remoteUpdatedAt !== expected.remoteUpdatedAt
+    )
+      return "conflict";
+    storage.records.set(record.id, record);
+    return "written";
+  }),
   writeDesignSummary: vi.fn(async (summary: DesignSummary) => {
     const record = storage.records.get(summary.id);
     if (record) {
@@ -78,6 +98,8 @@ import { useDesignStore } from "@/store/design-store";
 import { setLiveDesignId } from "@/store/live-edit-gate";
 import { useCloudLibraryStore } from "./cloud-library";
 import { syncLibraryNow, useLibrarySyncStore } from "./library-sync";
+import { fetchRemoteDesignPlan } from "./client";
+import type { RemoteDesignMeta } from "./sync-types";
 
 const OWNER = "33333333-3333-4333-8333-333333333333";
 
@@ -94,6 +116,7 @@ function record(id: string, extra: Partial<DesignRecord> = {}): DesignRecord {
 
 beforeEach(() => {
   storage.records.clear();
+  storage.replacements.clear();
   remote.pushes = [];
   remote.liveIds.clear();
   remote.library = { designs: [], folders: [], shared: [] };
@@ -103,6 +126,64 @@ beforeEach(() => {
 });
 
 describe("the account sync beside live plans", () => {
+  it("sends only metadata for a closed plan with a replacement awaiting live delivery", async () => {
+    storage.records.set(
+      "waiting",
+      record("waiting", { remoteUpdatedAt: "2026-10-01T00:00:00.000Z", closed: true }),
+    );
+    storage.replacements.add("waiting");
+    await syncLibraryNow();
+    expect(remote.pushes).toHaveLength(1);
+    expect(remote.pushes[0].body.plan).toBeUndefined();
+    expect(storage.replacements.has("waiting")).toBe(true);
+  });
+  it.each(["replacement", "live join"])(
+    "does not restore a stale download after a %s",
+    async (change) => {
+      const id = "in-flight";
+      const original = record(id, { remoteUpdatedAt: "2026-10-02T00:00:00.000Z" });
+      storage.records.set(id, original);
+      const design: RemoteDesignMeta = {
+        id,
+        name: original.name,
+        icon: null,
+        folderId: null,
+        closed: false,
+        favorite: false,
+        order: null,
+        communityPlanId: null,
+        deletedAt: null,
+        createdAt: original.createdAt,
+        updatedAt: "2026-10-03T00:00:00.000Z",
+        planUpdatedAt: "2026-10-03T00:00:00.000Z",
+      };
+      remote.library.designs = [design];
+      let release!: () => void;
+      const started = new Promise<void>((resolve) => {
+        vi.mocked(fetchRemoteDesignPlan).mockImplementationOnce(async () => {
+          resolve();
+          await new Promise<void>((done) => {
+            release = done;
+          });
+          return { design, plan: createEmptyProject() };
+        });
+      });
+      const sync = syncLibraryNow();
+      await started;
+      const project = { ...original.project, notes: "accepted replacement" };
+      storage.records.set(id, {
+        ...original,
+        project,
+        ...(change === "replacement" ? { updatedAt: "2026-10-04T00:00:00.000Z" } : {}),
+      });
+      if (change === "live join") setLiveDesignId(id);
+      release();
+      await sync;
+      expect(storage.records.get(id)!.project.notes).toBe("accepted replacement");
+      expect(useLibrarySyncStore.getState().state).toBe("idle");
+    },
+  );
+
   it("never sends the body of a plan open live in this tab", async () => {
     storage.records.set("design-open-1", record("design-open-1"));
     setLiveDesignId("design-open-1");

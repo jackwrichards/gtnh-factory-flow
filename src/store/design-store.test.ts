@@ -8,15 +8,24 @@ import type {
 const storage = vi.hoisted(() => ({
   listDesignSummaries: vi.fn<() => Promise<DesignSummary[]>>(),
   listDesignFolders: vi.fn<() => Promise<DesignFolder[]>>(async () => []),
-  readDesign: vi.fn<(id: string) => Promise<DesignRecord | undefined>>(),
+  readDesign: vi.fn<(id: string, expectedFull?: string) => Promise<DesignRecord | undefined>>(),
   readDesignSummary: vi.fn<(id: string) => Promise<DesignSummary | undefined>>(),
+  replaceDesignIfUnchanged: vi.fn<
+    (record: DesignRecord, expected: Pick<DesignSummary, "updatedAt" | "metaUpdatedAt" | "remoteUpdatedAt">) => Promise<"written" | "conflict" | "missing" | "live">
+  >(),
   writeDesignIfUnchanged: vi.fn<
     (record: DesignRecord, expectedUpdatedAt: string | undefined) => Promise<"written" | "conflict">
   >(),
   writeDesign: vi.fn<(record: DesignRecord) => Promise<void>>(async () => undefined),
   writeDesignSummary: vi.fn<(summary: DesignSummary) => Promise<void>>(async () => undefined),
   writeDesignFolder: vi.fn<(folder: DesignFolder) => Promise<void>>(async () => undefined),
-  deleteDesign: vi.fn<(id: string) => Promise<void>>(async () => undefined),
+  deleteDesign: vi.fn<
+    (
+      id: string,
+      expectedUpdatedAt?: string,
+      canDelete?: (stored: DesignSummary | undefined) => boolean,
+    ) => Promise<boolean>
+  >(async () => true),
   deleteDesignFolder: vi.fn<(id: string) => Promise<void>>(async () => undefined),
   readActiveDesignId: vi.fn<() => string | undefined>(),
   writeActiveDesignId: vi.fn<(id: string | undefined) => void>(),
@@ -55,9 +64,507 @@ vi.mock("@/lib/designs/design-camera", () => ({
 
 import { readLibraryTabState } from "@/lib/library/library-tab";
 import { createEmptyProject } from "@/examples";
-import { useDesignStore } from "./design-store";
+import { captureDesignUpdateGuard, useDesignStore } from "./design-store";
 import { useFactoryStore } from "./factory-store";
 import { copyViewedPost } from "@/lib/community/open-post";
+import { planFingerprints } from "@/lib/import-export/import-fingerprint";
+import { solveBooks } from "./solve-books";
+import { setLiveDesignId } from "./live-edit-gate";
+
+function deferredSolveWorker(totalEuT?: number) {
+  const result = {
+    ...solveBooks(createEmptyProject()),
+    stale: false,
+    ...(totalEuT === undefined ? {} : { totalEuT }),
+  };
+  let pending: { key: string; respond: (data: unknown) => void } | undefined;
+  const terminate = vi.fn();
+  class PendingWorker {
+    onmessage?: (event: { data: unknown }) => void;
+    terminate = terminate;
+    postMessage(request: { key: string }) {
+      pending = { key: request.key, respond: (data) => this.onmessage?.({ data }) };
+    }
+  }
+  vi.stubGlobal("Worker", PendingWorker);
+  return {
+    ready: () => vi.waitFor(() => expect(pending).toBeDefined()),
+    complete: () => {
+      if (!pending) throw new Error("No persistence solve is pending.");
+      // Landing later uses the normal canvas solver, outside this test worker.
+      vi.stubGlobal("Worker", undefined);
+      pending.respond({ key: pending.key, result });
+    },
+    terminate,
+  };
+}
+
+describe("explicitly updating an imported plan version", () => {
+  it("rejects a changed exact candidate without switching or reopening it", async () => {
+    const full = (await planFingerprints(createEmptyProject())).full;
+    const changed = await planFingerprints({ ...createEmptyProject(), notes: "New content" });
+    const records = library(
+      summary("target", { closed: true, fingerprints: changed }),
+      summary("incoming"),
+    );
+    storage.readActiveDesignId.mockReturnValue("incoming");
+    await useDesignStore.getState().hydrate();
+    expect(await useDesignStore.getState().switchToDesign("target", full)).toBe(false);
+    expect(useDesignStore.getState().activeDesignId).toBe("incoming");
+    expect(records.get("target")!.closed).toBe(true);
+  });
+
+  it("opens the validated closed exact match and retains an active match's canvas", async () => {
+    const fingerprints = await planFingerprints(createEmptyProject());
+    const records = library(summary("target", { closed: true, fingerprints }), summary("incoming"));
+    storage.readActiveDesignId.mockReturnValue("incoming");
+    await useDesignStore.getState().hydrate();
+    expect(await useDesignStore.getState().switchToDesign("target", fingerprints.full)).toBe(true);
+    expect(records.get("target")!.closed).toBeUndefined();
+    const canvas = useFactoryStore.getState().project;
+    expect(await useDesignStore.getState().switchToDesign("target", fingerprints.full)).toBe(true);
+    expect(useFactoryStore.getState().project).toBe(canvas);
+  });
+
+  it("flushes newer active edits before deciding whether an exact candidate matches", async () => {
+    const fingerprints = await planFingerprints(createEmptyProject());
+    const records = library(summary("incoming", { fingerprints }));
+    storage.readActiveDesignId.mockReturnValue("incoming");
+    await useDesignStore.getState().hydrate();
+    useFactoryStore.setState((state) => ({
+      project: { ...state.project, notes: "Unsaved new content" },
+    }));
+    storage.writeDesignIfUnchanged.mockImplementationOnce(async (record) => {
+      await storage.writeDesign({
+        ...record,
+        fingerprints: await planFingerprints(record.project),
+      });
+      return "written";
+    });
+    expect(await useDesignStore.getState().switchToDesign("incoming", fingerprints.full)).toBe(
+      false,
+    );
+    expect(records.get("incoming")!.fingerprints!.full).not.toBe(fingerprints.full);
+    expect(useFactoryStore.getState().project.notes).toBe("Unsaved new content");
+  });
+
+  it.each([false, true])(
+    "loads a newer active exact match before saving edits (another save: %s)",
+    async (anotherSave) => {
+      const records = library(summary("target", { updatedAt: "version-a" }));
+      storage.readActiveDesignId.mockReturnValue("target");
+      useDesignStore.setState({ tabConflict: undefined });
+      await useDesignStore.getState().hydrate();
+      const staleCanvas = useFactoryStore.getState().project;
+      const remoteProject = {
+        ...staleCanvas,
+        annotations: [
+          {
+            id: "remote-note",
+            kind: "text" as const,
+            text: "Work from another tab",
+            position: { x: 0, y: 0 },
+            size: { width: 200, height: 40 },
+          },
+        ],
+      };
+      const fingerprints = await planFingerprints(remoteProject);
+      records.set("target", { ...records.get("target")!, updatedAt: "version-b", fingerprints });
+      storage.readDesign.mockImplementation(async (id, expectedFull) => {
+        const record = records.get(id);
+        if (!record || (expectedFull !== undefined && record.fingerprints?.full !== expectedFull))
+          return undefined;
+        return { ...record, project: remoteProject };
+      });
+
+      expect(await useDesignStore.getState().switchToDesign("target", fingerprints.full)).toBe(
+        true,
+      );
+      expect(useFactoryStore.getState().project).not.toBe(staleCanvas);
+      expect(useFactoryStore.getState().project.annotations).toEqual(remoteProject.annotations);
+      storage.writeDesign.mockClear();
+      storage.writeDesignIfUnchanged.mockClear();
+      if (anotherSave) records.set("target", { ...records.get("target")!, updatedAt: "version-c" });
+      useFactoryStore.setState((state) => ({
+        project: { ...state.project, notes: "Local notes edit" },
+      }));
+      await useDesignStore.getState().flushActiveDesign();
+
+      expect(storage.writeDesignIfUnchanged.mock.calls[0][1]).toBe("version-b");
+      const saved = storage.writeDesign.mock.calls.at(-1)![0];
+      expect(saved.project.notes).toBe("Local notes edit");
+      expect(saved.project.annotations).toEqual(remoteProject.annotations);
+      if (anotherSave) {
+        expect(saved.id).not.toBe("target");
+        expect(records.get("target")!.updatedAt).toBe("version-c");
+        expect(useDesignStore.getState().tabConflict).toBeDefined();
+      } else {
+        expect(saved.id).toBe("target");
+        expect(useDesignStore.getState().tabConflict).toBeUndefined();
+      }
+    },
+  );
+
+  it.each(["switch back", "saved edit"])(
+    "retains a guard captured before replacement starts: %s",
+    async (change) => {
+      library(summary("target"), summary("incoming"), summary("other"));
+      storage.readActiveDesignId.mockReturnValue("incoming");
+      await useDesignStore.getState().hydrate();
+      const assertUnchangedCanvas = captureDesignUpdateGuard();
+      if (change === "switch back") {
+        await useDesignStore.getState().switchToDesign("other");
+        await useDesignStore.getState().switchToDesign("incoming");
+      } else {
+        useFactoryStore.setState((state) => ({ project: { ...state.project, notes: "New work" } }));
+        await useDesignStore.getState().flushActiveDesign();
+      }
+      storage.writeDesign.mockClear();
+      await expect(
+        useDesignStore
+          .getState()
+          .replaceDesignFromImport(
+            "target",
+            createEmptyProject(),
+            (await planFingerprints(createEmptyProject())).full,
+            assertUnchangedCanvas,
+          ),
+      ).rejects.toThrow("plan changed while updating");
+      expect(storage.writeDesign).not.toHaveBeenCalled();
+      expect(storage.replaceDesignIfUnchanged).not.toHaveBeenCalled();
+      expect(useDesignStore.getState().activeDesignId).toBe("incoming");
+    },
+  );
+
+  it.each(["already pending", "starts during solve", "finishes without opening"])(
+    "refuses replacement after navigation intent: %s",
+    async (timing) => {
+      library(summary("target"), summary("incoming"), summary("other"));
+      storage.readActiveDesignId.mockReturnValue("incoming");
+      await useDesignStore.getState().hydrate();
+      const other = (await storage.readDesign("other"))!;
+      const read = storage.readDesign.getMockImplementation()!;
+      let release: ((record: DesignRecord | undefined) => void) | undefined;
+      storage.readDesign.mockImplementation((id) =>
+        id === "other"
+          ? new Promise((resolve) => {
+              release = resolve;
+            })
+          : read(id),
+      );
+      const full = (await planFingerprints(createEmptyProject())).full;
+      const worker = deferredSolveWorker();
+      let switching: Promise<boolean> | undefined;
+      try {
+        if (timing === "already pending")
+          switching = useDesignStore.getState().switchToDesign("other");
+        const update = useDesignStore
+          .getState()
+          .replaceDesignFromImport("target", createEmptyProject(), full);
+        const rejection = expect(update).rejects.toThrow("plan changed while updating");
+        if (timing !== "already pending") {
+          await worker.ready();
+          switching = useDesignStore.getState().switchToDesign("other");
+          if (timing === "finishes without opening") {
+            release!(undefined);
+            await switching;
+          }
+          worker.complete();
+        }
+        await rejection;
+        expect(useDesignStore.getState().activeDesignId).toBe("incoming");
+        expect(storage.replaceDesignIfUnchanged).not.toHaveBeenCalled();
+        expect(storage.writeDesign).not.toHaveBeenCalled();
+      } finally {
+        vi.stubGlobal("Worker", undefined);
+        release?.(other);
+        await switching;
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it("refuses a target that becomes live while the worker runs", async () => {
+    library(summary("target"));
+    useDesignStore.setState({ activeDesignId: undefined, designs: [summary("target")] });
+    const worker = deferredSolveWorker();
+    try {
+      const update = useDesignStore
+        .getState()
+        .replaceDesignFromImport(
+          "target",
+          createEmptyProject(),
+          (await planFingerprints(createEmptyProject())).full,
+        );
+      const rejection = expect(update).rejects.toThrow("live or shared plan");
+      await worker.ready();
+      setLiveDesignId("target");
+      worker.complete();
+      await rejection;
+      expect(storage.replaceDesignIfUnchanged).not.toHaveBeenCalled();
+      expect(storage.writeDesign).not.toHaveBeenCalled();
+    } finally {
+      setLiveDesignId(undefined);
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("retains the incoming canvas when the transaction reports the target is live", async () => {
+    library(summary("target"), summary("incoming"));
+    storage.readActiveDesignId.mockReturnValue("incoming");
+    await useDesignStore.getState().hydrate();
+    storage.replaceDesignIfUnchanged.mockResolvedValueOnce("live");
+    await expect(
+      useDesignStore
+        .getState()
+        .replaceDesignFromImport(
+          "target",
+          createEmptyProject(),
+          (await planFingerprints(createEmptyProject())).full,
+        ),
+    ).rejects.toThrow("live or shared plan");
+    expect(useDesignStore.getState().activeDesignId).toBe("incoming");
+    expect(storage.deleteDesign).not.toHaveBeenCalled();
+  });
+
+  it.each(["rename", "favorite", "move", "delete", "account sync"])(
+    "retains the incoming plan when the target changes during the worker: %s",
+    async (change) => {
+      const records = library(summary("target"), summary("incoming"));
+      storage.readActiveDesignId.mockReturnValue("incoming");
+      await useDesignStore.getState().hydrate();
+      const worker = deferredSolveWorker();
+      try {
+        const update = useDesignStore
+          .getState()
+          .replaceDesignFromImport(
+            "target",
+            createEmptyProject(),
+            (await planFingerprints(createEmptyProject())).full,
+          );
+        const rejection = expect(update).rejects.toThrow(
+          change === "delete" ? "saved plan was deleted" : "Another tab changed",
+        );
+        await worker.ready();
+        if (change === "delete") records.delete("target");
+        else if (change === "account sync")
+          records.set("target", { ...records.get("target")!, remoteUpdatedAt: "newer" });
+        else
+          records.set("target", {
+            ...records.get("target")!,
+            metaUpdatedAt: "newer",
+            ...(change === "rename"
+              ? { name: "Renamed elsewhere" }
+              : change === "favorite"
+                ? { favorite: true }
+                : { folderId: "new-folder" }),
+          });
+        const latest = records.get("target");
+        worker.complete();
+        await rejection;
+        expect(records.get("target")).toBe(latest);
+        expect(records.has("incoming")).toBe(true);
+        expect(useDesignStore.getState().activeDesignId).toBe("incoming");
+        expect(storage.deleteDesign).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it.each(["incoming", "target", "switch", "saved edit", "backup write", "replacement write"])(
+    "preserves newer work during an update: %s",
+    async (change) => {
+      library(summary("target"), summary("incoming"), summary("other"));
+      storage.readActiveDesignId.mockReturnValue(change === "target" ? "target" : "incoming");
+      await useDesignStore.getState().hydrate();
+      const worker = deferredSolveWorker();
+      try {
+        const update = useDesignStore
+          .getState()
+          .replaceDesignFromImport(
+            "target",
+            createEmptyProject(),
+            (await planFingerprints(createEmptyProject())).full,
+          );
+        const rejection = expect(update).rejects.toThrow("plan changed while updating");
+        await worker.ready();
+        const edit = () =>
+          useFactoryStore.setState((state) => ({
+            project: { ...state.project, notes: "Work done while waiting" },
+          }));
+        if (change === "backup write")
+          storage.writeDesign.mockImplementationOnce(async () => {
+            edit();
+          });
+        else if (change === "replacement write")
+          storage.replaceDesignIfUnchanged.mockImplementationOnce(async () => {
+            edit();
+            return "written";
+          });
+        else if (change === "switch") {
+          vi.stubGlobal("Worker", undefined);
+          await useDesignStore.getState().switchToDesign("other");
+        } else {
+          edit();
+          if (change === "saved edit") await useDesignStore.getState().flushActiveDesign();
+        }
+        worker.complete();
+        await rejection;
+        if (change === "switch") expect(useDesignStore.getState().activeDesignId).toBe("other");
+        else expect(useFactoryStore.getState().project.notes).toBe("Work done while waiting");
+        if (change !== "replacement write") {
+          expect(
+            storage.replaceDesignIfUnchanged.mock.calls.filter(
+              ([record]) => record.id === "target",
+            ),
+          ).toHaveLength(0);
+        }
+        expect(storage.deleteDesign).not.toHaveBeenCalled();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it("writes neither replacement nor backup until the browser worker finishes", async () => {
+    library(summary("target"));
+    useDesignStore.setState({ activeDesignId: undefined, designs: [summary("target")] });
+    const project = { ...createEmptyProject(), planMode: true, solveMode: true };
+    const worker = deferredSolveWorker(42);
+    try {
+      const update = useDesignStore
+        .getState()
+        .replaceDesignFromImport(
+          "target",
+          project,
+          (await planFingerprints(createEmptyProject())).full,
+        );
+      await worker.ready();
+      expect(storage.writeDesign).not.toHaveBeenCalled();
+      expect(storage.replaceDesignIfUnchanged).not.toHaveBeenCalled();
+      worker.complete();
+      await update;
+      const replacement = storage.replaceDesignIfUnchanged.mock.calls[0][0];
+      expect(replacement.stats!.euT).toBe(42);
+      expect(worker.terminate).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("reopens a closed target and recalculates its statistics using the replacement's own solve", async () => {
+    library(
+      summary("target", {
+        closed: true,
+        stats: {
+          cards: 99,
+          machines: 99,
+          tier: "UV",
+          tierIndex: 8,
+          euT: 999_999,
+          takes: ["old-input"],
+          makes: ["old-output"],
+        },
+      }),
+    );
+    useDesignStore.setState({
+      activeDesignId: undefined,
+      designs: [summary("target", { closed: true })],
+    });
+    const old = (await storage.readDesign("target"))!;
+    useFactoryStore.setState({ lastResult: { ...solveBooks(old.project), totalEuT: 999_999 } });
+    const incoming = {
+      ...createEmptyProject(),
+      planMode: true,
+      solveMode: true,
+      recipes: [
+        {
+          id: "iron",
+          name: "Iron",
+          machineType: "Assembler",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [],
+          outputs: [{ kind: "item" as const, id: "minecraft:iron_ingot", amount: 1 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "machine",
+          recipeId: "iron",
+          machineCount: 4,
+          solvePin: 4,
+          overclockTier: "HV" as const,
+          parallel: 1,
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+    };
+    await useDesignStore
+      .getState()
+      .replaceDesignFromImport("target", incoming, (await planFingerprints(old.project)).full);
+    const replacement = storage.writeDesign.mock.calls
+      .map((call) => call[0])
+      .find((record) => record.id === "target")!;
+    expect(replacement.closed).toBeUndefined();
+    expect(
+      useDesignStore.getState().designs.find((design) => design.id === "target")?.closed,
+    ).toBeUndefined();
+    expect(useDesignStore.getState().activeDesignId).toBe("target");
+    expect(replacement.stats).toMatchObject({ cards: 1, drawers: 0, machines: 4, tier: "HV" });
+    expect(replacement.stats!.euT).toBeGreaterThan(0);
+    expect(replacement.stats!.euT).not.toBe(999_999);
+    expect(replacement.stats!.takes).not.toContain("old-input");
+    expect(replacement.stats!.makes).not.toContain("old-output");
+    expect(
+      storage.writeDesign.mock.calls
+        .map((call) => call[0])
+        .find((record) => record.id !== "target")!.closed,
+    ).toBe(true);
+  });
+  it("keeps the saved design identity and creates a closed backup of the old contents", async () => {
+    library(summary("target", { folderId: "folder", favorite: true }));
+    useDesignStore.setState({ activeDesignId: undefined, designs: [summary("target")] });
+    const old = (await storage.readDesign("target"))!;
+    const full = (await planFingerprints(old.project)).full;
+    await useDesignStore
+      .getState()
+      .replaceDesignFromImport("target", { ...old.project, notes: "New version" }, full);
+    const writes = storage.writeDesign.mock.calls.map((call) => call[0]);
+    const backup = writes.find((record) => record.id !== "target")!;
+    expect(backup.closed).toBe(true);
+    expect(backup.name).toContain("before update");
+    expect(backup.project.notes).toBe(old.project.notes);
+    const replacement = writes.find((record) => record.id === "target")!;
+    expect(replacement.folderId).toBe("folder");
+    expect(replacement.favorite).toBe(true);
+    expect(replacement.project.notes).toBe("New version");
+    expect(useDesignStore.getState().activeDesignId).toBe("target");
+  });
+
+  it("refuses a stale update choice without writing a backup or replacing a plan", async () => {
+    library(summary("target"));
+    useDesignStore.setState({ activeDesignId: undefined, designs: [summary("target")] });
+    await expect(
+      useDesignStore.getState().replaceDesignFromImport("target", createEmptyProject(), "stale"),
+    ).rejects.toThrow("saved plan changed");
+    expect(storage.writeDesign).not.toHaveBeenCalled();
+  });
+
+  it("preserves the incoming plan if another tab wins the atomic replacement check", async () => {
+    library(summary("target"));
+    useDesignStore.setState({ activeDesignId: undefined, designs: [summary("target")] });
+    const full = (await planFingerprints(createEmptyProject())).full;
+    storage.replaceDesignIfUnchanged.mockResolvedValueOnce("conflict");
+    await expect(
+      useDesignStore.getState().replaceDesignFromImport("target", createEmptyProject(), full),
+    ).rejects.toThrow("Another tab changed");
+    expect(storage.writeDesign.mock.calls.every((call) => call[0].id !== "target")).toBe(true);
+  });
+});
 
 function summary(id: string, extra: Partial<DesignSummary> = {}): DesignSummary {
   return {
@@ -70,12 +577,153 @@ function summary(id: string, extra: Partial<DesignSummary> = {}): DesignSummary 
   };
 }
 
+describe("guarded import cleanup", () => {
+  it("keeps unsaved work when the player returns to the incoming tab during cleanup", async () => {
+    const { updatePlanFromNotice } = await import("@/lib/open-plan-code");
+    const records = library(summary("target"), summary("incoming"));
+    storage.readActiveDesignId.mockReturnValue("incoming");
+    await useDesignStore.getState().hydrate();
+    const project = createEmptyProject();
+    const full = (await planFingerprints(project)).full;
+    const read = storage.readDesign.getMockImplementation()!;
+    let edited = false;
+    storage.readDesign.mockImplementation(async (id) => {
+      const saved = await read(id);
+      if (id === "incoming" && useDesignStore.getState().activeDesignId === "target" && !edited) {
+        edited = true;
+        await useDesignStore.getState().switchToDesign("incoming");
+        useFactoryStore.setState((state) => ({
+          project: { ...state.project, notes: "New unsaved work" },
+        }));
+      }
+      return saved;
+    });
+    await updatePlanFromNotice(
+      {
+        kind: "related",
+        designId: "incoming",
+        name: "Incoming",
+        project,
+        full,
+        related: [{ id: "target", name: "Target", full }],
+      },
+      "target",
+    );
+    expect(edited).toBe(true);
+    expect(records.has("incoming")).toBe(true);
+    expect(useDesignStore.getState().activeDesignId).toBe("incoming");
+    expect(useFactoryStore.getState().project.notes).toBe("New unsaved work");
+    expect(storage.deleteDesign).not.toHaveBeenCalled();
+  });
+
+  it("rechecks navigation inside the deletion transaction", async () => {
+    const records = library(summary("target"), summary("incoming"));
+    storage.readActiveDesignId.mockReturnValue("target");
+    await useDesignStore.getState().hydrate();
+    storage.deleteDesign.mockImplementationOnce(async (id, stamp, canDelete) => {
+      await useDesignStore.getState().switchToDesign("incoming");
+      useFactoryStore.setState((state) => ({
+        project: { ...state.project, notes: "Edited before delete" },
+      }));
+      if (!canDelete?.(records.get(id))) return false;
+      return records.delete(id);
+    });
+    expect(
+      await useDesignStore
+        .getState()
+        .cleanupImportedDesign(
+          "incoming",
+          (await planFingerprints(createEmptyProject())).full,
+          "target",
+        ),
+    ).toBe(false);
+    expect(records.has("incoming")).toBe(true);
+    expect(useFactoryStore.getState().project.notes).toBe("Edited before delete");
+  });
+
+  it("keeps an incoming tab whose switch is still awaiting its read", async () => {
+    library(summary("target"), summary("incoming"));
+    storage.readActiveDesignId.mockReturnValue("target");
+    await useDesignStore.getState().hydrate();
+    const record = (await storage.readDesign("incoming"))!;
+    let release!: (record: DesignRecord) => void;
+    storage.readDesign.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const switching = useDesignStore.getState().switchToDesign("incoming");
+    expect(
+      await useDesignStore
+        .getState()
+        .cleanupImportedDesign(
+          "incoming",
+          (await planFingerprints(createEmptyProject())).full,
+          "target",
+        ),
+    ).toBe(false);
+    expect(storage.deleteDesign).not.toHaveBeenCalled();
+    release(record);
+    await switching;
+    expect(useDesignStore.getState().activeDesignId).toBe("incoming");
+  });
+
+  it("keeps the incoming version when the target joins live after replacement", async () => {
+    const records = library(summary("target"), summary("incoming"));
+    storage.readActiveDesignId.mockReturnValue("target");
+    await useDesignStore.getState().hydrate();
+    setLiveDesignId("target");
+    try {
+      expect(
+        await useDesignStore
+          .getState()
+          .cleanupImportedDesign(
+            "incoming",
+            (await planFingerprints(createEmptyProject())).full,
+            "target",
+          ),
+      ).toBe(false);
+      expect(records.has("incoming")).toBe(true);
+    } finally {
+      setLiveDesignId(undefined);
+    }
+  });
+
+  it("deletes an unchanged inactive incoming version without navigating the canvas", async () => {
+    const records = library(summary("target"), summary("incoming"));
+    storage.readActiveDesignId.mockReturnValue("target");
+    await useDesignStore.getState().hydrate();
+    expect(
+      await useDesignStore
+        .getState()
+        .cleanupImportedDesign(
+          "incoming",
+          (await planFingerprints(createEmptyProject())).full,
+          "target",
+        ),
+    ).toBe(true);
+    expect(records.has("incoming")).toBe(false);
+    expect(useDesignStore.getState().activeDesignId).toBe("target");
+  });
+});
+
 /** The mock library: summaries answer the list, records answer reads. */
 function library(...designs: DesignSummary[]) {
   const current = new Map(designs.map((design) => [design.id, design]));
   storage.listDesignSummaries.mockImplementation(async () => [...current.values()]);
-  storage.readDesign.mockImplementation(async (id: string) => {
-    const design = current.get(id);
+  storage.readDesign.mockImplementation(async (id: string, expectedFull?: string) => {
+    let design = current.get(id);
+    if (
+      expectedFull !== undefined &&
+      (design?.fingerprints?.full !== expectedFull || design?.cloud)
+    )
+      return undefined;
+    if (design?.closed && expectedFull !== undefined) {
+      design = { ...design };
+      delete design.closed;
+      current.set(id, design);
+    }
     return design ? { ...design, project: createEmptyProject() } : undefined;
   });
   storage.writeDesignSummary.mockImplementation(async (design: DesignSummary) => {
@@ -86,8 +734,11 @@ function library(...designs: DesignSummary[]) {
     delete rest.project;
     current.set(record.id, rest as DesignSummary);
   });
-  storage.deleteDesign.mockImplementation(async (id: string) => {
-    current.delete(id);
+  storage.deleteDesign.mockImplementation(async (id, stamp, canDelete) => {
+    const stored = current.get(id);
+    if ((stamp !== undefined && stored?.updatedAt !== stamp) || (canDelete && !canDelete(stored)))
+      return false;
+    return current.delete(id);
   });
   storage.readDesignSummary.mockImplementation(async (id: string) => current.get(id));
   storage.writeDesignIfUnchanged.mockImplementation(async (record, expectedUpdatedAt) => {
@@ -95,6 +746,18 @@ function library(...designs: DesignSummary[]) {
     if (stored && expectedUpdatedAt !== undefined && stored.updatedAt !== expectedUpdatedAt) {
       return "conflict";
     }
+    await storage.writeDesign(record);
+    return "written";
+  });
+  storage.replaceDesignIfUnchanged.mockImplementation(async (record, expected) => {
+    const stored = current.get(record.id);
+    if (!stored) return "missing";
+    if (
+      stored.updatedAt !== expected.updatedAt ||
+      stored.metaUpdatedAt !== expected.metaUpdatedAt ||
+      stored.remoteUpdatedAt !== expected.remoteUpdatedAt
+    )
+      return "conflict";
     await storage.writeDesign(record);
     return "written";
   });

@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
 vi.mock("./client", () => api);
 vi.mock("./library-deletes", () => ({ readPendingDeletes: () => ({ designs: [], folders: [] }) }));
 vi.mock("@/lib/designs/design-storage", () => ({
+  readDesignLiveReplacement: vi.fn(async () => undefined),
   listDesignSummaries: async () => [...storage.records.values()],
   listDesignFolders: async () => [],
   readDesign: async (id: string) => storage.records.get(id),

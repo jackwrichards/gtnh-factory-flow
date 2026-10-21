@@ -91,8 +91,10 @@ Scratch harnesses are `*.local.test.ts` (excluded from the suite); run one with
   Prefer exported NEI/runtime data over hand-written tables and broad fallbacks.
 - Board performance is a requirement: no DOM measurement per edge or per frame, nothing
   O(nodes x edges) per frame, hover never rebuilds the board.
-- Every plan that arrives (import, paste, link, community copy) opens as a NEW design.
-  Nothing overwrites the open design; no app path calls `setProject`.
+- Arriving plans create a NEW design, except recognized plan codes and `#p=` links,
+  which reopen exact content matches. Related versions open separately and can replace
+  a saved plan only through the user's explicit Update action, with a recoverable backup.
+  No arriving plan overwrites an existing design automatically; no app path calls `setProject`.
 - Display dials (rate units, power display) repaint numbers only. They never re-solve.
 - A setting with no visible control must never be persisted: players get stuck in it,
   and a `finally` that restores it is not a durable undo.

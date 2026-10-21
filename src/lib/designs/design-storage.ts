@@ -1,9 +1,17 @@
 "use client";
 
 import type { FactoryProject } from "@/lib/model/types";
+import type { PendingBatch } from "@/lib/live/client-state";
+import { isDesignOpenLive } from "@/store/live-edit-gate";
+import {
+  FINGERPRINT_VERSION,
+  planFingerprints,
+  type PlanFingerprints,
+} from "../import-export/import-fingerprint";
 import {
   keepStoredPlanMarks,
   toDesignSummary,
+  touchDesignMeta,
   type DesignFolder,
   type DesignRecord,
   type DesignSummary,
@@ -33,6 +41,69 @@ export const ACTIVE_DESIGN_STORAGE_KEY = "gtnh-factory-flow.active-design.v1";
 interface StoredPlan {
   id: string;
   project: FactoryProject;
+  liveReplacement?: LiveReplacementOutbox;
+}
+
+/** Local delivery intent, stored with the plan body and never exported or synced. */
+export interface LiveReplacementOutbox {
+  doc: string;
+  pending: PendingBatch[];
+}
+
+export async function readDesignLiveReplacement(
+  id: string,
+): Promise<LiveReplacementOutbox | undefined> {
+  if (!isDesignStorageAvailable()) return undefined;
+  const db = await openDesignDb();
+  try {
+    const plan = await requestToPromise<StoredPlan | undefined>(
+      db.transaction(PLAN_STORE).objectStore(PLAN_STORE).get(id),
+    );
+    return plan?.liveReplacement;
+  } finally {
+    db.close();
+  }
+}
+
+/** Only the server's acknowledgement or explicit refusal settles an outbox batch. */
+export async function settleDesignLiveReplacement(
+  id: string,
+  doc: string,
+  cid: string,
+): Promise<void> {
+  if (!isDesignStorageAvailable()) return;
+  const db = await openDesignDb();
+  try {
+    const transaction = db.transaction(PLAN_STORE, "readwrite");
+    const completed = transactionToPromise(transaction);
+    const store = transaction.objectStore(PLAN_STORE);
+    const request = store.get(id);
+    request.onsuccess = () => {
+      const plan = request.result as StoredPlan | undefined;
+      if (!plan?.liveReplacement || plan.liveReplacement.doc !== doc) return;
+      const pending = plan.liveReplacement.pending.filter((batch) => batch.cid !== cid);
+      if (pending.length === plan.liveReplacement.pending.length) return;
+      if (pending.length) plan.liveReplacement = { doc, pending };
+      else delete plan.liveReplacement;
+      store.put(plan);
+    };
+    await completed;
+  } finally {
+    db.close();
+  }
+}
+
+/** Ordinary saves retain delivery intent until the live service settles it. */
+function putPlanPreservingOutbox(store: IDBObjectStore, record: DesignRecord): void {
+  const request = store.get(record.id);
+  request.onsuccess = () => {
+    const stored = request.result as StoredPlan | undefined;
+    store.put({
+      id: record.id,
+      project: record.project,
+      ...(stored?.liveReplacement ? { liveReplacement: stored.liveReplacement } : {}),
+    });
+  };
 }
 
 export function isDesignStorageAvailable(): boolean {
@@ -54,18 +125,62 @@ export async function listDesignSummaries(): Promise<DesignSummary[]> {
   }
 }
 
-export async function readDesign(id: string): Promise<DesignRecord | undefined> {
+export async function readDesign(
+  id: string,
+  expectedFull?: string,
+): Promise<DesignRecord | undefined> {
   if (!isDesignStorageAvailable()) {
     return undefined;
   }
 
   const db = await openDesignDb();
   try {
+    if (expectedFull !== undefined) {
+      // Validate the same body that will land, and reopen its fresh metadata
+      // atomically. A later unchecked read could open a different plan.
+      const transaction = db.transaction([META_STORE, PLAN_STORE], "readwrite");
+      const completed = transactionToPromise(transaction);
+      const meta = transaction.objectStore(META_STORE);
+      const summaryRequest = meta.get(id);
+      const planRequest = transaction.objectStore(PLAN_STORE).get(id);
+      let summary: DesignSummary | undefined, plan: StoredPlan | undefined;
+      let summaryReady = false,
+        planReady = false;
+      let result: DesignRecord | undefined;
+      const finish = () => {
+        if (
+          !summaryReady ||
+          !planReady ||
+          !summary ||
+          !plan ||
+          summary.cloud ||
+          summary.fingerprints?.version !== FINGERPRINT_VERSION ||
+          summary.fingerprints.full !== expectedFull
+        )
+          return;
+        if (summary.closed) {
+          summary = touchDesignMeta(summary);
+          delete summary.closed;
+          meta.put(summary);
+        }
+        result = { ...summary, project: plan.project };
+      };
+      summaryRequest.onsuccess = () => {
+        summary = summaryRequest.result;
+        summaryReady = true;
+        finish();
+      };
+      planRequest.onsuccess = () => {
+        plan = planRequest.result;
+        planReady = true;
+        finish();
+      };
+      await completed;
+      return result;
+    }
     const transaction = db.transaction([META_STORE, PLAN_STORE], "readonly");
     const [summary, plan] = await Promise.all([
-      requestToPromise<DesignSummary | undefined>(
-        transaction.objectStore(META_STORE).get(id),
-      ),
+      requestToPromise<DesignSummary | undefined>(transaction.objectStore(META_STORE).get(id)),
       requestToPromise<StoredPlan | undefined>(transaction.objectStore(PLAN_STORE).get(id)),
     ]);
 
@@ -84,11 +199,12 @@ export async function writeDesign(record: DesignRecord): Promise<void> {
     return;
   }
 
+  const fingerprints = await planFingerprints(record.project);
   const db = await openDesignDb();
   try {
     const transaction = db.transaction([META_STORE, PLAN_STORE], "readwrite");
-    transaction.objectStore(META_STORE).put(toDesignSummary(record));
-    transaction.objectStore(PLAN_STORE).put({ id: record.id, project: record.project });
+    transaction.objectStore(META_STORE).put(toDesignSummary({ ...record, fingerprints }));
+    putPlanPreservingOutbox(transaction.objectStore(PLAN_STORE), record);
     await transactionToPromise(transaction);
   } finally {
     db.close();
@@ -129,6 +245,7 @@ export async function writeDesignIfUnchanged(
     return "written";
   }
 
+  const fingerprints = await planFingerprints(record.project);
   const db = await openDesignDb();
   try {
     const transaction = db.transaction([META_STORE, PLAN_STORE], "readwrite");
@@ -142,13 +259,75 @@ export async function writeDesignIfUnchanged(
           resolve("conflict");
           return;
         }
-        meta.put(toDesignSummary(record));
-        transaction.objectStore(PLAN_STORE).put({ id: record.id, project: record.project });
+        const summary = toDesignSummary({ ...record, fingerprints });
+        meta.put(summary);
+        putPlanPreservingOutbox(transaction.objectStore(PLAN_STORE), record);
         resolve("written");
       };
     });
     await transactionToPromise(transaction);
     return outcome;
+  } finally {
+    db.close();
+  }
+}
+
+/** Replacement must not resurrect a deletion or roll back a metadata-only edit. */
+export async function replaceDesignIfUnchanged(
+  record: DesignRecord,
+  expected: Pick<DesignSummary, "updatedAt" | "metaUpdatedAt" | "remoteUpdatedAt">,
+  liveReplacement?: LiveReplacementOutbox,
+): Promise<"written" | "conflict" | "missing" | "live"> {
+  if (!isDesignStorageAvailable()) return "missing";
+  const fingerprints = await planFingerprints(record.project);
+  const db = await openDesignDb();
+  try {
+    const transaction = db.transaction([META_STORE, PLAN_STORE], "readwrite");
+    const meta = transaction.objectStore(META_STORE);
+    const plans = transaction.objectStore(PLAN_STORE);
+    const outcome = new Promise<"written" | "conflict" | "missing" | "live">((resolve, reject) => {
+      const current = meta.get(record.id);
+      current.onerror = () => reject(current.error);
+      current.onsuccess = () => {
+        const stored = current.result as DesignSummary | undefined;
+        if (!stored) {
+          resolve("missing");
+          return;
+        }
+        if (
+          stored.updatedAt !== expected.updatedAt ||
+          stored.metaUpdatedAt !== expected.metaUpdatedAt ||
+          stored.remoteUpdatedAt !== expected.remoteUpdatedAt ||
+          stored.cloud
+        ) {
+          resolve("conflict");
+          return;
+        }
+        const plan = plans.get(record.id);
+        plan.onerror = () => reject(plan.error);
+        plan.onsuccess = () => {
+          if (plan.result === undefined) {
+            resolve("missing");
+            return;
+          }
+          // Fingerprinting and opening this transaction both yield. The live
+          // mark can change without either IndexedDB timestamp changing.
+          if (isDesignOpenLive(record.id) || (plan.result as StoredPlan).liveReplacement) {
+            resolve("live");
+            return;
+          }
+          meta.put(toDesignSummary({ ...record, fingerprints }));
+          plans.put({
+            id: record.id,
+            project: record.project,
+            ...(liveReplacement?.pending.length ? { liveReplacement } : {}),
+          });
+          resolve("written");
+        };
+      };
+    });
+    const [result] = await Promise.all([outcome, transactionToPromise(transaction)]);
+    return result;
   } finally {
     db.close();
   }
@@ -180,17 +359,75 @@ export async function writeDesignSummary(summary: DesignSummary): Promise<void> 
   }
 }
 
-export async function deleteDesign(id: string): Promise<void> {
+/** Migration writes only derived metadata and never stamps or rewrites a plan. */
+export async function backfillDesignFingerprints(
+  id: string,
+  updatedAt: string,
+  fingerprints: PlanFingerprints,
+  expectedFingerprints?: PlanFingerprints,
+): Promise<boolean> {
+  const db = await openDesignDb();
+  try {
+    const tx = db.transaction(META_STORE, "readwrite");
+    const completed = transactionToPromise(tx);
+    const store = tx.objectStore(META_STORE);
+    let written = false;
+    const request = store.get(id);
+    request.onsuccess = () => {
+      const stored = request.result as DesignSummary | undefined;
+      // Live copies keep their edit stamp. Their freshly written fingerprints
+      // must win over a migration computed from an older body with that stamp.
+      if (
+        stored?.updatedAt === updatedAt &&
+        !(stored.fingerprints && stored.fingerprints.version >= fingerprints.version) &&
+        stored.fingerprints?.version === expectedFingerprints?.version &&
+        stored.fingerprints?.simple === expectedFingerprints?.simple &&
+        stored.fingerprints?.full === expectedFingerprints?.full
+      ) {
+        store.put({ ...stored, fingerprints });
+        written = true;
+      }
+    };
+    await completed;
+    return written;
+  } finally {
+    db.close();
+  }
+}
+
+export async function deleteDesign(
+  id: string,
+  expectedUpdatedAt?: string,
+  canDelete?: (stored: DesignSummary | undefined) => boolean,
+): Promise<boolean> {
   if (!isDesignStorageAvailable()) {
-    return;
+    return false;
   }
 
   const db = await openDesignDb();
   try {
     const transaction = db.transaction([META_STORE, PLAN_STORE], "readwrite");
-    transaction.objectStore(META_STORE).delete(id);
-    transaction.objectStore(PLAN_STORE).delete(id);
+    const meta = transaction.objectStore(META_STORE);
+    let deleted = false;
+    const remove = () => {
+      meta.delete(id);
+      transaction.objectStore(PLAN_STORE).delete(id);
+      deleted = true;
+    };
+    if (expectedUpdatedAt === undefined && !canDelete) remove();
+    else {
+      const current = meta.get(id);
+      current.onsuccess = () => {
+        const stored = current.result as DesignSummary | undefined;
+        if (
+          (expectedUpdatedAt === undefined || stored?.updatedAt === expectedUpdatedAt) &&
+          (!canDelete || canDelete(stored))
+        )
+          remove();
+      };
+    }
     await transactionToPromise(transaction);
+    return deleted;
   } finally {
     db.close();
   }

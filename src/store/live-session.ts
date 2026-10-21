@@ -3,6 +3,11 @@
 import { create } from "zustand";
 import { LiveClientState, type PendingBatch } from "@/lib/live/client-state";
 import { THIS_TAB_ID } from "@/lib/designs/design-tab-sync";
+import {
+  readDesignLiveReplacement,
+  settleDesignLiveReplacement,
+  type LiveReplacementOutbox,
+} from "@/lib/designs/design-storage";
 import { isLiveConfigured, liveSocketAddress } from "@/lib/live/live-config";
 import {
   aliveTabs,
@@ -171,6 +176,7 @@ interface Room {
   /** The snapshot arrived on the current connection. */
   joined: boolean;
   joinSent: boolean;
+  pendingLoaded: boolean;
   role?: "owner" | "editor";
   owner?: LiveMember;
   members: LiveMember[];
@@ -645,6 +651,7 @@ export class LiveSession {
     const result = room.engine.receive(frame);
     this.land(before, room.engine.view);
     if (result.own) {
+      void settleDesignLiveReplacement(room.designId, room.doc, frame.cid).catch(() => undefined);
       this.schedulePersist();
     }
     if (result.gap) {
@@ -678,6 +685,7 @@ export class LiveSession {
       }
       const before = room.engine.view;
       if (room.engine.refuse(frame.cid)) {
+        void settleDesignLiveReplacement(room.designId, room.doc, frame.cid).catch(() => undefined);
         this.land(before, room.engine.view);
         this.schedulePersist();
         useLiveSession.setState({ notice: noticeOf(`An edit was not saved: ${frame.msg}`) });
@@ -850,6 +858,7 @@ export class LiveSession {
       engine: new LiveClientState({ seq: 0, plan: liveShape(project) }),
       joined: false,
       joinSent: false,
+      pendingLoaded: false,
       members: [],
       present: [],
       fresh: takeDesignFresh(designId),
@@ -862,8 +871,23 @@ export class LiveSession {
     markDesignOpenLive(designId);
     clearInterval(this.markTimer);
     this.markTimer = setInterval(() => markDesignOpenLive(designId), OPEN_MARK_MS);
-    void this.adoptPending(room);
-    this.joinIfReady();
+    // Pending imports and offline edits must be applied before any snapshot
+    // arrives, rather than briefly replacing the canvas with the old account copy.
+    void this.adoptPending(room)
+      .then(() => {
+        if (this.room === room) {
+          room.pendingLoaded = true;
+          this.persistNow();
+          this.joinIfReady();
+        }
+      })
+      .catch(() => {
+        if (this.room === room) {
+          useLiveSession.setState({
+            notice: noticeOf("Saved edits could not be loaded. Reload this plan to reconnect."),
+          });
+        }
+      });
   }
 
   private unbind(): void {
@@ -888,7 +912,7 @@ export class LiveSession {
 
   private joinIfReady(): void {
     const room = this.room;
-    if (!room || room.joinSent || !this.welcomed) {
+    if (!room || !room.pendingLoaded || room.joinSent || !this.welcomed) {
       return;
     }
     room.joinSent = this.sendRaw({ t: "join", doc: room.doc });
@@ -896,23 +920,27 @@ export class LiveSession {
 
   /** Edits a closed tab of ours left for this plan: shown and sent with ours. */
   private async adoptPending(room: Room): Promise<void> {
-    let entries;
-    try {
-      entries = await readPending(room.doc);
-    } catch {
-      return;
-    }
+    const [entries, replacement] = await Promise.all([
+      readPending(room.doc),
+      readDesignLiveReplacement(room.designId),
+    ]);
     const alive = await aliveTabs();
     // This tab's own entry is left from an earlier visit to the plan (its
     // engine went when the tab moved to another design); others are tabs gone.
     const orphans = entries.filter(
       (entry) => entry.tabId === THIS_TAB_ID || (alive !== undefined && !alive.has(entry.tabId)),
     );
-    if (orphans.length === 0 || this.room !== room) {
+    const replacementBatches = replacement?.doc === room.doc ? replacement.pending : [];
+    if ((orphans.length === 0 && replacementBatches.length === 0) || this.room !== room) {
       return;
     }
     const before = room.engine.view;
-    const added = room.engine.adopt(orphans.flatMap((entry) => entry.pending));
+    const current = room.engine.pending.slice();
+    const batches = [...replacementBatches, ...orphans.flatMap((entry) => entry.pending)];
+    const unique = [...new Map(batches.map((batch) => [batch.cid, batch])).values()];
+    const added = room.engine.adopt(unique);
+    // Edits made while the database read waited are newer than saved edits.
+    room.engine.pending = [...added, ...current];
     this.land(before, room.engine.view);
     await Promise.all(
       orphans
@@ -1016,6 +1044,7 @@ export class LiveSession {
       // socket, and it would go again on every reconnect). It never happened.
       const before = room.engine.view;
       if (room.engine.refuse(batch.cid)) {
+        void settleDesignLiveReplacement(room.designId, room.doc, batch.cid).catch(() => undefined);
         this.land(before, room.engine.view);
         this.schedulePersist();
         useLiveSession.setState({
@@ -1077,10 +1106,12 @@ export class LiveSession {
     clearTimeout(this.persistTimer);
     this.persistTimer = undefined;
     const room = this.room;
-    if (!room) {
+    if (!room || (!room.pendingLoaded && room.engine.pending.length === 0)) {
       return;
     }
-    void writePending(room.doc, THIS_TAB_ID, room.engine.pending.slice()).catch(() => undefined);
+    void writePending(room.doc, THIS_TAB_ID, room.engine.pending.slice(), {
+      preserveStored: !room.pendingLoaded,
+    }).catch(() => undefined);
   }
 
   // -------------------------------------------------------------------------
@@ -1166,6 +1197,40 @@ export class LiveSession {
 }
 
 let session: LiveSession | undefined;
+
+/** An explicit replacement is an edit to an existing room, never a fresh-plan seed. */
+export async function prepareImportedReplacement(
+  designId: string,
+  before: FactoryProject,
+  after: FactoryProject,
+): Promise<LiveReplacementOutbox> {
+  const username = useCommunityAuthStore.getState().user?.username;
+  const owner = myAccountId();
+  if (!username || !owner)
+    throw new Error(
+      "Connect to your account before updating this plan. Keep the imported plan separately.",
+    );
+  const doc = docKey(owner, designId);
+  const [entries, replacement] = await Promise.all([
+    readPending(doc),
+    readDesignLiveReplacement(designId),
+  ]);
+  if (replacement || entries.some((entry) => entry.pending.length > 0)) {
+    throw new Error(
+      "That plan has unsent edits. Open it before updating it. Your imported plan was kept separately.",
+    );
+  }
+  const previous = liveShape(before);
+  const next = liveShape(after);
+  const engine = new LiveClientState({ seq: 0, plan: previous });
+  for (const ops of chunkOps(withRecipesTheyName(diffPlans(previous, next), previous, next))) {
+    engine.localOps(ops);
+  }
+  if (useCommunityAuthStore.getState().user?.username !== username || myAccountId() !== owner) {
+    throw new Error("Your account changed. Your imported plan was kept separately.");
+  }
+  return { doc, pending: engine.pending };
+}
 
 /** Mounted once by the app shell. Does nothing unless live plans are configured. */
 export function startLiveSessions(options?: LiveSessionOptions): () => void {

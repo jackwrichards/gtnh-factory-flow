@@ -28,8 +28,24 @@ Every save goes through `persistCanvas` in design-store.ts:
 
 ## Plans arriving and leaving
 
-- Every arriving plan (import, paste, `#p=` link, a community copy) opens as a NEW design
-  via `importProjectAsDesign`. Nothing calls `setProject` over the open design.
+- Arriving plans create a NEW design, except exact content matches from codes and `#p=`
+  links, which reopen a saved design. File imports and community copies remain new designs.
+  Nothing calls `setProject` over the open design.
+- Every plan write computes versioned simple/full fingerprints. Simple identifies
+  the graph and recipes; full adds authored configuration, counts and layout.
+  Names, personal views and presentation data do not identify content. Fingerprint
+  changes bump `FINGERPRINT_VERSION` and trigger a resumable background backfill.
+  Migration never changes plan bodies/stamps or overwrites newer live fingerprints.
+- Summary matches are candidates: validate the actual record before exact reopening.
+  A simple-only match opens separately and offers an explicit update or Keep separate.
+  Updates preserve identity and metadata, keep a closed backup, and save fresh statistics.
+  Edits, navigation, deletion, metadata changes and live ownership must be guarded
+  through verification, replacement and cleanup. Keep incoming copies with newer work.
+- Account replacements commit their live delivery intent atomically with the plan.
+  Live snapshots and account sync must never undo that intent; retries are idempotent.
+- Implementation and failure handling: [plan import reference](../../docs/plan-imports.md).
+  Tests: `open-plan-code.test.ts`, `import-fingerprint.test.ts`,
+  `fingerprint-migration.test.ts`, `design-store.test.ts`, `live-session.test.ts`.
 - The Share menu has the mod's rows in its words: Copy plan link (`<origin>/#p=gtnh1.<deflate-raw
   base64url JSON>`, `plan-code.ts`), Copy plan code (the code alone), Export plan file, Open in
   the mod. The arrival code is captured at module load (`src/lib/open-plan-code.ts`) because
@@ -106,7 +122,7 @@ changes nothing until then. Architecture and protocol: `docs/live.md`.
   `gtnhplanner` (the game's data is the original's: its placed machines, its own settings).
 - ARRIVING. Someone else's batch, a refusal, a fresh snapshot, an undo: the engine's view before and after is diffed
   and only that lands, through `applyLiveOps` (same objects for untouched things, re-solved like any edit). It is the
-  same design changing, never an arriving plan: the "every arriving plan opens as a NEW design" rule is untouched
+  same design changing, never an arriving plan: the import rules above are untouched
   (opening a shared plan the first time is the arrival, `openSharedDesign`).
 - ONE MODE. A live plan lands through `applyLiveOps`, not the loading funnel, so that action converts a plan not in
   plan mode yet (an older build's, or the game's, which writes Solve plans) as every landing plan is

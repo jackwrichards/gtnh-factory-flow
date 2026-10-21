@@ -2,7 +2,7 @@ import { calculateThroughput } from "@/lib/solver";
 import type { FactoryProject, ThroughputResult } from "@/lib/model/types";
 
 /**
- * The store's one door to the solver, sized to the board it is asked about.
+ * The canvas's solver router, sized to the board it is asked about.
  *
  * A small board solves synchronously: the result is back before the state
  * update lands. A BIG board must not run on the main thread (seconds to
@@ -70,6 +70,43 @@ try {
   // Storage refused (a private window): nothing was stored either.
 }
 
+/**
+ * A completed solve of this snapshot for persistence. Unlike the canvas API,
+ * this never returns placeholder books or shares its coalescing queue: another
+ * edit must not supersede the result a pending save is waiting for.
+ */
+export async function solveFreshBooks(project: FactoryProject): Promise<ThroughputResult> {
+  const snapshot = structuredClone(project);
+  if (typeof Worker === "undefined") return calculateThroughput(snapshot);
+  const key = booksContentKey(snapshot);
+  return new Promise((resolve, reject) => {
+    let requestWorker: Worker | undefined;
+    const fail = (reason: unknown) => {
+      requestWorker?.terminate();
+      reject(reason instanceof Error ? reason : new Error(String(reason)));
+    };
+    try {
+      requestWorker = new Worker(new URL("./solve-books.worker.ts", import.meta.url));
+      requestWorker.onmessage = (
+        event: MessageEvent<{ key: string; result?: ThroughputResult; error?: string }>,
+      ) => {
+        const { key: resultKey, result, error } = event.data;
+        if (error || resultKey !== key || !result || result.stale) {
+          fail(new Error(error ?? "The solver did not return fresh results for this plan."));
+          return;
+        }
+        requestWorker?.terminate();
+        resolve(result);
+      };
+      requestWorker.onerror = (event) =>
+        fail(new Error(event.message || "The plan could not be solved."));
+      requestWorker.postMessage({ key, project: snapshot });
+    } catch (error) {
+      fail(error);
+    }
+  });
+}
+
 const BIG_BOOKS_CACHE_LIMIT = 8;
 const bigBooksCache = new Map<string, ThroughputResult>();
 
@@ -130,9 +167,7 @@ export function solveBooks(project: FactoryProject): ThroughputResult {
   // The previous books stand in while the worker runs. After a tab switch
   // they belong to another plan, whose node ids simply miss - the board reads
   // that as empty books until the real ones land, which is the honest state.
-  const placeholder: ThroughputResult = lastBooks
-    ? { ...lastBooks, stale: true }
-    : emptyBooks();
+  const placeholder: ThroughputResult = lastBooks ? { ...lastBooks, stale: true } : emptyBooks();
   lastBooks = placeholder;
   return placeholder;
 }
@@ -143,7 +178,8 @@ export function solveBooks(project: FactoryProject): ThroughputResult {
  * design store also restamps it on every save, which would defeat the cache.
  */
 function booksContentKey(project: FactoryProject): string {
-  const { view: _view, ...solved } = project;
+  const { view, ...solved } = project;
+  void view;
   return JSON.stringify(solved);
 }
 

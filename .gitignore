@@ -69,3 +69,6 @@ tools/parity/out/
 
 # the live service bundle (npm run build:live)
 /dist-live/
+
+# JetBrains IDEs
+.idea/

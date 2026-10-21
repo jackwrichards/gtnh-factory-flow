@@ -24,7 +24,7 @@ function design(id: string, name: string, extra: Partial<DesignSummary> = {}): D
 }
 
 const actions = {
-  switchToDesign: vi.fn(async () => undefined),
+  switchToDesign: vi.fn(async () => true),
   addDesign: vi.fn(async () => undefined),
   closeDesigns: vi.fn(async () => undefined),
   removeDesign: vi.fn(async () => undefined),

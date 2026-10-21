@@ -37,7 +37,7 @@ function design(id: string, name: string, extra: Partial<DesignSummary> = {}): D
   return { id, name, createdAt: "2026-10-01T00:00:00.000Z", updatedAt: "2026-10-01T00:00:00.000Z", ...extra };
 }
 const actions = {
-  switchToDesign: vi.fn(async () => undefined),
+  switchToDesign: vi.fn(async () => true),
   addDesign: vi.fn(async () => undefined),
   removeDesign: vi.fn(async () => undefined),
   renameDesign: vi.fn(async () => undefined),

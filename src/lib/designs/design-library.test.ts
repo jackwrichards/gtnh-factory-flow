@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createEmptyProject } from "@/examples";
+import { FINGERPRINT_VERSION } from "../import-export/import-fingerprint";
 import {
   UNTITLED_DESIGN_NAME,
   UNTITLED_FOLDER_NAME,
@@ -70,6 +71,11 @@ describe("conflictCopyName", () => {
 });
 
 describe("keepStoredPlanMarks", () => {
+  it("keeps current content fingerprints when an older tab writes metadata", () => {
+    const old = makeSummary("old", "Steel", "2026-01-01");
+    const fingerprints = { version: FINGERPRINT_VERSION, simple: "simple", full: "full" } as const;
+    expect(keepStoredPlanMarks(old, { ...old, fingerprints }).fingerprints).toBe(fingerprints);
+  });
   const stored: DesignSummary = {
     ...makeSummary("a", "Oil", "2026-09-25T10:00:00.000Z"),
     updatedAt: "2026-09-25T12:00:00.000Z",
@@ -238,6 +244,17 @@ describe("pickDesignAfterDelete", () => {
 });
 
 describe("toDesignSummary", () => {
+  it("carries stored fingerprints in summaries; a copy is recalculated when written", () => {
+    const record = {
+      ...createDesign(createEmptyProject(), "Steel"),
+      fingerprints: { version: FINGERPRINT_VERSION, simple: "simple", full: "full" } as const,
+    };
+    expect(
+      toDesignSummary(updateDesignProject(record, { ...record.project, notes: "edited" }))
+        .fingerprints,
+    ).toBe(record.fingerprints);
+    expect(duplicateDesign(record, []).fingerprints).toBeUndefined();
+  });
   it("carries the shelf fields and reads the post mark off the plan", () => {
     const record = {
       ...createDesign(createEmptyProject(), "Oil"),

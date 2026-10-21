@@ -9,6 +9,8 @@ import {
   listDesignFolders,
   listDesignSummaries,
   readDesign,
+  readDesignLiveReplacement,
+  replaceDesignIfUnchanged,
   writeDesign,
   writeDesignFolder,
   writeDesignSummary,
@@ -471,14 +473,28 @@ async function applyDesignAction(action: DesignAction): Promise<boolean> {
         // The canvas follows the live plan; only the metadata comes across.
         return applyDesignAction({ kind: "pull-meta", id: action.id, remote: action.remote });
       }
+      const existing = await readDesign(action.id);
       const { design, plan } = await fetchRemoteDesignPlan(action.id);
       const project = parseFactoryProjectJson(JSON.stringify(plan));
-      const existing = await readDesign(action.id);
-      await writeDesign({
+      const pulled = {
         ...existing,
         ...remoteMetaToSummary(design),
         project: { ...project, name: design.name },
-      });
+      };
+      if (existing) {
+        // A fetch started before a local update or live join cannot restore
+        // its old body. Reconcile again against the record that won the race.
+        const outcome = await replaceDesignIfUnchanged(pulled, existing);
+        if (outcome === "live") {
+          return applyDesignAction({ kind: "pull-meta", id: action.id, remote: design });
+        }
+        if (outcome !== "written") {
+          runAgain = true;
+          return false;
+        }
+      } else {
+        await writeDesign(pulled);
+      }
       if (action.id === store.activeDesignId) {
         await store.reloadActiveDesign();
         setStatus({ reloadedActiveAt: new Date().toISOString() });
@@ -537,8 +553,10 @@ async function applyDesignAction(action: DesignAction): Promise<boolean> {
         return false;
       }
       let result: Awaited<ReturnType<typeof pushRemoteDesign>>;
-      // Open live (here or in another tab): the live service writes the plan.
-      const withPlan = action.withPlan && !isDesignOpenLive(record.id);
+      // A committed replacement waiting for live delivery also belongs to
+      // the live service, even when its tab has closed before joining.
+      const replacement = await readDesignLiveReplacement(record.id);
+      const withPlan = action.withPlan && !replacement && !isDesignOpenLive(record.id);
       const push = (sendPlan: boolean) =>
         pushRemoteDesign(record.id, {
           // The account refuses longer names, so clip to its limit.

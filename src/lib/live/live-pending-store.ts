@@ -62,16 +62,40 @@ export async function writePending(
   doc: string,
   tabId: string,
   pending: PendingBatch[],
+  options?: { preserveStored?: boolean },
 ): Promise<void> {
   if (!available()) {
     return;
   }
   const db = await open();
   try {
-    const store = db.transaction(STORE, "readwrite").objectStore(STORE);
+    const transaction = db.transaction(STORE, "readwrite");
+    const committed = new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () =>
+        reject(transaction.error ?? new Error("Live edits could not be saved."));
+      transaction.onerror = () =>
+        reject(transaction.error ?? new Error("Live edits could not be saved."));
+    });
+    const store = transaction.objectStore(STORE);
     const key = pendingKey(doc, tabId);
-    if (pending.length === 0) {
-      await done(store.delete(key));
+    if (options?.preserveStored) {
+      // The room may still be loading old pending edits. New edits can be
+      // appended, but must never erase the entry they have not adopted yet.
+      const current = store.get(key);
+      current.onsuccess = () => {
+        const saved = (current.result as StoredPending | undefined)?.pending ?? [];
+        const seen = new Set(saved.map((batch) => batch.cid));
+        store.put({
+          key,
+          doc,
+          tabId,
+          pending: [...saved, ...pending.filter((batch) => !seen.has(batch.cid))],
+          updatedAt: new Date().toISOString(),
+        });
+      };
+    } else if (pending.length === 0) {
+      store.delete(key);
     } else {
       const entry: StoredPending = {
         key,
@@ -80,8 +104,9 @@ export async function writePending(
         pending,
         updatedAt: new Date().toISOString(),
       };
-      await done(store.put(entry));
+      store.put(entry);
     }
+    await committed;
   } finally {
     db.close();
   }

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DesignRecord, DesignSummary } from "@/lib/designs/design-library";
 import type { PendingBatch } from "@/lib/live/client-state";
+import type { LiveReplacementOutbox } from "@/lib/designs/design-storage";
 
 /**
  * Live editing wired into the stores, against a fake live service speaking
@@ -12,6 +13,7 @@ import type { PendingBatch } from "@/lib/live/client-state";
 
 const storage = vi.hoisted(() => ({
   records: new Map<string, DesignRecord>(),
+  replacements: new Map<string, LiveReplacementOutbox>(),
 }));
 
 vi.mock("@/lib/designs/design-storage", () => ({
@@ -25,6 +27,14 @@ vi.mock("@/lib/designs/design-storage", () => ({
   listDesignFolders: vi.fn(async () => []),
   readDesign: vi.fn(async (id: string) => storage.records.get(id)),
   readDesignSummary: vi.fn(async (id: string) => storage.records.get(id)),
+  readDesignLiveReplacement: vi.fn(async (id: string) => storage.replacements.get(id)),
+  settleDesignLiveReplacement: vi.fn(async (id: string, doc: string, cid: string) => {
+    const outbox = storage.replacements.get(id);
+    if (outbox?.doc !== doc) return;
+    const pending = outbox.pending.filter((batch) => batch.cid !== cid);
+    if (pending.length) storage.replacements.set(id, { doc, pending });
+    else storage.replacements.delete(id);
+  }),
   writeDesign: vi.fn(async (record: DesignRecord) => {
     storage.records.set(record.id, record);
   }),
@@ -32,6 +42,21 @@ vi.mock("@/lib/designs/design-storage", () => ({
     storage.records.set(record.id, record);
     return "written";
   }),
+  replaceDesignIfUnchanged: vi.fn(
+    async (record: DesignRecord, expected: DesignSummary, outbox?: LiveReplacementOutbox) => {
+      const stored = storage.records.get(record.id);
+      if (!stored) return "missing";
+      if (
+        stored.updatedAt !== expected.updatedAt ||
+        stored.metaUpdatedAt !== expected.metaUpdatedAt ||
+        stored.remoteUpdatedAt !== expected.remoteUpdatedAt
+      )
+        return "conflict";
+      storage.records.set(record.id, record);
+      if (outbox) storage.replacements.set(record.id, structuredClone(outbox));
+      return "written";
+    },
+  ),
   writeDesignSummary: vi.fn(async () => undefined),
   writeDesignFolder: vi.fn(async () => undefined),
   deleteDesign: vi.fn(async (id: string) => {
@@ -61,8 +86,13 @@ const pendingStore = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/live/live-pending-store", () => ({
   pendingKey: (doc: string, tabId: string) => `${doc}|${tabId}`,
-  writePending: vi.fn(async (doc: string, tabId: string, pending: PendingBatch[]) => {
+  writePending: vi.fn(async (doc: string, tabId: string, pending: PendingBatch[], options?: { preserveStored?: boolean }) => {
     const key = `${doc}|${tabId}`;
+    if (options?.preserveStored) {
+      const saved = pendingStore.entries.get(key)?.pending ?? [];
+      const seen = new Set(saved.map(batch => batch.cid));
+      pending = [...saved, ...pending.filter(batch => !seen.has(batch.cid))];
+    }
     if (pending.length === 0) {
       pendingStore.entries.delete(key);
     } else {
@@ -279,6 +309,7 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_LIVE_URL", "ws://live.test/live");
   service = new FakeService();
   storage.records.clear();
+  storage.replacements.clear();
   pendingStore.entries.clear();
   useLiveSession.setState({
     status: "off",
@@ -299,6 +330,252 @@ afterEach(async () => {
 });
 
 describe("live editing in the store", () => {
+  it("sends an imported replacement as pending edits before accepting the account snapshot", async () => {
+    const { planFingerprints } = await import("@/lib/import-export/import-fingerprint");
+    const old = planWith(annotation("n1", "old"));
+    const incoming = planWith(annotation("n1", "replacement"));
+    const target: DesignRecord = {
+      id: DESIGN,
+      name: "Target",
+      createdAt: "2026-10-01",
+      updatedAt: "2026-10-01",
+      remoteUpdatedAt: "2026-10-01",
+      project: old,
+    };
+    const source: DesignRecord = {
+      id: "incoming",
+      name: "Incoming",
+      createdAt: "2026-10-01",
+      updatedAt: "2026-10-01",
+      project: incoming,
+    };
+    storage.records.set(DESIGN, target);
+    storage.records.set(source.id, source);
+    // A remote addition since this device last opened the target must survive too.
+    service.plan = JSON.parse(
+      JSON.stringify(planWith(annotation("n1", "old"), annotation("remote", "Bob"))),
+    );
+    useFactoryStore.getState().markHydratedProject(incoming);
+    useDesignStore.setState({
+      designs: [target, source],
+      activeDesignId: source.id,
+      isHydrated: true,
+    });
+    useCommunityAuthStore.setState({ user: { username: "ann" }, hasHydrated: true });
+    stop = startLiveSessions({
+      url: () => "ws://live.test/live",
+      createSocket: (url) => service.connect(url),
+    });
+    await settle();
+    expect(service.sent("join")).toHaveLength(0);
+    await useDesignStore
+      .getState()
+      .replaceDesignFromImport(DESIGN, incoming, (await planFingerprints(old)).full);
+    await settle();
+    expect(annotations().map((note) => note.text)).toEqual(["replacement", "Bob"]);
+    expect((service.plan.annotations as FactoryAnnotation[]).map((note) => note.text)).toEqual([
+      "replacement",
+      "Bob",
+    ]);
+    expect(service.sent("ops")).toHaveLength(1);
+    expect(useLiveSession.getState().pending).toBe(0);
+    service.socket!.drop();
+    await settle(30);
+    expect(annotations().find((note) => note.id === "n1")!.text).toBe("replacement");
+  });
+
+  it("waits for saved pending edits before joining and never clears them on an early departure", async () => {
+    const { readPending } = await import("@/lib/live/live-pending-store");
+    let release!: (entries: Awaited<ReturnType<typeof readPending>>) => void;
+    vi.mocked(readPending).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    pendingStore.entries.set(`${DOC}|tab-a`, {
+      key: `${DOC}|tab-a`,
+      doc: DOC,
+      tabId: "tab-a",
+      pending: [
+        {
+          cid: "saved",
+          ops: [{ o: "patch", c: "annotations", id: "n1", f: { text: "saved" } }],
+          inverse: [],
+        },
+      ],
+    });
+    await openLiveDesign(planWith(annotation("n1", "local")));
+    expect(service.sent("join")).toHaveLength(0);
+    useFactoryStore.getState().updateAnnotation("n1", { text: "new edit while loading" });
+    useDesignStore.setState({ activeDesignId: undefined });
+    release([]);
+    await settle();
+    expect(service.sent("join")).toHaveLength(0);
+    expect(pendingStore.entries.get(`${DOC}|tab-a`)?.pending[0].cid).toBe("saved");
+    expect(pendingStore.entries.get(`${DOC}|tab-a`)?.pending).toHaveLength(2);
+  });
+
+  it("requires existing unsent target edits to be resolved before preparing a replacement", async () => {
+    const { prepareImportedReplacement } = await import("./live-session");
+    // Establish the account identity, then leave the target room.
+    await openLiveDesign(planWith(annotation("n1", "old")));
+    useDesignStore.setState({ activeDesignId: undefined });
+    pendingStore.entries.set(`${DOC}|tab-gone`, {
+      key: `${DOC}|tab-gone`,
+      doc: DOC,
+      tabId: "tab-gone",
+      pending: [
+        {
+          cid: "saved",
+          ops: [{ o: "patch", c: "annotations", id: "n1", f: { text: "unsent" } }],
+          inverse: [],
+        },
+      ],
+    });
+    await expect(
+      prepareImportedReplacement(
+        DESIGN,
+        planWith(annotation("n1", "old")),
+        planWith(annotation("n1", "replacement")),
+      ),
+    ).rejects.toThrow("unsent edits");
+    expect(pendingStore.entries.get(`${DOC}|tab-gone`)?.pending[0].cid).toBe("saved");
+  });
+
+  it("keeps edits made during pending adoption newer than the saved edits", async () => {
+    const { readPending } = await import("@/lib/live/live-pending-store");
+    pendingStore.entries.set(`${DOC}|tab-a`, {
+      key: `${DOC}|tab-a`,
+      doc: DOC,
+      tabId: "tab-a",
+      pending: [
+        {
+          cid: "saved",
+          ops: [{ o: "patch", c: "annotations", id: "n1", f: { text: "saved" } }],
+          inverse: [],
+        },
+      ],
+    });
+    const entries = await readPending(DOC);
+    let release!: (entries: Awaited<ReturnType<typeof readPending>>) => void;
+    vi.mocked(readPending).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    await openLiveDesign(planWith(annotation("n1", "local")));
+    useFactoryStore.getState().updateAnnotation("n1", { text: "newest" });
+    release(entries);
+    await settle(200);
+    expect(annotations()[0].text).toBe("newest");
+    expect((service.plan.annotations as FactoryAnnotation[])[0].text).toBe("newest");
+  });
+
+  it("recovers a committed replacement after pending persistence fails and the session restarts", async () => {
+    const { planFingerprints } = await import("@/lib/import-export/import-fingerprint");
+    const { writePending } = await import("@/lib/live/live-pending-store");
+    const old = planWith(annotation("n1", "old"));
+    const incoming = planWith(annotation("n1", "replacement"));
+    await openLiveDesign(old);
+    const target = storage.records.get(DESIGN)!;
+    const source: DesignRecord = {
+      id: "incoming",
+      name: "Incoming",
+      createdAt: target.createdAt,
+      updatedAt: target.updatedAt,
+      project: incoming,
+    };
+    storage.records.set(source.id, source);
+    useDesignStore.setState({ activeDesignId: source.id, designs: [target, source] });
+    useFactoryStore.getState().markHydratedProject(incoming);
+    const originalWrite = vi.mocked(writePending).getMockImplementation()!;
+    vi.mocked(writePending).mockRejectedValue(new Error("Storage full"));
+    try {
+      service.silent = true;
+      await useDesignStore
+        .getState()
+        .replaceDesignFromImport(DESIGN, incoming, (await planFingerprints(old)).full);
+      await settle();
+      expect(storage.records.get(DESIGN)!.project.annotations![0].text).toBe("replacement");
+      expect(storage.replacements.get(DESIGN)?.pending).toHaveLength(1);
+      expect(pendingStore.entries.size).toBe(0);
+      stop!();
+      service.silent = false;
+      stop = startLiveSessions({
+        url: () => "ws://live.test/live",
+        createSocket: (url) => service.connect(url),
+      });
+      await settle();
+      expect(annotations()[0].text).toBe("replacement");
+      expect((service.plan.annotations as FactoryAnnotation[])[0].text).toBe("replacement");
+      expect(storage.replacements.has(DESIGN)).toBe(false);
+    } finally {
+      vi.mocked(writePending).mockImplementation(originalWrite);
+    }
+  });
+
+  it("does not queue a rejected replacement for later live delivery", async () => {
+    const { replaceDesignIfUnchanged } = await import("@/lib/designs/design-storage");
+    const { planFingerprints } = await import("@/lib/import-export/import-fingerprint");
+    const old = planWith(annotation("n1", "old"));
+    await openLiveDesign(old);
+    useDesignStore.setState({ activeDesignId: undefined });
+    vi.mocked(replaceDesignIfUnchanged).mockResolvedValueOnce("conflict");
+    await expect(
+      useDesignStore
+        .getState()
+        .replaceDesignFromImport(
+          DESIGN,
+          planWith(annotation("n1", "replacement")),
+          (await planFingerprints(old)).full,
+        ),
+    ).rejects.toThrow("Another tab changed");
+    expect(storage.replacements.size).toBe(0);
+    expect(pendingStore.entries.size).toBe(0);
+    expect(storage.records.get(DESIGN)!.project.annotations![0].text).toBe("old");
+  });
+
+  it("resends the same batch id if acknowledgement cleanup fails, without applying it twice", async () => {
+    const { prepareImportedReplacement } = await import("./live-session");
+    const { settleDesignLiveReplacement } = await import("@/lib/designs/design-storage");
+    const old = planWith(annotation("n1", "old"));
+    const incoming = planWith(annotation("n1", "replacement"));
+    await openLiveDesign(old);
+    useDesignStore.setState({ activeDesignId: undefined });
+    const outbox = await prepareImportedReplacement(DESIGN, old, incoming);
+    storage.replacements.set(DESIGN, outbox);
+    storage.records.set(DESIGN, { ...storage.records.get(DESIGN)!, project: incoming });
+    vi.mocked(settleDesignLiveReplacement).mockRejectedValueOnce(new Error("Storage unavailable"));
+    await useDesignStore.getState().switchToDesign(DESIGN);
+    await settle();
+    expect(storage.replacements.get(DESIGN)?.pending[0].cid).toBe(outbox.pending[0].cid);
+    expect(service.seq).toBe(1);
+    stop!();
+    stop = startLiveSessions({
+      url: () => "ws://live.test/live",
+      createSocket: (url) => service.connect(url),
+    });
+    await settle();
+    expect(service.sent("ops").map((frame) => frame.cid)).toEqual([
+      outbox.pending[0].cid,
+      outbox.pending[0].cid,
+    ]);
+    expect(service.seq).toBe(1);
+    expect(annotations()[0].text).toBe("replacement");
+    expect(storage.replacements.has(DESIGN)).toBe(false);
+  });
+
+  it("keeps the local canvas and does not join when pending edits cannot be read", async () => {
+    const { readPending } = await import("@/lib/live/live-pending-store");
+    vi.mocked(readPending).mockRejectedValueOnce(new Error("Storage unavailable"));
+    await openLiveDesign(planWith(annotation("n1", "local")), planWith(annotation("n1", "old")));
+    expect(service.sent("join")).toHaveLength(0);
+    expect(annotations()[0].text).toBe("local");
+    expect(useLiveSession.getState().notice?.text).toContain("Saved edits could not be loaded");
+  });
+
   it("joins the open cloud design and lands its live plan on the canvas, as the same design", async () => {
     await openLiveDesign(planWith(annotation("n1", "old")), planWith(annotation("n1", "new")));
 

@@ -40,6 +40,7 @@ import { SharedAddressSync } from "./SharedAddressSync";
 import { PublicViewBar } from "./community/PublicViewBar";
 import { ViewOnlyNotice } from "./community/ViewOnlyNotice";
 import { TabConflictNotice } from "./TabConflictNotice";
+import { PlanImportNotice } from "./PlanImportNotice";
 import { LiveNotice } from "./live/LiveNotice";
 import { TaskBoard, TaskLinkIndexController } from "./tasks/TaskBoard";
 import { AddToTaskMenu } from "./tasks/AddToTask";
@@ -415,6 +416,7 @@ const BoardColumn = memo(function BoardColumn() {
       <div className="min-w-0">
         {covering ? null : publicView ? <PublicViewBar key={publicView.id} /> : null}
         {covering ? null : <TabConflictNotice />}
+        {covering ? null : <PlanImportNotice />}
         <LiveNotice />
       </div>
       {/*
