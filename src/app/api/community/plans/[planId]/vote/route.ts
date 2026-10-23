@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
 import type { CommunityVoteResponse } from "@/lib/community/types";
 import {
-  checkRateLimit,
+  accountKey,
+  addressKey,
+  checkRateLimits,
   getCommunityDb,
+  getSessionUser,
   isCommunityConfigured,
-  makeActorKey,
+  isMissingColumnError,
   makeVoterKey,
 } from "@/lib/server/community";
 import { invalidatePlanListCache } from "@/lib/server/plan-list-cache";
@@ -14,8 +17,8 @@ export const dynamic = "force-dynamic";
 
 /**
  * Casts, switches, or (when re-sending the same value) retracts a vote.
- * Votes are keyed by account or device id (see makeVoterKey); the IP only
- * feeds the rate limit.
+ * Only a signed-in account votes, once per plan (see makeVoterKey); the
+ * account and the address each feed a rate limit.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ planId: string }> }) {
   if (!isCommunityConfigured()) {
@@ -27,12 +30,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ pla
     const body = (await request.json()) as { deviceId?: unknown; value?: unknown };
     const deviceId = typeof body.deviceId === "string" ? body.deviceId.slice(0, 64) : "";
     const value = body.value === 1 || body.value === -1 ? body.value : undefined;
-    if (!deviceId || value === undefined) {
+    if (value === undefined) {
       return NextResponse.json({ error: "Invalid vote." }, { status: 400 });
     }
 
-    const actorKey = makeActorKey(request, deviceId);
-    if (!(await checkRateLimit(actorKey, "vote", 60, 60 * 10))) {
+    // One vote per account: a device id is whatever the client sends, so
+    // anonymous votes could be cast without end.
+    const sessionUser = await getSessionUser(request);
+    if (!sessionUser) {
+      return NextResponse.json({ error: "Sign in to vote." }, { status: 401 });
+    }
+    if (
+      !(await checkRateLimits([
+        { actorKey: accountKey(sessionUser.id), action: "vote", max: 60, windowSeconds: 60 * 10 },
+        { actorKey: addressKey(request), action: "vote", max: 120, windowSeconds: 60 * 10 },
+      ]))
+    ) {
       return NextResponse.json({ error: "Voting too fast. Slow down." }, { status: 429 });
     }
     const voterKey = await makeVoterKey(request, deviceId);
@@ -50,9 +63,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ pla
       await db.from("community_votes").delete().eq("plan_id", planId).eq("voter_key", voterKey);
       myVote = undefined;
     } else {
-      const { error } = await db
+      // user_id carries the database's one-vote-per-account index; a database
+      // not yet migrated takes the vote without it (voter_key is still the account).
+      let { error } = await db
         .from("community_votes")
-        .upsert({ plan_id: planId, voter_key: voterKey, value });
+        .upsert({ plan_id: planId, voter_key: voterKey, user_id: sessionUser.id, value });
+      if (error && isMissingColumnError(error)) {
+        ({ error } = await db
+          .from("community_votes")
+          .upsert({ plan_id: planId, voter_key: voterKey, value }));
+      }
       if (error) {
         throw new Error(error.message);
       }

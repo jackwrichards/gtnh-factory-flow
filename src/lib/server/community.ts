@@ -198,12 +198,10 @@ export function makeActorKey(request: Request, deviceId?: string): string {
 }
 
 /**
- * Who a VOTE belongs to: the signed-in user, else the browser's device id
- * (a random UUID kept in localStorage).
- *
- * Not the actor key above: it folds the client IP in, and IPv6 privacy
- * addresses and carrier NAT change a browser's IP every few minutes, which
- * would let one person vote again.
+ * Who a vote belongs to: the signed-in user, else the browser's device id
+ * (a random UUID kept in localStorage). Casting a vote needs an account, since
+ * the device id is whatever the client sends; the device form only finds
+ * votes cast before that rule, for `myVote`.
  */
 export async function makeVoterKey(request: Request, deviceId: string): Promise<string> {
   const user = await getSessionUser(request);
@@ -311,6 +309,43 @@ export async function checkRateLimit(
     return false;
   }
   await recordEvents([{ actorKey, action }]);
+  return true;
+}
+
+export interface RateLimit {
+  actorKey: string;
+  action: string;
+  max: number;
+  windowSeconds: number;
+}
+
+/** Rate-limit key for the caller's address alone: a client-sent device id never resets it. */
+export function addressKey(request: Request): string {
+  return saltedKey(`ip:${clientAddress(request)}`);
+}
+
+/** Rate-limit key for an account. */
+export function accountKey(userId: string): string {
+  return saltedKey(`user:${userId}`);
+}
+
+/** Rate-limit key for the whole site: a cap that address-spreading proxies cannot dodge. */
+export const SITE_KEY = "site";
+
+/**
+ * Every limit must have room, or none is spent. An accepted action is
+ * recorded once per key in one insert.
+ */
+export async function checkRateLimits(limits: RateLimit[]): Promise<boolean> {
+  const counts = await Promise.all(
+    limits.map((limit) => countEvents(limit.actorKey, limit.action, limit.windowSeconds)),
+  );
+  if (counts.some((count, index) => count >= limits[index].max)) {
+    return false;
+  }
+  // An hour and a day window on one key share their events: record once.
+  const events = new Map(limits.map(({ actorKey, action }) => [`${actorKey}\n${action}`, { actorKey, action }]));
+  await recordEvents([...events.values()]);
   return true;
 }
 

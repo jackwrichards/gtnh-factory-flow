@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import {
-  checkRateLimit,
+  addressKey,
+  checkRateLimits,
+  SITE_KEY,
   getCommunityDb,
   hashPassword,
   isCommunityConfigured,
-  makeActorKey,
   makeSessionToken,
   sessionCookieHeader,
 } from "@/lib/server/community";
@@ -38,8 +39,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const actorKey = makeActorKey(request);
-    if (!(await checkRateLimit(actorKey, "register", 5, 60 * 60))) {
+    // Per address, and a site-wide cap: thousands of accounts have been made
+    // from thousands of addresses, a handful each.
+    if (
+      !(await checkRateLimits([
+        { actorKey: addressKey(request), action: "register", max: 5, windowSeconds: 60 * 60 },
+        { actorKey: addressKey(request), action: "register", max: 10, windowSeconds: 24 * 60 * 60 },
+        { actorKey: SITE_KEY, action: "register", max: 60, windowSeconds: 60 * 60 },
+      ]))
+    ) {
       return NextResponse.json(
         { error: "Too many accounts created. Try again later." },
         { status: 429 },

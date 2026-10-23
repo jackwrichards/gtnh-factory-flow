@@ -277,3 +277,10 @@ create table if not exists library_design_members (
 create index if not exists library_design_members_member on library_design_members (member_id);
 
 alter table library_design_members enable row level security;
+
+-- One vote per account per plan (supabase/migrations/2026-10-23-votes-per-account.sql).
+alter table community_votes
+  add column if not exists user_id uuid references community_users (id) on delete cascade;
+
+create unique index if not exists community_votes_one_per_account
+  on community_votes (plan_id, user_id) where user_id is not null;

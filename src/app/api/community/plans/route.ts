@@ -15,15 +15,18 @@ import {
 import { normalizeBlueprintTags } from "@/lib/blueprints/types";
 import { applyPlanSearch, parsePlanSearch } from "@/lib/community/search-query";
 import {
-  checkRateLimit,
+  accountKey,
+  addressKey,
+  checkRateLimits,
+  SITE_KEY,
   communityStorageErrorMessage,
   getCommunityDb,
   getSessionUser,
   isCommunityConfigured,
-  makeActorKey,
   makeVoterKey,
   parseEntryIcon,
   isMissingColumnError,
+  makeActorKey,
   PLAN_ACTIVITY_COLUMNS,
   PLAN_SUMMARY_COLUMNS,
   PLAN_SUMMARY_COLUMNS_LEGACY,
@@ -292,8 +295,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Refusing to share an empty plan." }, { status: 400 });
     }
 
-    const actorKey = makeActorKey(request, deviceId);
-    if (!(await checkRateLimit(actorKey, "upload", 10, 60 * 60))) {
+    // Per account, per address and for the whole site: spam has come from
+    // thousands of accounts and addresses at once, each posting once.
+    if (
+      !(await checkRateLimits([
+        { actorKey: accountKey(sessionUser.id), action: "upload", max: 10, windowSeconds: 60 * 60 },
+        { actorKey: accountKey(sessionUser.id), action: "upload", max: 30, windowSeconds: 24 * 60 * 60 },
+        { actorKey: addressKey(request), action: "upload", max: 10, windowSeconds: 60 * 60 },
+        { actorKey: SITE_KEY, action: "upload", max: 120, windowSeconds: 60 * 60 },
+      ]))
+    ) {
       return NextResponse.json(
         { error: "Upload rate limit reached. Try again later." },
         { status: 429 },
@@ -329,7 +340,7 @@ export async function POST(request: Request) {
         highest_tier: stats.highestTier ?? null,
         highest_tier_index: stats.highestTierIndex,
         stats_version: APP_VERSION,
-        uploader_key: actorKey,
+        uploader_key: makeActorKey(request, deviceId),
       };
     let { data, error } = await db
       .from("community_plans")

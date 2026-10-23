@@ -86,3 +86,10 @@ The instance is small and has gone down under load. Rules:
   `LIVE_INTERNAL_TOKEN`). A failed notice loses nothing: the service checks membership on every join.
 - Account search is limited in memory (`memory-rate.ts`): a share box asks on every keystroke.
 - Exam: `app/api/library/cloud-plans.test.ts` (against the local database).
+
+## Community abuse limits (community.ts, app/api/community)
+
+- A vote needs an account, once per plan (`community_votes_one_per_account`). Never key a limit on the client's
+  device id: `checkRateLimits` takes account, address (`addressKey`) and site (`SITE_KEY`) limits together.
+- Uploads: 10 an hour and 30 a day per account, 10 an hour per address, 120 an hour site-wide. Sign-ups: 5 an hour
+  and 10 a day per address, 60 an hour site-wide. Exam: `app/api/community/community-abuse.test.ts`.

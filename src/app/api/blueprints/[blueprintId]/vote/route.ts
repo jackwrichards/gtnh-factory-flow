@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import type { BlueprintVoteResponse } from "@/lib/blueprints/types";
 import {
-  checkRateLimit,
+  accountKey,
+  addressKey,
+  checkRateLimits,
   getCommunityDb,
+  getSessionUser,
   isCommunityConfigured,
-  makeActorKey,
   makeVoterKey,
 } from "@/lib/server/community";
 import {
@@ -33,12 +35,21 @@ export async function POST(
     const body = (await request.json()) as { deviceId?: unknown; value?: unknown };
     const deviceId = typeof body.deviceId === "string" ? body.deviceId.slice(0, 64) : "";
     const value = body.value === 1 || body.value === -1 ? body.value : undefined;
-    if (!deviceId || value === undefined) {
+    if (value === undefined) {
       return NextResponse.json({ error: "Invalid vote." }, { status: 400 });
     }
 
-    const actorKey = makeActorKey(request, deviceId);
-    if (!(await checkRateLimit(actorKey, "blueprint-vote", 60, 60 * 10))) {
+    // One vote per account: a device id is whatever the client sends.
+    const sessionUser = await getSessionUser(request);
+    if (!sessionUser) {
+      return NextResponse.json({ error: "Sign in to vote." }, { status: 401 });
+    }
+    if (
+      !(await checkRateLimits([
+        { actorKey: accountKey(sessionUser.id), action: "blueprint-vote", max: 60, windowSeconds: 60 * 10 },
+        { actorKey: addressKey(request), action: "blueprint-vote", max: 120, windowSeconds: 60 * 10 },
+      ]))
+    ) {
       return NextResponse.json({ error: "Voting too fast. Slow down." }, { status: 429 });
     }
     const voterKey = await makeVoterKey(request, deviceId);
