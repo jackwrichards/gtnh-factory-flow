@@ -161,6 +161,9 @@ The board must stay smooth with 100+ cards on weak PCs.
 - Other people in a live plan are `LivePresenceLayer.tsx`, mounted only with live plans: a ViewportPortal layer
   over the cards fed by `src/lib/live/live-presence.ts`, never by a board store, so a remote pointer never re-renders
   a card. Its outline selector costs one length check while nobody else has anything selected.
+- Delete and Backspace take React Flow's selection only, never the store's `selectedNodeId` (never drawn), and do
+  nothing while the recipe search, Library, Welcome or a task board covers the board (`isBoardCovered`); the search
+  walks back on a bare Backspace. Escape lets go of the selection. Exam: `board-delete-key.test.ts`.
 - One right-click menu, `BoardContextMenu.tsx`. A control with its own right click calls
   `preventDefault`; board handlers skip prevented events.
 - Calm mode is session-only and never stored: a stored flag once stranded players with no

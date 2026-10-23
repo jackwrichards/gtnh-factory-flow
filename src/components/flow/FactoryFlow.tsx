@@ -154,7 +154,7 @@ import {
   writeDesignCamera,
   type BoardCamera,
 } from "@/lib/designs/design-camera";
-import { isEditableKeyboardTarget } from "./keyboard";
+import { isBoardCovered, isEditableKeyboardTarget } from "./keyboard";
 import {
   didBoardTimelapseEndHeld,
   getBoardTimelapseCameraMode,
@@ -4827,6 +4827,18 @@ export function FactoryFlow() {
     return true;
   }, [deleteBoardSelection, selectNode, selectedEdgeIds, selectedNodeIds]);
 
+  /** Escape lets go of the selection, as the controls list says: nothing stays armed for a later Delete. */
+  const clearBoardSelection = useCallback(() => {
+    setFlowNodes((current) =>
+      current.some((node) => node.selected)
+        ? current.map((node) => (node.selected ? { ...node, selected: false } : node))
+        : current,
+    );
+    setSelectedNodeIds([]);
+    setSelectedEdgeIds([]);
+    setSelectedBoardIds([]);
+  }, [setSelectedBoardIds]);
+
   // The recipe search covers the board; the board's own notices mute while
   // it does.
   const recipeSearchOpen = useFactoryStore((state) => Boolean(state.recipeBrowserResource));
@@ -4935,6 +4947,10 @@ export function FactoryFlow() {
       if (useFactoryStore.getState().project.poolMode && document.querySelector("[data-pool-worksheet]")) return;
       if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
         const key = event.key.toLowerCase();
+        // Keys that change the plan leave a covered board alone.
+        if (key !== "c" && isBoardCovered()) {
+          return;
+        }
         if (key === "c" || key === "x") {
           // Never fight the browser for real text: typing fields and selected
           // page text keep native copy/cut.
@@ -4977,32 +4993,17 @@ export function FactoryFlow() {
       // Backspace deletes too. React Flow's own delete key is off
       // (deleteKeyCode null): it removes cards from the canvas without
       // telling the project, so they come back on the next commit.
+      // Only what is selected on the board goes, and nothing while the board
+      // is covered (the recipe search walks back on a bare Backspace). The
+      // store's selectedNodeId is never drawn (a landing and every delete
+      // point it at the first card), so a key on it deleted cards nobody saw.
       if (event.key === "Delete" || event.key === "Backspace") {
-        if (isEditableKeyboardTarget(event.target)) {
+        if (isEditableKeyboardTarget(event.target) || event.defaultPrevented || isBoardCovered()) {
           return;
         }
 
         if (deleteSelectedBoardItems()) {
           return;
-        }
-
-        if (selectedNodeId) {
-          if (project.nodes.some((node) => node.id === selectedNodeId)) {
-            deleteNode(selectedNodeId);
-            return;
-          }
-
-          if ((project.storages ?? []).some((storage) => storage.id === selectedNodeId)) {
-            deleteStorage(selectedNodeId);
-            selectNode(undefined);
-            return;
-          }
-
-          if ((project.annotations ?? []).some((annotation) => annotation.id === selectedNodeId)) {
-            deleteAnnotation(selectedNodeId);
-            selectNode(undefined);
-            return;
-          }
         }
 
         cancelResourceConnection();
@@ -5031,11 +5032,15 @@ export function FactoryFlow() {
           return;
         }
 
-        // Escape backs out of whatever tool or half-made wire is active.
+        // Escape backs out of whatever tool or half-made wire is active, and
+        // lets go of the selection.
         cancelResourceConnection();
         setNodeColorPaintMode(undefined);
         setAnnotationTool(undefined);
         setDeleteMode(false);
+        if (!isBoardCovered()) {
+          clearBoardSelection();
+        }
       }
     };
 
@@ -5044,19 +5049,12 @@ export function FactoryFlow() {
   }, [
     annotationTool,
     cancelResourceConnection,
+    clearBoardSelection,
     copyBoardSelection,
-    deleteAnnotation,
-    deleteNode,
     deleteSelectedBoardItems,
-    deleteStorage,
     isDeleteMode,
     nodeColorPaintMode,
     pasteBoardClipboard,
-    project.annotations,
-    project.nodes,
-    project.storages,
-    selectNode,
-    selectedNodeId,
     setNodeColorPaintMode,
     wrapSelectedBoardItems,
   ]);
