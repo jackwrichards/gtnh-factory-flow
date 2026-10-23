@@ -100,8 +100,9 @@ function ResourceIconComponent({
           : "bg-[#3a3a3a] opacity-100 shadow-[inset_1px_1px_0_#5d5d5d,inset_-1px_-1px_0_#1f1f1f]",
         // The circuit's art is a near-black chip, drawn on a light grey panel
         // at the size of a fingernail. Left as it is, the setting a recipe
-        // will not run without is the hardest thing on the card to see.
-        resource && isProgrammedCircuitResource(resource)
+        // will not run without is the hardest thing on the card to see. Drawn
+        // bare (the clean card's badge, on a dark well) it keeps its own art.
+        !bare && resource && isProgrammedCircuitResource(resource)
           ? "[&_.minecraft-pixel-art]:brightness-[1.9] [&_.minecraft-pixel-art]:contrast-[1.15] [&_.minecraft-pixel-art]:saturate-[1.2]"
           : "",
         className,
