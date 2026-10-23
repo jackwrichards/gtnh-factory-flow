@@ -13,4 +13,4 @@
  * Every bump needs an entry in `src/lib/changelog.ts`, written for players:
  * a headline plus a few one-line notes.
  */
-export const APP_VERSION = "4.4.2";
+export const APP_VERSION = "4.4.3";

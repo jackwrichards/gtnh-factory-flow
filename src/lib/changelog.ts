@@ -40,6 +40,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "4.4.3",
+    date: "2026-10-23",
+    headline: "Machine counts work like drawers",
+    notes: [
+      "A machine with no count now reads Any: the plan picks how many. Picking Any no longer jumps back to Up to.",
+      "Typing a count makes it Up to. Exactly is picked from the rule menu. Clearing the count goes back to Any.",
+      "The programmed circuit on a card shows its real colours again instead of a washed-out white.",
+    ],
+  },
+  {
     version: "4.4.2",
     date: "2026-10-22",
     headline: "No more invisible wires",
