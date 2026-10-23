@@ -58,8 +58,18 @@ vi.mock("@/lib/designs/design-camera", () => ({
 const pendingStore = vi.hoisted(() => ({
   entries: new Map<string, { key: string; doc: string; tabId: string; pending: PendingBatch[] }>(),
   alive: new Set<string>(["tab-a"]),
+  bases: new Map<string, unknown>(),
 }));
 vi.mock("@/lib/live/live-pending-store", () => ({
+  keepDetachedBase: vi.fn(async (designId: string, base: unknown) => {
+    if (!pendingStore.bases.has(designId)) {
+      pendingStore.bases.set(designId, structuredClone(base));
+    }
+  }),
+  readDetachedBase: vi.fn(async (designId: string) => pendingStore.bases.get(designId)),
+  forgetDetachedBase: vi.fn(async (designId: string) => {
+    pendingStore.bases.delete(designId);
+  }),
   pendingKey: (doc: string, tabId: string) => `${doc}|${tabId}`,
   writePending: vi.fn(async (doc: string, tabId: string, pending: PendingBatch[]) => {
     const key = `${doc}|${tabId}`;
@@ -248,7 +258,7 @@ function annotations(): FactoryAnnotation[] {
 let service: FakeService;
 let stop: (() => void) | undefined;
 
-async function openLiveDesign(local: FactoryProject, server: FactoryProject = local) {
+async function openLiveDesign(local: FactoryProject, server: FactoryProject = local, signedIn = true) {
   service.plan = JSON.parse(JSON.stringify(server)) as LivePlan;
   const record: DesignRecord = {
     id: DESIGN,
@@ -267,7 +277,9 @@ async function openLiveDesign(local: FactoryProject, server: FactoryProject = lo
     activeDesignId: DESIGN,
     isHydrated: true,
   });
-  useCommunityAuthStore.setState({ user: { username: "ann" }, hasHydrated: true });
+  if (signedIn) {
+    useCommunityAuthStore.setState({ user: { username: "ann" }, hasHydrated: true });
+  }
   stop = startLiveSessions({
     url: () => "ws://live.test/live",
     createSocket: (url) => service.connect(url),
@@ -280,6 +292,7 @@ beforeEach(() => {
   service = new FakeService();
   storage.records.clear();
   pendingStore.entries.clear();
+  pendingStore.bases.clear();
   useLiveSession.setState({
     status: "off",
     members: [],
@@ -330,6 +343,74 @@ describe("live editing in the store", () => {
     service = new FakeService();
     await openLiveDesign(planWith(annotation("n1", "one"), annotation("n2", "two", 300)), planWith(annotation("n1", "one")));
     expect(annotations().map((note) => note.id)).toEqual(["n1"]);
+  });
+
+  it("keeps machines built before the session knew who was signed in, and sends them over the live plan", async () => {
+    // Signing in was slow (the database was down): the plan on the canvas is in the account, but no room is open.
+    const machine = (id: string) => ({
+      id, name: id, machineType: "Bender", minimumTier: "LV", durationTicks: 20, eut: 30,
+      inputs: [{ kind: "item" as const, id: `${id}_in`, amount: 1, displayName: `${id} in` }],
+      outputs: [{ kind: "item" as const, id: `${id}_out`, amount: 1, displayName: `${id} out` }],
+    });
+    const card = (id: string, recipeId: string, x: number) => ({
+      id, recipeId, machineCount: 1, parallel: 1, overclockTier: "LV" as const, enabled: true, position: { x, y: 0 },
+    });
+    const local: FactoryProject = {
+      ...planWith(annotation("n1", "one")),
+      recipes: [machine("press")],
+      nodes: [card("m1", "press", 0)],
+    };
+    // Meanwhile someone else added a note to the live plan.
+    const server: FactoryProject = { ...local, annotations: [annotation("n1", "one"), annotation("n9", "bob", 600)] };
+    await openLiveDesign(local, server, false);
+    expect(useLiveSession.getState().status).toBe("off");
+
+    // A second machine, wired to the first, and a note changed: none of it reaches the service yet.
+    useFactoryStore.setState((state) => ({
+      project: {
+        ...state.project,
+        recipes: [...state.project.recipes, machine("mixer")],
+        nodes: [...state.project.nodes, card("m2", "mixer", 400)],
+        edges: [{ id: "w", source: "m1", target: "m2", sourceHandle: "output:item:press_out",
+          targetHandle: "input:item:mixer_in", resourceKind: "item" as const, resourceId: "press_out" }],
+      },
+    }));
+    useFactoryStore.getState().updateAnnotation("n1", { text: "mine" });
+    await settle();
+    expect(service.sent("ops")).toHaveLength(0);
+
+    useCommunityAuthStore.setState({ user: { username: "ann" }, hasHydrated: true });
+    await settle(12);
+
+    expect(useLiveSession.getState().status).toBe("live");
+    const project = useFactoryStore.getState().project;
+    expect(project.nodes.map((node) => node.id)).toEqual(["m1", "m2"]);
+    expect(project.edges.map((edge) => edge.id)).toEqual(["w"]);
+    expect(annotations().map((note) => note.text)).toEqual(["mine", "bob"]);
+    // The live plan has them now, and still has the other person's edit.
+    expect((service.plan.nodes as Array<{ id: string }>).map((node) => node.id)).toEqual(["m1", "m2"]);
+    expect((service.plan.edges as Array<{ id: string }>).map((edge) => edge.id)).toEqual(["w"]);
+    expect((service.plan.recipes as Array<{ id: string }>).map((recipe) => recipe.id)).toEqual(["press", "mixer"]);
+    expect((service.plan.annotations as FactoryAnnotation[]).map((note) => note.text)).toEqual(["mine", "bob"]);
+    expect(useLiveSession.getState().pending).toBe(0);
+    await settle();
+    expect(pendingStore.bases.size).toBe(0);
+  });
+
+  it("keeps edits made on an earlier visit while no room was open, from the stored base", async () => {
+    // The page closed before the session ever knew who was signed in; this visit opens the plan live.
+    const local = planWith(annotation("n1", "mine"), annotation("n2", "built offline", 300));
+    pendingStore.bases.set(DESIGN, JSON.parse(JSON.stringify(planWith(annotation("n1", "one")))));
+    await openLiveDesign(local, planWith(annotation("n1", "one"), annotation("n9", "bob", 600)));
+    await settle();
+
+    expect(annotations().map((note) => note.text)).toEqual(["mine", "built offline", "bob"]);
+    expect((service.plan.annotations as FactoryAnnotation[]).map((note) => note.text)).toEqual([
+      "mine",
+      "bob",
+      "built offline",
+    ]);
+    expect(pendingStore.bases.size).toBe(0);
   });
 
   it("says who shared a plan with the player, with a key to open it, once however often it is sent", async () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import type { PendingBatch } from "./client-state";
+import type { LivePlan } from "./ops";
 
 /**
  * Live edits not yet confirmed by the live service, kept in IndexedDB so a
@@ -111,6 +112,108 @@ export async function deletePending(key: string): Promise<void> {
   const db = await open();
   try {
     await done(db.transaction(STORE, "readwrite").objectStore(STORE).delete(key));
+  } finally {
+    db.close();
+  }
+}
+
+/*
+ * Edits made to a plan in the account while no room is open for it in this tab (the session does not know who is
+ * signed in yet, or the service would not open the plan) are not batches: there is no live plan to diff against. The
+ * plan as it stood before the first of them is kept instead, per design, so when the room opens the difference from
+ * it to the canvas goes on top of the live plan rather than the snapshot wiping it. Same store, keys of their own
+ * (no `pending`, so `readPending` never lists them).
+ *
+ * The first base wins until it is used or the account takes the plan: a later edit never moves it forward, or the
+ * edits before it would be lost. Kept in memory as well, so a room opening moments after an edit reads the base that
+ * edit is still writing.
+ */
+
+interface StoredBase {
+  key: string;
+  doc: string;
+  tabId: string;
+  base: LivePlan;
+  updatedAt: string;
+}
+
+function baseKey(designId: string): string {
+  return `detached|${designId}`;
+}
+
+const bases = new Map<string, Promise<LivePlan | undefined>>();
+
+async function storedBase(designId: string): Promise<LivePlan | undefined> {
+  if (!available()) {
+    return undefined;
+  }
+  const db = await open();
+  try {
+    const entry = (await done(db.transaction(STORE, "readonly").objectStore(STORE).get(baseKey(designId)))) as
+      | StoredBase
+      | undefined;
+    return entry?.base;
+  } finally {
+    db.close();
+  }
+}
+
+async function writeBase(designId: string, base: LivePlan, onlyIfAbsent: boolean): Promise<LivePlan> {
+  if (!available()) {
+    return base;
+  }
+  const db = await open();
+  try {
+    const store = db.transaction(STORE, "readwrite").objectStore(STORE);
+    const key = baseKey(designId);
+    if (onlyIfAbsent) {
+      const existing = (await done(store.get(key))) as StoredBase | undefined;
+      if (existing?.base) {
+        return existing.base;
+      }
+    }
+    const entry: StoredBase = { key, doc: key, tabId: "", base, updatedAt: new Date().toISOString() };
+    await done(store.put(entry));
+    return base;
+  } finally {
+    db.close();
+  }
+}
+
+/** The plan before the first edit made away from its room, unless one is kept already. */
+export function keepDetachedBase(designId: string, base: LivePlan): Promise<void> {
+  if (!bases.has(designId)) {
+    bases.set(
+      designId,
+      writeBase(designId, base, true).catch(() => base),
+    );
+  }
+  return bases.get(designId)!.then(() => undefined);
+}
+
+export async function readDetachedBase(designId: string): Promise<LivePlan | undefined> {
+  const kept = bases.get(designId);
+  return kept ? kept : storedBase(designId);
+}
+
+/** The account now holds the plan as `base` (a push of it went through): later edits count from there. */
+export async function moveDetachedBase(designId: string, base: LivePlan): Promise<void> {
+  if (!bases.has(designId) && (await storedBase(designId)) === undefined) {
+    return;
+  }
+  bases.set(designId, Promise.resolve(base));
+  await writeBase(designId, base, false);
+}
+
+/** The base was used (its edits are batches now) or the plan was replaced: nothing is waiting. */
+export async function forgetDetachedBase(designId: string): Promise<void> {
+  bases.delete(designId);
+  if (!available()) {
+    return;
+  }
+  const db = await open();
+  try {
+    await done(db.transaction(STORE, "readwrite").objectStore(STORE).delete(baseKey(designId)));
   } finally {
     db.close();
   }

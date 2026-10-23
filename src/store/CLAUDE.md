@@ -138,6 +138,11 @@ changes nothing until then. Architecture and protocol: `docs/live.md`.
 - SHARING NOTICES. The service's `shared` frame (to every socket of an added account, in the room or not) shows the notice
   with Open and refreshes the account list; `unshared` refreshes it (the sync drops copies no longer listed). Each plan is
   announced once a session (the service may repeat one); an `unshared` lets the next share be announced.
+- EDITS AWAY FROM THE ROOM. An edit to a plan the account holds while this tab has no room open for it (signed-in
+  user not known yet, the service refused the plan) keeps the plan as it stood before as the base (`keepDetachedBase`,
+  the first only, stored). The room that opens sends base-to-canvas as this person's edit on top of its first
+  snapshot; a pull of a newer account copy puts the same edits on top of it; a push of the plan moves the base. A
+  snapshot never wipes work the service never got. Exam: `live-session.test.ts`, `library-sync-live.test.ts`.
 - ACCOUNT SYNC never sends the body of a plan open live, here or in another tab (`isDesignOpenLive`, a localStorage
   mark refreshed while open), and a pull of one moves only its metadata. A push answered 409 `{ live: true }` goes
   again without the plan: not an error, not a conflict copy. Copies of shared plans are never pushed as ours; the
