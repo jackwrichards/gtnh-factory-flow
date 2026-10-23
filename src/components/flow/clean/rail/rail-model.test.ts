@@ -53,18 +53,13 @@ describe("the rail's totals", () => {
     // The compressor runs 6 pinned; the cutter and the sawmill sit at zero and are listed all the same.
     expect(rail.machines.map((m) => m.nodeId).sort()).toEqual(["comp", "cutter", "saw"]);
     expect(rail.machines.find((m) => m.nodeId === "comp")).toMatchObject({ pinned: true, pin: 6 });
-    // No count set: Up to, waiting for one, as the card says it.
+    // No count set: Any, as the card says it.
     expect(rail.machines.find((m) => m.nodeId === "saw")).toMatchObject({
-      rule: "upTo",
+      rule: "any",
       pinned: false,
       count: 0,
     });
     expect(rail.wholeMachines).toBe(6);
-    const project = structuredClone(mockUnneeded.project);
-    project.nodes.find((n) => n.id === "saw")!.solvePinAny = true;
-    expect(
-      buildRailModel(project, mockUnneeded.result).machines.find((m) => m.nodeId === "saw"),
-    ).toMatchObject({ rule: "any", pinned: false });
   });
 
   it("keeps a machine listed when its card is set to Exactly", () => {

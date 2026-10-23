@@ -42,7 +42,7 @@ import { getVoltageTierMaxEuT } from "@/lib/model/tiers";
 import { makePortKey, parsePortKey } from "@/lib/solver/plan/port-key";
 import { parseSectionNodeId, sectionHandleId } from "@/lib/model/shared-machine";
 import type { PlanUpTo, UpToReason } from "@/lib/solver/plan/types";
-import { PIN_RULE_LABEL, pinRuleOf, shownPinRule, withPinRule, type PinRule } from "@/lib/model/pin-rule";
+import { PIN_RULE_LABEL, pinRuleOf, withPinRule, type PinRule } from "@/lib/model/pin-rule";
 import { getMachineStructureArt } from "@/lib/power/structure-art";
 import { useFactoryStore, useRateDisplayUnits } from "@/store/factory-store";
 import { useWorkspaceView } from "@/lib/workspace-view";
@@ -126,8 +126,8 @@ export interface CleanPowerView {
 
 /**
  * The count under the machine (docs/up-to.md): what runs, big, and under it what is set, small: the rule's word and
- * the set box, as the overview's machine lines have them ("Up to [24]", "Exactly [24]", "Up to [Set]" with no count,
- * "Any [Set]" when the player picked Any). The box asks for a count while nothing sets this part of the plan.
+ * the set box, as the overview's machine lines have them ("Up to [24]", "Exactly [24]", "Any [Set]" with no count).
+ * The box asks for a count while nothing sets this part of the plan.
  */
 export interface CleanCountView {
   /** What runs, as printed: "×18.2" (a crop's has no times sign). */
@@ -236,7 +236,7 @@ export interface CleanCardActions {
   setAmps: (amps: number) => void;
   cycleMachine: (direction: -1 | 1) => void;
   switchMachine: (handlerId: string) => void;
-  /** Sets the count, keeping the rule (Any becomes Up to); nothing clears it (Up to, waiting for a count). */
+  /** Sets the count, keeping the rule (Any becomes Up to); nothing clears it (Any). */
   setCount: (count: number | undefined) => void;
   /** The wheel on the count: one up or down (with none set, Up to at what runs rounded up; below one, none set). */
   stepCount: (direction: -1 | 1) => void;
@@ -498,22 +498,20 @@ function planSetsOf(plan: NonNullable<PlanExtras>) {
 
 /**
  * A card's count: its rule as the board shows it, what it needs, and what runs (an Up to card's reached count from the
- * solve, else the pin when one is set, else the solved count). With no count set the rule reads Up to unless the player
- * picked Any; either way the plan picks the count until one is set.
+ * solve, else the pin when one is set, else the solved count). With no count set the rule is Any: the plan picks it.
  */
 export function cardCountState(
   result: RecipeNodeData["result"],
-  projectNode: Pick<FactoryNode, "id" | "solvePin" | "solvePinExact" | "solvePinAny">,
+  projectNode: Pick<FactoryNode, "id" | "solvePin" | "solvePinExact">,
   plan: PlanExtras,
   recipe?: Pick<Recipe, "machineType">,
   needed: number = result?.theoreticalMachinesRequired ?? 0,
 ) {
-  const solved = pinRuleOf(projectNode, recipe);
-  const rule = shownPinRule(projectNode, recipe);
+  const rule = pinRuleOf(projectNode, recipe);
   const pin = projectNode.solvePin;
-  const pinned = solved !== "any";
+  const pinned = rule !== "any";
   // An Up to card's read-out; one left over from before the rule changed is not this card's.
-  const upTo = solved === "upTo" ? plan?.upTo?.[projectNode.id] : undefined;
+  const upTo = rule === "upTo" ? plan?.upTo?.[projectNode.id] : undefined;
   // Sets, kept per plan: a board of a thousand cards asks this of each of them on every solve.
   const sets = plan !== undefined ? planSetsOf(plan) : undefined;
   const unset =
@@ -557,9 +555,7 @@ export function buildCountView(
     zero: state.upTo ? state.upTo.reached <= 0.0000005 : !pinned && needed <= 0.0000005,
     title:
       opts.title ??
-      (rule === "upTo" && !pinned
-        ? "Set how many you have. Until then the plan picks."
-        : rule === "upTo"
+      (rule === "upTo"
         ? "Runs as many as the plan lets it. Never more than you set."
         : rule === "exact"
           ? "Runs exactly this many. A gap shows as a forced flow."
@@ -612,20 +608,12 @@ export function wheelDraft(
   return next === undefined ? "" : formatSetCount(next);
 }
 
-type PinFields = Pick<FactoryNode, "solvePin" | "solvePinExact" | "solvePinAny">;
+type PinFields = Pick<FactoryNode, "solvePin" | "solvePinExact">;
 
 /** The patch that gives a card `rule` and `count` (every write of a count goes through `withPinRule`). */
 export function pinPatch(node: PinFields, rule: PinRule, count: number | undefined): PinFields {
-  const next = withPinRule(
-    { solvePin: node.solvePin, solvePinExact: node.solvePinExact, solvePinAny: node.solvePinAny },
-    rule,
-    count,
-  );
-  return {
-    solvePin: next.solvePin,
-    solvePinExact: next.solvePinExact,
-    solvePinAny: next.solvePinAny,
-  };
+  const next = withPinRule({ solvePin: node.solvePin, solvePinExact: node.solvePinExact }, rule, count);
+  return { solvePin: next.solvePin, solvePinExact: next.solvePinExact };
 }
 
 /**
@@ -642,7 +630,7 @@ export function pinActions(
     if (!locked()) update(node.id, pinPatch(node, rule, value));
   };
   // A typed or stepped count keeps the rule; from Any it is Up to (a custom rate card's is Exactly). A count cleared
-  // (typed 0, stepped below one, the middle button) is Up to waiting for a count, never Any.
+  // (typed 0, stepped below one, the middle button) is Any, and the next count set is Up to again.
   const ruleForCount: PinRule = count.ruleFixed
     ? "exact"
     : count.rule === "any"

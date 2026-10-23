@@ -525,17 +525,11 @@ export interface FactoryNode {
    * above it, and say why when they run less. With `solvePinExact` it is an
    * Exactly count: run this many flat out and solve the rest around it, gaps
    * shown as forced flows. Absent means the solver chooses the count; the
-   * card then reads Up to, waiting for one, unless `solvePinAny`. A custom
-   * rate card's pin is always exact.
+   * card then reads Any. A custom rate card's pin is always exact.
    */
   solvePin?: number;
   /** `solvePin` is Exactly, not Up to. Absent or false: Up to. Meaningless without `solvePin`. */
   solvePinExact?: boolean;
-  /**
-   * The player picked Any: the card reads Any instead of Up to waiting for a
-   * count. The solver reads it exactly as no count. Meaningless with `solvePin`.
-   */
-  solvePinAny?: boolean;
   /**
    * Plan mode's port-rate pins, units per second by canonical handle id
    * (`output:item:foo`, `r2:input:fluid:bar` for a shared machine's section).

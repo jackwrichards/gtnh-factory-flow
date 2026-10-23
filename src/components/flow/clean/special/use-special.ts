@@ -135,7 +135,7 @@ export function fitNameSize(name: string, opts: { chips: number; picker: boolean
  * Up to read-out. A custom rate card's rule is always Exactly.
  */
 export function countView(
-  node: Pick<FactoryNode, "id" | "solvePin" | "solvePinExact" | "solvePinAny">,
+  node: Pick<FactoryNode, "id" | "solvePin" | "solvePinExact">,
   needed: number,
   plan: Parameters<typeof cardCountState>[2],
   opts?: {

@@ -392,7 +392,7 @@ function Words({ p, iconProps }: { p: CleanPortView; iconProps: Record<string, u
  * The count under the machine (docs/up-to.md): what runs, big and white (`::before`, from `data-run`), and under it
  * what is set, as the overview's machine lines say it: the rule word, always (a click opens Any, Up to, Exactly), and
  * the set box (`::after`, from `data-set`): the number in gold, or "Set" with no count. A click anywhere else types a
- * count (Any becomes Up to), the wheel steps it, the middle button clears it (Up to, waiting). Two elements: the block and the rule
+ * count (Any becomes Up to), the wheel steps it, the middle button clears it (Any). Two elements: the block and the rule
  * word.
  */
 export function CountBox({
@@ -502,7 +502,7 @@ export function CountBox({
           setDraft(view.set !== undefined ? view.setText : "");
         }
       }}
-      // The middle button clears the count: Up to, waiting for one, while the plan decides it again.
+      // The middle button clears the count: Any, the plan decides it again.
       onMouseDown={(event) => {
         if (event.button === 1) event.preventDefault();
       }}

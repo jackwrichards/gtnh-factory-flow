@@ -31,8 +31,8 @@ holder, a crop card. Bees, the Extreme Entity Crusher and every other machine ar
   every width is measured again when a face of the app's font loads.
 - The count (`docs/up-to.md`): under the machine's art what runs, big (`data-run`), and what is set, as the overview's
   machine lines say it: the rule word on every rule and the set box (`::after`: the number in gold, else "Set"; Any,
-  Up to, Exactly through `lib/model/pin-rule.ts`; `menus/CountRuleMenu.tsx`). With no count a card reads Up to (a new
-  card, a cleared count) unless the player picked Any (`solvePinAny`, `shownPinRule`).
+  Up to, Exactly through `lib/model/pin-rule.ts`; `menus/CountRuleMenu.tsx`). As a drawer's rate: no count is Any (a new
+  card, a cleared count), a count typed in is Up to, Exactly only from the menu.
   An Up to card has one foot bar (`.cc-foot`): fill reached / count, the reason word in its tone, a plain line,
   the fraction, a bottleneck's striped run-on to what the line wants; an Exactly card with a forced input says
   FORCED IN. The read-out is `PlanSolveExtras.upTo`; the overview's words and colours are `up-to-reason.ts`.

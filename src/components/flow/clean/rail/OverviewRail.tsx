@@ -1211,7 +1211,7 @@ const MachineRow = memo(function MachineRow({
         </span>
         <div className="rail-controls" onClick={(event) => event.stopPropagation()}>
           <RuleKey
-            // ≤ Up to (grey while it waits for a count; a count wheeled onto Any is Up to), = Exactly, ~ Any.
+            // ≤ Up to (a count wheeled onto Any is Up to), = Exactly, ~ Any.
             mark={entry.rule === "exact" ? "=" : upTo || set ? "≤" : "~"}
             tone={set ? "gold" : "muted"}
             label={`Pin the ${entry.label}`}
@@ -1244,9 +1244,7 @@ const MachineRow = memo(function MachineRow({
                     title: PIN_RULE_LABEL[entry.rule],
                     notes: [
                       {
-                        text: upTo
-                          ? "Set how many you have. Until then the plan picks."
-                          : "The plan decides how many.",
+                        text: "The plan decides how many.",
                         tone: "muted",
                       },
                     ],

@@ -8,10 +8,9 @@ lockstep: every rule here has a Java twin and the two must give the same answer.
 
 A card's machine count has one of three rules:
 
-- **Any**: the plan picks how many (no `solvePin`). The card reads Any only when the player picked it
-  (`solvePinAny`); with no count and no pick it reads **Up to** waiting for a count, its Set box asking (a new card, a
-  cleared count). The solver reads both as no count (`pinRuleOf`); the board's word is `shownPinRule`. The mod does not
-  carry `solvePinAny`: a plan back from the mod reads Up to waiting where it said Any.
+- **Any**: the plan picks how many (no `solvePin`), as a drawer with no rate. A new card and a cleared count are Any.
+  A count typed in is Up to; Exactly is picked from the rule menu. A cleared count is Any again, and the next count is
+  Up to.
 - **Up to N** (the default for a set count): `solvePin = N`. The machines run as hard as the rest of the plan lets
   them, never above N. No forced flow (a gate: material brought in or sent out at a wired port with no drawer) makes
   up what they cannot do; they slow down instead, as in the game. It is old Build mode inside the one solver.
@@ -169,10 +168,10 @@ card ids), each ring to `PlanUpToLoop`, and every shortfall to `PlanShortfall` w
 `underutilized` below the count.
 
 The card (pass 3): under the machine what runs, big and white ("×18.2"), and what you set, small, as the overview's
-machine lines say it: the rule word, always, and the set box ("Up to [24]", "Exactly [24]", "Up to [Set]" with no
-count, "Any [Set]" when picked, the Set blinking while nothing sets that part of the plan). Click the box to type (a
-count typed on Any is Up to, as in the overview), the wheel steps it, click the rule word for Any, Up to, Exactly. A
-cleared count (an empty box, the middle button, the wheel below one) goes back to Up to waiting, never to Any. Along the foot one
+machine lines say it: the rule word, always, and the set box ("Up to [24]", "Exactly [24]", "Any [Set]" with no
+count, the Set blinking while nothing sets that part of the plan). Click the box to type (a count typed on Any is Up
+to, as in the overview), the wheel steps it, click the rule word for Any, Up to, Exactly. A cleared count (an empty
+box, the middle button, the wheel below one) is Any. Along the foot one
 bar for an Up to card: its fill is reached / capacity, then one word in the reason's colour, one plain line, and a
 fraction on the right ("18.2 / 24"); a bottleneck's bar runs on, striped, to what the line wants ("24 / 31"). An
 Exactly card with a forced input says FORCED IN with the resource and rate. No bar for Any, or Exactly with nothing
