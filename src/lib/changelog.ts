@@ -40,6 +40,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "4.4.4",
+    date: "2026-10-23",
+    headline: "No more vanishing machines",
+    notes: [
+      "Fixed Delete and Backspace removing machines you never selected, including while typing in the recipe search. They now only remove what is selected.",
+      "Escape clears the selection.",
+      "Fixed machines built while a shared plan was reconnecting being lost when it reconnected.",
+      "Voting on library plans now needs an account, one vote per plan.",
+    ],
+  },
+  {
     version: "4.4.3",
     date: "2026-10-23",
     headline: "Machine counts work like drawers",
