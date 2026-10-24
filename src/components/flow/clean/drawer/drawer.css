@@ -144,7 +144,19 @@
   box-sizing: border-box;
   background: var(--cd-bar);
   border-bottom: 1px solid var(--cd-frame);
-  pointer-events: auto;
+}
+/* The bar's hit area, unpainted: 8 px above the drawer, 4 px past each side and 6 px into the row, so a press near
+   the top moves the drawer instead of starting a wire. Over the row's wiring handle (z 30), under the keys (z 41).
+   A pseudo-element of the drawer, not of the bar: .cd-fill's clip would cut it to the bar, and an element would cost
+   one of the drawer's DOM budget. */
+.cd::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  top: -8px;
+  height: 21px;
+  z-index: 35;
   cursor: grab;
 }
 .cd:hover .cd-bar,

@@ -382,6 +382,8 @@ export function CleanDrawer({
         data-lit={lit ? "" : undefined}
         data-unset={view.prompt ? "" : undefined}
         data-spill={view.spill ? "" : undefined}
+        // The bar's tip rides the drawer: its grip (.cd::before) is the only part of it with no tip of its own.
+        {...tipAttrs(view.tips.bar)}
       >
         <div
           className="cd-edge"
@@ -391,7 +393,7 @@ export function CleanDrawer({
           aria-hidden
         />
         <div className="cd-fill" aria-hidden>
-          <div className="cd-bar" {...tipAttrs(view.tips.bar)} />
+          <div className="cd-bar" />
         </div>
         <DrawerIcon storage={storage} alternatives={category?.alternatives} />
         <div
