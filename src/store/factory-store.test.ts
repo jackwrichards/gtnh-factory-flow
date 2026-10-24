@@ -1467,6 +1467,47 @@ describe("project recipe refresh", () => {
     );
   });
 
+  it("never fills an input with the product a makes-search was for", () => {
+    useFactoryStore.getState().setProject({
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "add-context-self-loop-test",
+      name: "Add context self loop test",
+      fuelProfiles: [],
+      recipes: [],
+      nodes: [],
+      edges: [],
+    });
+
+    // Picked from what makes Distilled Water, with a Water slot that also
+    // lists Distilled Water: the card makes it from Water.
+    useFactoryStore.getState().addNodeForRecipeObject(
+      {
+        id: "distillery-distilled-water",
+        name: "Distillery: Distilled Water",
+        machineType: "Distillery",
+        minimumTier: "ULV",
+        durationTicks: 25,
+        eut: 7,
+        inputs: [
+          {
+            kind: "fluid",
+            id: "water",
+            amount: 10,
+            displayName: "Water",
+            alternatives: [
+              { kind: "fluid", id: "water", displayName: "Water", amount: 1 },
+              { kind: "fluid", id: "ic2distilledwater", displayName: "Distilled Water", amount: 1 },
+            ],
+          },
+        ],
+        outputs: [{ kind: "fluid", id: "ic2distilledwater", amount: 10, displayName: "Distilled Water" }],
+      },
+      { kind: "fluid", id: "ic2distilledwater", displayName: "Distilled Water", mode: "recipes" },
+    );
+
+    expect(useFactoryStore.getState().project.nodes[0]?.recipeInputOverrides).toBeUndefined();
+  });
+
   it("stores concrete uses inputs on connected recipe nodes", () => {
     useFactoryStore.getState().setProject({
       schemaVersion: PROJECT_SCHEMA_VERSION,

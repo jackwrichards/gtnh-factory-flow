@@ -61,6 +61,9 @@ prefix included); bees, crops, veins, mobs and underground fluids keep theirs by
   `scripts/singleblock-tiers.test.mjs`. A multiblock whose name collides with a
   singleblock gets its own id.
 - Concrete items carry their oredict membership.
+- What a slot accepts (`mAltFluidInputs`, `mOreDictAlt`) stays on that recipe's input. The
+  catalog and the resource index carry only item-level alternatives: the server gives
+  every slot without its own the index entry's. Exam: `build-resource-index.test.mjs`.
 - NEI layout: keep exported slot positions and progress bars; empty slots stay visible;
   non-consumed slots stay visible except TGS tool placeholders; never replace a real slot
   with a fake label.

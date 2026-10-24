@@ -143,7 +143,7 @@ function buildResourceIndex(dataset) {
         recipeCount: 1,
         tooltip: resource.tooltip ?? indexed?.tooltip,
         oreDictionary: resource.oreDictionary ?? indexed?.oreDictionary,
-        alternatives: resource.alternatives ?? indexed?.alternatives,
+        alternatives: itemLevelAlternatives(indexed),
       });
     }
   }
@@ -175,8 +175,19 @@ function mergeResourceIcon(target, resource, indexed) {
     target.tooltip = resource.tooltip ?? indexed?.tooltip;
   }
   if (!target.alternatives) {
-    target.alternatives = resource.alternatives ?? indexed?.alternatives;
+    target.alternatives = itemLevelAlternatives(indexed);
   }
+}
+
+// The index entry is the resource itself, shared by every recipe that names it,
+// so it takes only the catalog's item-level choices (an ore dictionary group's
+// members). Alternatives on a recipe's input are what that one SLOT accepts and
+// stay on that recipe: the Fertilizer recipe's Water slot also takes Distilled
+// Water, and copying that onto Water offered Distilled Water in every Water
+// slot the server hydrates, the Distillery's own Water to Distilled Water
+// recipe included.
+function itemLevelAlternatives(indexed) {
+  return indexed?.alternatives;
 }
 
 function currentIconPath(resourceIconPath, indexedIconPath) {

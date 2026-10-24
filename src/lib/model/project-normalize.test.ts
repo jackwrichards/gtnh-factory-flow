@@ -122,6 +122,137 @@ describe("dropping cross-form connections on load", () => {
   });
 });
 
+/**
+ * The shape players saved from a search for what makes Distilled Water: the
+ * dataset offered Distilled Water in every Water slot, so the pick filled the
+ * Distillation Tower's Water slot with its own product, and the tower then
+ * needed a drawer of Distilled Water to make Distilled Water. A Distillery
+ * picked from the uses of Water stored Water itself.
+ */
+function createSelfLoopProject(): FactoryProject {
+  const water = { kind: "fluid", id: "water", displayName: "Water" } as const;
+  const distilled = { kind: "fluid", id: "ic2distilledwater", displayName: "Distilled Water" } as const;
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "self-loop",
+    name: "Self loop",
+    recipes: [
+      {
+        id: "tower-distilled-water",
+        name: "Distillation Tower: Distilled Water",
+        machineType: "Distillation Tower",
+        minimumTier: "MV",
+        durationTicks: 32,
+        eut: 120,
+        inputs: [
+          { ...water, amount: 1000, alternatives: [{ ...water, amount: 1 }, { ...distilled, amount: 1 }] },
+        ],
+        outputs: [{ ...distilled, amount: 1000 }],
+      },
+      {
+        id: "distillery-distilled-water",
+        name: "Distillery: Distilled Water",
+        machineType: "Distillery",
+        minimumTier: "ULV",
+        durationTicks: 25,
+        eut: 7,
+        inputs: [
+          { ...water, amount: 10, alternatives: [{ ...water, amount: 1 }, { ...distilled, amount: 1 }] },
+        ],
+        outputs: [{ ...distilled, amount: 10 }],
+      },
+      {
+        id: "reactor",
+        name: "Chemical Reactor: Something",
+        machineType: "Chemical Reactor",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 30,
+        inputs: [{ ...distilled, amount: 1000 }],
+        outputs: [{ kind: "item", id: "dust", amount: 1 }],
+      },
+    ],
+    nodes: [
+      {
+        id: "tower",
+        recipeId: "tower-distilled-water",
+        machineCount: 1,
+        parallel: 1,
+        position: { x: 0, y: 0 },
+        recipeInputOverrides: { "0": { ...distilled, amount: 1000 } },
+      },
+      {
+        id: "distillery",
+        recipeId: "distillery-distilled-water",
+        machineCount: 1,
+        parallel: 1,
+        position: { x: 0, y: 400 },
+        recipeInputOverrides: { "0": { ...water, amount: 1 } },
+      },
+      {
+        id: "reactor",
+        recipeId: "reactor",
+        machineCount: 1,
+        parallel: 1,
+        position: { x: 400, y: 0 },
+      },
+    ],
+    storages: [
+      {
+        id: "drawer",
+        kind: "fluid",
+        resourceId: "ic2distilledwater",
+        displayName: "Distilled Water",
+        position: { x: -400, y: 0 },
+      },
+    ],
+    edges: [
+      {
+        id: "drawer-to-tower",
+        source: "drawer",
+        target: "tower",
+        sourceHandle: "output:fluid:ic2distilledwater",
+        targetHandle: "input:fluid:ic2distilledwater",
+        resourceKind: "fluid",
+        resourceId: "ic2distilledwater",
+      },
+      {
+        id: "tower-to-reactor",
+        source: "tower",
+        target: "reactor",
+        sourceHandle: "output:fluid:ic2distilledwater",
+        targetHandle: "input:fluid:ic2distilledwater",
+        resourceKind: "fluid",
+        resourceId: "ic2distilledwater",
+      },
+    ],
+    fuelProfiles: [],
+  } as unknown as FactoryProject;
+}
+
+describe("a slot filled with its own recipe's product, on load", () => {
+  it("puts the Distillation Tower back on Water", () => {
+    const tower = normalizeLoadedProject(createSelfLoopProject()).nodes.find((node) => node.id === "tower");
+
+    expect(tower?.recipeInputOverrides).toBeUndefined();
+  });
+
+  it("drops the Distilled Water wire into that slot and keeps the drawer and the tower's own output", () => {
+    const normalized = normalizeLoadedProject(createSelfLoopProject());
+
+    expect(normalized.edges.map((edge) => edge.id)).toEqual(["tower-to-reactor"]);
+    expect(normalized.storages?.map((storage) => storage.id)).toEqual(["drawer"]);
+  });
+
+  it("keeps a slot set to its own resource", () => {
+    const distillery = normalizeLoadedProject(createSelfLoopProject()).nodes.find(
+      (node) => node.id === "distillery",
+    );
+
+    expect(distillery?.recipeInputOverrides?.["0"]).toEqual(expect.objectContaining({ id: "water" }));
+  });
+});
+
 describe("wires into a trash can survive a reload", () => {
   /** A plate maker with its output piped into a can, saved and loaded back. */
   function createTrashProject(kind: "item" | "fluid"): FactoryProject {

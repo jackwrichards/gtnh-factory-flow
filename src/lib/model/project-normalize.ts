@@ -1,7 +1,8 @@
 import { normalizeProductionGroups } from "./production-groups";
 import { normalizeFullFarms } from "./full-farms";
 import { normalizeProjectHatchInputs } from "@/lib/solver/hatch-input";
-import type { FactoryProject } from "./types";
+import type { FactoryProject, RecipeInput } from "./types";
+import { switchesSlotToOwnProduct } from "./recipe-input-overrides";
 import { energyHatchTypeExistsAtTier } from "@/lib/machines/energy-hatches";
 import { normalizeProjectFuelProfiles } from "./fuels";
 import { isCustomRateRecipe, releaseCustomRates } from "./custom-rate";
@@ -101,6 +102,7 @@ function withCellWireNotice(
 function normalizeLegacyProject(project: FactoryProject): FactoryProject {
   project = normalizeProductionGroups(project);
   project = repairWiredInputOverrides(project);
+  project = dropSelfLoopInputOverrides(project);
   return normalizeProjectHatchInputs(
     snapProjectToGrid(
       repairPocketReferences(
@@ -130,6 +132,94 @@ function normalizeLegacyProject(project: FactoryProject): FactoryProject {
     ),
     true,
   );
+}
+
+/**
+ * Lets go of a slot pick that names the card's own product, and of the wires
+ * that brought the product to that slot: the slot goes back to its own
+ * resource. Such picks came from a recipe search for the product, which put it
+ * in an input listing it as a substitute (a Distillation Tower making
+ * Distilled Water from Distilled Water). Unwired drawers stay where they are.
+ */
+function dropSelfLoopInputOverrides(project: FactoryProject): FactoryProject {
+  const recipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe]));
+  // `${cardId}#${section}` -> the products let go of in that section, and
+  // whether a row there still takes each one.
+  const released = new Map<string, Map<string, boolean>>();
+
+  const heal = (
+    cardId: string,
+    section: number,
+    recipeId: string,
+    overrides: Record<string, RecipeInput> | undefined,
+  ): Record<string, RecipeInput> | undefined => {
+    const recipe = recipesById.get(recipeId);
+    if (!overrides || !recipe) {
+      return overrides;
+    }
+    const kept: Record<string, RecipeInput> = {};
+    const dropped: RecipeInput[] = [];
+    for (const [slot, override] of Object.entries(overrides)) {
+      const input = recipe.inputs[Number(slot)];
+      if (override && input && switchesSlotToOwnProduct(recipe, input, override)) {
+        dropped.push(override);
+        continue;
+      }
+      kept[slot] = override;
+    }
+    if (dropped.length === 0) {
+      return overrides;
+    }
+    const stillTaken = new Map<string, boolean>();
+    for (const product of dropped) {
+      stillTaken.set(
+        `${product.kind}:${product.id}`,
+        recipe.inputs.some((input, index) => {
+          const row = kept[String(index)] ?? input;
+          return row.kind === product.kind && row.id === product.id;
+        }),
+      );
+    }
+    released.set(`${cardId}#${section}`, stillTaken);
+    return Object.keys(kept).length > 0 ? kept : undefined;
+  };
+
+  const nodes = project.nodes.map((node) => {
+    const overrides = heal(node.id, 0, node.recipeId, node.recipeInputOverrides);
+    let extrasChanged = false;
+    const extraRecipes = node.extraRecipes?.map((extra, index) => {
+      const healed = heal(node.id, index + 1, extra.recipeId, extra.recipeInputOverrides);
+      if (healed === extra.recipeInputOverrides) {
+        return extra;
+      }
+      extrasChanged = true;
+      const { recipeInputOverrides: _dropped, ...rest } = extra;
+      void _dropped;
+      return healed ? { ...rest, recipeInputOverrides: healed } : rest;
+    });
+    if (overrides === node.recipeInputOverrides && !extrasChanged) {
+      return node;
+    }
+    const { recipeInputOverrides: _dropped, ...rest } = node;
+    void _dropped;
+    return {
+      ...rest,
+      ...(overrides ? { recipeInputOverrides: overrides } : {}),
+      ...(extrasChanged ? { extraRecipes } : {}),
+    };
+  });
+  if (released.size === 0) {
+    return project;
+  }
+
+  const edges = project.edges.filter((edge) => {
+    const section = splitSectionHandleId(edge.targetHandle).section;
+    const stillTaken = released
+      .get(`${edge.target}#${section}`)
+      ?.get(`${edge.resourceKind}:${edge.resourceId}`);
+    return stillTaken !== false;
+  });
+  return { ...project, nodes, edges };
 }
 
 /**
