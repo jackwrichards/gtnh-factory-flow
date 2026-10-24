@@ -123,7 +123,10 @@ The board must stay smooth with 100+ cards on weak PCs.
   stub. Diagonals only for trips whose card rims are 6+ cells apart, at least two cells
   long. Self loops use 90-degree turns and land a cell from their exit. Turns and
   crossings are priced; reversals are all but forbidden.
-- Docking is free on the whole perimeter (corners excepted). Wire width follows flow
+- Docking is free on the whole perimeter (corners excepted). Docks sit on each side's first grid line at or
+  outside the border, never the nearest (`cardRimDocks`), and `stubDepth` draws the wire on to the border: clean
+  drawers and cards come in 10 px sizes and group members can sit half a cell off, and a dock inside the card
+  loses the whole side or draws the wire from under it. Wire width follows flow
   (`laneWidthForHeat`) and wires sit under cards. No rate labels on wires, except
   ratio-drawer percentages. One drawn wire per material between two cards
   (`channelEdgeIdsByRepresentative`).

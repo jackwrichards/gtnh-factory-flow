@@ -270,6 +270,7 @@ import {
 import { RecipeAddChips } from "@/components/RecipeAddChip";
 import {
   LANE_CAPACITY,
+  cardRimDocks,
   laneWidthForHeat,
   solveGridRoutes,
   type GridEndpoint,
@@ -1175,59 +1176,10 @@ function resolveGridRouteEndpoints(
 ): GridEndpoint[] {
   const nodeId = end === "source" ? input.sourceNodeId : input.targetNodeId;
   const rect = getMeasuredNodeBoundsById(nodeId);
-  if (!rect) {
-    return [];
-  }
-  const snap = (value: number) => Math.round(value / BOARD_GRID) * BOARD_GRID;
-
   // Every wire docks freely, self loops included; the router keeps a self
   // loop's two ends apart so it reads as a loop.
-  const left = snap(rect.left);
-  const right = snap(rect.right);
-  const top = snap(rect.top);
-  const bottom = snap(rect.bottom);
-  // Every grid line crossing the border is a candidate; huge multiblock
-  // cards coarsen to every other line so the candidate set stays bounded.
-  const perimeterCells = (right - left + (bottom - top)) / BOARD_GRID;
-  const step = perimeterCells > 60 ? 2 * BOARD_GRID : BOARD_GRID;
-  // The corner itself is not a dock (a wire off the very corner reads as
-  // clipped through the card); one cell in is fine, at 45° too.
-  const keepOutFor = (span: number) => (span >= 2 * BOARD_GRID ? BOARD_GRID : 0);
-  const dockTop = top;
-  const centerX = (left + right) / 2;
-  const centerY = (dockTop + bottom) / 2;
-  const candidates: GridEndpoint[] = [];
-  const keepOutX = keepOutFor(right - left);
-  const keepOutY = keepOutFor(bottom - dockTop);
-  for (let x = left + keepOutX; x <= right - keepOutX; x += step) {
-    const penalty = Math.abs(x - centerX) * DOCK_CENTER_BIAS;
-    candidates.push({ x, y: top, side: "top", penalty });
-    candidates.push({ x, y: bottom, side: "bottom", penalty });
-  }
-  for (let y = dockTop + keepOutY; y <= bottom - keepOutY; y += step) {
-    const penalty = Math.abs(y - centerY) * DOCK_CENTER_BIAS;
-    candidates.push({ x: left, y, side: "left", penalty }, { x: right, y, side: "right", penalty });
-  }
-  // Defensive: a card with no dock left after the keep-out falls back to its
-  // side centres.
-  if (candidates.length === 0) {
-    candidates.push(
-      { x: left, y: snap(centerY), side: "left" },
-      { x: right, y: snap(centerY), side: "right" },
-      { x: snap(centerX), y: bottom, side: "bottom" },
-    );
-    candidates.push({ x: snap(centerX), y: top, side: "top" });
-  }
-  return candidates;
+  return rect ? cardRimDocks(rect) : [];
 }
-
-/**
- * Cost per pixel of distance from a side's centre when choosing a dock:
- * mid-way out a machine's long side costs about one extra turn, so facing
- * wires meet centre-to-centre and a wire slides toward a corner only when
- * the route earns it.
- */
-const DOCK_CENTER_BIAS = 0.25;
 
 /**
  * Runs the grid solve if anything it depends on changed, and parks every

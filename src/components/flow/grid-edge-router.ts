@@ -879,6 +879,71 @@ function snapLine(value: number): number {
   return Math.round(value / BOARD_GRID) * BOARD_GRID;
 }
 
+/**
+ * Cost per pixel of distance from a side's centre when choosing a dock:
+ * mid-way out a machine's long side costs about one extra turn, so facing
+ * wires meet centre-to-centre and a wire slides toward a corner only when
+ * the route earns it.
+ */
+export const DOCK_CENTER_BIAS = 0.25;
+
+/**
+ * Every dock a card offers: one per grid line crossing its border, on each
+ * side's first grid line AT OR OUTSIDE the border, never the nearest one. A
+ * border need not sit on a grid line (clean drawers and cards come in the
+ * mod's 10 px sizes, a group's corner sits on its 10 px grid), and a dock on
+ * a line inside the card puts its apron in the card's own clearance: that
+ * whole side is lost, or a touching dock draws the wire from under the card.
+ * `stubDepth` carries the drawn wire on from the dock to the true border.
+ */
+export function cardRimDocks(rect: { left: number; top: number; right: number; bottom: number }): GridEndpoint[] {
+  const lineAtOrBefore = (value: number) => Math.floor(value / BOARD_GRID + 1e-6) * BOARD_GRID;
+  const lineAtOrAfter = (value: number) => Math.ceil(value / BOARD_GRID - 1e-6) * BOARD_GRID;
+  const left = lineAtOrBefore(rect.left);
+  const top = lineAtOrBefore(rect.top);
+  const right = lineAtOrAfter(rect.right);
+  const bottom = lineAtOrAfter(rect.bottom);
+  const depth = (gap: number) => (gap > 0.5 ? { stubDepth: gap } : undefined);
+  const topDepth = depth(rect.top - top);
+  const bottomDepth = depth(bottom - rect.bottom);
+  const leftDepth = depth(rect.left - left);
+  const rightDepth = depth(right - rect.right);
+  // Huge multiblock cards coarsen to every other line so the candidate set stays bounded.
+  const perimeterCells = (right - left + (bottom - top)) / BOARD_GRID;
+  const step = perimeterCells > 60 ? 2 * BOARD_GRID : BOARD_GRID;
+  // The corner itself is not a dock (a wire off the very corner reads as
+  // clipped through the card); one cell in is fine, at 45° too.
+  const keepOutFor = (span: number) => (span >= 2 * BOARD_GRID ? BOARD_GRID : 0);
+  const centerX = (left + right) / 2;
+  const centerY = (top + bottom) / 2;
+  const keepOutX = keepOutFor(right - left);
+  const keepOutY = keepOutFor(bottom - top);
+  const docks: GridEndpoint[] = [];
+  for (let x = left + keepOutX; x <= right - keepOutX; x += step) {
+    const penalty = Math.abs(x - centerX) * DOCK_CENTER_BIAS;
+    docks.push({ x, y: top, side: "top", penalty, ...topDepth });
+    docks.push({ x, y: bottom, side: "bottom", penalty, ...bottomDepth });
+  }
+  for (let y = top + keepOutY; y <= bottom - keepOutY; y += step) {
+    const penalty = Math.abs(y - centerY) * DOCK_CENTER_BIAS;
+    docks.push(
+      { x: left, y, side: "left", penalty, ...leftDepth },
+      { x: right, y, side: "right", penalty, ...rightDepth },
+    );
+  }
+  // Defensive: a card with no dock left after the keep-out falls back to its
+  // side centres.
+  if (docks.length === 0) {
+    docks.push(
+      { x: left, y: snapLine(centerY), side: "left", ...leftDepth },
+      { x: right, y: snapLine(centerY), side: "right", ...rightDepth },
+      { x: snapLine(centerX), y: bottom, side: "bottom", ...bottomDepth },
+      { x: snapLine(centerX), y: top, side: "top", ...topDepth },
+    );
+  }
+  return docks;
+}
+
 /** The apron vertex: the endpoint pushed one cell out of its card, on-grid. */
 function apronPoint(endpoint: GridEndpoint): GridPoint {
   const dir = outwardDirection(endpoint.side);
@@ -1763,7 +1828,9 @@ function findRoute(context: SolveContext, request: PlannedRequest): RouteFound |
  * them (each dock's apron is the other card's edge), so a source dock whose
  * apron IS a facing target dock connects straight across without a search.
  * The only route the search cannot find by itself. Straight only: diagonals
- * need two cells.
+ * need two cells. Two borders less than a cell apart share their dock line
+ * (`cardRimDocks`), so facing docks on the SAME point connect too, as long as
+ * the borders themselves do not touch (the wire would have no length).
  */
 function directDock(
   context: SolveContext,
@@ -1780,21 +1847,26 @@ function directDock(
   let best: RouteFound | undefined;
   for (const source of sources) {
     const dir = outwardDirection(source.side);
-    const x = source.x + DIR_DX[dir] * BOARD_GRID;
-    const y = source.y + DIR_DY[dir] * BOARD_GRID;
-    for (const target of targetsAt.get(`${Math.round(x)},${Math.round(y)}`) ?? []) {
-      if ((dir + 4) % 8 !== outwardDirection(target.side)) {
-        continue;
-      }
-      const vertex = { x: Math.round(x / BOARD_GRID), y: Math.round(y / BOARD_GRID) };
-      const cost =
-        BOARD_GRID +
-        (source.penalty ?? 0) +
-        (target.penalty ?? 0) +
-        context.occupancy.stepCrossings(DIR_AXIS[dir], vertex.x, vertex.y, vertex.x, vertex.y, false) *
-          T.crossing;
-      if (!best || cost < best.cost) {
-        best = { source, target, vertices: [vertex], cost };
+    for (const reach of [BOARD_GRID, 0]) {
+      const x = source.x + DIR_DX[dir] * reach;
+      const y = source.y + DIR_DY[dir] * reach;
+      for (const target of targetsAt.get(`${Math.round(x)},${Math.round(y)}`) ?? []) {
+        if ((dir + 4) % 8 !== outwardDirection(target.side)) {
+          continue;
+        }
+        if (reach === 0 && (source.stubDepth ?? 0) + (target.stubDepth ?? 0) <= 0) {
+          continue;
+        }
+        const vertex = { x: Math.round(x / BOARD_GRID), y: Math.round(y / BOARD_GRID) };
+        const cost =
+          reach +
+          (source.penalty ?? 0) +
+          (target.penalty ?? 0) +
+          context.occupancy.stepCrossings(DIR_AXIS[dir], vertex.x, vertex.y, vertex.x, vertex.y, false) *
+            T.crossing;
+        if (!best || cost < best.cost) {
+          best = { source, target, vertices: [vertex], cost };
+        }
       }
     }
   }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LANE_CAPACITY,
   WIRE_NODE_MARGIN,
+  cardRimDocks,
   laneWidthForHeat,
   solveGridRoutes,
   type GridEndpoint,
@@ -888,5 +889,121 @@ describe("straight shots and self loops", () => {
     expect(Math.max(Math.abs(first.x - last.x), Math.abs(first.y - last.y))).toBeGreaterThanOrEqual(20);
     // Ninety-degree turns only: every run is horizontal or vertical.
     expect(isOrthogonal(points)).toBe(true);
+  });
+});
+
+describe("docks on cards off the grid", () => {
+  /** Distance from a point to the rect's border: 0 when the point lies on it. */
+  function borderGap(point: GridPoint, rect: GridObstacle): number {
+    const outside = Math.hypot(
+      Math.max(rect.left - point.x, 0, point.x - rect.right),
+      Math.max(rect.top - point.y, 0, point.y - rect.bottom),
+    );
+    if (outside > 0) return outside;
+    return Math.min(point.x - rect.left, rect.right - point.x, point.y - rect.top, rect.bottom - point.y);
+  }
+
+  function routeLength(points: GridPoint[]): number {
+    return segments(points).reduce((sum, { a, b }) => sum + Math.hypot(b.x - a.x, b.y - a.y), 0);
+  }
+
+  it("docks each side on the first grid line at or outside it, and the drawn stub reaches the border", () => {
+    // A card in a group whose corner sits on the mod's 10 px grid: half a cell off.
+    const docks = cardRimDocks({ left: 10, top: -170, right: 330, bottom: 30 });
+    const bySide = (side: GridEndpoint["side"]) => docks.filter((dock) => dock.side === side);
+    expect(bySide("top").every((dock) => dock.y === -180 && dock.stubDepth === 10)).toBe(true);
+    expect(bySide("bottom").every((dock) => dock.y === 40 && dock.stubDepth === 10)).toBe(true);
+    expect(bySide("left").every((dock) => dock.x === 0 && dock.stubDepth === 10)).toBe(true);
+    expect(bySide("right").every((dock) => dock.x === 340 && dock.stubDepth === 10)).toBe(true);
+    // Docks along a side stay within the card's own span.
+    expect(bySide("top").every((dock) => dock.x > 10 && dock.x < 330)).toBe(true);
+    expect(bySide("left").every((dock) => dock.y > -170 && dock.y < 30)).toBe(true);
+  });
+
+  it("a clean drawer's 116 x 48 box docks outside its right and bottom sides", () => {
+    const docks = cardRimDocks({ left: 0, top: 0, right: 116, bottom: 48 });
+    const on = (side: GridEndpoint["side"]) => docks.filter((dock) => dock.side === side);
+    expect(on("right").every((dock) => dock.x === 120 && dock.stubDepth === 4)).toBe(true);
+    expect(on("bottom").every((dock) => dock.y === 60 && dock.stubDepth === 12)).toBe(true);
+    expect([...on("top"), ...on("left")].every((dock) => dock.stubDepth === undefined)).toBe(true);
+  });
+
+  it("a card on the grid docks on its border with no stub", () => {
+    const box = card("c", 0, 0, 320, 200);
+    const docks = cardRimDocks(box);
+    expect(docks.every((dock) => dock.stubDepth === undefined)).toBe(true);
+    expect(docks.every((dock) => borderGap(dock, box) === 0)).toBe(true);
+  });
+
+  it("a card half a cell off the grid still sends its wire out of its top to the card above", () => {
+    const above = card("above", 0, -400, 320, 160);
+    const below = card("below", 0, -130, 320, 200);
+    const solved = solveGridRoutes(
+      [above, below],
+      [
+        request({
+          edgeId: "up",
+          sources: cardRimDocks(below),
+          targets: cardRimDocks(above),
+          sourceCardId: "below",
+          targetCardId: "above",
+        }),
+      ],
+    );
+    const points = solved.get("up")!.points;
+    expect(points[0].y).toBe(-130);
+    expect(borderGap(points[points.length - 1], above)).toBe(0);
+    expect(routeLength(points)).toBeLessThanOrEqual(140);
+  });
+
+  it("every wire end sits on its card's border, whatever the card's size", () => {
+    const drawer = card("drawer", 0, 0, 116, 48);
+    const machine = card("machine", 300, -100, 320, 330);
+    const under = card("under", -40, 160, 320, 200);
+    const wire = (edgeId: string, order: number, from: GridObstacle, to: GridObstacle) =>
+      request({
+        edgeId,
+        order,
+        sources: cardRimDocks(from),
+        targets: cardRimDocks(to),
+        sourceCardId: from.id,
+        targetCardId: to.id,
+      });
+    const ends: Array<[string, GridObstacle, GridObstacle]> = [
+      ["out", drawer, machine],
+      ["down", drawer, under],
+      ["back", machine, under],
+    ];
+    const solved = solveGridRoutes(
+      [drawer, machine, under],
+      ends.map(([id, from, to], order) => wire(id, order, from, to)),
+    );
+    for (const [id, from, to] of ends) {
+      const points = solved.get(id)!.points;
+      expect(borderGap(points[0], from), id).toBe(0);
+      expect(borderGap(points[points.length - 1], to), id).toBe(0);
+    }
+  });
+
+  it("a drawer less than a cell above a card connects straight across the gap", () => {
+    const drawer = card("drawer", 0, -220, 116, 48);
+    const machine = card("machine", -60, -160, 320, 200);
+    const solved = solveGridRoutes(
+      [drawer, machine],
+      [
+        request({
+          edgeId: "e",
+          sources: cardRimDocks(drawer),
+          targets: cardRimDocks(machine),
+          sourceCardId: "drawer",
+          targetCardId: "machine",
+        }),
+      ],
+    );
+    const points = solved.get("e")!.points;
+    expect(points.length).toBe(2);
+    expect(points[0].x).toBe(points[1].x);
+    expect(points[0].y).toBe(-172);
+    expect(points[1].y).toBe(-160);
   });
 });
