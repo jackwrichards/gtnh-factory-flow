@@ -189,7 +189,7 @@ export function CleanPortRow({
       >
         {port.resource ? <PortIcon resource={port.resource} iconProps={iconProps} /> : null}
         <span className="cc-num" data-small="" data-unit="">
-          {controller ? "in controller" : bee ? "not used up" : "free"}
+          {controller ? "in controller" : bee ? "Not used" : "free"}
         </span>
         <span
           className="cc-pname"

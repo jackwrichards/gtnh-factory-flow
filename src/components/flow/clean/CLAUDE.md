@@ -7,7 +7,7 @@ cannot be goes to `special/` (`specialKindOf`): a shared machine, a generator, a
 holder, a crop card. Bees, the Extreme Entity Crusher and every other machine are the plain card.
 - A bee or crop map's icon is a specimen, never the machine (`cardPicture`): those cards wear the housing's or
   harvester's own face (the server's `SYNTHESIZED_HANDLER_FACES`) or its name. A bee card's species is a kept row
-  ("not used up", node-verdict's inert rows), the only thing on it that names the bee.
+  ("Not used", node-verdict's inert rows), the only thing on it that names the bee.
 
 - `special/` is those cards on the plain card's classes (`cc-card`, `cc-head`, `cc-rail`, `cc-row`, `cc-pic`,
   `cc-strip`) plus `sp-*` (`special.css`, loaded after `clean.css`; `cs-*` is the menus'). `use-special.ts` has
