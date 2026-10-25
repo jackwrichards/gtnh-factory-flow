@@ -15,6 +15,7 @@ import type {
   FactoryStorage,
   NodeThroughputResult,
   Recipe,
+  ResourceKey,
 } from "../../../model/types";
 import { TICKS_PER_SECOND } from "../../../model/types";
 import { HATCH_SUPPLY_PREFIX } from "../../hatch-supply";
@@ -178,13 +179,16 @@ export function buildPlanModel(args: PlanSolveArgs): PlanModel {
     const builtCount = node.machineCount;
     const opRate = report.operationRatePerSecond;
     const readable = builtCount > 0 && opRate > 0 && Number.isFinite(opRate);
-    const raw = readable ? undefined : rawPerCraft(recipe);
+    const raw = readable || unit.perCraft ? undefined : rawPerCraft(recipe);
     // The row's flow is amount-per-craft x operationRate, so the engine's
-    // `amount` (chance and multiplier 1) is flow / operationRate.
+    // `amount` (chance and multiplier 1) is flow / operationRate. A card with
+    // no count reads the nameplate loop's own per-craft amounts.
     const amountOf = (side: "i" | "o") => (flow: { key: string; amountPerSecond: number }) =>
       readable
         ? flow.amountPerSecond / opRate
-        : (side === "i" ? raw!.inputs : raw!.outputs).get(flow.key as never) ?? 0;
+        : unit.perCraft
+          ? (side === "i" ? unit.perCraft.inputs : unit.perCraft.outputs)[flow.key as ResourceKey] ?? 0
+          : (side === "i" ? raw!.inputs : raw!.outputs).get(flow.key as never) ?? 0;
     const section = parseSectionNodeId(node.id).section;
     entries.push({
       id: node.id,

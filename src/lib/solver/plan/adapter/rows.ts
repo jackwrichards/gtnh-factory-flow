@@ -96,10 +96,10 @@ export function canonicalPortRateHandle(handleId: string): { section: number; ha
 }
 
 /**
- * Raw per-craft amounts of a recipe for a machine with no built count (its
- * nameplate flows are all zero, so they cannot be read back): consumed inputs,
- * outputs at their chance. Output multipliers of machine effects are not
- * applied here.
+ * Raw per-craft amounts of a recipe for a machine with no built count and no
+ * per-craft amounts from the nameplate loop (tests that build the report by
+ * hand): consumed inputs, outputs at their chance. Output multipliers of
+ * machine effects are not applied here.
  */
 export function rawPerCraft(recipe: Recipe | undefined): { inputs: Map<ResourceKey, number>; outputs: Map<ResourceKey, number> } {
   const inputs = new Map<ResourceKey, number>();

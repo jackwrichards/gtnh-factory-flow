@@ -182,25 +182,30 @@ export function calculateThroughput(
       overclockedRecipe.durationTicks;
     const inputs: FlowRecord = {};
     const outputs: FlowRecord = {};
+    const perCraft = { inputs: {} as Record<ResourceKey, number>, outputs: {} as Record<ResourceKey, number> };
+    const addPerCraft = (record: Record<ResourceKey, number>, resource: ResourceAmount, amount: number) => {
+      const key = makeResourceKey(resource.kind, resource.id);
+      record[key] = (record[key] ?? 0) + amount;
+    };
 
     for (const input of nodeRecipe.inputs) {
       if (!isRecipeInputConsumed(input)) {
         continue;
       }
 
-      const amountPerSecond = input.amount * operationRatePerSecond;
-      addFlow(inputs, input, amountPerSecond);
+      addFlow(inputs, input, input.amount * operationRatePerSecond);
+      addPerCraft(perCraft.inputs, input, input.amount);
     }
 
     for (const output of runtimeOutputs ?? effectiveRecipe.outputs) {
-      const amountPerSecond =
+      const amount =
         output.amount *
         getChanceMultiplier(effectiveRecipe, output) *
         (runtimeOutputs
           ? 1
-          : getMachineOutputMultiplier(effectiveRecipe, node, output, overclockedRecipe.tier)) *
-        operationRatePerSecond;
-      addFlow(outputs, output, amountPerSecond);
+          : getMachineOutputMultiplier(effectiveRecipe, node, output, overclockedRecipe.tier));
+      addFlow(outputs, output, amount * operationRatePerSecond);
+      addPerCraft(perCraft.outputs, output, amount);
     }
 
     const euT =
@@ -210,6 +215,7 @@ export function calculateThroughput(
       planUnits[node.id] = {
         durationTicks: overclockedRecipe.durationTicks,
         throughputFactor: node.parallel * machineParallelMultiplier,
+        perCraft,
       };
     }
 

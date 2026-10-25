@@ -20,6 +20,11 @@ export interface PlanUnit {
   durationTicks: number;
   /** `node.parallel * machineParallelMultiplier`: crafts at once per machine. */
   throughputFactor: number;
+  /**
+   * Units of each report port one craft takes or makes, chances and machine effects applied (a TGS's tier and tools).
+   * A card with no count has all-zero flows and cannot be read back, and the bare recipe would drop those effects.
+   */
+  perCraft?: { inputs: Record<ResourceKey, number>; outputs: Record<ResourceKey, number> };
 }
 
 /**
