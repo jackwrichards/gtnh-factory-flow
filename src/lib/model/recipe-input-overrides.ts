@@ -1,5 +1,6 @@
 import type { FactoryNode, Recipe, ResourceAmount, ResourceKind } from "./types";
 import { isOreDictionaryResource } from "./resources";
+import { applyInputConsumeChances } from "./input-chance";
 import { applyVatInputs, isVatRecipe } from "@/lib/machines/bacterial-vat";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
 
@@ -46,13 +47,15 @@ export function switchesSlotToOwnProduct(
 }
 
 /**
- * The recipe's inputs as this node takes them: the wired substitutes, then the machine's own scaling (the
- * Bacterial Vat's fill multiplier on its fluid, its radio hatch's burn).
+ * The recipe's inputs as this node takes them: chanced inputs at their average (a plan saved before the dataset
+ * carried the chance), the wired substitutes, then the machine's own scaling (the Bacterial Vat's fill multiplier
+ * on its fluid, its radio hatch's burn).
  */
 export function applyRecipeInputOverrides(
   recipe: Recipe,
   node: Pick<FactoryNode, "recipeInputOverrides"> & Partial<FactoryNode>,
 ): Recipe {
+  recipe = applyInputConsumeChances(recipe);
   const overridden = applyWiredOverrides(recipe, node);
   if (isVatRecipe(recipe)) {
     const stats = getOverclockedRecipeStats(recipe, node as FactoryNode);

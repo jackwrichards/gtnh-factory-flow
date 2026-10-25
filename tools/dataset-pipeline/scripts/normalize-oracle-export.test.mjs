@@ -844,3 +844,25 @@ describe("LFTR sparging: the rolled outputs the recipe registers at 0 L", () => 
     expect(plain.outputs).toHaveLength(1);
   });
 });
+
+describe("a chanced input (the Boldarnator's leaves, inputChances(1000))", () => {
+  const leaves = (inputChance) => ({
+    domains: [{
+      id: "gregtech",
+      recipeMaps: [{ id: "gtpp.recipe.multiblockrockbreaker", name: "Boldarnator", recipes: [{
+        id: "leaves", durationTicks: 16, eut: 30,
+        itemInputs: [{ ...item("thaumicbases:genleaves@2", 1, "Nether Leaves"), ...(inputChance ? { inputChance } : {}) }],
+        itemOutputs: [item("minecraft:netherrack", 1, "Netherrack")],
+      }] }],
+    }],
+  });
+
+  it("reads its average a run and says so", () => {
+    const [recipe] = normalize(leaves(1000)).recipes;
+    expect(recipe.inputs[0]).toMatchObject({ amount: 0.1, consumeChance: 0.1 });
+  });
+
+  it("keeps the recipe id an export without the chance had", () => {
+    expect(normalize(leaves(1000)).recipes[0].id).toBe(normalize(leaves()).recipes[0].id);
+  });
+});

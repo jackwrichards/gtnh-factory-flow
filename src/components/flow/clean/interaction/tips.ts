@@ -23,6 +23,10 @@ export function portTip(p: CleanPortView): TipSpec {
   if (chance !== undefined && chance < 1) {
     rows.push({ label: "Chance", value: `${Math.round(chance * 10000) / 100}%` });
   }
+  const consumeChance = (p.port.resource as { consumeChance?: number } | undefined)?.consumeChance;
+  if (input && consumeChance !== undefined && consumeChance < 1) {
+    rows.push({ label: "Used up", value: `${Math.round(consumeChance * 10000) / 100}% of runs` });
+  }
   const notes: NonNullable<TipSpec["notes"]> = [];
   const choices = p.port.resource?.alternatives?.length ?? 0;
   if (p.choice) notes.push({ text: `Takes any of ${choices} items.`, tone: "muted" });

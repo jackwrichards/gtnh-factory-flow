@@ -2684,6 +2684,11 @@ public final class GtnhCalcOracleExporter {
             if (markNonConsumed && inputChances != null && index < inputChances.length && inputChances[index] <= 0) {
                 item.put("consumed", Boolean.FALSE);
             }
+            // Used up only this often (out of 10000); the slot must still be filled to start.
+            if (markNonConsumed && inputChances != null && index < inputChances.length
+                && inputChances[index] > 0 && inputChances[index] < 10000) {
+                item.put("inputChance", Integer.valueOf(inputChances[index]));
+            }
             items.add(item);
             if (sourceIndexes != null) {
                 sourceIndexes.add(Integer.valueOf(index));

@@ -182,7 +182,10 @@ function normalizeGregtech(domain) {
     for (const rawRecipe of recipeMap.recipes ?? []) {
       const inputs = [
         ...(rawRecipe.itemInputs ?? []).map((entry) =>
-          resourceAmount(entry, { consumed: entry.consumed === false ? false : undefined }),
+          withInputChance(
+            resourceAmount(entry, { consumed: entry.consumed === false ? false : undefined }),
+            entry.inputChance,
+          ),
         ),
         ...(rawRecipe.nonConsumedInputs ?? []).map((entry) =>
           resourceAmount(entry, { consumed: false }),
@@ -2243,12 +2246,26 @@ function findDomain(id) {
  * hash and are told apart by a counter, in the exporter's sorted order.
  */
 
+/**
+ * GT's input chance (mInputChances, out of 10000): the slot must be filled to start, and a run uses the stack up only
+ * this often. The app reads `amount` as the average a run, and `consumeChance` says it already is
+ * (src/lib/model/input-chance.ts).
+ */
+function withInputChance(resource, inputChance) {
+  const chance = Number(inputChance);
+  if (!resource || resource.consumed === false || !(chance > 0 && chance < 10000)) {
+    return resource;
+  }
+  return { ...resource, amount: resource.amount * (chance / 10000), consumeChance: chance / 10000 };
+}
+
 function stableRecipeId(recipeMapId, recipe) {
   const slotKey = (entry) =>
     [
       entry.kind,
       entry.id,
-      entry.amount,
+      // The stack, not its average: a chanced input keeps the id it had before the chance was exported.
+      entry.consumeChance ? Math.round(entry.amount / entry.consumeChance) : entry.amount,
       entry.consumed === false ? "nc" : "",
       entry.chance ?? "",
     ].join("|");

@@ -379,6 +379,9 @@ export function buildPortView(
   const chance = (port.resource as { chance?: number } | undefined)?.chance;
   const chanceText =
     chance !== undefined && chance < 1 ? `${Math.round(chance * 10000) / 100}%` : undefined;
+  const consumeChance = (port.resource as { consumeChance?: number } | undefined)?.consumeChance;
+  const consumeText =
+    consumeChance !== undefined && consumeChance < 1 ? `used up ${Math.round(consumeChance * 10000) / 100}% of runs` : undefined;
   return {
     key: port.key,
     nodeId,
@@ -388,7 +391,11 @@ export function buildPortView(
     number,
     unit,
     name: port.displayName,
-    title: chanceText ? `${port.displayName} (${chanceText} chance)` : port.displayName,
+    title: chanceText
+      ? `${port.displayName} (${chanceText} chance)`
+      : consumeText
+        ? `${port.displayName} (${consumeText})`
+        : port.displayName,
     zero: !(shown > 0),
     gold: node.portRates?.[port.handleId] !== undefined,
     rate: node.portRates?.[port.handleId],

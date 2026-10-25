@@ -239,6 +239,8 @@ export type ResourceAlternative = Pick<
 export interface RecipeInput extends ResourceAmount {
   optional?: boolean;
   consumed?: boolean;
+  /** The chance a run uses this input up; `amount` is then already the average a run (input-chance.ts). */
+  consumeChance?: number;
 }
 
 export interface RecipeOutput extends ResourceAmount {

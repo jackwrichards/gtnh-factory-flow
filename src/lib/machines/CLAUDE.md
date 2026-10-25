@@ -118,5 +118,7 @@ computes in float: replicate it.
   a "Controller Block" tooltip line (`machine-configs.mjs`), never from the map.
 - Exotic (multi-amp, laser) hatches: one per machine, and their amps never raise the
   parallel ordinal.
+- Chanced inputs (GT's mInputChances; in 2.9 only the Boldarnator's leaves, 10%): `amount` is the average a run and
+  `consumeChance` marks it so it applies once (`model/input-chance.ts`, which also repairs exports and plans without it).
 - Crops (CropsNH): chance is display-only, already baked into the amount. The wiki's
   Industrial Farm table is wrong; the mod source is right.

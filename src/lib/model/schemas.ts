@@ -146,6 +146,7 @@ export const resourceAmountSchema = z.object({
 export const recipeInputSchema = resourceAmountSchema.extend({
   optional: z.boolean().optional(),
   consumed: z.boolean().optional(),
+  consumeChance: z.number().min(0).max(1).optional(),
 });
 
 export const recipeOutputSchema = resourceAmountSchema.extend({
