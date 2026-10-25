@@ -40,6 +40,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "4.5.0",
+    date: "2026-10-25",
+    headline: "Trees, bees and leaves",
+    notes: [
+      "Tree Growth Simulators now make more at higher tiers.",
+      "The Boldarnator only uses up its leaves 10% of the time, like in game.",
+      "Bee cards show the housing and the bee. Crop cards count seeds and show the machines they fill.",
+      "Distilled Water from Water is back, and drawers are easier to grab.",
+    ],
+  },
+  {
     version: "4.4.4",
     date: "2026-10-23",
     headline: "No more vanishing machines",
