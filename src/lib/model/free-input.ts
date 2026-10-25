@@ -31,6 +31,16 @@ export function isControllerSlotInput(resource: InputRef): boolean {
   );
 }
 
+/**
+ * The bee a housing holds: kept, never used up, and like the crusher's spawner
+ * the only thing on a bee card that names its species, so the card draws it
+ * the same way (node-verdict's inert rows). It stays out of isFreeRecipeInput:
+ * the recipe already marks it not consumed.
+ */
+export function isBeeSpeciesInput(resource: InputRef): boolean {
+  return resource.id.startsWith("factoryflow:bee_species:");
+}
+
 export function isFreeRecipeInput(resource: InputRef): boolean {
   return (
     ((resource.kind === undefined || resource.kind === "item") && FREE_INPUT_ITEM_IDS.has(resource.id)) ||

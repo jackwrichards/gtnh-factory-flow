@@ -12,6 +12,7 @@ import {
   FOOT_TRACK,
   buildCountView,
   buildFootView,
+  cardPicture,
   cardCountState,
   circuitNumber,
   frameTone,
@@ -560,5 +561,44 @@ describe("the Up to mock", () => {
       new Set(["FULL", "BOTTLENECK", "STARVED", "CLOGGED", "UNUSED", "LIMITED", null]),
     );
     expect(extras.forced.map((entry) => entry.nodeId)).toEqual(["exact"]);
+  });
+});
+
+describe("the card's picture", () => {
+  const uranium = { kind: "item", id: "factoryflow:bee_species:uranium", displayName: "Uranium Princess", amount: 1 };
+  const alveary = { kind: "item", id: "forestry:alveary", displayName: "Alveary", amount: 1 };
+  const mapIcons = new Map([["Bee Produce", uranium]]) as unknown as Parameters<typeof cardPicture>[4];
+  const beeRecipe = {
+    id: "salt",
+    name: "Salt Bee",
+    kind: "bee_produce",
+    category: "forestry-bee",
+    machineType: "Apiary",
+    source: { recipeMap: "Bee Produce" },
+  } as unknown as Parameters<typeof cardPicture>[0];
+  const beeNode = { id: "bee", overclockTier: "NONE" } as unknown as FactoryNode;
+  const face = (id: string) =>
+    ({ selectedMachineHandler: { id, label: id }, tierControl: undefined }) as unknown as Parameters<typeof cardPicture>[2];
+
+  it("never takes a bee map's specimen for the machine", () => {
+    const none = new Map() as Parameters<typeof cardPicture>[3];
+    expect(cardPicture(beeRecipe, beeNode, face("magic-apiary"), none, mapIcons).machineIcon).toBeUndefined();
+  });
+
+  it("wears the housing's own face", () => {
+    const entries = new Map([["alveary", { familyId: "alveary", resource: alveary }]]) as unknown as Parameters<
+      typeof cardPicture
+    >[3];
+    expect(cardPicture(beeRecipe, beeNode, face("alveary"), entries, mapIcons).machineIcon?.displayName).toBe("Alveary");
+  });
+
+  it("still falls back to the map's machine for other recipes", () => {
+    const mixer = { kind: "item", id: "gregtech:mixer", displayName: "Basic Mixer", amount: 1 };
+    const recipe = { id: "m", name: "Mixer", machineType: "Mixer", source: { recipeMap: "Mixer" } } as unknown as Parameters<
+      typeof cardPicture
+    >[0];
+    const icons = new Map([["Mixer", mixer]]) as unknown as Parameters<typeof cardPicture>[4];
+    const none = new Map() as Parameters<typeof cardPicture>[3];
+    expect(cardPicture(recipe, beeNode, face("mixer"), none, icons).machineIcon?.displayName).toBe("Basic Mixer");
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
-import { isFreeRecipeInput, isRecipeInputConsumed } from "@/lib/model";
+import { isBeeSpeciesInput, isFreeRecipeInput, isRecipeInputConsumed } from "@/lib/model";
 import { calculateThroughput } from "@/lib/solver/throughput";
 import { buildRailPorts, deriveNodeVerdict, findUnwiredNodeIds } from "./node-verdict";
 
@@ -80,5 +80,61 @@ describe("free-in-the-game inputs", () => {
     expect(port.nameplatePerSecond).toBe(0);
     expect(port.currentPerSecond).toBe(0);
     expect(rails.outputs).toHaveLength(1);
+  });
+});
+
+describe("a bee card's species", () => {
+  const SALT = "factoryflow:bee_species:gregtech-bee-speciessalt";
+
+  function beeProject(): FactoryProject {
+    return {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "bee-row-exam",
+      name: "bee-row-exam",
+      recipes: [
+        {
+          id: "salt",
+          name: "Salt Bee",
+          kind: "bee_produce",
+          category: "forestry-bee",
+          machineType: "Apiary",
+          minimumTier: "NONE",
+          durationTicks: 550,
+          eut: 0,
+          inputs: [{ kind: "item", id: SALT, amount: 1, displayName: "Salt Bee", consumed: false }],
+          outputs: [{ kind: "item", id: "gregtech:gt.comb@salt", amount: 1 }],
+          source: { recipeMap: "Bee Produce" },
+        },
+      ],
+      nodes: [
+        {
+          id: "bee",
+          recipeId: "salt",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "NONE",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      storages: [{ id: "d", kind: "item", resourceId: "gregtech:gt.comb@salt", position: { x: 0, y: 0 } }],
+      edges: [{ id: "e1", source: "bee", target: "d", resourceKind: "item", resourceId: "gregtech:gt.comb@salt" }],
+      fuelProfiles: [],
+    } as FactoryProject;
+  }
+
+  it("is drawn as an inert row naming the bee, with nothing to wire", () => {
+    expect(isBeeSpeciesInput({ kind: "item", id: SALT })).toBe(true);
+    expect(isFreeRecipeInput({ kind: "item", id: SALT })).toBe(false);
+    const proj = beeProject();
+    const result = calculateThroughput(proj, { generatedAt: "fixed" });
+    const rails = buildRailPorts(proj, result, "bee", proj.recipes[0]!, deriveNodeVerdict(proj, result, "bee"));
+    expect(rails.inputs).toHaveLength(1);
+    const port = rails.inputs[0]!;
+    expect(port.free).toBe(true);
+    expect(port.displayName).toBe("Salt Bee");
+    expect(port.unsupplied).toBe(false);
+    expect(port.nameplatePerSecond).toBe(0);
+    expect(findUnwiredNodeIds(proj, result)).toEqual([]);
   });
 });

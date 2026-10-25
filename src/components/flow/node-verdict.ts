@@ -7,7 +7,7 @@ import type {
   ResourceKind,
   ThroughputResult,
 } from "@/lib/model/types";
-import { isFreeRecipeInput, isOreDictionaryResource, isRecipeInputConsumed, makeResourceKey, resourceLabel } from "@/lib/model";
+import { isBeeSpeciesInput, isFreeRecipeInput, isOreDictionaryResource, isRecipeInputConsumed, makeResourceKey, resourceLabel } from "@/lib/model";
 import { getPoolProject, isPoolStorageId } from "@/lib/solver/pool-mode";
 import { findDeathSpirals, type DeathSpiral } from "./death-spiral";
 import { findClogLocks, type ClogLock } from "./clog-lock";
@@ -2074,11 +2074,12 @@ export function buildRailPorts(
 
     // Free-in-the-game inputs never reach the solver's flows and pushPort
     // skips them as non-consumed, so they are added last as inert rows:
-    // the item and its name, every figure zero, no handle to wire.
+    // the item and its name, every figure zero, no handle to wire. A bee
+    // card's species rides here too: it is all that names the bee.
     if (isInput) {
       for (const resource of resources) {
         const key = makeResourceKey(resource.kind, resource.id);
-        if (!isFreeRecipeInput(resource) || seen.has(key)) {
+        if (!(isFreeRecipeInput(resource) || isBeeSpeciesInput(resource)) || seen.has(key)) {
           continue;
         }
         seen.add(key);

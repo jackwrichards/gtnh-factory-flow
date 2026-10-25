@@ -37,7 +37,7 @@ const TASKS_ENABLED = isLiveConfigured();
 import { checklistLocked } from "../RecipeNode";
 import { wheelChangesValues } from "@/lib/device-settings";
 import { MobPickerMenu } from "../MobPickerMenu";
-import { isControllerSlotInput } from "@/lib/model/free-input";
+import { isBeeSpeciesInput, isControllerSlotInput } from "@/lib/model/free-input";
 import type {
   CleanCardActions,
   CleanCardContext,
@@ -154,14 +154,16 @@ export function CleanPortRow({
   if (port.free) {
     // The item in a machine's controller slot (the Extreme Entity Crusher's spawner) names its mob: pressing it picks another.
     const controller = port.resource !== undefined && isControllerSlotInput(port.resource);
+    // A bee card's species, kept in the housing: the row is what says which bee it is.
+    const bee = port.resource !== undefined && isBeeSpeciesInput(port.resource);
     // The game gives this one away: shown so it is set down beside the machine, nothing to wire.
     return (
       <div
         className="cc-row"
         data-side={p.side}
         data-controller={controller ? "" : undefined}
-        title={controller ? undefined : `${p.name}: free input, no supply needed`}
-        style={{ opacity: controller ? 0.85 : 0.6 }}
+        title={controller ? undefined : bee ? `${p.name}: stays in the housing, not used up` : `${p.name}: free input, no supply needed`}
+        style={{ opacity: controller || bee ? 0.85 : 0.6 }}
         {...(controller
           ? {
               role: "button",
@@ -187,7 +189,7 @@ export function CleanPortRow({
       >
         {port.resource ? <PortIcon resource={port.resource} iconProps={iconProps} /> : null}
         <span className="cc-num" data-small="" data-unit="">
-          {controller ? "in controller" : "free"}
+          {controller ? "in controller" : bee ? "not used up" : "free"}
         </span>
         <span
           className="cc-pname"

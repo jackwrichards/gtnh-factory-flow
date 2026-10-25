@@ -239,6 +239,10 @@ export async function getDatasetCatalog(versionId: string) {
 const SYNTHESIZED_HANDLER_FACES: Array<{
   familyId: string;
   displayNames: string[];
+  /** Dataset ids tried before the names, where a name is shared (Gendustry also has an "Industrial Apiary"). */
+  ids?: string[];
+  /** The card's name when the item's own is not what players call it. */
+  displayName?: string;
   /** Tier -> the tier's own item name, for families whose card wears its tier's block. */
   tierNames?: Record<string, string>;
 }> = [
@@ -249,6 +253,16 @@ const SYNTHESIZED_HANDLER_FACES: Array<{
     tierNames: CROP_MANAGER_ITEM_NAMES,
   },
   { familyId: CROP_HARVESTER_INDUSTRIAL_FARM_ID, displayNames: ["Industrial Farm"] },
+  // The bee housings (beeMachineHandlers): without a face of their own a bee card wore its map's specimen.
+  { familyId: "magic-apiary", ids: ["magicbees:magicapiary"], displayNames: ["Magic Apiary"] },
+  { familyId: "alveary", ids: ["forestry:alveary"], displayNames: ["Alveary"] },
+  { familyId: "industrial-apiary", ids: ["gregtech:gt.blockmachines@9399"], displayNames: [] },
+  {
+    familyId: "mega-apiary",
+    ids: ["gregtech:gt.blockmachines@14202"],
+    displayNames: ["Industrial Apicultural Acclimatiser and Drone Domestication Station"],
+    displayName: "Mega Apiary",
+  },
 ];
 
 /**
@@ -292,14 +306,17 @@ export function withTankMapFace(
   );
 }
 
-function withSynthesizedHandlerIcons(catalog: LoadedRecipeIndex): MachineHandlerIconEntry[] {
+export function withSynthesizedHandlerIcons(catalog: LoadedRecipeIndex): MachineHandlerIconEntry[] {
   const icons = [...(catalog.machineHandlerIcons ?? [])];
   const byName = new Map(catalog.resources.map((resource) => [resource.displayName, resource] as const));
-  for (const { familyId, displayNames, tierNames } of SYNTHESIZED_HANDLER_FACES) {
+  const byId = new Map(catalog.resources.map((resource) => [resource.id, resource] as const));
+  for (const { familyId, displayNames, ids, displayName, tierNames } of SYNTHESIZED_HANDLER_FACES) {
     if (icons.some((entry) => entry.familyId === familyId)) {
       continue;
     }
-    const face = displayNames.map((name) => byName.get(name)).find(Boolean);
+    const face = [...(ids ?? []).map((id) => byId.get(id)), ...displayNames.map((name) => byName.get(name))].find(
+      Boolean,
+    );
     if (!face) {
       continue;
     }
@@ -309,7 +326,7 @@ function withSynthesizedHandlerIcons(catalog: LoadedRecipeIndex): MachineHandler
     });
     icons.push({
       familyId,
-      resource: { ...face, amount: 1 },
+      resource: { ...face, ...(displayName ? { displayName } : {}), amount: 1 },
       ...(tiers.length > 1 ? { tiers } : {}),
     });
   }
