@@ -58,7 +58,11 @@ import { registerBooksSink, solveBooks } from "./solve-books";
 import { liveUndoHandler, quietly } from "./live-edit-gate";
 import { applyOps, type LiveOp } from "@/lib/live/ops";
 import { applyEdgeInputOverride } from "@/lib/model/edge-input-overrides";
-import { applyRecipeInputOverrides, inputOverrideAmount } from "@/lib/model/recipe-input-overrides";
+import {
+  applyRecipeInputOverrides,
+  inputOverrideAmount,
+  switchesSlotToOwnProduct,
+} from "@/lib/model/recipe-input-overrides";
 import type { AlternativeCycleFace } from "@/lib/nei/alternative-cycle";
 import { createCropFarmPlaceholderRecipe, isCropFarmRecipe } from "@/lib/model/passive-production";
 import { buildPowerRecipe, isPowerRecipe } from "@/lib/power/power-recipe";
@@ -5648,6 +5652,11 @@ function buildRecipeInputOverrides(
       resource.inputIndex === undefined &&
       resourceMatchesInput(resource, input);
     if (!matchesSlot && !matchesIndex && !matchesResource) {
+      return;
+    }
+    // A pick from "what makes Distilled Water" never puts Distilled Water in
+    // a Water slot that also takes it: the recipe would run on its own product.
+    if (switchesSlotToOwnProduct(recipe, input, resource)) {
       return;
     }
 
