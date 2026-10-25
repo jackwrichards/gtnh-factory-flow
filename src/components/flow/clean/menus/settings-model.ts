@@ -39,6 +39,22 @@ export interface SettingControl {
 
 export const COIL_ID = "heatingCoil";
 
+/** A crop card's harvesters, a number setting pinned until unpinned: typed or stepped, it sets the seeds. */
+export const CROP_MACHINES_ID = "cropMachines";
+
+/** A setting that is a number the card works out, not a machine control: the well is typed into. */
+export interface NumberSetting {
+  id: string;
+  label: string;
+  /** As the well and the chip print it. */
+  value: string;
+  /** What an opened well starts with. */
+  text: string;
+  pinDefault: boolean;
+  commit: (text: string) => void;
+  step: (direction: -1 | 1) => void;
+}
+
 export function settingControls(recipe: Recipe, node: FactoryNode): SettingControl[] {
   try {
     return computeControls(recipe, node);
@@ -114,11 +130,11 @@ export function isPinned(
   return kept === undefined ? control.pinDefault : kept.includes(control.id);
 }
 
-/** The keys a machine would have pinned after toggling one control. */
+/** The keys a machine would have pinned after toggling one control. Pass every pinnable setting: one left out unpins. */
 export function toggledPins(
   project: Pick<FactoryProject, "settingPins">,
   machine: string,
-  controls: SettingControl[],
+  controls: Array<Pick<SettingControl, "id" | "pinDefault">>,
   toggled: string,
 ): string[] {
   return controls

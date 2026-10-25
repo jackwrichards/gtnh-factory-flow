@@ -132,6 +132,8 @@ export interface CleanPowerView {
 export interface CleanCountView {
   /** What runs, as printed: "×18.2" (a crop's has no times sign). */
   text: string;
+  /** What the number counts, under it, when it is not machines: a crop card counts seeds. */
+  unit?: string;
   /** What runs: an Up to card's reached count, else the solved count (the pin when one is set). */
   value: number;
   /** A count is set: Up to or Exactly. */
@@ -536,6 +538,7 @@ export function buildCountView(
     /** A custom rate card: always Exactly, no rule menu. */
     ruleFixed?: boolean;
     title?: string;
+    unit?: string;
   } = {},
 ): CleanCountView {
   const { rule, pinned, value, unset, needed } = state;
@@ -543,6 +546,7 @@ export function buildCountView(
   const setText = set !== undefined ? formatSetCount(set) : "";
   return {
     text: `${opts.noTimes ? "" : "×"}${formatSolvedMachines(value)}`,
+    unit: opts.unit,
     value,
     pinned,
     rule,

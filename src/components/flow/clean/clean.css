@@ -770,6 +770,30 @@
 .cc-count[data-zero]::before {
   color: var(--cc-idle);
 }
+/* A count of something other than machines (a crop card's seeds) draws its line as `.cc-run`, the number with what it
+   counts small and grey beside it, as a row's unit. */
+.cc-count[data-unit]::before {
+  display: none;
+}
+.cc-run {
+  flex: 0 0 100%;
+  margin-bottom: 2px;
+  text-align: center;
+  font-size: 14px;
+  letter-spacing: -0.8px;
+  line-height: 13px;
+  color: var(--cc-ink);
+}
+.cc-count[data-zero] .cc-run {
+  color: var(--cc-idle);
+}
+.cc-run::after {
+  content: attr(data-unit);
+  margin-left: 2px;
+  font-size: 9px;
+  letter-spacing: -0.6px;
+  color: var(--cc-muted);
+}
 /* The set box: as wide as what it says, at least the box an open editor starts at. */
 .cc-count::after {
   content: attr(data-set);

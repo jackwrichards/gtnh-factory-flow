@@ -306,7 +306,9 @@ function SpecialChipView({
       {...tipAttrs({
         id: `${nodeId}|setting|${chip.id}`,
         title: chip.label,
-        rows: [{ label: "Set to", value: chip.value }],
+        // A worked-out number (a crop card's machines) explains itself in notes; a knob says what it is set to.
+        rows: edit.notes ? [] : [{ label: "Set to", value: chip.value }],
+        notes: edit.notes?.map((text) => ({ text, tone: "muted" as const })),
         actions: [
           { input: "left", label: "Type a value" },
           { input: "wheel", label: "Step" },
@@ -736,6 +738,7 @@ export function SpecialCard({ model, recipe, node }: SpecialCardProps) {
           <SettingsSheet
             nodeId={node.id}
             anchor={sheetAnchor}
+            numbers={context.sheet.numbers}
             onClose={() => setSheetAnchor(undefined)}
           />
         ) : (

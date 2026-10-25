@@ -481,9 +481,10 @@ export function CountBox({
       tabIndex={0}
       className="cc-count nowheel"
       data-wheel-value=""
-      aria-label={`${view.text} running, ${view.ruleWord.toLowerCase()}${view.pinned ? ` ${view.setText}` : ""}`}
+      aria-label={`${view.text}${view.unit ? ` ${view.unit}` : ""} running, ${view.ruleWord.toLowerCase()}${view.pinned ? ` ${view.setText}` : ""}`}
       data-rule={view.rule}
       data-run={view.text}
+      data-unit={view.unit}
       data-set={view.box}
       data-pinned={view.pinned ? "" : undefined}
       data-zero={view.zero ? "" : undefined}
@@ -514,6 +515,11 @@ export function CountBox({
         onSet(undefined);
       }}
     >
+      {view.unit ? (
+        <div className="cc-run" data-unit={view.unit}>
+          {view.text}
+        </div>
+      ) : null}
       <div
         role={view.ruleFixed ? undefined : "button"}
         tabIndex={view.ruleFixed ? undefined : 0}

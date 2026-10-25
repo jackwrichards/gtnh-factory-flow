@@ -49,7 +49,7 @@ export interface SpecialSection {
 
 /** A strip chip that can also be typed into (a number setting). */
 export interface SpecialChip extends CleanChipView {
-  edit?: { text: string; commit: (text: string) => void };
+  edit?: { text: string; commit: (text: string) => void; notes?: string[] };
 }
 
 export type NameTone = "ink" | "power" | "holder";

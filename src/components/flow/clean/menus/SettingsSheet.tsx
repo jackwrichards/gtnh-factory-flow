@@ -14,6 +14,7 @@ import {
   settingPatch,
   steppedOption,
   toggledPins,
+  type NumberSetting,
   type SettingControl,
 } from "./settings-model";
 import { workingLines } from "./working-lines";
@@ -85,7 +86,18 @@ function PinGlyph() {
  * the card's own numbers), and a line on how it works. A machine with nothing to set says so beside its working.
  * Pinned settings show on the card as chips, on every card of the machine; the sheet stays open while settings change.
  */
-export function SettingsSheet({ nodeId, anchor, onClose }: { nodeId: string; anchor: MenuAnchor; onClose: () => void }) {
+export function SettingsSheet({
+  nodeId,
+  anchor,
+  numbers = [],
+  onClose,
+}: {
+  nodeId: string;
+  anchor: MenuAnchor;
+  /** Settings the card works out (a crop card's harvesters), listed first, each typed into. */
+  numbers?: NumberSetting[];
+  onClose: () => void;
+}) {
   const project = useFactoryStore((state) => state.project);
   const locked = useFactoryStore((state) => state.isReadOnly || state.checklistMode);
   const updateNode = useFactoryStore((state) => state.updateNode);
@@ -93,6 +105,7 @@ export function SettingsSheet({ nodeId, anchor, onClose }: { nodeId: string; anc
   const node = project.nodes.find((entry) => entry.id === nodeId);
   const recipe = project.recipes.find((entry) => entry.id === node?.recipeId);
   const [open, setOpen] = useState<{ id: string; anchor: MenuAnchor }>();
+  const [draft, setDraft] = useState<{ id: string; text: string }>();
   const sheetRef = useRef<HTMLDivElement>(null);
   const controls = useMemo(() => (node && recipe ? settingControls(recipe, node) : []), [recipe, node]);
   const formulas = useMemo(() => (node && recipe ? workingLines(recipe, node) : []), [recipe, node]);
@@ -108,7 +121,17 @@ export function SettingsSheet({ nodeId, anchor, onClose }: { nodeId: string; anc
     if (next) choose(control, next.key);
   };
   const openControl = open ? controls.find((entry) => entry.id === open.id) : undefined;
-  const none = controls.length === 0;
+  const none = controls.length === 0 && numbers.length === 0;
+  // Every pinnable setting goes to the toggle, or pinning one would unpin those left out.
+  const pinnable = [...numbers, ...controls];
+  const togglePin = (id: string) => {
+    if (!locked) setSettingPins(machine, toggledPins(project, machine, pinnable, id));
+  };
+  const commitDraft = () => {
+    if (!draft) return;
+    setDraft(undefined);
+    if (!locked) numbers.find((entry) => entry.id === draft.id)?.commit(draft.text);
+  };
   const wide = formulas.length > 0;
 
   return (
@@ -119,6 +142,66 @@ export function SettingsSheet({ nodeId, anchor, onClose }: { nodeId: string; anc
             <div className="cs-col" style={{ flex: wide ? "0 0 auto" : "1 1 auto", minWidth: wide ? (none ? 220 : 250) : 0 }}>
               <div className="cs-title">Settings</div>
               {none ? <div className="cs-none">{NONE}</div> : null}
+              {numbers.map((setting) => {
+                const pinned = isPinned(project, machine, setting);
+                return (
+                  <div
+                    key={setting.id}
+                    className="cs-row"
+                    onWheel={(event) => {
+                      if (!locked && draft?.id !== setting.id && wheelChangesValues()) {
+                        setting.step(event.deltaY < 0 ? 1 : -1);
+                      }
+                    }}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      if (!locked) setting.step(-1);
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="cs-pin"
+                      data-on={pinned ? "" : undefined}
+                      aria-pressed={pinned}
+                      aria-label={pinned ? `Unpin ${setting.label} from the card` : `Pin ${setting.label} to the card`}
+                      onClick={() => togglePin(setting.id)}
+                    >
+                      <PinGlyph />
+                    </button>
+                    <span className="cs-label">{setting.label}</span>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      className="cs-well"
+                      onClick={() => {
+                        if (!locked && draft?.id !== setting.id) setDraft({ id: setting.id, text: setting.text });
+                      }}
+                    >
+                      {draft?.id === setting.id ? (
+                        <input
+                          autoFocus
+                          className="nodrag"
+                          value={draft.text}
+                          inputMode="numeric"
+                          aria-label={setting.label}
+                          style={{ width: "100%", background: "transparent", border: 0, outline: 0, color: "inherit", font: "inherit" }}
+                          onChange={(event) => setDraft({ id: setting.id, text: event.target.value })}
+                          onBlur={commitDraft}
+                          onFocus={(event) => event.currentTarget.select()}
+                          onClick={(event) => event.stopPropagation()}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") event.currentTarget.blur();
+                            if (event.key === "Escape") setDraft(undefined);
+                            event.stopPropagation();
+                          }}
+                        />
+                      ) : (
+                        <span className="cs-value">{setting.value}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
               {controls.map((control) => {
                 const pinned = isPinned(project, machine, control);
                 return (
@@ -142,9 +225,7 @@ export function SettingsSheet({ nodeId, anchor, onClose }: { nodeId: string; anc
                       data-on={pinned ? "" : undefined}
                       aria-pressed={pinned}
                       aria-label={pinned ? `Unpin ${control.label} from the card` : `Pin ${control.label} to the card`}
-                      onClick={() => {
-                        if (!locked) setSettingPins(machine, toggledPins(project, machine, controls, control.id));
-                      }}
+                      onClick={() => togglePin(control.id)}
                     >
                       <PinGlyph />
                     </button>
