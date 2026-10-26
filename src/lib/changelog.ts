@@ -40,6 +40,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "4.5.1",
+    date: "2026-10-25",
+    headline: "Up to counts that fit now solve",
+    notes: [
+      "Fixed a plan saying there is no way to meet all the rules and pinned counts when a machine's Up to count was more than it needed.",
+    ],
+  },
+  {
     version: "4.5.0",
     date: "2026-10-25",
     headline: "Trees, bees and leaves",
