@@ -156,11 +156,15 @@ The board must stay smooth with 100+ cards on weak PCs.
 
 - Three candidates (column pass, annealed challenger, free placement in
   `board-arrange-free.ts`), each judged by the real router on points (flow-weighted via
-  `wireWeight`) plus stranger air; the best two are polished and the lower wins. The proxy
-  scorer must price like the router and must never pin ports.
-- The arrange dissolves every board first (`flattenBoards`) unless the "Keep boards on
-  rearrange" browser setting is on. Islands emerge from `board-arrange-air.ts`
-  (`islandAir`), not from cutting rules. Drawers are placed by pattern (a line beside
+  `wireWeight`) plus stranger air; the best two are polished and the pick counts a crossing
+  `PICK_CROSSING_EXTRA` px more (`fewerCrossings`; fewest crossings at any cost stacked a grouped
+  board into a tower). The proxy scorer must price like the router and must never pin ports.
+  `arrangeCrossing` (dev menu) reprices crossings for the whole arrange; 400, as the router.
+- On a plan with groups the Arrange key opens a menu (`BoardToolbar.tsx`): Keep groups (each
+  top-level group one block, its insides untouched) or Ungroup all (`flattenBoards` first). With
+  groups kept the judge still sees the cards inside an open group, riding its block
+  (`buildArrangeJudgeInput` members, route-judge `riders`). Islands emerge from
+  `board-arrange-air.ts` (`islandAir`), not from cutting rules. Drawers are placed by pattern (a line beside
   their one machine, or between their two), not searched.
 - Run the `free-explain` harness before tuning arrange weights. The free placement spots
   drawers by width, not role. Every router-judged search needs a time cap, not only a count.

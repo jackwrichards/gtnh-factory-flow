@@ -12,6 +12,7 @@
  * at once. The stages are the same functions the single-thread arrange
  * calls in order, so the answer is the same board, sooner.
  */
+import { PICK_CROSSING_EXTRA } from "./board-arrange";
 import {
   runArrangeJob,
   type ArrangeJob,
@@ -174,7 +175,10 @@ async function arrangeStaged(
     }),
   ]);
   say(5, "Choosing the better board", 1, 1);
-  const winner = (second.polishedPoints ?? Infinity) < (first.polishedPoints ?? Infinity) ? second : first;
+  // The same choice as arrangeBoard's (fewerCrossings): a crossing counts extra.
+  const judged = (job: typeof first) =>
+    (job.polishedPoints ?? Infinity) + PICK_CROSSING_EXTRA * (job.polishedCrossings ?? Infinity);
+  const winner = judged(second) < judged(first) ? second : first;
   return { seq: full.seq, result: winner.result, arrangeMs: performance.now() - started };
 }
 

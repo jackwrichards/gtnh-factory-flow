@@ -10,7 +10,8 @@ import { playEditSfx, playSfxDegree } from "@/lib/sound/sfx";
  * as one fraction for the key's label ("Arranging 40%", the mod's).
  */
 export interface BoardCommands {
-  arrange: () => void;
+  /** `ungroup`: every group is taken apart first and all the cards are laid out; otherwise a group moves as one block. */
+  arrange: (options?: { ungroup?: boolean }) => void;
   cancelArrange: () => void;
   fit: () => void;
   /** Opens the board's empty-board menu at a screen point, its new things landing in the middle of the view. */
@@ -101,12 +102,12 @@ export function useArrangeState(): ArrangeState {
 }
 
 /** Arrange, or stop the one running (the key is both). */
-export function pressArrange() {
+export function pressArrange(options?: { ungroup?: boolean }) {
   if (!commands) return;
   if (arrange.running) {
     markArrangeStopping();
     commands.cancelArrange();
   } else {
-    commands.arrange();
+    commands.arrange(options);
   }
 }

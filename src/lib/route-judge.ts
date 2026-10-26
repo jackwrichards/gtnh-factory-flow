@@ -41,7 +41,25 @@ export function makeRouteJudge(
   restingObstacles: readonly GridObstacle[],
   restingRequests: readonly GridRouteRequest[],
   tuningIn: Partial<RouterTuning>,
+  /**
+   * Obstacles that ride on an arranged card, by id: the cards inside a kept
+   * group move with the group's block, so wires into the group are judged at
+   * the card they really reach. The layouts name only the arranged cards.
+   */
+  riders: ReadonlyArray<readonly [string, string]> = [],
 ): (positions: JudgePositions, options?: { quick?: boolean; base?: JudgePositions }) => JudgeVerdict {
+  const riderOf = new Map(riders);
+  const restingById = new Map(restingObstacles.map((o) => [o.id, o]));
+  /** Where an obstacle's top-left stands in a layout: its own place, or its block's step from rest. */
+  const at = (positions: JudgePositions, o: GridObstacle): { x: number; y: number } => {
+    const own = positions.get(o.id);
+    if (own) return own;
+    const blockId = riderOf.get(o.id);
+    const blockAt = blockId === undefined ? undefined : positions.get(blockId);
+    const block = blockId === undefined ? undefined : restingById.get(blockId);
+    if (blockAt && block) return { x: o.left + blockAt.x - block.left, y: o.top + blockAt.y - block.top };
+    return { x: o.left, y: o.top };
+  };
   // A tuning saved before a dial existed still routes with that dial at
   // its default, exactly as the app fills it in.
   const tuning: RouterTuning = { ...DEFAULT_ROUTER_TUNING, ...tuningIn };
@@ -54,13 +72,13 @@ export function makeRouteJudge(
   const fullByKey = new Map<string, { obstacles: GridObstacle[]; requests: GridRouteRequest[]; routes: Map<string, GridRoutedEdge> }>();
   const keyOf = (positions: JudgePositions) =>
     restingObstacles.map((o) => {
-      const p = positions.get(o.id);
-      return p ? `${p.x},${p.y}` : `${o.left},${o.top}`;
+      const p = at(positions, o);
+      return `${p.x},${p.y}`;
     }).join(";");
   const place = (positions: JudgePositions) => {
     const delta = new Map<string, { dx: number; dy: number }>();
     const obstacles: GridObstacle[] = restingObstacles.map((o) => {
-      const p = positions.get(o.id) ?? { x: o.left, y: o.top };
+      const p = at(positions, o);
       delta.set(o.id, { dx: p.x - o.left, dy: p.y - o.top });
       return { id: o.id, left: p.x, top: p.y, right: p.x + (o.right - o.left), bottom: p.y + (o.bottom - o.top) };
     });
@@ -80,7 +98,9 @@ export function makeRouteJudge(
     const started = performance.now();
     const measure = measureRoutes(routes);
     judgeStats.verdictMs += performance.now() - started;
-    return { ...measure, points: routePoints(measure, tuning) };
+    // Routed at the router's prices, scored at the arrange's crossing price.
+    const points = routePoints(measure, tuning) + (tuning.arrangeCrossing - tuning.crossing) * measure.crossings;
+    return { ...measure, points };
   };
   const full = (positions: JudgePositions): JudgeVerdict => {
     const key = keyOf(positions);
@@ -111,8 +131,8 @@ export function makeRouteJudge(
     // Which cards moved between the base and this layout?
     const moved = new Set<string>();
     for (const o of restingObstacles) {
-      const a = options.base.get(o.id) ?? { x: o.left, y: o.top };
-      const b = positions.get(o.id) ?? { x: o.left, y: o.top };
+      const a = at(options.base, o);
+      const b = at(positions, o);
       if (a.x !== b.x || a.y !== b.y) moved.add(o.id);
     }
     if (moved.size === 0) {

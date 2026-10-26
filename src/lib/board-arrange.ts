@@ -199,8 +199,13 @@ let ROW_GAP = cells(2);
 let SECTION_GAP = cells(4);
 /** Air around a whole island. Generous: separateness is the point. */
 let ISLAND_GAP = cells(12);
-/** The router's prices for this arrange (set by arrangeBoard). */
+/** The router's prices for this arrange, a crossing at the arrange's price (set by arrangeBoard). */
 let ARRANGE_PRICES: RouterTuning | undefined;
+
+/** The dials as the arrange prices layouts: a crossing costs `arrangeCrossing` (route-judge.ts scores the same way). */
+function arrangePrices(tuning: RouterTuning): RouterTuning {
+  return { ...tuning, crossing: tuning.arrangeCrossing ?? DEFAULT_ROUTER_TUNING.arrangeCrossing };
+}
 /** The air owed between strangers at a set of positions (set by arrangeBoard). */
 let ARRANGE_AIR: (positions: ReadonlyMap<string, { x: number; y: number }>) => number = () => 0;
 /** Where the optimiser's search is, for the loader (set by arrangeBoard). */
@@ -232,7 +237,8 @@ function applyTaste(taste: ArrangeTaste | undefined): void {
   // Compact matches hand-drawn boards: rows a cell apart, columns two.
   // Drawers keep two cells from their machine and a cell from each other
   // in every spacing: closer and the wire between them, its arrowhead and
-  // the drawer's own keys are hidden (the mod keeps the same air).
+  // the drawer's own keys are hidden (the mod keeps the same air). Touching
+  // drawers made shorter wires but more crossings on big plans.
   ROW_GAP = cells(spacing === "compact" ? 1 : spacing === "roomy" ? 3 : 2);
   SECTION_GAP = cells(spacing === "compact" ? 2 : spacing === "roomy" ? 6 : 4);
   COLUMN_GAP_MIN = cells(spacing === "compact" ? 2 : spacing === "roomy" ? 5 : 3);
@@ -347,7 +353,7 @@ function prepareArrange(rawInput: ArrangeInput): {
   // here so every stage (search proxy, finalists, polish, final choice)
   // optimises the same objective and the judge never undoes the search.
   // The dev menu's score stays pure routing points.
-  ARRANGE_PRICES = rawInput.tuning ?? routerPrices();
+  ARRANGE_PRICES = arrangePrices(rawInput.tuning ?? routerPrices());
   ARRANGE_AIR = makeAirTerm(rawInput.cards, rawInput.wires, ARRANGE_PRICES.islandAir);
   const airOf = (positions: ReadonlyMap<string, { x: number; y: number }>) => ARRANGE_AIR(positions);
   const input: ArrangeInput = rawInput.judge
@@ -384,7 +390,7 @@ function rankCandidates(input: ArrangeInput, candidates: ArrangeCandidates) {
   ];
   const ranked = named
     .map(({ name, result }) => ({ name, result, verdict: verdict(result) }))
-    .sort((a, b) => a.verdict.points - b.verdict.points);
+    .sort((a, b) => fewerCrossings(a.verdict, b.verdict));
   return { ranked, verdict };
 }
 
@@ -422,11 +428,12 @@ export function arrangePolishStage(
   rawInput: ArrangeInput,
   candidates: ArrangeCandidates,
   which: 0 | 1,
-): { result: ArrangeResult; points: number } {
+): { result: ArrangeResult; points: number; crossings: number } {
   const { input } = prepareArrange(rawInput);
   const { ranked, verdict } = rankCandidates(input, candidates);
   const polished = polishWithJudge(input, ranked[which].result, ranked[which].verdict, which === 0 ? "first" : "second");
-  return { result: polished, points: verdict(polished).points };
+  const final = verdict(polished);
+  return { result: polished, points: final.points, crossings: final.crossings };
 }
 
 export function arrangeBoard(rawInput: ArrangeInput): ArrangeResult {
@@ -475,10 +482,24 @@ export function arrangeBoard(rawInput: ArrangeInput): ArrangeResult {
   input.onProgress?.({ step: 5, stage: "Choosing the better board", done: 1, total: 1 });
   const finalFirst = verdict(polishedFirst);
   const finalSecond = verdict(polishedSecond);
-  // Points alone decide: a crossing is already priced into them, so a
-  // layout that dodges one with a long detour does not win on crossings.
-  return finalSecond.points < finalFirst.points ? polishedSecond : polishedFirst;
+  return fewerCrossings(finalSecond, finalFirst) < 0 ? polishedSecond : polishedFirst;
 }
+
+/**
+ * Which of two judged boards the arrange keeps (negative: `a`). Players read
+ * crossings first, so here a crossing counts PICK_CROSSING_EXTRA px of wire on
+ * top of its price in the points; the search and the polish still trade at
+ * the router's price, which keeps their moves small. Fewest crossings at any
+ * cost stacked a grouped board into a tower with half as much wire again.
+ */
+export function fewerCrossings(
+  a: { crossings: number; points: number },
+  b: { crossings: number; points: number },
+): number {
+  return a.points + PICK_CROSSING_EXTRA * a.crossings - (b.points + PICK_CROSSING_EXTRA * b.crossings);
+}
+
+export const PICK_CROSSING_EXTRA = 1600;
 
 /** The free placement as an ArrangeResult: component boxes, no steering. */
 function arrangeFreeCandidate(input: ArrangeInput): ArrangeResult {
@@ -517,7 +538,7 @@ function arrangeFreeCandidate(input: ArrangeInput): ArrangeResult {
  * (sections, satellites, the fold); the arrange itself is `arrangeBoard`.
  */
 export function arrangeBoardColumns(rawInput: ArrangeInput): ArrangeResult {
-  ARRANGE_PRICES = rawInput.tuning ?? routerPrices();
+  ARRANGE_PRICES = arrangePrices(rawInput.tuning ?? routerPrices());
   ARRANGE_AIR = makeAirTerm(rawInput.cards, rawInput.wires, ARRANGE_PRICES.islandAir);
   const airOf = (positions: ReadonlyMap<string, { x: number; y: number }>) => ARRANGE_AIR(positions);
   const plain = arrangeBoardOnce(rawInput, false);

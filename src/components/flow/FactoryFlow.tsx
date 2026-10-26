@@ -1557,55 +1557,109 @@ function installSolvedRoutes(result: RouteSolveResult) {
 }
 setRouteSolveSink(installSolvedRoutes);
 
-/** The judge's inputs, serialisable: what the arrange worker builds its judge from. */
-function buildArrangeJudgeInput(cardIds: readonly string[]): ArrangeJudgeInput | undefined {
-  const ids = new Set(cardIds);
-  const inputs = publishedGridRouteEdges.filter(
-    (input) => ids.has(input.sourceNodeId) && ids.has(input.targetNodeId),
-  );
-  if (inputs.length === 0) {
-    return undefined;
+/**
+ * The judge's inputs, serialisable: what the arrange worker builds its judge
+ * from. The cards are the level's arrange cards; a group is one of them, a
+ * block of its frame's size. Inside an open group the cards ride the block
+ * (`members`, route-judge.ts `riders`): a wire into the group is judged at
+ * the card it really reaches, through the frame as the board routes it. A
+ * wire into a collapsed group meets its summary card (`representativeOf`).
+ * A wire with both ends in one block never changes with the layout and is
+ * left out.
+ */
+function buildArrangeJudgeInput(
+  cards: ReadonlyArray<{ id: string; x: number; y: number; width: number; height: number }>,
+  representativeOf: (id: string) => string | undefined,
+  isBlock: (id: string) => boolean,
+  members: ReadonlyArray<{ id: string; top: string }>,
+): ArrangeJudgeInput | undefined {
+  const ids = new Set(cards.map((card) => card.id));
+  // A plain card is judged at its measured box, as the router sees it; a
+  // group at the block the arrange moves.
+  const bounds = new Map<string, { left: number; top: number; right: number; bottom: number }>();
+  for (const card of cards) {
+    const block = isBlock(card.id);
+    const measured = block ? undefined : getMeasuredNodeBoundsById(card.id);
+    if (!measured && !block) {
+      return undefined;
+    }
+    bounds.set(
+      card.id,
+      measured ?? { left: card.x, top: card.y, right: card.x + card.width, bottom: card.y + card.height },
+    );
   }
-  const base: Array<{ input: GridRouteEdgeInput; sources: GridEndpoint[]; targets: GridEndpoint[] }> = [];
-  for (const input of inputs) {
-    const sources = resolveGridRouteEndpoints(input, "source");
-    const targets = resolveGridRouteEndpoints(input, "target");
+  // The cards drawn inside an open top-level group, and the block each rides.
+  const riders = new Map<string, string>();
+  for (const member of members) {
+    if (!ids.has(member.top) || !isBlock(member.top) || bounds.has(member.id)) continue;
+    const measured = getMeasuredNodeBoundsById(member.id);
+    if (!measured) continue;
+    bounds.set(member.id, measured);
+    riders.set(member.id, member.top);
+  }
+  const topOf = (id: string) => riders.get(id) ?? id;
+  const requests: GridRouteRequest[] = [];
+  for (const input of publishedGridRouteEdges) {
+    // An end the board draws (a card here, or one inside an open group) is
+    // judged at its own docks; anything else at its stand-in's rim.
+    const endOf = (end: "source" | "target") => {
+      const id = end === "source" ? input.sourceNodeId : input.targetNodeId;
+      if (bounds.has(id)) return { id, own: true };
+      const rep = representativeOf(id);
+      return rep && ids.has(rep) ? { id: rep, own: false } : undefined;
+    };
+    const source = endOf("source");
+    const target = endOf("target");
+    if (!source || !target || topOf(source.id) === topOf(target.id)) {
+      continue;
+    }
+    const docks = (end: "source" | "target", at: { id: string; own: boolean }) =>
+      at.own ? resolveGridRouteEndpoints(input, end) : cardRimDocks(bounds.get(at.id)!);
+    const sources = docks("source", source);
+    const targets = docks("target", target);
     if (sources.length === 0 || targets.length === 0) {
       continue;
     }
-    base.push({ input, sources, targets });
+    // The frames this wire may cross, as the board routes it; only frames
+    // the judge holds count.
+    const frames = (list: string[] | undefined) => {
+      const kept = (list ?? []).filter((id) => bounds.has(id));
+      return kept.length > 0 ? kept : undefined;
+    };
+    requests.push({
+      edgeId: input.edgeId,
+      order: input.order,
+      sources,
+      targets,
+      strokeWidth: Math.min(input.routingWidth, LANE_CAPACITY),
+      sourceCardId: source.id,
+      targetCardId: target.id,
+      // As the board routes them (ensureGridSolve): a drawer's own end lands square.
+      sourceSquare: (source.own && input.sourceStorageEndpoint) || undefined,
+      targetSquare: (target.own && input.targetStorageEndpoint) || undefined,
+      exemptObstacleIds: frames(input.throughBoardIds),
+      homeObstacleIds: frames(input.homeBoardIds),
+    });
   }
-  if (base.length === 0) {
+  if (requests.length === 0) {
     return undefined;
-  }
-  const bounds = new Map<string, { left: number; top: number; right: number; bottom: number }>();
-  for (const id of ids) {
-    const rect = getMeasuredNodeBoundsById(id);
-    if (!rect) {
-      return undefined;
-    }
-    bounds.set(id, rect);
   }
   const obstacles: GridObstacle[] = [];
   for (const [id, rect] of bounds) {
     obstacles.push({ id, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
   }
-  const requests: GridRouteRequest[] = base.map(({ input, sources, targets }) => ({
-    edgeId: input.edgeId,
-    order: input.order,
-    sources,
-    targets,
-    strokeWidth: Math.min(input.routingWidth, LANE_CAPACITY),
-    sourceCardId: input.sourceNodeId,
-    targetCardId: input.targetNodeId,
-  }));
   // The judge's exact inputs at the moment of the arrange, for the audit
   // tool (tools/audit-board.mjs) to save beside the result.
-  const input: ArrangeJudgeInput = { obstacles, requests, tuning: getRouterTuning() };
+  const input: ArrangeJudgeInput = {
+    obstacles,
+    requests,
+    tuning: getRouterTuning(),
+    riders: riders.size > 0 ? [...riders] : undefined,
+  };
   if (typeof window !== "undefined") {
     (window as unknown as { __gtnhArrangeJudgeInput?: unknown }).__gtnhArrangeJudgeInput = {
       ...input,
-      cardIds: [...cardIds],
+      cardIds: [...ids],
     };
   }
   return input;
@@ -5453,7 +5507,7 @@ export function FactoryFlow() {
   // The arrange in flight, for the loader; undefined when none is.
   const [arrangeProgress, setArrangeProgress] = useState<ArrangeProgress | undefined>(undefined);
   const arrangeRunningRef = useRef(false);
-  const handleAutoArrange = useCallback(async (options: { keepBoards: boolean }) => {
+  const handleAutoArrange = useCallback(async (options: { keepBoards: boolean; ungroup?: boolean }) => {
     // One at a time: a click while one runs is ignored.
     if (arrangeRunningRef.current) {
       return;
@@ -5464,9 +5518,11 @@ export function FactoryFlow() {
     // Unless Keep boards is on, every board is dissolved first (members
     // surface where the frame stood) and the arrange lays out one flat set
     // of cards. With Keep boards on, each board is sealed and only placed.
-    // Plan boards always keep their groups: each is one block, its insides untouched (docs/groups.md, Arrange).
+    // Plan boards keep their groups unless the Arrange menu's Ungroup all was picked: each is one block, its insides
+    // untouched (docs/groups.md, Arrange).
     const dumpBoards =
-      !options.keepBoards && state.project.planMode !== true && (state.project.pockets?.length ?? 0) > 0;
+      (state.project.pockets?.length ?? 0) > 0 &&
+      (options.ungroup === true || (!options.keepBoards && state.project.planMode !== true));
     const project = dumpBoards ? flattenBoards(state.project) : state.project;
     let computed: Awaited<ReturnType<typeof computeAutoArrangement>>;
     try {
@@ -5528,7 +5584,7 @@ export function FactoryFlow() {
   useEffect(
     () =>
       registerBoardCommands({
-        arrange: () => void handleAutoArrange({ keepBoards: false }),
+        arrange: (options) => void handleAutoArrange({ keepBoards: false, ungroup: options?.ungroup }),
         cancelArrange,
         fit: handleFitView,
         openBoardMenu: (at) => {
@@ -11512,12 +11568,32 @@ async function computeAutoArrangement(
   // The root pass: boards as meta cards at their fresh sizes, wire length
   // between the blocks doing the placing.
   const root = gatherLevel(undefined);
-  // The judge routes the real wires at each candidate layout; it exists
-  // only when every card on the level is a plain card (no boards).
-  const rootIsPlain = root.cards.every((card) => !isPocketId(project, card.id));
-  const judgeInput = rootIsPlain
-    ? buildArrangeJudgeInput(root.cards.map((card) => card.id))
-    : undefined;
+  // The judge routes the real wires at each candidate layout, a group as
+  // one block and the wires into it as wires into the block.
+  // Everything inside a top-level group, and that group.
+  const pocketParent = new Map((project.pockets ?? []).map((pocket) => [pocket.id, pocket.parentPocketId]));
+  const topPocketOf = (pocketId: string): string => {
+    let current = pocketId;
+    const seen = new Set<string>();
+    while (pocketParent.get(current) !== undefined && !seen.has(current)) {
+      seen.add(current);
+      current = pocketParent.get(current)!;
+    }
+    return current;
+  };
+  const groupMembers: Array<{ id: string; top: string }> = [];
+  for (const item of [...project.nodes, ...(project.storages ?? [])]) {
+    if (item.pocketId !== undefined) groupMembers.push({ id: item.id, top: topPocketOf(item.pocketId) });
+  }
+  for (const pocket of project.pockets ?? []) {
+    if (pocket.parentPocketId !== undefined) groupMembers.push({ id: pocket.id, top: topPocketOf(pocket.id) });
+  }
+  const judgeInput = buildArrangeJudgeInput(
+    root.cards,
+    (id) => representativeAt(undefined, id),
+    (id) => isPocketId(project, id),
+    groupMembers,
+  );
   if (typeof window !== "undefined") {
     (window as unknown as { __gtnhArrangeInput?: unknown }).__gtnhArrangeInput = {
       cards: root.cards,

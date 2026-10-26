@@ -66,6 +66,12 @@ export interface RouterTuning {
    * tight as the wires allow.
    */
   islandAir: number;
+  /**
+   * ARRANGE: a crossing's price when the arrange compares layouts, in pixels
+   * of wire; the router's own `crossing` prices routing. The same by default:
+   * dearer (2,000) cut crossings in a one-thread bench but not on the board.
+   */
+  arrangeCrossing: number;
   /** ARRANGE: annealing trials the search may spend (capped by board size). */
   searchTrials: number;
   /** ARRANGE: distinct layouts the real router judges at the end of the search. */
@@ -108,6 +114,7 @@ export const DEFAULT_ROUTER_TUNING: RouterTuning = {
   windowPad: 4,
   wideRungCells: 30,
   islandAir: 0.5,
+  arrangeCrossing: 400,
   searchTrials: 20000,
   finalists: 6,
   polishBudget: 100,
@@ -288,6 +295,12 @@ export const ROUTER_TUNING_FIELDS: RouterTuningField[] = [
     hint: "Price for standing within six cells of an unrelated card. Parts clusters into islands.",
     low: "Zero packs tight, no islands.",
     high: "Groups stand far apart; bridge wires get longer.",
+  },
+  {
+    key: "arrangeCrossing", label: "Crossing (arrange)", kind: "number", min: 0, max: 8000, step: 100, group: "Arrange",
+    hint: "A crossing's price when Arrange compares layouts, in pixels of wire. Wire routing keeps its own price.",
+    low: "Arrange takes crossings for shorter wires.",
+    high: "Arrange takes longer wires for fewer crossings.",
   },
   {
     key: "searchTrials", label: "Search trials", kind: "number", min: 1000, max: 100000, step: 1000, group: "Arrange",

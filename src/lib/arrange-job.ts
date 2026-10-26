@@ -28,6 +28,8 @@ export interface ArrangeJudgeInput {
   obstacles: GridObstacle[];
   requests: GridRouteRequest[];
   tuning: RouterTuning;
+  /** Obstacles that move with an arranged card (route-judge.ts): the cards inside a kept group. */
+  riders?: Array<[string, string]>;
 }
 
 export interface ArrangeJob {
@@ -80,6 +82,7 @@ export interface ArrangeJobResult {
   /** A stage job's own answer (the `result` above is then its main board). */
   columns?: { plain: ArrangeResult; challenger: ArrangeResult };
   polishedPoints?: number;
+  polishedCrossings?: number;
 }
 
 /** Runs the job right here; the worker and the fallback both call this. */
@@ -89,7 +92,7 @@ export function runArrangeJob(
 ): ArrangeJobResult {
   const started = performance.now();
   const judge = job.judgeInput
-    ? makeRouteJudge(job.judgeInput.obstacles, job.judgeInput.requests, job.judgeInput.tuning)
+    ? makeRouteJudge(job.judgeInput.obstacles, job.judgeInput.requests, job.judgeInput.tuning, job.judgeInput.riders)
     : undefined;
   const input: ArrangeInput = {
     cards: job.cards,
@@ -112,7 +115,13 @@ export function runArrangeJob(
   }
   if (job.stage === "polish" && job.candidates) {
     const polished = arrangePolishStage(input, job.candidates, job.which ?? 0);
-    return { seq: job.seq, result: polished.result, polishedPoints: polished.points, arrangeMs: performance.now() - started };
+    return {
+      seq: job.seq,
+      result: polished.result,
+      polishedPoints: polished.points,
+      polishedCrossings: polished.crossings,
+      arrangeMs: performance.now() - started,
+    };
   }
   const result = arrangeBoard(input);
   return { seq: job.seq, result, arrangeMs: performance.now() - started };

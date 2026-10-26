@@ -149,8 +149,10 @@ Group key or Ctrl+G.
 ## Arrange
 
 Arrange keeps a group together: each top-level group is one block of its frame's size (or the summary card's when
-collapsed), its insides untouched, placed with the ungrouped cards; the website's old "Keep boards on rearrange" made
-this the only behaviour. Wires into a group count as wires into its block.
+collapsed), its insides untouched, placed with the ungrouped cards. Wires into a group count as wires into its block
+for the placing; the website's router judge still routes them to the card inside. On the website a plan with groups
+asks first (the Arrange key's menu): Keep groups, or Ungroup all, which takes every group apart and arranges all the
+cards (undo brings the groups back).
 
 ## Where it lives
 

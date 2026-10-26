@@ -40,6 +40,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "4.7.0",
+    date: "2026-10-26",
+    headline: "Arrange with or without groups",
+    notes: [
+      "On a plan with groups, Arrange asks: keep the groups, or ungroup all and arrange every card.",
+      "Arrange now checks its layouts against the real wires on plans with groups too.",
+      "Arrange prefers layouts with fewer crossing wires.",
+    ],
+  },
+  {
     version: "4.6.0",
     date: "2026-10-25",
     headline: "Wires keep up",

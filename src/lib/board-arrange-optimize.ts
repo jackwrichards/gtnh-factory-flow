@@ -735,7 +735,9 @@ export function optimizeIslandLayout(
 
   const random = rng(hashIds(cards.map((card) => card.id)));
   const trials = options.trials ?? Math.min(prices.searchTrials, 600 * n + 3000);
-  const startTemperature = prices.crossing / 2;
+  // Starts at half the ROUTER's crossing price, not the arrange's dearer one: the search's
+  // reach was tuned there, and a hotter start wanders off good layouts it had found.
+  const startTemperature = DEFAULT_ROUTER_TUNING.crossing / 2;
   const endTemperature = 4;
   const columnCards = state.columns.flat();
   if (columnCards.length === 0) {
