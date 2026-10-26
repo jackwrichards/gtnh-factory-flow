@@ -69,7 +69,10 @@ After the trades are settled and held (or, on the fast path, with every gate clo
   cannot go higher (maximise its own `u` with every unfrozen pool at least z); a pool the round's own point already
   shows above z is a certificate that it can, and is not probed. Repeat until every pool is frozen.
 - **Hold**: each pool's machine time is held in a narrow band around its level through least flow, the canonical
-  tie-break and every later model of that support (rows, not column bounds: TS columns start at 0).
+  tie-break and every later model of that support (rows, not column bounds: TS columns start at 0). When least flow
+  finds no point under the exact bands and drawer caps (each read off a point HiGHS keeps only to its own tolerance),
+  the pass tries it once more with them loosened by `validateTol` (`loosened` in `trade.ts`). Website only: HiGHS'
+  tolerance, not a rule.
 
 The levels are a property of the plan, not of the solve path: the stage A optimum is unique, the max-min vector over a
 convex set is unique, and every freeze is decided by a value (a probe's optimum), never by which vertex an engine

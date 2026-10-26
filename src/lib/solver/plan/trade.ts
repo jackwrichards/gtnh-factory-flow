@@ -88,6 +88,22 @@ export function tradesWithin(open: ReadonlySet<number> | null): Trades {
   return { open, levels: [], caps: [], floors: [] };
 }
 
+/**
+ * `held` with room on each hold's loose side, as wide as the conservation check: every value held was read off a point
+ * the engine kept only to its own tolerance (HiGHS misses rows by about 1e-7 on its own scaling), so the exact holds
+ * together can leave a later model with no point at all. A closed level stays closed, a band at nothing stays there.
+ */
+export function loosened(held: Trades): Trades {
+  const room = NUMERICS.validateTol;
+  return {
+    ...held,
+    caps: held.caps.map((cap) => (cap <= 0 ? 0 : cap * (1 + room) + room * Math.max(1, cap))),
+    floors: held.floors.map((band) =>
+      band.hi <= 0 ? band : { ...band, lo: Math.max(0, band.lo - room) },
+    ),
+  };
+}
+
 export function holding(trades: Trades, level: Level, cap: number): Trades {
   return {
     open: trades.open,

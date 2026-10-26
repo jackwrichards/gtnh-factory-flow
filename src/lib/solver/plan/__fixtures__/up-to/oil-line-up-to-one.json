@@ -1,0 +1,2486 @@
+{
+ "mode": "AUTO",
+ "machines": [
+  {
+   "id": "node-10e0c51f-0753-4703-a2e1-7fbe39ee4b7f",
+   "name": "Chemical Reactor: TNT",
+   "durationTicks": 200,
+   "energyPerTick": 24,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 4,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 0,
+     "name": "Gelled Toluene",
+     "free": false
+    },
+    {
+     "amount": 250,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 1,
+     "name": "Sulfuric Acid",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 2,
+     "name": "TNT",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-16fc5b33-59bf-4300-96ff-5ab0260011e5",
+   "name": "Distillation Tower: Sulfuric Heavy Fuel",
+   "durationTicks": 98,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 10,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 3,
+     "name": "Oil Berry",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 100,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 4,
+     "name": "Sulfuric Heavy Fuel",
+     "free": false
+    },
+    {
+     "amount": 500,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 5,
+     "name": "Sulfuric Light Fuel",
+     "free": false
+    },
+    {
+     "amount": 1500,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 6,
+     "name": "Sulfuric Naphtha",
+     "free": false
+    },
+    {
+     "amount": 25,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 7,
+     "name": "Naphthenic Acid",
+     "free": false
+    },
+    {
+     "amount": 600,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 8,
+     "name": "Sulfuric Gas",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-16fc5b33-59bf-4300-96ff-5ab0260011e5#r1",
+   "name": "Distillation Tower: Toluene",
+   "durationTicks": 120,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 9,
+     "name": "Heavy Fuel",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 399.99999999999994,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 10,
+     "name": "Toluene",
+     "free": false
+    },
+    {
+     "amount": 399.99999999999994,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 11,
+     "name": "Benzene",
+     "free": false
+    },
+    {
+     "amount": 250,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 12,
+     "name": "Phenol",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-1d20a159-da29-49e6-8953-7f55b3af0c79",
+   "name": "Distillation Tower: Tiny Pile of Carbon Dust",
+   "durationTicks": 30,
+   "energyPerTick": 1920,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 13,
+     "name": "Severely Steam-Cracked Naphtha",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 3,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 14,
+     "name": "Tiny Pile of Carbon Dust",
+     "free": false
+    },
+    {
+     "amount": 24.999999999999996,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 9,
+     "name": "Heavy Fuel",
+     "free": false
+    },
+    {
+     "amount": 49.99999999999999,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 15,
+     "name": "Light Fuel",
+     "free": false
+    },
+    {
+     "amount": 20,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 10,
+     "name": "Toluene",
+     "free": false
+    },
+    {
+     "amount": 99.99999999999999,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 11,
+     "name": "Benzene",
+     "free": false
+    },
+    {
+     "amount": 49.99999999999999,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 16,
+     "name": "Butene",
+     "free": false
+    },
+    {
+     "amount": 49.99999999999999,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 17,
+     "name": "Butadiene",
+     "free": false
+    },
+    {
+     "amount": 15,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 18,
+     "name": "Propane",
+     "free": false
+    },
+    {
+     "amount": 300,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 19,
+     "name": "Propene",
+     "free": false
+    },
+    {
+     "amount": 65,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 20,
+     "name": "Ethane",
+     "free": false
+    },
+    {
+     "amount": 500,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 21,
+     "name": "Ethylene",
+     "free": false
+    },
+    {
+     "amount": 500,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 22,
+     "name": "Methane",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-20be411d-e166-43b5-98b9-74c54e37f7b4",
+   "name": "Tank: Empty Cell",
+   "durationTicks": 1,
+   "energyPerTick": 0,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 1,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 23,
+     "name": "Hydrogen Cell",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 24,
+     "name": "Empty Cell",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 25,
+     "name": "Hydrogen",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-22303007-1e0e-426b-99a9-339e60ca79e4",
+   "name": "Large Chemical Reactor: Heavy Fuel",
+   "durationTicks": 10,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 8000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 4,
+     "name": "Sulfuric Heavy Fuel",
+     "free": false
+    },
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 25,
+     "name": "Hydrogen",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 8000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 9,
+     "name": "Heavy Fuel",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 26,
+     "name": "Hydrogen Sulfide",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r1",
+   "name": "Large Chemical Reactor: Light Fuel",
+   "durationTicks": 10,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 12000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 5,
+     "name": "Sulfuric Light Fuel",
+     "free": false
+    },
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 25,
+     "name": "Hydrogen",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 12000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 15,
+     "name": "Light Fuel",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 26,
+     "name": "Hydrogen Sulfide",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r2",
+   "name": "Large Chemical Reactor: Naphtha",
+   "durationTicks": 10,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 12000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 6,
+     "name": "Sulfuric Naphtha",
+     "free": false
+    },
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 25,
+     "name": "Hydrogen",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 12000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 27,
+     "name": "Naphtha",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 26,
+     "name": "Hydrogen Sulfide",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r3",
+   "name": "Large Chemical Reactor: Refinery Gas",
+   "durationTicks": 10,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 16000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 8,
+     "name": "Sulfuric Gas",
+     "free": false
+    },
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 25,
+     "name": "Hydrogen",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 16000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 28,
+     "name": "Refinery Gas",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 26,
+     "name": "Hydrogen Sulfide",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r4",
+   "name": "Large Chemical Reactor: Fuel",
+   "durationTicks": 100,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 20000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 15,
+     "name": "Light Fuel",
+     "free": false
+    },
+    {
+     "amount": 4000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 9,
+     "name": "Heavy Fuel",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 24000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 29,
+     "name": "Fuel",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-237bff6f-12f1-4fd4-8e38-4bc936c86d13",
+   "name": "Crop Farm: Oil Berry",
+   "durationTicks": 5888,
+   "energyPerTick": 0,
+   "throughputFactor": 1,
+   "inputs": [],
+   "outputs": [
+    {
+     "amount": 6.614003199999999,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 3,
+     "name": "Oil Berry",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 225,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-2964b946-4f03-45bc-b142-ee4b5da3a671",
+   "name": "Electrolyzer: Sodium Hydroxide Dust",
+   "durationTicks": 720,
+   "energyPerTick": 30,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 1,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 24,
+     "name": "Empty Cell",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 30,
+     "name": "Salt Water",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 3,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 31,
+     "name": "Sodium Hydroxide Dust",
+     "free": false
+    },
+    {
+     "amount": 1,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 23,
+     "name": "Hydrogen Cell",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 32,
+     "name": "Chlorine",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7",
+   "name": "Large Chemical Reactor: Raw Rubber Dust",
+   "durationTicks": 20,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 288,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 33,
+     "name": "Isoprene",
+     "free": false
+    },
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 34,
+     "name": "Oxygen",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 3,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 35,
+     "name": "Raw Rubber Dust",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r1",
+   "name": "Large Chemical Reactor: Molten Rubber",
+   "durationTicks": 37,
+   "energyPerTick": 240,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 9,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 35,
+     "name": "Raw Rubber Dust",
+     "free": false
+    },
+    {
+     "amount": 1,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 36,
+     "name": "Sulfur Dust",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1296,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 37,
+     "name": "Molten Rubber",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r2",
+   "name": "Large Chemical Reactor: Raw Styrene-Butadiene Rubber Dust",
+   "durationTicks": 40,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 72,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 38,
+     "name": "Styrene",
+     "free": false
+    },
+    {
+     "amount": 216,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 17,
+     "name": "Butadiene",
+     "free": false
+    },
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 34,
+     "name": "Oxygen",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 3,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 39,
+     "name": "Raw Styrene-Butadiene Rubber Dust",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r3",
+   "name": "Large Chemical Reactor: Molten Styrene-Butadiene Rubber (SBR)",
+   "durationTicks": 37,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 9,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 39,
+     "name": "Raw Styrene-Butadiene Rubber Dust",
+     "free": false
+    },
+    {
+     "amount": 1,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 36,
+     "name": "Sulfur Dust",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1296,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 40,
+     "name": "Molten Styrene-Butadiene Rubber (SBR)",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450",
+   "name": "Large Chemical Reactor: Molten Polytetrafluoroethylene (PTFE)",
+   "durationTicks": 40,
+   "energyPerTick": 120,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 144,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 41,
+     "name": "Tetrafluoroethylene",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 34,
+     "name": "Oxygen",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 216,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 42,
+     "name": "Molten Polytetrafluoroethylene (PTFE)",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450#r1",
+   "name": "Large Chemical Reactor: Isoprene",
+   "durationTicks": 30,
+   "energyPerTick": 120,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 21,
+     "name": "Ethylene",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 19,
+     "name": "Propene",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 33,
+     "name": "Isoprene",
+     "free": false
+    },
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 25,
+     "name": "Hydrogen",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450#r2",
+   "name": "Large Chemical Reactor: Hydrogen",
+   "durationTicks": 30,
+   "energyPerTick": 120,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 21,
+     "name": "Ethylene",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 11,
+     "name": "Benzene",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 25,
+     "name": "Hydrogen",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 38,
+     "name": "Styrene",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-5938373f-d11c-4690-8895-00e1b4b55c6a",
+   "name": "Gas Turbine",
+   "durationTicks": 20,
+   "energyPerTick": 0,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 55.18716577540107,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 27,
+     "name": "Naphtha",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 10240,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 43,
+     "name": "EU",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-6f343951-b103-45d8-b663-230838f110f8",
+   "name": "Fluid Solidifier: Gelled Toluene",
+   "durationTicks": 100,
+   "energyPerTick": 15,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 100,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 10,
+     "name": "Toluene",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 0,
+     "name": "Gelled Toluene",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-7ff8245f-338f-48cc-8904-fafe9b4229d7",
+   "name": "Gas Turbine",
+   "durationTicks": 20,
+   "energyPerTick": 0,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 18.055555555555557,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 28,
+     "name": "Refinery Gas",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 2560,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 43,
+     "name": "EU",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49",
+   "name": "Large Chemical Reactor: Diluted Sulfuric Acid",
+   "durationTicks": 160,
+   "energyPerTick": 120,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 1,
+     "name": "Sulfuric Acid",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 44,
+     "name": "Acetic Acid",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 45,
+     "name": "Diluted Sulfuric Acid",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 46,
+     "name": "Ethenone",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r1",
+   "name": "Large Chemical Reactor: Acetic Acid",
+   "durationTicks": 25,
+   "energyPerTick": 120,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 34,
+     "name": "Oxygen",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 21,
+     "name": "Ethylene",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 44,
+     "name": "Acetic Acid",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r2",
+   "name": "Large Chemical Reactor: Sulfuric Acid",
+   "durationTicks": 120,
+   "energyPerTick": 120,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 26,
+     "name": "Hydrogen Sulfide",
+     "free": false
+    },
+    {
+     "amount": 4000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 34,
+     "name": "Oxygen",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 1,
+     "name": "Sulfuric Acid",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r3",
+   "name": "Large Chemical Reactor: Molten Polyethylene (PE)",
+   "durationTicks": 280,
+   "energyPerTick": 120,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 1152,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 21,
+     "name": "Ethylene",
+     "free": false
+    },
+    {
+     "amount": 8000.000000000001,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 34,
+     "name": "Oxygen",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1728,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 47,
+     "name": "Molten Polyethylene (PE)",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-9a2adaaa-aeb8-44ee-8463-21272e94d6d4",
+   "name": "Electrolyzer: Sulfur Dust",
+   "durationTicks": 72,
+   "energyPerTick": 120,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 999.9999999999999,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 26,
+     "name": "Hydrogen Sulfide",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 36,
+     "name": "Sulfur Dust",
+     "free": false
+    },
+    {
+     "amount": 1999.9999999999998,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 25,
+     "name": "Hydrogen",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5",
+   "name": "Large Chemical Reactor: Cetane-Boosted Diesel",
+   "durationTicks": 120,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 10000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 29,
+     "name": "Fuel",
+     "free": false
+    },
+    {
+     "amount": 199.99999999999997,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 48,
+     "name": "Tetranitromethane",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 10000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 49,
+     "name": "Cetane-Boosted Diesel",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5#r1",
+   "name": "Large Chemical Reactor: Water",
+   "durationTicks": 120,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 8000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 50,
+     "name": "Nitric Acid",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 46,
+     "name": "Ethenone",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 9000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 51,
+     "name": "Water",
+     "free": false
+    },
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 48,
+     "name": "Tetranitromethane",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5#r2",
+   "name": "Large Chemical Reactor: Nitric Acid",
+   "durationTicks": 320,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 3000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 25,
+     "name": "Hydrogen",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 52,
+     "name": "Nitrogen",
+     "free": false
+    },
+    {
+     "amount": 4000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 34,
+     "name": "Oxygen",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 50,
+     "name": "Nitric Acid",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 51,
+     "name": "Water",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-aa0e2d3a-1c6d-4675-b128-5ffd2f325b78",
+   "name": "Oil Cracker: Severely Steam-Cracked Naphtha",
+   "durationTicks": 60,
+   "energyPerTick": 216,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 27,
+     "name": "Naphtha",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 53,
+     "name": "Steam",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1200,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 13,
+     "name": "Severely Steam-Cracked Naphtha",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-c1c9a1dd-46bf-43c9-8ae3-02da36deaa7e",
+   "name": "Large Chemical Reactor: Molten Epoxid",
+   "durationTicks": 30,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 6,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 31,
+     "name": "Sodium Hydroxide Dust",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 54,
+     "name": "Acetone",
+     "free": false
+    },
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 12,
+     "name": "Phenol",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 55,
+     "name": "Hydrochloric Acid",
+     "free": false
+    },
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 56,
+     "name": "Epichlorohydrin",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 57,
+     "name": "Molten Epoxid",
+     "free": false
+    },
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 30,
+     "name": "Salt Water",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-c1c9a1dd-46bf-43c9-8ae3-02da36deaa7e#r1",
+   "name": "Large Chemical Reactor: Acetone",
+   "durationTicks": 400,
+   "energyPerTick": 480,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 44,
+     "name": "Acetic Acid",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 54,
+     "name": "Acetone",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 58,
+     "name": "Carbon Dioxide",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 51,
+     "name": "Water",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-ce525e6f-aac7-4234-9bd1-07e16532e573",
+   "name": "Large Chemical Reactor: Tetrafluoroethylene",
+   "durationTicks": 540,
+   "energyPerTick": 120,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 4000.0000000000005,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 59,
+     "name": "Hydrofluoric Acid",
+     "free": false
+    },
+    {
+     "amount": 2000.0000000000002,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 22,
+     "name": "Methane",
+     "free": false
+    },
+    {
+     "amount": 12000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 32,
+     "name": "Chlorine",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1000.0000000000001,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 41,
+     "name": "Tetrafluoroethylene",
+     "free": false
+    },
+    {
+     "amount": 12000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 55,
+     "name": "Hydrochloric Acid",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-ce525e6f-aac7-4234-9bd1-07e16532e573#r1",
+   "name": "Large Chemical Reactor: Hydrofluoric Acid",
+   "durationTicks": 15,
+   "energyPerTick": 28,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 25,
+     "name": "Hydrogen",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 60,
+     "name": "Fluorine",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 59,
+     "name": "Hydrofluoric Acid",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-ce525e6f-aac7-4234-9bd1-07e16532e573#r2",
+   "name": "Large Chemical Reactor: Epichlorohydrin",
+   "durationTicks": 160,
+   "energyPerTick": 120,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 3,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 31,
+     "name": "Sodium Hydroxide Dust",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 19,
+     "name": "Propene",
+     "free": false
+    },
+    {
+     "amount": 4000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 32,
+     "name": "Chlorine",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 51,
+     "name": "Water",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 56,
+     "name": "Epichlorohydrin",
+     "free": false
+    },
+    {
+     "amount": 1000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 30,
+     "name": "Salt Water",
+     "free": false
+    },
+    {
+     "amount": 2000,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 55,
+     "name": "Hydrochloric Acid",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  },
+  {
+   "id": "node-ee38f2af-f66d-46c7-ae28-406c19f95d57",
+   "name": "Gas Turbine",
+   "durationTicks": 20,
+   "energyPerTick": 0,
+   "throughputFactor": 1,
+   "inputs": [
+    {
+     "amount": 75.88235294117646,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 28,
+     "name": "Refinery Gas",
+     "free": false
+    }
+   ],
+   "outputs": [
+    {
+     "amount": 10240,
+     "chance": 1,
+     "multiplier": 1,
+     "resource": 43,
+     "name": "EU",
+     "free": false
+    }
+   ],
+   "countFixed": false,
+   "machineCount": 1,
+   "targetOutputRates": {},
+   "targetInputRates": {}
+  }
+ ],
+ "edges": [
+  {
+   "id": "edge-1456fbdd-895f-4cbe-a789-9c1b47866282",
+   "source": "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450#r1",
+   "sourceOutput": 0,
+   "target": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-14ba2520-d8e4-414b-8760-68379dc5ca44",
+   "source": "node-20be411d-e166-43b5-98b9-74c54e37f7b4",
+   "sourceOutput": 0,
+   "target": "node-2964b946-4f03-45bc-b142-ee4b5da3a671",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-159ed9f0-af3e-4fe8-8be2-c04bf57d2ebf",
+   "source": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r4",
+   "sourceOutput": 0,
+   "target": "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-21ec378b-5239-42d7-be1b-84aade1be556",
+   "source": "node-22303007-1e0e-426b-99a9-339e60ca79e4",
+   "sourceOutput": 0,
+   "target": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r4",
+   "targetInput": 1
+  },
+  {
+   "id": "edge-2322577a-d3b1-4a1f-b9e4-5790dc153544",
+   "source": "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5#r1",
+   "sourceOutput": 1,
+   "target": "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5",
+   "targetInput": 1
+  },
+  {
+   "id": "edge-27085002-12b3-4465-bdf9-7e0cdbcf6f2e",
+   "source": "node-2964b946-4f03-45bc-b142-ee4b5da3a671",
+   "sourceOutput": 1,
+   "target": "node-20be411d-e166-43b5-98b9-74c54e37f7b4",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-280d8912-fdee-4e96-8df7-c683b3839217",
+   "source": "node-c1c9a1dd-46bf-43c9-8ae3-02da36deaa7e#r1",
+   "sourceOutput": 0,
+   "target": "node-c1c9a1dd-46bf-43c9-8ae3-02da36deaa7e",
+   "targetInput": 1
+  },
+  {
+   "id": "edge-36f42db6-8e8b-4491-b95f-4e3baf04ea28",
+   "source": "node-1d20a159-da29-49e6-8953-7f55b3af0c79",
+   "sourceOutput": 6,
+   "target": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r2",
+   "targetInput": 1
+  },
+  {
+   "id": "edge-4c6e49d9-6d6e-45a1-8128-33f2116ed0d7",
+   "source": "node-ce525e6f-aac7-4234-9bd1-07e16532e573#r1",
+   "sourceOutput": 0,
+   "target": "node-ce525e6f-aac7-4234-9bd1-07e16532e573",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-4deb27c9-a51c-4273-85f2-4cedb9b5c695",
+   "source": "node-16fc5b33-59bf-4300-96ff-5ab0260011e5",
+   "sourceOutput": 0,
+   "target": "node-22303007-1e0e-426b-99a9-339e60ca79e4",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-4fcf3122-21bd-45f8-8e25-5ce292f16630",
+   "source": "node-6f343951-b103-45d8-b663-230838f110f8",
+   "sourceOutput": 0,
+   "target": "node-10e0c51f-0753-4703-a2e1-7fbe39ee4b7f",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-57b2d5af-5d8f-46a8-a586-d9f8954d7779",
+   "source": "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450#r2",
+   "sourceOutput": 1,
+   "target": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r2",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-7094647d-4ca7-4736-96b2-84dad213ca1e",
+   "source": "node-16fc5b33-59bf-4300-96ff-5ab0260011e5",
+   "sourceOutput": 2,
+   "target": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r2",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-75650311-b9bb-49ac-9328-b7d28419ea49",
+   "source": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r1",
+   "sourceOutput": 0,
+   "target": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r4",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-7ec6e561-f97c-45fa-aaa6-e8bfed8e79e9",
+   "source": "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5#r2",
+   "sourceOutput": 0,
+   "target": "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5#r1",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-8423d26d-9d34-4fb8-83e9-6e59ddbf9e27",
+   "source": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49",
+   "sourceOutput": 1,
+   "target": "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5#r1",
+   "targetInput": 1
+  },
+  {
+   "id": "edge-8f744420-2a63-4438-b83f-9daa21a936e3",
+   "source": "node-1d20a159-da29-49e6-8953-7f55b3af0c79",
+   "sourceOutput": 1,
+   "target": "node-16fc5b33-59bf-4300-96ff-5ab0260011e5#r1",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-95637da9-e610-4151-b8ae-d1f742361edb",
+   "source": "node-ce525e6f-aac7-4234-9bd1-07e16532e573",
+   "sourceOutput": 0,
+   "target": "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-98aa26a5-ffa6-4db9-babd-d1e191da1624",
+   "source": "node-aa0e2d3a-1c6d-4675-b128-5ffd2f325b78",
+   "sourceOutput": 0,
+   "target": "node-1d20a159-da29-49e6-8953-7f55b3af0c79",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-a217d6b6-380c-4992-8bc3-ae2f9910b0eb",
+   "source": "node-ce525e6f-aac7-4234-9bd1-07e16532e573#r2",
+   "sourceOutput": 0,
+   "target": "node-c1c9a1dd-46bf-43c9-8ae3-02da36deaa7e",
+   "targetInput": 4
+  },
+  {
+   "id": "edge-a66e4d10-1adb-4fdf-a514-2587c96f054e",
+   "source": "node-16fc5b33-59bf-4300-96ff-5ab0260011e5",
+   "sourceOutput": 4,
+   "target": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r3",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-bd77c395-8116-48ee-842f-fca5d6c43b24",
+   "source": "node-16fc5b33-59bf-4300-96ff-5ab0260011e5#r1",
+   "sourceOutput": 2,
+   "target": "node-c1c9a1dd-46bf-43c9-8ae3-02da36deaa7e",
+   "targetInput": 2
+  },
+  {
+   "id": "edge-c2a46a09-4483-4957-acfb-ce94065426d8",
+   "source": "node-22303007-1e0e-426b-99a9-339e60ca79e4",
+   "sourceOutput": 0,
+   "target": "node-16fc5b33-59bf-4300-96ff-5ab0260011e5#r1",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-ca642db1-28a6-45c9-850b-930917b8a2cd",
+   "source": "node-16fc5b33-59bf-4300-96ff-5ab0260011e5",
+   "sourceOutput": 1,
+   "target": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r1",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-d79ba1b1-93c5-460a-b433-b0dafaba9d6a",
+   "source": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r2",
+   "sourceOutput": 0,
+   "target": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r3",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-dc70881e-2a81-42e5-bca1-2ed1ce09f4b4",
+   "source": "node-237bff6f-12f1-4fd4-8e38-4bc936c86d13",
+   "sourceOutput": 0,
+   "target": "node-16fc5b33-59bf-4300-96ff-5ab0260011e5",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-e18df818-5a36-498a-872b-355bd76f9a7a",
+   "source": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7",
+   "sourceOutput": 0,
+   "target": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r1",
+   "targetInput": 0
+  },
+  {
+   "id": "edge-f5b94cb5-7cf9-485a-ab44-4ce37afafc6a",
+   "source": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r2",
+   "sourceOutput": 0,
+   "target": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49",
+   "targetInput": 0
+  }
+ ],
+ "pools": [
+  {
+   "machines": [
+    "node-10e0c51f-0753-4703-a2e1-7fbe39ee4b7f"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-16fc5b33-59bf-4300-96ff-5ab0260011e5",
+    "node-16fc5b33-59bf-4300-96ff-5ab0260011e5#r1"
+   ],
+   "capacity": 2,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-1d20a159-da29-49e6-8953-7f55b3af0c79"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-22303007-1e0e-426b-99a9-339e60ca79e4",
+    "node-22303007-1e0e-426b-99a9-339e60ca79e4#r1",
+    "node-22303007-1e0e-426b-99a9-339e60ca79e4#r2",
+    "node-22303007-1e0e-426b-99a9-339e60ca79e4#r3",
+    "node-22303007-1e0e-426b-99a9-339e60ca79e4#r4"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-237bff6f-12f1-4fd4-8e38-4bc936c86d13"
+   ],
+   "capacity": 225,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-2964b946-4f03-45bc-b142-ee4b5da3a671"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7",
+    "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r1",
+    "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r2",
+    "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r3"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450",
+    "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450#r1",
+    "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450#r2"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-5938373f-d11c-4690-8895-00e1b4b55c6a"
+   ],
+   "capacity": 4,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-6f343951-b103-45d8-b663-230838f110f8"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-7ff8245f-338f-48cc-8904-fafe9b4229d7"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49",
+    "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r1",
+    "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r2",
+    "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r3"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-9a2adaaa-aeb8-44ee-8463-21272e94d6d4"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5",
+    "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5#r1",
+    "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5#r2"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-aa0e2d3a-1c6d-4675-b128-5ffd2f325b78"
+   ],
+   "capacity": 2,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-c1c9a1dd-46bf-43c9-8ae3-02da36deaa7e",
+    "node-c1c9a1dd-46bf-43c9-8ae3-02da36deaa7e#r1"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-ce525e6f-aac7-4234-9bd1-07e16532e573",
+    "node-ce525e6f-aac7-4234-9bd1-07e16532e573#r1",
+    "node-ce525e6f-aac7-4234-9bd1-07e16532e573#r2"
+   ],
+   "capacity": 1,
+   "exact": false,
+   "upTo": true
+  },
+  {
+   "machines": [
+    "node-ee38f2af-f66d-46c7-ae28-406c19f95d57"
+   ],
+   "capacity": 3,
+   "exact": false,
+   "upTo": true
+  }
+ ],
+ "drawers": [
+  {
+   "id": "storage-0efa2c3c-5003-4aa9-9248-8912f3dae414",
+   "label": "Sulfur Dust",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-9a2adaaa-aeb8-44ee-8463-21272e94d6d4",
+     "port": 0
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r3",
+     "port": 1
+    },
+    {
+     "node": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r1",
+     "port": 1
+    }
+   ]
+  },
+  {
+   "id": "storage-20179000-9ec3-4b49-bab5-a148110c2b05",
+   "label": "Hydrogen",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-9a2adaaa-aeb8-44ee-8463-21272e94d6d4",
+     "port": 1
+    },
+    {
+     "node": "node-20be411d-e166-43b5-98b9-74c54e37f7b4",
+     "port": 1
+    },
+    {
+     "node": "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450#r1",
+     "port": 1
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-ce525e6f-aac7-4234-9bd1-07e16532e573#r1",
+     "port": 0
+    }
+   ]
+  },
+  {
+   "id": "storage-29d7661c-5f44-4344-8d04-81dfcaac4e4d",
+   "label": "Hydrochloric Acid",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-ce525e6f-aac7-4234-9bd1-07e16532e573",
+     "port": 1
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-c1c9a1dd-46bf-43c9-8ae3-02da36deaa7e",
+     "port": 3
+    }
+   ]
+  },
+  {
+   "id": "storage-3c9603a1-22a3-4a9d-98ad-ca693c4bd77d",
+   "label": "Hydrogen",
+   "kind": "SOURCE",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r3",
+     "port": 1
+    },
+    {
+     "node": "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5#r2",
+     "port": 0
+    },
+    {
+     "node": "node-22303007-1e0e-426b-99a9-339e60ca79e4",
+     "port": 1
+    },
+    {
+     "node": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r2",
+     "port": 1
+    },
+    {
+     "node": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r1",
+     "port": 1
+    }
+   ]
+  },
+  {
+   "id": "storage-440a77db-e958-44a2-a596-2feea52ac487",
+   "label": "Salt Water",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-c1c9a1dd-46bf-43c9-8ae3-02da36deaa7e",
+     "port": 1
+    },
+    {
+     "node": "node-ce525e6f-aac7-4234-9bd1-07e16532e573#r2",
+     "port": 1
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-2964b946-4f03-45bc-b142-ee4b5da3a671",
+     "port": 1
+    }
+   ]
+  },
+  {
+   "id": "storage-6ccd3f33-02c7-4efa-8e62-fe80340bbfed",
+   "label": "Sodium Hydroxide Dust",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-2964b946-4f03-45bc-b142-ee4b5da3a671",
+     "port": 0
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-ce525e6f-aac7-4234-9bd1-07e16532e573#r2",
+     "port": 0
+    },
+    {
+     "node": "node-c1c9a1dd-46bf-43c9-8ae3-02da36deaa7e",
+     "port": 0
+    }
+   ]
+  },
+  {
+   "id": "storage-74f127d5-d450-4369-b257-2eb39105b6a2",
+   "label": "Naphtha",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r2",
+     "port": 0
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-aa0e2d3a-1c6d-4675-b128-5ffd2f325b78",
+     "port": 0
+    },
+    {
+     "node": "node-5938373f-d11c-4690-8895-00e1b4b55c6a",
+     "port": 0
+    }
+   ]
+  },
+  {
+   "id": "storage-7825eb65-8021-41a3-9520-95364b2fbac1",
+   "label": "Propene",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-1d20a159-da29-49e6-8953-7f55b3af0c79",
+     "port": 8
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-ce525e6f-aac7-4234-9bd1-07e16532e573#r2",
+     "port": 1
+    },
+    {
+     "node": "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450#r1",
+     "port": 1
+    }
+   ]
+  },
+  {
+   "id": "storage-7e8665d7-354b-4dc9-9ab1-644865bfc065",
+   "label": "Hydrogen Sulfide",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-22303007-1e0e-426b-99a9-339e60ca79e4",
+     "port": 1
+    },
+    {
+     "node": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r2",
+     "port": 1
+    },
+    {
+     "node": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r1",
+     "port": 1
+    },
+    {
+     "node": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r3",
+     "port": 1
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-9a2adaaa-aeb8-44ee-8463-21272e94d6d4",
+     "port": 0
+    },
+    {
+     "node": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r2",
+     "port": 0
+    }
+   ]
+  },
+  {
+   "id": "storage-8f4bfac6-0784-45ae-887f-da3e3ce37e98",
+   "label": "Oxygen",
+   "kind": "SOURCE",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7",
+     "port": 1
+    },
+    {
+     "node": "node-30e1bbe9-c865-4e63-a3de-bdb746a4c3d7#r2",
+     "port": 2
+    },
+    {
+     "node": "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450",
+     "port": 1
+    },
+    {
+     "node": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r2",
+     "port": 1
+    },
+    {
+     "node": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r3",
+     "port": 1
+    },
+    {
+     "node": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r1",
+     "port": 0
+    },
+    {
+     "node": "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5#r2",
+     "port": 2
+    }
+   ]
+  },
+  {
+   "id": "storage-9577bbc3-27bb-4803-bc0b-e9017af30236",
+   "label": "Acetic Acid",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r1",
+     "port": 0
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-c1c9a1dd-46bf-43c9-8ae3-02da36deaa7e#r1",
+     "port": 0
+    },
+    {
+     "node": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49",
+     "port": 1
+    }
+   ]
+  },
+  {
+   "id": "storage-a54099ba-628a-44b8-b107-086ef492d446",
+   "label": "Ethylene",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-1d20a159-da29-49e6-8953-7f55b3af0c79",
+     "port": 10
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r3",
+     "port": 0
+    },
+    {
+     "node": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r1",
+     "port": 1
+    },
+    {
+     "node": "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450#r1",
+     "port": 0
+    },
+    {
+     "node": "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450#r2",
+     "port": 0
+    }
+   ]
+  },
+  {
+   "id": "storage-bdcbf062-9538-4ee4-bb39-be22c523bcac",
+   "label": "Sulfuric Acid",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49#r2",
+     "port": 0
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-10e0c51f-0753-4703-a2e1-7fbe39ee4b7f",
+     "port": 1
+    },
+    {
+     "node": "node-9610bb72-d02b-4c0d-b079-3bab6fb8cd49",
+     "port": 0
+    }
+   ]
+  },
+  {
+   "id": "storage-c6d8a058-4f25-452f-9b65-4d0516461899",
+   "label": "Refinery Gas",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-22303007-1e0e-426b-99a9-339e60ca79e4#r3",
+     "port": 0
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-ee38f2af-f66d-46c7-ae28-406c19f95d57",
+     "port": 0
+    },
+    {
+     "node": "node-7ff8245f-338f-48cc-8904-fafe9b4229d7",
+     "port": 0
+    }
+   ]
+  },
+  {
+   "id": "storage-e6815b5d-8d29-4ad4-bc17-59eedb063a01",
+   "label": "Toluene",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-1d20a159-da29-49e6-8953-7f55b3af0c79",
+     "port": 3
+    },
+    {
+     "node": "node-16fc5b33-59bf-4300-96ff-5ab0260011e5#r1",
+     "port": 0
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-6f343951-b103-45d8-b663-230838f110f8",
+     "port": 0
+    }
+   ]
+  },
+  {
+   "id": "storage-f0203f64-e0ad-434d-9306-d0202421b55d",
+   "label": "Benzene",
+   "kind": "BUFFER",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-1d20a159-da29-49e6-8953-7f55b3af0c79",
+     "port": 4
+    }
+   ],
+   "takers": [
+    {
+     "node": "node-4efe9509-55a1-49a6-b8c1-1a66c4bfc450#r2",
+     "port": 1
+    }
+   ]
+  },
+  {
+   "id": "storage-f1236d70-5084-4eec-925a-6b0ba015f537",
+   "label": "Cetane-Boosted Diesel",
+   "kind": "PRODUCT",
+   "rule": "ANY",
+   "rate": 0,
+   "links": [
+    {
+     "node": "node-a7ecd088-6321-4ad3-98ee-c7731f1d63a5",
+     "port": 0
+    }
+   ]
+  }
+ ],
+ "extentPins": {},
+ "spares": {}
+}

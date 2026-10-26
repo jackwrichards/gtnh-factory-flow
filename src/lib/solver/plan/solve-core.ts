@@ -12,7 +12,7 @@ import { TICKS_PER_SECOND, portKey } from "./model";
 import { externalsLp } from "./probes";
 import { pushUpTo } from "./push";
 import { readUpTo } from "./readout";
-import { settleDrawers, settleTrades } from "./trade";
+import { loosened, settleDrawers, settleTrades } from "./trade";
 import type {
   Alternatives,
   Answer,
@@ -146,8 +146,14 @@ function pass(ctx: SolveContext): Settlement {
   const trades = settleTrades(ctx);
   if (!trades.ok)
     return { kind: "stalled", reason: note("STAGE_FAILED", "trades", trades.rejection) };
-  const pushed = pushUpTo(ctx, trades.held);
-  const flow = runFlowMin(ctx, settleDrawers(ctx, pushed));
+  let pushed = pushUpTo(ctx, trades.held);
+  const settled = settleDrawers(ctx, pushed);
+  let flow = runFlowMin(ctx, settled);
+  if (!flow.ok) {
+    // Holds read off points solved only to the engine's tolerance can leave least flow nothing; once more with room.
+    flow = runFlowMin(ctx, loosened(settled));
+    pushed = loosened(pushed);
+  }
   if (!flow.ok)
     return { kind: "stalled", reason: note("STAGE_FAILED", "internal flow", flow.rejection) };
   ctx.committedTrades = pushed;
