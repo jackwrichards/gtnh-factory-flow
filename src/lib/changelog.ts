@@ -40,6 +40,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "4.6.0",
+    date: "2026-10-25",
+    headline: "Wires keep up",
+    notes: [
+      "Wires update in a moment after you move a card, and follow it while you drag.",
+      "Only the wires a change touches are routed again; the rest stay where they are.",
+      "Wires meet drawers straight on instead of at an angle.",
+      "Reopening a plan keeps its wires instead of routing them all again.",
+    ],
+  },
+  {
     version: "4.5.1",
     date: "2026-10-25",
     headline: "Up to counts that fit now solve",
