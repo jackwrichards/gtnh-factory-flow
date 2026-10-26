@@ -1,11 +1,11 @@
 import {
-  solveGridRoutes,
   type GridEndpoint,
   type GridObstacle,
   type GridPoint,
   type GridRouteRequest,
   type GridSide,
 } from "./grid-edge-router";
+import { IncrementalRouter, type RouterSnapshot } from "./incremental-router";
 import { DEFAULT_ROUTER_TUNING, type RouterTuning } from "./router-tuning";
 
 /**
@@ -31,6 +31,13 @@ export interface RouteSolveJob {
   requests: GridRouteRequest[];
   /** The dials the main thread is routing with; the worker uses the same. */
   tuning?: RouterTuning;
+  /**
+   * False while a card is in hand: wires route without negotiation, and
+   * the solve after the drop routes those wires again properly.
+   */
+  thorough: boolean;
+  /** Which plan this board is (its design id): each keeps its own router. */
+  boardKey?: string;
 }
 
 export interface RouteSolveResult {
@@ -53,6 +60,8 @@ export interface EncodedRouteSolveJob {
   seq: number;
   obstacles: GridObstacle[];
   tuning?: RouterTuning;
+  thorough: boolean;
+  boardKey?: string;
   edges: Array<{
     edgeId: string;
     order: number;
@@ -64,6 +73,8 @@ export interface EncodedRouteSolveJob {
     homeObstacleIds?: readonly string[];
     sourceCardId?: string;
     targetCardId?: string;
+    sourceSquare?: boolean;
+    targetSquare?: boolean;
   }>;
   endpoints: Float64Array;
 }
@@ -105,9 +116,20 @@ export function encodeRouteSolveJob(job: RouteSolveJob): EncodedRouteSolveJob {
       homeObstacleIds: request.homeObstacleIds,
       sourceCardId: request.sourceCardId,
       targetCardId: request.targetCardId,
+      sourceSquare: request.sourceSquare,
+      targetSquare: request.targetSquare,
     });
   }
-  return { signature: job.signature, seq: job.seq, obstacles: job.obstacles, tuning: job.tuning, edges, endpoints };
+  return {
+    signature: job.signature,
+    seq: job.seq,
+    obstacles: job.obstacles,
+    tuning: job.tuning,
+    thorough: job.thorough,
+    boardKey: job.boardKey,
+    edges,
+    endpoints,
+  };
 }
 
 export function decodeRouteSolveJob(encoded: EncodedRouteSolveJob): RouteSolveJob {
@@ -150,6 +172,8 @@ export function decodeRouteSolveJob(encoded: EncodedRouteSolveJob): RouteSolveJo
       homeObstacleIds: edge.homeObstacleIds,
       sourceCardId: edge.sourceCardId,
       targetCardId: edge.targetCardId,
+      sourceSquare: edge.sourceSquare,
+      targetSquare: edge.targetSquare,
     };
   });
   return {
@@ -158,13 +182,61 @@ export function decodeRouteSolveJob(encoded: EncodedRouteSolveJob): RouteSolveJo
     obstacles: encoded.obstacles,
     requests,
     tuning: encoded.tuning,
+    thorough: encoded.thorough,
+    boardKey: encoded.boardKey,
   };
+}
+
+/**
+ * This thread's routers, one per plan, most recently used last. Each keeps
+ * the last board it routed, so a job routes again only what changed since
+ * that plan's job before (`IncrementalRouter`), and switching back to a plan
+ * finds its routes waiting. The worker and the main thread each have their own.
+ */
+const routers = new Map<string, IncrementalRouter>();
+/** How many plans' routers a thread keeps; the least recently used go first. */
+const MAX_ROUTERS = 6;
+
+function routerFor(boardKey: string): IncrementalRouter {
+  let router = routers.get(boardKey);
+  if (router) {
+    routers.delete(boardKey);
+  } else {
+    router = new IncrementalRouter();
+  }
+  routers.set(boardKey, router);
+  while (routers.size > MAX_ROUTERS) {
+    routers.delete(routers.keys().next().value!);
+  }
+  return router;
+}
+
+/** Whether this thread still holds a router for the plan. */
+export function hasBoardRouter(boardKey: string): boolean {
+  return routers.has(boardKey);
+}
+
+/** The plan's router state, for `route-memory.ts`. */
+export function boardRouterSnapshot(boardKey: string): RouterSnapshot | undefined {
+  return routers.get(boardKey)?.snapshot();
+}
+
+/** Starts the plan's router from a stored state. */
+export function restoreBoardRouter(boardKey: string, snapshot: RouterSnapshot) {
+  routerFor(boardKey).restore(snapshot);
+}
+
+/** Forgets every plan's board: the next job routes every wire. */
+export function resetBoardRouters() {
+  routers.clear();
 }
 
 /** Runs the job right here; the worker and the fallback both call this. */
 export function runRouteSolveJob(job: RouteSolveJob): RouteSolveResult {
   const started = performance.now();
-  const solved = solveGridRoutes(job.obstacles, job.requests, undefined, job.tuning ?? DEFAULT_ROUTER_TUNING);
+  const solved = routerFor(job.boardKey ?? "").solve(job.obstacles, job.requests, job.tuning ?? DEFAULT_ROUTER_TUNING, {
+    thorough: job.thorough,
+  });
   const orderByEdge = new Map(job.requests.map((request) => [request.edgeId, request.order]));
   const routes: RouteSolveResult["routes"] = [];
   for (const [edgeId, routed] of solved) {

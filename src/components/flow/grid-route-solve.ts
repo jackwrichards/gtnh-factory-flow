@@ -6,9 +6,9 @@
  * solve freezes the page (no drag frame, no typed digit, no hover). The
  * board posts any solve past `ASYNC_ROUTE_EDGE_LIMIT` wires here and keeps
  * drawing the routes it has until the answer lands (`FactoryFlow.tsx`
- * installs it and re-issues the edges). Same inputs, same pure function,
- * same routes; only the thread differs, so the routing invariant in
- * src/components/flow/CLAUDE.md (routes depend on flow-space geometry alone) still holds.
+ * installs it and re-issues the edges). The worker keeps its own router,
+ * which routes each job against the last board it saw; routes never depend
+ * on the viewport.
  *
  * Scheduling mirrors `solve-books.ts`: one job in flight and only the
  * NEWEST waiting job kept, since a drag publishes fresh geometry several

@@ -118,6 +118,13 @@ export interface GridRouteRequest {
    */
   sourceCardId?: string;
   targetCardId?: string;
+  /**
+   * This end leaves or lands square to its side, never at 45°: a drawer is
+   * a cell or two tall, and a wire meeting it on a slant reads as aimed at
+   * the wrong place. It may still turn diagonal past its clean run.
+   */
+  sourceSquare?: boolean;
+  targetSquare?: boolean;
   /** Stroke this wire draws at, in px. Must be ≤ LANE_CAPACITY. */
   strokeWidth: number;
   /**
@@ -1082,6 +1089,9 @@ export function solveGridRoutes(
       const state = install(context, request, { source, target, vertices, cost: 0 });
       state.pinned = true;
       states.push(state);
+    } else if (pin.route.points.length >= 2) {
+      // A boxed-in L held as it was: searching again would find no way either.
+      states.push({ request, found: undefined, routed: pin.route, crossings: 0, overflowed: false, stuck: false, pinned: true });
     } else {
       states.push({ ...routeOne(context, request), pinned: true });
     }
@@ -1105,10 +1115,13 @@ export function solveGridRoutes(
     }
   };
   let rerouted = 0;
-  // A floor on the budget: a small board's few wires may need several
-  // trades to settle, and the whole solve is still milliseconds.
-  let budget = Math.max(12, Math.round(T.negotiationBudget * states.length));
-  const popCap = NEGOTIATION_POPS_PER_WIRE * states.length;
+  // Budgets count the wires that can move: pinned ones never yield, so a
+  // few loose wires among them would otherwise spend the whole board's
+  // budget re-fighting the same crossings. A floor: a small board's few
+  // wires may need several trades to settle, and that is still milliseconds.
+  const movable = states.length - pinned.length;
+  let budget = Math.max(Math.min(12, 4 * movable), Math.round(T.negotiationBudget * movable));
+  const popCap = NEGOTIATION_POPS_PER_WIRE * movable;
   context.widePopCap = popCap;
   readCrossings(context, states);
   for (let round = 0; round < T.negotiationRounds && budget > 0 && workPops < popCap; round += 1) {
@@ -2049,13 +2062,13 @@ function routeWithinWindow(
      */
     exitCost: number;
   }
-  const endVertices = (endpoints: GridEndpoint[]): EndVertex[] => {
+  const endVertices = (endpoints: GridEndpoint[], square: boolean): EndVertex[] => {
     const list: EndVertex[] = [];
     for (let i = 0; i < endpoints.length; i += 1) {
       const normal = outwardDirection(endpoints[i].side);
       const dockX = toCell(endpoints[i].x) - cx0;
       const dockY = toCell(endpoints[i].y) - cy0;
-      for (const outward of straightOnly ? [normal] : [normal, (normal + 1) % 8, (normal + 7) % 8]) {
+      for (const outward of straightOnly || square ? [normal] : [normal, (normal + 1) % 8, (normal + 7) % 8]) {
         const apronX = dockX + DIR_DX[outward];
         const apronY = dockY + DIR_DY[outward];
         if (!inWindow(apronX, apronY)) {
@@ -2093,8 +2106,8 @@ function routeWithinWindow(
     }
     return list;
   };
-  const starts = endVertices(sources);
-  const ends = endVertices(targets);
+  const starts = endVertices(sources, request.sourceSquare === true);
+  const ends = endVertices(targets, request.targetSquare === true);
   if (starts.length === 0 || ends.length === 0) {
     return undefined;
   }
