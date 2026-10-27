@@ -213,6 +213,7 @@
   pointer-events: none;
 }
 .ml-tasks {
+  display: inline-block;
   margin: 0 3px -1px 0;
   color: #a78bfa;
   vertical-align: baseline;
