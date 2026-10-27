@@ -59,6 +59,23 @@ export async function activateDesign(design: {
   leaveLibrary();
 }
 
+/** Opens the source plan itself, including a shared plan not yet held on this device. */
+export async function openTaskPlan(plan: string): Promise<boolean> {
+  const design = designForPlan(useDesignStore.getState().designs, plan, myAccountId());
+  if (design) {
+    await activateDesign(design);
+    return true;
+  }
+  const key = parseDocKey(plan);
+  if (!key || key.ownerId === myAccountId()) return false;
+  try {
+    await openSharedPlan({ ownerId: key.ownerId, ownerName: "", designId: key.designId }, "");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Opens the plan a link names and centres its card. Resolves to what went wrong, if anything. */
 export async function openTaskLink(link: PlanTaskLink): Promise<"plan-gone" | "card-gone" | undefined> {
   const store = useDesignStore.getState();

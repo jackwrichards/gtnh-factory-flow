@@ -14,6 +14,7 @@ import { chainIds, chainRows, taskChains } from "@/lib/tasks/task-chain";
 import { TASK_STATUS_COLOR } from "@/lib/tasks/task-links";
 import { useFactoryStore } from "@/store/factory-store";
 import { PriorityIcon, StatusDot, TaskFaces, useNameOf } from "./task-look";
+import { TaskPlanLabel } from "./TaskPlanLabel";
 
 /**
  * A task board's chain view, the quest book's way (the game's TaskChainView): a list of the tasks on the left, chain
@@ -399,7 +400,7 @@ export function TaskChainView() {
                     if (event.key === "Enter") selectTask(id);
                   }}
                 >
-                  <div className="tc-node-title">{task.title}</div>
+                    <div className="tc-node-title"><TaskPlanLabel task={task} compact />{task.title}</div>
                   <PriorityIcon priority={priority} />
                   <TaskFaces ids={task.assignees ?? []} nameOf={nameOf} />
                 </div>
@@ -459,7 +460,7 @@ function ListRow({
       }}
     >
       <StatusDot status={task.status} size={5} />
-      <span>{task.title}</span>
+        <span><TaskPlanLabel task={task} compact />{task.title}</span>
     </div>
   );
 }

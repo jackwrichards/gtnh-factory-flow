@@ -114,6 +114,8 @@ export interface PlanTask {
    * Older boards wrote `nodeIds`, cards of the plan holding the task; they are still read.
    */
   links?: PlanTaskLink[];
+  /** Whole plans added to this task, with their names captured when added. */
+  sourcePlans?: PlanTaskSourcePlan[];
   /** Older spelling of `links`: cards of the plan that holds the task. Read, no longer written. */
   nodeIds?: string[];
   createdBy?: string;
@@ -131,6 +133,11 @@ export interface PlanTask {
 }
 
 export type PlanTaskPriority = "high" | "medium" | "low";
+
+export interface PlanTaskSourcePlan {
+  plan: string;
+  name: string;
+}
 
 /**
  * A card on a plan. `plan` is the plan's id as the library knows it: `<ownerId>:<designId>` for a plan in the

@@ -652,6 +652,10 @@ export const planTaskSchema = z.object({
   order: orderKeySchema,
   assignees: z.array(accountIdSchema).max(PLAN_TASK_LIMITS.assignees).optional(),
   links: z.array(planTaskLinkSchema).max(PLAN_TASK_LIMITS.nodeIds).optional(),
+  sourcePlans: z.array(z.object({
+    plan: taskIdSchema,
+    name: z.string().min(1).max(PLAN_TASK_LIMITS.titleLength),
+  })).max(PLAN_TASK_LIMITS.nodeIds).optional(),
   nodeIds: z.array(taskIdSchema).max(PLAN_TASK_LIMITS.nodeIds).optional(),
   createdBy: accountIdSchema.optional(),
   createdAt: stampSchema.optional(),

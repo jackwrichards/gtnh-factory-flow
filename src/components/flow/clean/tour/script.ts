@@ -5,6 +5,7 @@ import { useFactoryStore } from "@/store/factory-store";
 import { setMinimap } from "../minimap/minimap-settings";
 import { A, type Action, type Step } from "./director";
 import { pressKey } from "./input";
+import { tourDesignId, tourTaskBoardIds } from "./sandbox";
 import {
   addRecipe,
   barKey,
@@ -785,6 +786,10 @@ const stickyNote: Step = {
 
 const shareKey: Target = barKey("share");
 const plansKey: Target = barKey("plans");
+const tourPlanTab: Target = () => {
+  const id = tourDesignId();
+  return id ? css(`[data-design-id="${id}"]`)() : null;
+};
 
 const inviteStep: Step = {
   id: "invite",
@@ -822,13 +827,103 @@ const taskBoardStep: Step = {
 const taskStep: Step = {
   id: "task",
   actions: [
-    A.click(noticeOpen, { label: "Open" }),
+    A.when(() => noticeOpen() !== null, A.click(noticeOpen, { label: "Open" })),
+    A.when(
+      () => store().project.primaryView !== "tasks",
+      A.click(
+        () => {
+          const id = tourTaskBoardIds()[0];
+          return id ? css(`[data-design-id="${id}"]`)() : null;
+        },
+        { label: "the tour's task board" },
+      ),
+    ),
+    A.when(
+      () => css("[data-task-panel]")() === null,
+      A.click(css("[data-task-card] .tb-card-title"), { label: "the machine task" }),
+    ),
     A.until(() => css('[aria-label="Task title"]')() !== null, "the task box"),
     A.wait(600),
   ],
   note: {
     text: "A *task* holds notes, a checklist, comments and who is on it. Drag it across the columns as the work goes.",
     at: css('[aria-label^="Task: "]'),
+  },
+};
+
+const planTaskStep: Step = {
+  id: "plan-task",
+  actions: [
+    closeMenus,
+    A.when(
+      () => css('button[aria-label="Close the task"]')() !== null,
+      A.click(css('button[aria-label="Close the task"]'), { label: "close the task" }),
+    ),
+    A.click(tourPlanTab, { label: "the tour's plan tab" }),
+    A.until(() => store().project.primaryView !== "tasks" && solved(), "the source plan"),
+    A.right(tourPlanTab, { label: "the plan tab" }),
+    A.until(() => menuRow(/^Add plan as a task/)() !== null, "Add plan as a task"),
+  ],
+  note: {
+    text: "Right-click a *plan tab* and choose *Add plan as a task* to put all its machines in one checklist.",
+    at: menuRow(/^Add plan as a task/),
+  },
+};
+
+const planTaskLinkStep: Step = {
+  id: "plan-task-link",
+  actions: [
+    closeMenus,
+    A.when(
+      () => css('[data-live-notice] button[aria-label="Dismiss"]')() !== null,
+      A.click(css('[data-live-notice] button[aria-label="Dismiss"]'), {
+        label: "dismiss the earlier notice",
+      }),
+    ),
+    A.right(tourPlanTab, { label: "the plan tab" }),
+    A.click(menuRow(/^Add plan as a task/), { label: "Add plan as a task" }),
+    A.click(menuRow(/^New task board/), { label: "New task board" }),
+    A.until(() => noticeOpen() !== null, "the plan task notice", 12000),
+    A.click(noticeOpen, { label: "Open" }),
+    A.until(
+      () => css("[data-task-panel] [data-task-plan-label]")() !== null,
+      "the whole-plan task",
+    ),
+  ],
+  note: {
+    text: "The *Plan* link opens this task's source plan. Its checklist holds every machine to build.",
+    at: css("[data-task-panel] .tb-plan-link"),
+  },
+};
+
+const planTaskUpdateStep: Step = {
+  id: "plan-task-update",
+  actions: [
+    closeMenus,
+    A.when(
+      () => css("[data-task-panel] .tb-plan-link")() === null,
+      A.click(css("[data-task-card] .tb-card-title"), { label: "the whole-plan task" }),
+    ),
+    A.until(() => css("[data-task-panel] .tb-plan-link")() !== null, "the task's Plan link"),
+    A.click(css("[data-task-panel] .tb-plan-link"), { label: "Plan" }),
+    A.until(() => store().project.primaryView !== "tasks" && nodeCount() > 0, "the source plan"),
+    A.run(() => unpin(0)),
+    A.type(cardPart(0, "count"), "2", { enter: true, label: "the machine count" }),
+    A.run(() => pinExactly(0)),
+    A.until(() => solved() && machines(0) === 2, "the new machine counts"),
+    A.right(tourPlanTab, { label: "the plan tab" }),
+    A.until(() => menuRow(/^Update a task/)() !== null, "Update a task"),
+    A.click(menuRow(/^Update a task/), { label: "Update a task" }),
+    A.click(css('[role="menu"][aria-label="Update a task"] [role="menuitem"]'), {
+      label: "the plan's task",
+    }),
+    A.until(() => noticeOpen() !== null, "the updated task notice", 12000),
+    A.click(noticeOpen, { label: "Open" }),
+    A.until(() => css("[data-task-panel] [data-task-plan-label]")() !== null, "the refreshed task"),
+  ],
+  note: {
+    text: "After editing the plan, *Update a task* refreshes its machines. Same or smaller amounts keep checkmarks. More machines or a changed machine or tier clear them.",
+    at: css("[data-task-things-head]"),
   },
 };
 
@@ -845,15 +940,15 @@ const libraryStep: Step = {
     A.click(libraryTab, { label: "Community" }),
     A.wait(1200),
   ],
-  note: { text: "*Community* is where people post their plans. You can browse them here.", at: libraryTab },
+  note: {
+    text: "*Community* is where people post their plans. You can browse them here.",
+    at: libraryTab,
+  },
 };
 
 const newPlan: Step = {
   id: "new-plan",
-  actions: [
-    A.click(textOf("[data-design-id]", /^Tour plan/), { label: "the Tour plan tab" }),
-    A.wait(600),
-  ],
+  actions: [A.click(tourPlanTab, { label: "the Tour plan tab" }), A.wait(600)],
   note: {
     text: "Here's how you make a *new plan*.",
     at: css(".mt-plus"),
@@ -908,6 +1003,8 @@ export const STEPS: Step[] = [
   plansStep,
   libraryStep,
   newPlan,
-  ...(isLiveConfigured() ? [taskBoardStep, taskStep] : []),
+  ...(isLiveConfigured()
+    ? [taskBoardStep, taskStep, planTaskStep, planTaskLinkStep, planTaskUpdateStep]
+    : []),
   feedback,
 ];

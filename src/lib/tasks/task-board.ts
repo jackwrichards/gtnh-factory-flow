@@ -10,6 +10,7 @@ import type {
   PlanTaskLink,
   PlanTaskPriority,
   PlanTaskStatus,
+  PlanTaskSourcePlan,
 } from "@/lib/model/types";
 import { PLAN_TASK_LIMITS } from "@/lib/model/schemas";
 import { byOrder, orderBetween } from "./order-key";
@@ -137,6 +138,32 @@ export function addTask(
 }
 
 const linkKeyOf = (link: PlanTaskLink) => `${link.plan}\u0000${link.node}`;
+
+/** Records an explicit whole-plan addition; machine links alone never imply a whole plan. */
+export function addTaskSourcePlan(
+  project: FactoryProject,
+  id: string,
+  source: PlanTaskSourcePlan,
+): FactoryProject {
+  const task = taskById(project, id);
+  const name = clipTitle(source.name);
+  if (
+    !task ||
+    !source.plan ||
+    !name ||
+    (task.sourcePlans?.length ?? 0) >= PLAN_TASK_LIMITS.nodeIds ||
+    task.sourcePlans?.some((entry) => entry.plan === source.plan)
+  )
+    return project;
+  return {
+    ...project,
+    tasks: tasksOf(project).map((entry) =>
+      entry.id === id
+        ? { ...entry, sourcePlans: [...(entry.sourcePlans ?? []), { plan: source.plan, name }] }
+        : entry,
+    ),
+  };
+}
 
 /** A link list without repeats (the same plan and card twice), in order, within the schema's bound. */
 export function uniqueLinks(links: readonly PlanTaskLink[]): PlanTaskLink[] {

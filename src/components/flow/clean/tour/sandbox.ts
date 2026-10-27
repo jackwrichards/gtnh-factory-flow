@@ -6,7 +6,12 @@ import { leaveLibrary } from "@/lib/library/library-tab";
 import { leaveWelcomeTab } from "@/lib/welcome/welcome-tab";
 import { useDesignStore } from "@/store/design-store";
 import { useFactoryStore } from "@/store/factory-store";
-import { getMinimap, setMinimap, snapshotMinimap, type MinimapSettings } from "../minimap/minimap-settings";
+import {
+  getMinimap,
+  setMinimap,
+  snapshotMinimap,
+  type MinimapSettings,
+} from "../minimap/minimap-settings";
 
 /**
  * The tour's own plan, kept apart from the player's: the player's design is saved first and put aside, the tour
@@ -78,19 +83,40 @@ export function currentDesignId(): string | undefined {
   return useDesignStore.getState().activeDesignId;
 }
 
+/** The sandbox's plan tab, even when the player already owns a plan with the same name. */
+export function tourDesignId(): string | undefined {
+  return saved?.tourDesignId;
+}
+
+/** Task boards made inside this tour, excluding every board the player already owned. */
+export function tourTaskBoardIds(): string[] {
+  if (!saved) return [];
+  const made = new Set(madeByTour(saved));
+  return useDesignStore
+    .getState()
+    .designs.filter((design) => made.has(design.id) && design.taskBoard)
+    .map((design) => design.id);
+}
+
 /**
- * Back to the design a step started on. Back to the tour's own plan, the designs the tour made after it (a task board
- * from a later step) go: the step makes them again.
+ * Back to the design a step started on. Keep its existing task boards and remove only later tour creations,
+ * so replay can create them again without losing the boards an update step still needs.
  */
-export async function returnToDesign(designId: string | undefined): Promise<void> {
+export async function returnToDesign(
+  designId: string | undefined,
+  keepDesignIds?: readonly string[],
+): Promise<void> {
   const s = saved;
   if (!s || !designId) return;
   const designs = useDesignStore.getState();
   if (designs.activeDesignId !== designId && designs.designs.some((d) => d.id === designId)) {
     await designs.switchToDesign(designId);
   }
-  if (designId !== s.tourDesignId) return;
-  for (const id of madeByTour(s)) await useDesignStore.getState().removeDesign(id);
+  if (!keepDesignIds && designId !== s.tourDesignId) return;
+  const keep = new Set(keepDesignIds);
+  for (const id of madeByTour(s)) {
+    if (!keep.has(id)) await useDesignStore.getState().removeDesign(id);
+  }
 }
 
 /** Puts the tour's plan back to what a step started from (Back). */

@@ -1,6 +1,7 @@
 "use client";
 
 import { useFactoryStore } from "@/store/factory-store";
+import { useDesignStore } from "@/store/design-store";
 import { Cursor, draws, sleep, type MouseGlyph } from "./cursor";
 import * as input from "./input";
 import type { Mods } from "./input";
@@ -386,6 +387,8 @@ interface Start {
   project: ReturnType<typeof useFactoryStore.getState>["project"];
   /** The design the step began on: the tour's plan, or a task board it made. */
   designId?: string;
+  /** Keep task boards that already existed at this step, removing only later tour creations. */
+  designIds: string[];
 }
 
 export class Director {
@@ -396,6 +399,11 @@ export class Director {
   private fast = false;
   private starts = new Map<number, Start>();
   private busy = false;
+
+  /** Replayed creation steps make fresh design ids, so later checkpoints must be captured again. */
+  private forgetAfter(index: number): void {
+    for (const saved of this.starts.keys()) if (saved > index) this.starts.delete(saved);
+  }
 
   constructor(steps: Step[], cursor: Cursor, hooks: DirectorHooks) {
     this.steps = steps;
@@ -429,6 +437,7 @@ export class Director {
     if (!this.starts.has(index)) this.starts.set(index, {
         project: structuredClone(useFactoryStore.getState().project),
         designId: currentDesignId(),
+        designIds: useDesignStore.getState().designs.map((design) => design.id),
       });
     const isFast = () => this.fast;
     const ctx: Ctx = {
@@ -489,9 +498,10 @@ export class Director {
     this.token++;
     const target = index - 1;
     const start = this.starts.get(target);
+    this.forgetAfter(target);
     this.closeThings();
     if (start) {
-      await returnToDesign(start.designId);
+      await returnToDesign(start.designId, start.designIds);
       restoreProject(start.project);
     }
     await draws(3);
@@ -505,9 +515,10 @@ export class Director {
     let begin = from;
     while (begin > 0 && !this.starts.has(begin)) begin--;
     const start = this.starts.get(begin);
+    this.forgetAfter(begin);
     this.closeThings();
     if (start) {
-      await returnToDesign(start.designId);
+      await returnToDesign(start.designId, start.designIds);
       restoreProject(start.project);
     }
     await draws(3);

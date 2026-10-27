@@ -65,6 +65,7 @@ import { useFactoryStore } from "@/store/factory-store";
 import { myAccountId, useLiveSession } from "@/store/live-session";
 import { PriorityIcon, StatusDot, TaskFace, useNameOf } from "./task-look";
 import { useTaskAuthor, useTaskPeople } from "./task-people";
+import { TaskPlanLabel } from "./TaskPlanLabel";
 
 /**
  * A task, open in a box over its board, laid out as an issue is in Jira (the game's TaskPanel): a wide main column
@@ -391,6 +392,7 @@ export function TaskBox({ task, onClose }: { task: PlanTask; onClose: () => void
           <div className="tbx-page" ref={pageRef}>
             <div className="tbx-main">
               <TitleField task={task} readOnly={isReadOnly} />
+              <TaskPlanLabel task={task} />
               {wide ? null : <div className="tbx-side-under">{side}</div>}
               <div className="tbx-label">Notes</div>
               <NotesField task={task} readOnly={isReadOnly} />
