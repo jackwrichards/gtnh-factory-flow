@@ -7,6 +7,7 @@ import {
   mockUnneeded,
 } from "@/lib/solver/plan/__fixtures__/mock-extras";
 import type { FactoryProject, ThroughputResult } from "@/lib/model/types";
+import { formatCompact } from "@/lib/model/resources";
 import type { PlanNote } from "@/lib/solver/plan/types";
 import { useFactoryStore } from "@/store/factory-store";
 import { writeDeviceSettings } from "@/lib/device-settings";
@@ -70,12 +71,55 @@ function load(mock: typeof mockLeftovers, result: ThroughputResult = mock.result
 beforeEach(() => {
   window.localStorage.clear();
   resetRailViewForTests();
+  useFactoryStore.getState().setRateUnit("second");
+  useFactoryStore.getState().setPowerDisplayUnit("eu");
 });
 const realFrame = useFactoryStore.getState().frameBoardNodes;
 afterEach(() => {
   useFactoryStore.setState({ frameBoardNodes: realFrame });
   closeSparePopup();
   cleanup();
+  useFactoryStore.getState().setRateUnit("second");
+  useFactoryStore.getState().setPowerDisplayUnit("eu");
+});
+
+it("repaints memoized rates, rules and section units without changing the solve", () => {
+  load(mockUnneeded);
+  const { container } = render(<OverviewRail />);
+  const row = container.querySelector('[data-resource-row="item:Iron Ingot"]')!;
+  const number = row.querySelector(".rail-num")!;
+  const box = row.querySelector(".rail-box")!;
+  const before = useFactoryStore.getState();
+  const perSecond = Number(box.textContent);
+  const amount = Number(number.textContent);
+  const sign = number.textContent!.startsWith("+") ? "+" : "";
+  expect(perSecond).toBeGreaterThan(0);
+
+  for (const [unit, multiplier, suffix] of [
+    ["minute", 60, "/min"],
+    ["hour", 3600, "/hr"],
+    ["tick", 0.05, "/t"],
+    ["second", 1, "/s"],
+  ] as const) {
+    act(() => useFactoryStore.getState().setRateUnit(unit));
+    expect(box.textContent).toBe(formatCompact(perSecond * multiplier));
+    expect(number.textContent).toBe(`${sign}${formatCompact(amount * multiplier)}`);
+    expect(container.querySelector(".rail-sec-end")!.textContent).toBe(suffix);
+    expect(useFactoryStore.getState().project).toBe(before.project);
+    expect(useFactoryStore.getState().lastResult).toBe(before.lastResult);
+    expect(useFactoryStore.getState().undoHistory).toBe(before.undoHistory);
+  }
+});
+
+it("repaints memoized machine power when the power unit changes", () => {
+  load(mockUnneeded);
+  const { container } = render(<OverviewRail />);
+  const power = container.querySelector('[data-rail-machine="comp"] .rail-eu')!;
+  expect(power.textContent).toContain("EU/t");
+  act(() => useFactoryStore.getState().setPowerDisplayUnit("LV"));
+  expect(power.textContent).toContain("A LV");
+  act(() => useFactoryStore.getState().setPowerDisplayUnit("eu"));
+  expect(power.textContent).toContain("EU/t");
 });
 
 it("lists the plan's sections, lines and machines", () => {
