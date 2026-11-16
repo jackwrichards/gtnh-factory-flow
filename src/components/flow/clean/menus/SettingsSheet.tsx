@@ -9,6 +9,7 @@ import { MenuPortal, anchorOf, type MenuAnchor } from "./MenuPortal";
 import { OptionListMenu } from "./OptionListMenu";
 import {
   isPinned,
+  machineNumberSettings,
   pinMachineKey,
   settingControls,
   settingPatch,
@@ -36,6 +37,8 @@ const KNOB_COLORS: Record<string, string> = {
   bioVatGlass: "#9fd3e6",
   bioVatRadio: "#7fd94a",
   bioVatShutter: "#e0a060",
+  eecWeaponDamage: "#e06060",
+  eecSharpness: "#b06fd9",
 };
 
 const NONE = "No settings for this machine.";
@@ -89,7 +92,7 @@ function PinGlyph() {
 export function SettingsSheet({
   nodeId,
   anchor,
-  numbers = [],
+  numbers: cardNumbers = [],
   onClose,
 }: {
   nodeId: string;
@@ -109,6 +112,11 @@ export function SettingsSheet({
   const sheetRef = useRef<HTMLDivElement>(null);
   const controls = useMemo(() => (node && recipe ? settingControls(recipe, node) : []), [recipe, node]);
   const formulas = useMemo(() => (node && recipe ? workingLines(recipe, node) : []), [recipe, node]);
+  const machineNumbers = useMemo(
+    () => (node && recipe ? machineNumberSettings(recipe, node, (patch) => updateNode(node.id, patch)) : []),
+    [recipe, node, updateNode],
+  );
+  const numbers = useMemo(() => [...cardNumbers, ...machineNumbers], [cardNumbers, machineNumbers]);
   if (!node || !recipe) return null;
   const machine = pinMachineKey(recipe, node);
 
@@ -182,7 +190,7 @@ export function SettingsSheet({
                           autoFocus
                           className="nodrag"
                           value={draft.text}
-                          inputMode="numeric"
+                          inputMode="decimal"
                           aria-label={setting.label}
                           style={{ width: "100%", background: "transparent", border: 0, outline: 0, color: "inherit", font: "inherit" }}
                           onChange={(event) => setDraft({ id: setting.id, text: event.target.value })}

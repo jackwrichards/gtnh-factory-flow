@@ -24,6 +24,7 @@ import type { MachineConfigControl, Recipe, RecipeOutput } from "@/lib/model/typ
 export const EEC_MACHINE_TYPE = "Extreme Entity Crusher";
 
 export const EEC_WEAPON_DAMAGE = "eecWeaponDamage";
+export const EEC_SHARPNESS = "eecSharpness";
 export const EEC_LOOTING = "eecLooting";
 export const EEC_INFERNAL = "eecInfernal";
 export const EEC_MODE = "eecMode";
@@ -32,6 +33,8 @@ export const EEC_VOID = "eecVoid";
 /** The machine's own constants, used when the dataset does not carry them. */
 const SPAWN_INTERVAL = 55;
 const SPIKES_DAMAGE = 9;
+/** EnchantmentHelper's bonus damage per Sharpness level against any mob. */
+const SHARPNESS_DAMAGE = 1.25;
 const MAX_LOOTING = 4;
 const MIN_TICKS = 20;
 const XP_PER_KILL = 120;
@@ -93,7 +96,9 @@ export function isEecRecipe(recipe: EecRecipe): boolean {
 }
 
 export interface EecSettings {
+  /** The weapon's attack damage with Sharpness included, without the spikes. */
   weaponDamage: number;
+  sharpness: number;
   looting: number;
   infernal: boolean;
   ritual: boolean;
@@ -102,9 +107,12 @@ export interface EecSettings {
 
 export function getEecSettings(settings: Record<string, string> | undefined): EecSettings {
   const weapon = Number(settings?.[EEC_WEAPON_DAMAGE] ?? 0);
+  const sharpnessLevel = Number(settings?.[EEC_SHARPNESS] ?? 0);
   const looting = Number(settings?.[EEC_LOOTING] ?? 0);
+  const sharpness = Number.isFinite(sharpnessLevel) ? Math.max(0, Math.trunc(sharpnessLevel)) : 0;
   return {
-    weaponDamage: Number.isFinite(weapon) && weapon > 0 ? weapon : 0,
+    weaponDamage: (Number.isFinite(weapon) && weapon > 0 ? weapon : 0) + sharpness * SHARPNESS_DAMAGE,
+    sharpness,
     looting: Number.isFinite(looting) ? Math.max(0, Math.trunc(looting)) : 0,
     infernal: settings?.[EEC_INFERNAL] !== "off",
     ritual: settings?.[EEC_MODE] === "ritual",
@@ -140,8 +148,18 @@ export const EEC_CONTROLS: MachineConfigControl[] = [
         EEC_WEAPON_DAMAGE,
         "0",
         "Weapon damage",
-        "The weapon's attack damage, plus 1.25 per level of Sharpness. The spikes add 9 on their own.",
+        "The weapon's attack damage without enchantments. A diamond sword is 7. The spikes add 9 on their own.",
       ),
+    ],
+  },
+  {
+    id: EEC_SHARPNESS,
+    label: "Sharpness",
+    minimumKey: "0",
+    defaultKey: "0",
+    numeric: { min: 0, max: 255 },
+    tiers: [
+      option(EEC_SHARPNESS, "0", "Sharpness", "The weapon's Sharpness level. Each level adds 1.25 damage."),
     ],
   },
   {
@@ -224,6 +242,29 @@ export function eecOverclock(eut: number, ticks: number, maxInputEu: number): Cy
 export function eecKillTicks(meta: EecMetadata, weaponDamage: number): number {
   const damage = (meta.spikesDamage ?? SPIKES_DAMAGE) + weaponDamage;
   return Math.max(meta.spawnInterval ?? SPAWN_INTERVAL, Math.trunc((meta.maxHealth / damage) * 10));
+}
+
+export interface EecDamageReport {
+  /** Spikes plus weapon plus Sharpness. */
+  totalDamage: number;
+  /** Ticks for one plain kill before overclocks. */
+  killTicks: number;
+  /** The kill already sits on the spawn interval: more damage changes nothing. */
+  atFloor: boolean;
+  floorTicks: number;
+}
+
+/** What the weapon knobs do for this mob, for the card's tooltips. */
+export function getEecDamageReport(meta: EecMetadata, settings: EecSettings): EecDamageReport {
+  const weapon = settings.ritual ? 0 : settings.weaponDamage;
+  const floorTicks = meta.spawnInterval ?? SPAWN_INTERVAL;
+  const killTicks = eecKillTicks(meta, weapon);
+  return {
+    totalDamage: (meta.spikesDamage ?? SPIKES_DAMAGE) + weapon,
+    killTicks,
+    atFloor: killTicks <= floorTicks,
+    floorTicks,
+  };
 }
 
 /** How likely each kind of kill is: plain, then elite, ultra and inferno infernals. */
