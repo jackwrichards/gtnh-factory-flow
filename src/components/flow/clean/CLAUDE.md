@@ -22,6 +22,8 @@ holder, a crop card. Bees, the Extreme Entity Crusher and every other machine ar
   number setting (`CROP_MACHINES_ID`, `NumberSetting`), pinned by default: what the seeds fill at the tier's capacity
   (`cropsNhCropsPerMachine`); typed or stepped, it sets the seeds to that many full machines. Pin toggles pass every
   pinnable setting, or the ones left out unpin.
+  A machine control with `numeric` (the Extreme Entity Crusher's weapon damage and Sharpness) is a NumberSetting
+  too (`machineNumberSettings`): the sheet types it, a pinned chip steps it. `settingControls` leaves it out.
 
 - A card's menu (`menus/CardActionsMenu.tsx` `CardRows`, from its actions key and a right click on it) is the mod's
   order: Clone node, Add another recipe, Replace the recipe, Add to a task, then Delete node in red. The recipe rows

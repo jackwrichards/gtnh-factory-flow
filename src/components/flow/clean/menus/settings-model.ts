@@ -6,6 +6,7 @@ import {
   getRecipeMachineConfigTierControls,
   getRecipeSpecialValue,
 } from "@/lib/model";
+import { snapNumericSetting } from "@/lib/model/recipe-rules";
 import { rememberSetting, settingMemoryMachine } from "@/lib/model/setting-memory";
 import { getMachineBehaviour } from "@/lib/machines/machine-table";
 import { isHeatOverclockMachine } from "@/lib/solver/heat";
@@ -85,7 +86,8 @@ function computeControls(recipe: Recipe, node: FactoryNode): SettingControl[] {
   }
   for (const control of getRecipeMachineConfigTierControls(effective, node)) {
     if (control.id === COIL_ID || /^(machineParallel|voltageParallel)/.test(control.id)) continue;
-    if (control.tiers.length <= 1) continue;
+    // A typed number is a NumberSetting (machineNumberSettings), not a list.
+    if (control.numeric || control.tiers.length <= 1) continue;
     out.push({
       id: control.id,
       group: "Machine",
@@ -160,4 +162,43 @@ export function steppedOption(control: SettingControl, direction: -1 | 1): Setti
   if (control.options.length <= 1) return undefined;
   const index = Math.max(0, control.options.findIndex((option) => option.key === control.currentKey));
   return control.options[(index + direction + control.options.length) % control.options.length];
+}
+
+/**
+ * The machine's typed-number controls (the Extreme Entity Crusher's weapon damage and Sharpness) as wells the
+ * sheet types into. Each value is snapped to the control's step and range, and remembered like a listed option.
+ */
+export function machineNumberSettings(
+  recipe: Recipe,
+  node: FactoryNode,
+  apply: (patch: Partial<FactoryNode>) => void,
+): NumberSetting[] {
+  let controls;
+  try {
+    const effective = applyMachineHandlerToRecipe(applyRecipeInputOverrides(recipe, node), node);
+    controls = getRecipeMachineConfigTierControls(effective, node);
+  } catch {
+    return [];
+  }
+  return controls.flatMap((control) => {
+    const numeric = control.numeric;
+    if (!numeric) return [];
+    const shown = Number(control.current.key);
+    const set = (value: number) => {
+      const key = String(snapNumericSetting(value, numeric));
+      if (key !== control.current.key) apply(settingPatch(recipe, node, control.id, key));
+    };
+    return [{
+      id: control.id,
+      label: control.label,
+      value: shown.toLocaleString("en-US", { maximumFractionDigits: 2 }),
+      text: String(shown),
+      pinDefault: false,
+      commit: (text: string) => {
+        const parsed = Number(text.replaceAll(",", "").trim());
+        if (text.trim() && Number.isFinite(parsed)) set(parsed);
+      },
+      step: (direction: -1 | 1) => set(shown + direction * (numeric.step ?? 1)),
+    }];
+  });
 }

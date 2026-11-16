@@ -19,6 +19,13 @@ import {
 import { getEffectiveVoltageOrdinal } from "@/lib/solver/power";
 import { getNodePowerReport, hasPowerReport } from "@/lib/solver/power-report";
 import { prefersCuratedMachineMath } from "@/lib/solver/runtime-calculation";
+import {
+  EEC_SHARPNESS,
+  EEC_WEAPON_DAMAGE,
+  getEecDamageReport,
+  getEecMetadata,
+  getEecSettings,
+} from "@/lib/machines/extreme-entity-crusher";
 
 /**
  * A GregTech card's working, as lines for its gear sheet (the mod's `machines/web/Working`): the supply, the coil's
@@ -67,6 +74,13 @@ export function workingLines(recipe: Recipe, node: FactoryNode): FormulaLine[] {
     out.push(
       line("supply", `${n(pool)} EU/t`, undefined, knob(tier, TIER_KNOB), ` machine${amps !== 1 ? ` · ${n(amps)} A` : ""}`),
     );
+  }
+
+  const eec = getEecMetadata(e);
+  if (eec) {
+    out.push(...eecLines(eec, node, s));
+    out.push(recipesLine(1, s.durationTicks));
+    return out;
   }
 
   const base = Math.abs(e.eut);
@@ -159,5 +173,40 @@ export function workingLines(recipe: Recipe, node: FactoryNode): FormulaLine[] {
   if (parallels > 1) power.push(` · ${n(parallels)}`);
   out.push(line("draw", `${n(Math.abs(s.eut) * parallels)} EU/t`, report.state !== "ok" ? "bad" : undefined, ...power));
   out.push(recipesLine(parallels, s.durationTicks));
+  return out;
+}
+
+/**
+ * The Extreme Entity Crusher's working: spikes, weapon and Sharpness make the damage, the mob's health over it the
+ * kill, never under the spawn interval. The time is per kill's drops, averaged over infernal kills, with the
+ * overclocks past the 20-tick floor multiplying the drops instead.
+ */
+function eecLines(
+  meta: NonNullable<ReturnType<typeof getEecMetadata>>,
+  node: FactoryNode,
+  s: ReturnType<typeof getOverclockedRecipeStats>,
+): FormulaLine[] {
+  const settings = getEecSettings(node.machineConfigTiers);
+  const report = getEecDamageReport(meta, settings);
+  const out: FormulaLine[] = [];
+  if (settings.ritual) {
+    out.push(line("kill", "ritual, 400 t"));
+  } else {
+    const weapon = settings.weaponDamage - settings.sharpness * 1.25;
+    const damage: FormulaTerm[] = [n(report.totalDamage - settings.weaponDamage), " + ", knob(n(weapon), EEC_WEAPON_DAMAGE)];
+    if (settings.sharpness > 0) damage.push(" + 1.25·", knob(n(settings.sharpness), EEC_SHARPNESS));
+    out.push(line("damage", n(report.totalDamage), undefined, ...damage));
+    out.push(
+      line(
+        "kill",
+        report.atFloor ? `${ticks(report.killTicks)} (minimum)` : ticks(report.killTicks),
+        undefined,
+        `max(${n(report.floorTicks)}, ⌊${n(meta.maxHealth)} HP / ${n(report.totalDamage)} · 10⌋)`,
+      ),
+    );
+  }
+  out.push(line("overclocks", s.overclockSteps === 0 ? "none" : String(s.overclockSteps)));
+  out.push(line("time per kill", ticks(s.durationTicks)));
+  out.push(line("draw", `${n(Math.abs(s.eut))} EU/t`));
   return out;
 }

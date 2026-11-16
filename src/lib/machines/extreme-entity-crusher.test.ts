@@ -5,12 +5,14 @@ import {
   EEC_LOOTING,
   EEC_MACHINE_TYPE,
   EEC_MODE,
+  EEC_SHARPNESS,
   EEC_VOID,
   EEC_WEAPON_DAMAGE,
   type EecMetadata,
   eecExpectedItems,
   eecKillTicks,
   eecOverclock,
+  getEecDamageReport,
   getEecOutputMultiplier,
   getEecSettings,
   getEecStats,
@@ -165,5 +167,21 @@ describe("Extreme Entity Crusher", () => {
     expect(weapon.current.key).toBe("13.25");
     expect(getAdjacentMachineConfigTier(weapon, 1)).toBe("13.5");
     expect(getAdjacentMachineConfigTier({ ...weapon, current: { ...weapon.current, key: "0" } }, -1)).toBe("0");
+  });
+
+  it("adds 1.25 damage per Sharpness level to the weapon", () => {
+    const settings = getEecSettings({ [EEC_WEAPON_DAMAGE]: "7", [EEC_SHARPNESS]: "5" });
+    expect(settings.weaponDamage).toBe(13.25);
+    const golem = meta(zombie({ mob: "Iron Golem", maxHealth: 100 }));
+    // 100 / (9 + 7 + 6.25) * 10 = 44.9, under the 55-tick spawn interval.
+    expect(getEecDamageReport(golem, settings)).toEqual({
+      totalDamage: 22.25,
+      killTicks: 55,
+      atFloor: true,
+      floorTicks: 55,
+    });
+    // Bare spikes: 100 / 9 * 10 = 111 ticks.
+    expect(getEecDamageReport(golem, getEecSettings({}))).toMatchObject({ killTicks: 111, atFloor: false });
+    expect(getEecSettings({ [EEC_SHARPNESS]: "-2" }).weaponDamage).toBe(0);
   });
 });

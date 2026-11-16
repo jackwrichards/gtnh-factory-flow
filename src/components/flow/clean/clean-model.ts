@@ -62,7 +62,7 @@ import { mixHex } from "./colors";
 import { UP_TO_COLOR } from "./up-to-reason";
 import { cardLoop, LOOP_WORD, type LoopTone } from "./loops";
 import { glanceBar, type GlanceBar } from "./glance";
-import { isPinned, pinMachineKey, settingControls } from "./menus/settings-model";
+import { isPinned, machineNumberSettings, pinMachineKey, settingControls } from "./menus/settings-model";
 import { mcTextWidth, measureClean, measureRowFigure, measureRowName, useFontEpoch } from "./text-measure";
 
 type VoltageTier = Parameters<typeof getVoltageTierIndex>[0];
@@ -982,6 +982,10 @@ export function useCleanCardModel(
   }, [recipe, projectNode]);
 
   const pinControls = useMemo(() => settingControls(recipe, projectNode), [recipe, projectNode]);
+  const pinNumbers = useMemo(
+    () => machineNumberSettings(recipe, projectNode, (patch) => updateNode(projectNode.id, patch)),
+    [recipe, projectNode, updateNode],
+  );
   const verdict = deriveNodeVerdict(liveProject, lastResult, projectNode.id);
   const rails = buildRailPorts(
     liveProject,
@@ -1084,6 +1088,17 @@ export function useCleanCardModel(
       icon: control.icon,
       warn: control.warn || undefined,
       title: `${control.label}: ${control.value}`,
+    });
+  }
+  // Typed numbers (the Extreme Entity Crusher's weapon) pin the same way; the wheel steps them, the sheet types them.
+  for (const setting of pinNumbers) {
+    settings.push({ id: setting.id, label: setting.label, value: setting.value, steps: true });
+    if (!isPinned(liveProject, pinKey, setting)) continue;
+    rawChips.push({
+      id: setting.id,
+      label: setting.label,
+      value: setting.value,
+      title: `${setting.label}: ${setting.value}`,
     });
   }
   const parallels = powerReport?.parallels ?? steamReport?.parallels ?? derived.parallel;
@@ -1214,6 +1229,11 @@ export function useCleanCardModel(
     ...pinActions(projectNode, count, updateNode, isLocked),
     stepSetting: (id, direction) => {
       if (isLocked()) return;
+      const typed = pinNumbers.find((entry) => entry.id === id);
+      if (typed) {
+        typed.step(direction);
+        return;
+      }
       const control: MachineConfigTierControl | undefined =
         id === "heatingCoil"
           ? derived.coilControl
